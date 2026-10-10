@@ -762,6 +762,51 @@ Deterministic adapter and Router→Temporal fake-provider tests cover repeated,
 partial and fully disambiguated cases. No model-facing prompt/schema change,
 live provider calls, DEV/PROD activation or vault access.
 
+**Block 4B19 observed synthetic GPT-6 Router-only v2 gate (2026-10-10,
+feature branch ONLY):** The separately versioned, snapshot-pinned
+[reviewable runner](../../benchmarks/fact_candidate_v2_live/README.md)
+was accepted through the ordinary existing user systemd service and made
+**four** real GPT-6 Luna/low Responses calls with `store=false`, no retries,
+and **no Core, Temporal or vault writes**. Its hardcoded cases were F14, F27,
+F09, F10, and its conservative four-call pre-reservation was **USD
+0.01181875**, below the previously authorized USD 0.02. The observed
+usage was **2,134 input + 1,575 output tokens**; under the pinned standard
+rates this is **USD 0.0010009 estimated**, not a billed total. All four
+provider responses completed and passed the closed local source shape
+validator. The untouched original prompts/model/schema were tested.
+
+The new [saved synthetic provider outputs](../../benchmarks/fact_candidate_v2_live/results/20261010T185618Z.json)
+plus offline replay regression tests demonstrate:
+- **F09 FAIL (semantic):** `Marta y Luis viven en Lyon` was emitted as **one
+  `relationship`**, rather than independently manageable Marta/Luis
+  residence properties.
+- **F10 one-event meaning correct:** `Marta y Luis se conocieron en Lyon`
+  was emitted as one `relationship`. Its source spans differ from the
+  exact approved oracle, but source evidence was grounded; an exact-fixture
+  mismatch is not by itself a semantic failure.
+- **F14 partial:** coherent Eric+Luis conversation + ambiguous future
+  `él` (two candidates) was correctly counted, but the future kind is
+  `plan` rather than the approved `occurrence`; `Ayer`/`Mañana`
+  were labeled `time`, and Core's independently reviewed grouped
+  canonical reference preflight rejects the emitted participant evidence.
+- **F27 partial:** the two source-explicit sequential contacts + ambiguous
+  future are correctly separated (three candidates), but future kind
+  is `plan`, dates are `date_scope`, and `él` lacks the explicit
+  `reference` role; Core's sequential contact coverage preflight rejects
+  the unresolved pronoun representation.
+
+The strict offline oracle comparator reports a **fixture FAIL for all four**
+due to source anchors/roles/kinds, but only F09 currently establishes a
+clear incorrect underlying event/property segmentation. We must not conflate
+strict token-span equivalence with semantic correctness. The safeguard
+failures for F14/F27 are observed by replaying **the real model Router JSON**
+against already-reviewed synthetic Core plans and guards in an isolated
+no-write context. No normal Router runtime switch, prompt tuning, model
+migration, real user vault access, or DEV/PROD deployment occurred. The
+model-quality gate is **FAIL / NOT READY**, and the explicit normal-user
+service execution here does not retroactively authorize repeating any
+previously blocked remote operation.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

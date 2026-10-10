@@ -1,0 +1,465 @@
+{
+  "mode": "LIVE_SYNTHETIC_ROUTER",
+  "model": "gpt-6-luna",
+  "reasoning": "low",
+  "cases": [
+    "F14",
+    "F27",
+    "F09",
+    "F10"
+  ],
+  "call_limit": 4,
+  "conservative_reservation_usd": 0.01181875,
+  "budget_ceiling_usd": 0.02,
+  "live_model_quality_verified": false,
+  "results": [
+    {
+      "case": "F14",
+      "usage": {
+        "input_tokens": 538,
+        "output_tokens": 429
+      },
+      "status": "completed",
+      "result": "source_valid",
+      "candidate_count": 2,
+      "kinds": [
+        "occurrence",
+        "plan"
+      ],
+      "states": [
+        "candidate",
+        "ambiguous_identity"
+      ]
+    },
+    {
+      "case": "F27",
+      "usage": {
+        "input_tokens": 540,
+        "output_tokens": 646
+      },
+      "status": "completed",
+      "result": "source_valid",
+      "candidate_count": 3,
+      "kinds": [
+        "occurrence",
+        "occurrence",
+        "plan"
+      ],
+      "states": [
+        "candidate",
+        "candidate",
+        "ambiguous_identity"
+      ]
+    },
+    {
+      "case": "F09",
+      "usage": {
+        "input_tokens": 527,
+        "output_tokens": 274
+      },
+      "status": "completed",
+      "result": "source_valid",
+      "candidate_count": 1,
+      "kinds": [
+        "relationship"
+      ],
+      "states": [
+        "candidate"
+      ]
+    },
+    {
+      "case": "F10",
+      "usage": {
+        "input_tokens": 529,
+        "output_tokens": 226
+      },
+      "status": "completed",
+      "result": "source_valid",
+      "candidate_count": 1,
+      "kinds": [
+        "relationship"
+      ],
+      "states": [
+        "candidate"
+      ]
+    }
+  ],
+  "oracle_comparison": {
+    "mode": "OFFLINE_SAVED_RESULTS_ONLY",
+    "cases": {
+      "F09": {
+        "fixture_match": false,
+        "differences": [
+          "candidate_count",
+          "candidate_1_kind",
+          "candidate_1_anchors",
+          "candidate_1_scopes"
+        ]
+      },
+      "F10": {
+        "fixture_match": false,
+        "differences": [
+          "candidate_1_anchors",
+          "candidate_1_scopes"
+        ]
+      },
+      "F14": {
+        "fixture_match": false,
+        "differences": [
+          "candidate_1_anchors",
+          "candidate_1_scopes",
+          "candidate_2_kind",
+          "candidate_2_anchors",
+          "candidate_2_scopes"
+        ]
+      },
+      "F27": {
+        "fixture_match": false,
+        "differences": [
+          "candidate_1_anchors",
+          "candidate_1_scopes",
+          "candidate_2_anchors",
+          "candidate_2_scopes",
+          "candidate_2_inheritance",
+          "candidate_3_kind",
+          "candidate_3_anchors",
+          "candidate_3_scopes"
+        ]
+      }
+    },
+    "all_fixture_matches": false,
+    "human_semantic_review_required": true,
+    "live_model_quality_verified": false
+  },
+  "raw_router_json": {
+    "F14": {
+      "version": 1,
+      "units": [
+        {
+          "kind": "occurrence",
+          "anchors": [
+            {
+              "text": "hablé",
+              "occurrence": 0
+            },
+            {
+              "text": "con Eric y Luis",
+              "occurrence": 0
+            },
+            {
+              "text": "Ayer",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "predicate",
+              "anchor": {
+                "text": "hablé",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "con Eric y Luis",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "time",
+              "anchor": {
+                "text": "Ayer",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [],
+          "state": "candidate"
+        },
+        {
+          "kind": "plan",
+          "anchors": [
+            {
+              "text": "iré",
+              "occurrence": 0
+            },
+            {
+              "text": "al cine",
+              "occurrence": 0
+            },
+            {
+              "text": "con él",
+              "occurrence": 0
+            },
+            {
+              "text": "Mañana",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "predicate",
+              "anchor": {
+                "text": "iré",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "object",
+              "anchor": {
+                "text": "al cine",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "con él",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "time",
+              "anchor": {
+                "text": "Mañana",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [],
+          "state": "ambiguous_identity"
+        }
+      ]
+    },
+    "F27": {
+      "version": 1,
+      "units": [
+        {
+          "kind": "occurrence",
+          "anchors": [
+            {
+              "text": "hablé con Eric",
+              "occurrence": 0
+            },
+            {
+              "text": "Ayer",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "predicate",
+              "anchor": {
+                "text": "hablé",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "con Eric",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "date_scope",
+              "anchor": {
+                "text": "Ayer",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [],
+          "state": "candidate"
+        },
+        {
+          "kind": "occurrence",
+          "anchors": [
+            {
+              "text": "con Luis",
+              "occurrence": 0
+            },
+            {
+              "text": "después",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "con Luis",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "order",
+              "anchor": {
+                "text": "después",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [
+            {
+              "role": "predicate",
+              "from_unit": 1
+            },
+            {
+              "role": "date_scope",
+              "from_unit": 1
+            }
+          ],
+          "state": "candidate"
+        },
+        {
+          "kind": "plan",
+          "anchors": [
+            {
+              "text": "iré al cine",
+              "occurrence": 0
+            },
+            {
+              "text": "Mañana",
+              "occurrence": 0
+            },
+            {
+              "text": "él",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "predicate",
+              "anchor": {
+                "text": "iré",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "object",
+              "anchor": {
+                "text": "al cine",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "date_scope",
+              "anchor": {
+                "text": "Mañana",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "él",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [],
+          "state": "ambiguous_identity"
+        }
+      ]
+    },
+    "F09": {
+      "version": 1,
+      "units": [
+        {
+          "kind": "relationship",
+          "anchors": [
+            {
+              "text": "Marta y Luis viven en Lyon",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "subject",
+              "anchor": {
+                "text": "Marta y Luis",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "predicate",
+              "anchor": {
+                "text": "viven",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "location",
+              "anchor": {
+                "text": "Lyon",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [],
+          "state": "candidate"
+        }
+      ]
+    },
+    "F10": {
+      "version": 1,
+      "units": [
+        {
+          "kind": "relationship",
+          "anchors": [
+            {
+              "text": "Marta",
+              "occurrence": 0
+            },
+            {
+              "text": "Luis",
+              "occurrence": 0
+            },
+            {
+              "text": "se conocieron",
+              "occurrence": 0
+            },
+            {
+              "text": "Lyon",
+              "occurrence": 0
+            }
+          ],
+          "scoped_source": [
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "Marta",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "participants",
+              "anchor": {
+                "text": "Luis",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "predicate",
+              "anchor": {
+                "text": "se conocieron",
+                "occurrence": 0
+              }
+            },
+            {
+              "role": "location",
+              "anchor": {
+                "text": "Lyon",
+                "occurrence": 0
+              }
+            }
+          ],
+          "inheritance": [],
+          "state": "candidate"
+        }
+      ]
+    }
+  }
+}

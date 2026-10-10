@@ -145,9 +145,15 @@ def main() -> int:
         )
     else:
         print(json.dumps(result, indent=2))
+    if not args.live:
+        return 0
+    # A syntactically valid provider response is not a passing Router gate.
+    # Only exact frozen fixture matches can return success; human semantic
+    # review is still mandatory even then.
     return (
         0
-        if not args.live or all(row["result"] == "source_valid" for row in result["results"])
+        if all(row["result"] == "source_valid" for row in result["results"])
+        and result.get("oracle_comparison", {}).get("all_fixture_matches") is True
         else 1
     )
 

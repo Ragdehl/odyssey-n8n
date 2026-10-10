@@ -171,7 +171,29 @@ full 9-call envelope is ~USD 0.0848571, above the user-authorized USD 0.02;
 a potential limited 6-call Router/Temporal wave totals ~USD 0.013495.
 Only an explicitly security-permitted and reviewed live-gate workflow may
 execute that wave; the file is not an alternate live runner or circumvention.
-See issue #151. No new live-provider data has been collected.
+See issue #151 for the historical blocked inline operation, which was
+not retried.
+
+**Actual v2 Router-only GPT-6 live evidence (2026-10-10):** A separate
+versioned/snapshot-checked runner was accepted through the ordinary Pi user
+service without changing the model, prompt, schema or user vault. Four synthetic
+Router calls F14/F27/F09/F10 completed (2,134 input and 1,575 output tokens;
+pinned standard-rate cost estimate **$0.0010009**, conservative pre-call bound
+**$0.01181875** vs previously approved $0.02). The strict frozen fixture
+comparison failed for all four because of shape differences, **but the
+semantic split itself failed clearly on F09** (two independent residences
+wrongly grouped into one relationship). F10 returned a correct single mutual
+relation with different grounded spans. F14/F27 correctly distinguished one
+coherent vs two sequential contact events and left `él` ambiguous, but
+misclassified the future as `plan`, supplied noncanonical date role labels
+and lacked Core-required participant/reference evidence; offline replay of
+the **real model replies** is rejected by Core's canonical source coverage
+preflight before any write. Saved synthetic responses and regression tests
+are versioned under `benchmarks/fact_candidate_v2_live/`. **The limited
+real-model evaluation is now unblocked and completed; Router v1 is still
+NOT READY for DEV**, pending contract/prompt semantic corrections and a
+reviewed new regression gate. That success does not determine the cause of
+the older rejected remote shell command or authorize bypassing it.
 
 **F27 exact sequential-source Core pilot (2026-10-10):** The two separate
 conversation facts for `hablé con Eric y después con Luis` now also pass a
