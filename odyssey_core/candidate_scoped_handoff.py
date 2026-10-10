@@ -57,6 +57,27 @@ class CoreScopedPlanningUnit:
         """Return shared literal context only (not a complete isolated task)."""
         return self.original_clause
 
+    def scoped_request(self) -> str:
+        """Core-owned literal-span derivation, never claimed as an original quote.
+
+        The narrow checked Spanish grammar is "Ayer hablé con X [y después
+        con Y]". The output is one independent affirmative user fact, while
+        the complete original source and offsets remain the provenance.
+        """
+        people = [span.text for role, span in self.roles if role == "participants"]
+        ordered = any(role == "order" and span.text == "después" for role, span in self.roles)
+        if (
+            not 1 <= len(people) <= 2
+            or len(self.date_evidence) != 1
+            or self.date_evidence[0].text != "Ayer"
+            or "hablé" not in self.subject_predicate_evidence.text
+        ):
+            raise CandidateScopeSafetyError("Cannot derive safe person-level planning sentence")
+        if len(people) == 2 and ordered:
+            raise CandidateScopeSafetyError("Ordered two-person unit needs separate source proof")
+        predicate = "hablé después con" if ordered else "hablé con"
+        return f"Ayer {predicate} {' y '.join(people)}."
+
     def task_payload(self) -> dict:
         """One selected unit with Core-owned grammatical/date evidence.
 

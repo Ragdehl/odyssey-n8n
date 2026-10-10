@@ -244,3 +244,51 @@ deployed. Do not naïvely cut strings at punctuation, allow
 cross-clause corrections to be lost, expose Router-supplied canonical
 targets, weaken note resolution, or mark the pending cinema as
 written. Validate provider-free semantics/provenance first.
+
+## 2026-10-10 opt-in independent Core planner per-unit gate
+
+The reviewed Core boundary now constructs source-proven individual planning
+tasks from actual saved GPT-6 Router F14/F27 candidates. F14 yields ONE
+`Ayer hablé con Eric y Luis.` task; F27 yields TWO separate Core-assembled
+tasks `Ayer hablé con Eric.` and `Ayer hablé después con Luis.`.
+The latter are **Core-owned derived paraphrases**, not purported verbatim
+quotes; exact original spans, shared past-clause context, original first-
+person predicate and `después` remain retained in a separate immutable
+evidence object. Each task is sent to the **same existing
+`OpenAILunaExperimentalPlanner`**, with just its corresponding **trusted
+original Temporal past date**. The original `Mañana`/unresolved `él`
+never enters the scoped model input. The full original source and future
+pending candidate remain available for later global review.
+
+`odyssey_core/candidate_scoped_planning.py` is an opt-in **non-executing
+one-Core-call-per-unit adapter**. It enforces one dated Core fact and
+precisely the selected original participant(s) per model response. It
+does NOT authorize a combined plan, note write, identity guess, or
+pending persistence. The later aggregation to Core's full-source
+candidate-coverage plus durable pending write is a distinct remaining
+release gate.
+
+`run_scoped_live.py` is offline by default. It pins each exact,
+production-shaped GPT-5.6 Luna/low model request with SHA-256
+(`reviewed_scoped_requests.json`). It may run one and only one
+synthetic fixed unit per execution and cannot touch a vault. First
+F14, then F27/candidate-1, then F27/candidate-2 **only after**
+the earlier actual token-usage receipts are present and enough of
+the user's existing cumulative USD 0.07 approval remains for the
+entire next worst-case reservation. Prior observed focused tests
+consume an estimated USD 0.01852760, and each new Core call has
+roughly USD 0.03215 conservative maximum. Provider retries are disabled,
+`store=false`, no additional model is introduced or migrated.
+
+Offline:
+```bash
+python -m benchmarks.fact_candidate_core_live.run_scoped_live \
+  --case F14 --unit candidate-1
+python -m pytest -q tests/core/test_candidate_scoped_planning.py \
+  tests/benchmarks/test_fact_candidate_scoped_core_live.py
+```
+
+The reviewed live command is the same with `--live`, under the existing
+transient Pi user service with the fixed EnvironmentFile and explicit
+`ODYSSEY_CORE_FACT_LIVE_APPROVED=1`. If any provider stage refuses,
+save it as failure evidence rather than claiming acceptance or retrying.

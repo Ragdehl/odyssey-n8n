@@ -1,0 +1,26 @@
+{
+  "stages": [
+    [
+      "F14",
+      "candidate-1"
+    ],
+    [
+      "F27",
+      "candidate-1"
+    ],
+    [
+      "F27",
+      "candidate-2"
+    ]
+  ],
+  "sha256": {
+    "F14/candidate-1": "58ac25127c8e504436b9a90f803cc7da68928d4750637421cb73c3ed8a9072d9",
+    "F27/candidate-1": "b7be34212fae75e8e18172aa8b3371f99f564c94e92c244206a3892e90d95016",
+    "F27/candidate-2": "75801e4ac952d9d3c6a6d1b06ee776ad74e09d611d44da2dac2b0f7ca5ae2ca1"
+  },
+  "bytes": {
+    "F14/candidate-1": 57821,
+    "F27/candidate-1": 57814,
+    "F27/candidate-2": 57823
+  }
+}
