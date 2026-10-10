@@ -23,7 +23,7 @@ from tests.runtime.test_fact_candidate_writes_e2e import _case, _new_repo
 from tests.runtime.test_temporal_user_path_e2e import SCHEMA, _day_plan
 
 
-def _case_with_pending(tmp_path: Path):
+def _case_with_pending(tmp_path: Path, *, candidate_pending_recorder=None):
     case, context = _case("F14")
     original = _day_plan("2026-10-03", "Hablé con Eric.", "2026-10-03")
     unit = original.actions[0].units[0]
@@ -63,6 +63,7 @@ def _case_with_pending(tmp_path: Path):
         request_id_factory=lambda: "candidate-pending-test",
         candidate_context=context,
         candidate_coverage_factory=lambda *_: manifest,
+        candidate_pending_recorder=candidate_pending_recorder,
     )
     readback = readback_core_facts(case["source"], context, plan, result, repo, SCHEMA)
     return case, context, plan, manifest, result, readback, repo

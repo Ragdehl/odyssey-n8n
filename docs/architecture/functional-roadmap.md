@@ -81,17 +81,21 @@ references **before persistence**. Passing these vetoes is not semantic
 attestation: mixed-clause negation, date ownership and grounded canonical
 identity still require independent verification.
 
-A provider-free **in-memory** preview for a still-unplanned Router candidate
-now cross-checks the original source fragment, a bounded Core coverage
-manifest, a partial Core result and physically persisted facts. In the
-Eric/Luis/`él` case it can report two physically verified facts and one
-unresolved clause while explicitly indicating `persisted=false`,
-`resumable=false`. It neither stores a new pending record nor fabricates an
-incomplete Core action. The next material review concerns a versioned extension
-of the approved Phase 17B nonknowledge pending state for unplanned candidates,
-including request selection, cancellation, unrelated turns, stale evidence,
-replay and retention. This contract must precede any runtime activation;
-new model-facing Router/Luna live gates and historical release gates remain.
+The human-approved partial clarification lifecycle now has an isolated v2
+nonknowledge state store under `state/pending/candidates/`, leaving v1 planned
+pending records and all canonical Notes intact. The opt-in Core callback
+records a real pending candidate **only after** verifying written Markdown,
+including original request/ordinal/target/fact digests; selections remain
+Core-grounded, request-ID scoped and replay/staleness guarded. Synthetic
+`Eric y Luis → él` tests now cover `con Luis`, cancellation (including after
+selection), unrelated/multiple clarifications, restart, option changes and
+previous fact changes. A guarded Core continuation with a pre-reviewed plan
+writes only the outstanding cinema Day link, with original capture clock and
+all previously saved facts unchanged. These remain **provider-free fixtures**;
+no live model has produced an accepted continuation, no auto-close-to-resolved
+semantic contract is claimed, and the v2 route is not wired into runtime.
+Final model semantic gates plus the historical release hash/operator blockers
+remain before any DEV activation.
 
 ## Current functional work — explainable clarification
 

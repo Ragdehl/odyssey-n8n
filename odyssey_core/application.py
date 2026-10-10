@@ -338,6 +338,7 @@ def execute_request(
     candidate_context: CoreCandidateContext | None = None,
     candidate_coverage_factory: Callable[[str, CoreCandidateContext, RequestPlan], Any]
     | None = None,
+    candidate_pending_recorder: Callable[[Any], str] | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -366,6 +367,8 @@ def execute_request(
         conversation_context: Bounded visible recent turns used only by the planner to resolve
             continuity; Core never passes this text to canonical retrieval or mutation boundaries.
         candidate_context: Optional Core-owned request-local source candidates. Disabled normally.
+        candidate_pending_recorder: Optional opt-in durable callback taking a Core-verified
+            source-pending preview. It must only record operational state, not replay a plan.
         candidate_coverage_factory: Optional reviewed Core mapping producer, paired with
             candidate_context. It MUST account for every candidate and planned atomic fact
             before any Core action. It does not grant new write or semantic authority.
@@ -381,6 +384,10 @@ def execute_request(
         raise ValueError("Candidate coverage requires both Core context and review factory")
     if candidate_coverage_factory is not None and not callable(candidate_coverage_factory):
         raise ValueError("Core coverage factory must be callable")
+    if candidate_pending_recorder is not None and (
+        candidate_context is None or not callable(candidate_pending_recorder)
+    ):
+        raise ValueError("Candidate pending recorder requires opt-in Core coverage")
     started = monotonic()
     stages: list[OperationalStage] = []
     if not isinstance(user_request, str) or not user_request.strip():
@@ -762,6 +769,68 @@ def execute_request(
                 error="candidate continuation is not yet implemented",
             ),
         )
+        if candidate_pending_recorder is not None:
+            from .candidate_fact_readback import readback_core_facts
+            from .candidate_pending_projection import project_unresolved_candidate_preview
+
+            pending_started = monotonic()
+            try:
+                readback = readback_core_facts(
+                    user_request, candidate_context, plan, result, repository, schema
+                )
+                preview = project_unresolved_candidate_preview(
+                    user_request, candidate_context, plan, manifest, result, readback
+                )
+                stored_id = candidate_pending_recorder(preview)
+                if stored_id != request_id:
+                    raise ValueError("Candidate pending record ID differs from Core request")
+            except Exception as error:
+                stages.append(
+                    _stage(
+                        "pending",
+                        OperationalOutcome.FAILED,
+                        pending_started,
+                        monotonic,
+                        error,
+                        started,
+                    )
+                )
+                return _with_operational(
+                    replace(
+                        result,
+                        pending_work=PendingWorkStatus(
+                            required=True,
+                            persisted=False,
+                            error="candidate pending evidence could not be persisted",
+                        ),
+                    ),
+                    stages,
+                    started,
+                    monotonic,
+                )
+            stages.append(
+                _stage(
+                    "pending",
+                    OperationalOutcome.COMPLETED,
+                    pending_started,
+                    monotonic,
+                    None,
+                    started,
+                )
+            )
+            return _with_operational(
+                replace(
+                    result,
+                    pending_work=PendingWorkStatus(
+                        required=True,
+                        persisted=True,
+                        record_id=stored_id,
+                    ),
+                ),
+                stages,
+                started,
+                monotonic,
+            )
         stages.append(OperationalStage("pending", OperationalOutcome.UNAVAILABLE))
         return _with_operational(result, stages, started, monotonic)
     if not any(action.status is not ActionStatus.COMPLETED for action in actions):

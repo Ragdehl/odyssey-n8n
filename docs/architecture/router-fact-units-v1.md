@@ -401,25 +401,59 @@ clarification. Tests cover real disposable Markdown from two independent
 written facts and one ambiguous third source candidate, inconsistent evidence,
 no pending candidate, and no accidental durable pending/knowledge writes.
 
-**Unresolved architecture/product decision (stop before activation):** Phase
-17B's **approved** `state/pending/<request_id>.json` v1 format intentionally
-stores validated incomplete planned actions; a Router-v1 candidate blocked
-**before** Core builds an action cannot safely be injected into that schema
-or replayed as a plan. Do not silently add an alternative authority or
-interpret `"con Luis"` as permission to rewrite successful earlier facts.
-Recommend extending the existing **request-ID-scoped nonknowledge pending state**
-with a clearly versioned, bounded *unplanned candidate* section under the same
-storage/ownership root, preserving exact original text and source offsets,
-completed-fact provenance by original request ID/ordinal, candidate reason,
-verified-entity choice evidence and preflight guards, plus explicit continuation
-lifecycle and replay/expiry rules. Human review is required for whether a
-follow-up answer targets the most recent pending clarification or must carry
-an explicit pending request identifier when other turns intervene, the
-acceptable lifecycle/retention for such unplanned candidate states, and how
-to handle cancellation, irrelevant replies, stale canonical evidence and
-multiple simultaneous pending clarifications. Before approval the preview
-remains in memory and **cannot resume**. No production/DEV vault, pending
-file or user conversation is changed.
+**Block 4B10 approved candidate pending state / guarded continuation (isolated):**
+The human approved storing source-candidate clarifications under existing
+actor-local pending operational state until resolved/cancelled, interpreting an
+immediate answer only when the conversation has exactly one outstanding
+clarification, requiring an explicit request selector for multiple/unrelated
+turns, and never undoing already persisted independent Core facts on
+cancellation. Implementation uses `state/pending/candidates/<request_id>.json`
+format `odyssey_pending_work` version **2**. Keeping a dedicated subdirectory
+beneath the existing Phase-17B pending root leaves v1's `list_ids()` and
+validated incomplete-`RequestPlan` records byte-for-byte unchanged. It adds
+NO canonical Note type, database, index, service or new mutation authority.
+
+`odyssey_core/candidate_pending_projection.py` now carries real Core source
+anchors (including scoped original `reference` wording), physically verified
+request/ordinal/note-id/normalized-fact-digest markers and candidate pending
+reasons. In the **opt-in** application boundary, `candidate_pending_recorder`
+runs only after the normal approved subset was written and canonically read
+back; it records with a request-bound create-only, fsynced/locked v2 store or
+returns a truthful `persisted=false` partial result on failure. The format
+preserves an offset-bearing capture timestamp so a resumed `mañana` does not
+silently shift to the date of the eventual user answer. Record sizes/counts
+are bounded, malformed/symlinked/stale evidence fails closed; completed Core
+facts are NOT converted into replayable instructions.
+
+The v2 store reuses Core's existing bounded `ClarificationOption`, direct
+reply matcher, optional injected Luna clarification classifier and canonical
+`current_identity_guard`: one trusted immediately-following `Con Luis`
+selects only an **existing Core-grounded** `Luis` choice; explicit `cancelar`
+closes pending state without deleting a Note; an unrelated new request does not
+consume it; multiple open requests require an explicit original request ID;
+answer request IDs are replay/idempotence guards. Modified selected notes OR
+changed previously written facts make selection/continuation stale, with no
+silent repair/replay. The typed selected state is rechecked upon every later
+Core use and supports generic canonical Note types, not only Person. Records
+are kept until cancellation or eventual proven completion; there is no
+speculative age-based expiry. Missing Core-verified options remain open but
+cannot execute or choose an invented identity.
+
+`odyssey_core/candidate_continuation_guard.py` offers a narrow **Core-only**
+last-moment preflight for an already selected identity, one reference-bearing
+fact and one ordinary reference-only helper. It requires that the original
+source reference mention and current option guard exactly match Core's
+resolved target ID. With a **pre-reviewed synthetic plan** and the captured
+clock, the real Core writer now persists *only* the dependent cinema Day fact
+linked to Luis in a disposable vault, leaving both earlier independent facts
+unchanged. A wrong target/person, changed canonical Note, altered pronoun,
+extra write or canceled clarification is rejected before persistence. This
+success does NOT mean the model can yet generate the correct continuation:
+semantic event/date/polarity/source-fact equivalence and safe completion still
+need a separate live model evidence gate and Core review. The v2 state is left
+`selected` (not falsely `resolved`) after this simulation, and the guard never
+turns a user reply directly into a `RequestPlan`. No runtime request path
+supplies these experimental arguments; DEV and PROD remain Router v0.
 
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that

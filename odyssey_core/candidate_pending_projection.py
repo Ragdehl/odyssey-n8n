@@ -7,9 +7,11 @@ until a separately approved durable state and continuation contract exists.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 from .application import ApplicationResult, ApplicationStatus
+from .atomic_facts import normalize_atomic_fact
 from .candidate_context import CoreCandidateContext
 from .candidate_coverage import (
     CoreCandidateCoverageManifest,
@@ -18,7 +20,7 @@ from .candidate_coverage import (
     validate_candidate_coverage_manifest,
 )
 from .candidate_fact_readback import CandidateFactReadback
-from .request_planning import RequestPlan
+from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 
 class CandidatePendingProjectionError(ValueError):
@@ -34,6 +36,9 @@ class CandidatePendingItem:
     source_start: int
     source_end: int
     reason: str
+    reference_text: str | None = None
+    reference_start: int | None = None
+    reference_end: int | None = None
     resumable: bool = False
 
 
@@ -46,6 +51,7 @@ class CandidatePendingPreview:
     request_status: str
     pending: tuple[CandidatePendingItem, ...]
     physically_verified_fact_count: int
+    completed_fact_markers: tuple[tuple[int, str, str], ...] = ()
     candidate_semantics_verified: bool = False
     persisted: bool = False
     resumable: bool = False
@@ -95,6 +101,16 @@ def project_unresolved_candidate_preview(
                         "Multiple-anchor candidate needs a different clarification UI"
                     )
                 anchor = candidate.anchors[0]
+                references = [role.span for role in candidate.roles if role.role == "reference"]
+                if (
+                    len(references) > 1
+                    or references
+                    and (references[0].start < anchor.start or references[0].end > anchor.end)
+                ):
+                    raise CandidatePendingProjectionError(
+                        "Pending reference is not locally sourced"
+                    )
+                reference = references[0] if references else None
                 pending.append(
                     CandidatePendingItem(
                         candidate.candidate_id,
@@ -102,6 +118,9 @@ def project_unresolved_candidate_preview(
                         anchor.start,
                         anchor.end,
                         claim.pending_reason,
+                        reference.text if reference else None,
+                        reference.start if reference else None,
+                        reference.end if reference else None,
                     )
                 )
         if not pending:
@@ -112,12 +131,31 @@ def project_unresolved_candidate_preview(
         raise CandidatePendingProjectionError(
             "Unable to project validated candidate pending evidence"
         ) from error
+    # Preserve exact original successful Core provenance for later staleness
+    # checks. This is not a new knowledge store or a replayable Core plan.
+    fact_texts: dict[int, str] = {}
+    by_unit = iter(plan_fact_ordinals(plan))
+    for action in plan.actions:
+        if isinstance(action, WriteAction):
+            for unit in action.units:
+                for ordinal, fact_text in zip(next(by_unit), unit.facts, strict=True):
+                    fact_texts[ordinal] = fact_text
+    confirmed = tuple(
+        (
+            fact.ordinal,
+            fact.note_id,
+            hashlib.sha256(
+                normalize_atomic_fact(fact_texts[fact.ordinal]).encode("utf-8")
+            ).hexdigest(),
+        )
+        for fact in readback.persisted_facts
+        if fact.status == "verified_in_markdown" and fact.note_id is not None
+    )
     return CandidatePendingPreview(
         request_id=result.request_id,
         original_request=source,
         request_status=result.status.value,
         pending=tuple(pending),
-        physically_verified_fact_count=sum(
-            item.status == "verified_in_markdown" for item in readback.persisted_facts
-        ),
+        physically_verified_fact_count=len(confirmed),
+        completed_fact_markers=confirmed,
     )
