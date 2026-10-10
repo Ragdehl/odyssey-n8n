@@ -902,6 +902,36 @@ four-case gate cannot substitute for a held-out 23-case semantic sweep or
 for a separate real Core planning and acceptance gate. No claim that
 all new user messages or identity resolutions are semantically certified.
 
+**Block 4B23 F09 physical Core write proof and F09/F10 Core provider budget
+preflight (2026-10-10, feature branch ONLY):** The observed GPT-6 prompt-v3
+F09 source evidence (two separately anchored `property` candidates) now passes
+Core's independent candidate→planned-fact coverage and physically updates
+**two existing, independently seeded synthetic canonical Person notes**:
+"Marta vive en Lyon." and "Luis vive en Lyon." Markdown readback verifies
+both facts and distinct stable person targets; swapped, duplicated or omitted
+property assignments fail before any write. This replay uses a separately
+constructed reviewed fake Core plan, **not real GPT-5.6 planner output**.
+F10's one mutual `relationship` is source-grounded and Core validates its
+two canonical reference helper roles; a full Core-chosen target/plan/Markdown
+representation is still unverified, and no fabricated date/event Note should
+be inferred from this undated source.
+
+A separate **Core-only, offline-by-default, source-pinned** executor is
+prepared at `benchmarks/fact_candidate_core_live/`. Its exact provider
+request hashes and current model/schema/prompt are verified offline for
+**F09 and F10 only**, using the existing `gpt-5.6-luna` / low planner,
+unchanged 2048-token output cap, `store=false` and no SDK retries. It
+has no repository, Core executor or personal-vault access. A conservative
+**two-call reservation is USD 0.06344020**, and previous three Router runs'
+standard-rate estimated cost is USD 0.00323560, implying a required new
+**cumulative approval of USD 0.07**. The previous USD 0.02 Router allowance
+does not cover this new worst-case gate. **The live GPT-5.6 Core gate has
+NOT been executed or authorized**; only offline capture/preflight/tests
+have run. After separate explicit budget approval, collect those two
+actual model responses and independently verify target/cardinality,
+canonical Note representation and any refusal/escalation. Do not claim
+Core production-model acceptance or enable Router v1 before that evidence.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

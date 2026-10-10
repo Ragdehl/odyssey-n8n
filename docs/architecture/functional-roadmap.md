@@ -234,6 +234,25 @@ also passes but its full Core planning/persistence is untested. This is
 **focused Router success, not production activation or complete Core live
 model acceptance**. Keep normal Core GPT-5.6 and Router v0 unchanged.
 
+**F09/F10 separate Core model gate preflight (2026-10-10):** The saved
+GPT-6 v3 F09 response now exercises real Core coverage and physically
+writes **two distinct Person facts** to two pre-seeded synthetic Markdown
+notes. Each candidate receives its own readback-confirmed fact; swapped,
+duplicated or omitted writes are rejected before mutation. F10's single
+mutual relationship passes the literal source/participant guard, but the
+undated target and real Core-chosen write plan remain to be demonstrated.
+A separate offline-by-default GPT-5.6 Luna/low Core-only two-call
+evaluation is pinned at `benchmarks/fact_candidate_core_live/`. It
+preserves the production planner prompt and JSON schema and cannot read
+personal notes or execute write actions. The conservative two-call cost
+envelope is **USD 0.06344020**, requiring **explicit new cumulative
+approval of USD 0.07**, beyond the historical USD 0.02 Router test
+authorization. **No real GPT-5.6 Core provider calls have yet run**;
+do not infer model readiness from offline preflight. After approval,
+evaluate its actual two Core plans/clarifications without assuming an
+undated event belongs to today's Calendar Day. Leave F14/F27 and the
+23 other Router design cases untouched for this distinct Core gate.
+
 **F27 exact sequential-source Core pilot (2026-10-10):** The two separate
 conversation facts for `hablé con Eric y después con Luis` now also pass a
 real (fake-model) semantic Core compilation, source-before-write candidate
