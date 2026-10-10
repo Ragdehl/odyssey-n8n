@@ -593,6 +593,54 @@ invalid reference plans. No new paid calls and no DEV/PROD wiring or model-
 facing prompt/schema/hash changes occurred; a dedicated production-shape live
 quality gate is still mandatory before enabling this experimental route.
 
+**Block 4B13 real Core Luna compiler + pending Temporal correction (2026-10-10,
+feature branch only, provider-free):** The first model-shaped semantic PLAN for
+F14 exposed a concrete integration blocker, invisible to manually constructed
+Core plans: Temporal supplies BOTH `Ayer` and `Mañana` to the full-source Luna
+planner, but its two existing strict Core validators required EVERY exact
+mention to be consumed by the partial safe WriteAction. That incorrectly
+rejects an independently safe conversation write while an ambiguous future
+cinema clause is deliberately pending. No model prompt edit solves this
+validation conflict.
+
+`odyssey_core/experimental_luna_planning.py` now has a default-disabled,
+**Core-owned pending Temporal exception** restricted to a passed
+`CoreCandidateContext` already independently source-validated. Exactly one
+Temporal text occurrence may be exempted from *that plan's completeness
+validation* ONLY when its exact span is wholly inside the sole candidate
+covering it, that candidate is explicitly `ambiguous_identity`, and it also
+cites the same exact span through a temporal source role. Missing dates in
+normal, unrelated, overlapping, unscoped or repeated literal occurrences
+still fail closed. A filtered immutable **validation copy** of the Temporal
+domain is used for the existing Core plan validator and fact-anchor binder;
+the originally supplied Temporal interpretation and its date/time values are
+never changed, normalized by Router, or turned into identity/write authority.
+Without candidate context the previous Luna and Core validators remain
+strict and the prompts, Structured Outputs schemas, cache-stable prefix,
+normal Router v0 runtime and production paths are unchanged. A successful
+source-only exception is **not** semantic attestation: opt-in Core candidate
+coverage remains an independent mandatory pre-write gate.
+
+Most importantly, a frozen provider-shaped GPT-5.6 Luna semantic WRITE fixture
+now runs through **the actual `OpenAILunaExperimentalPlanner.plan` +
+`decode_semantic_write_action` + `compile_semantic_write`**, rather than
+injecting a hand-authored `RequestPlan`. Core itself produces `calendar_day`
+10-03 with exactly one fact `Hablé con {{ref:0}} y {{ref:1}}.`, two typed
+`reference_lookup_only` person helper units with canonical `identity` roles,
+and verified `2026-10-03` fact temporal anchors; Core's unchanged writer,
+source review, canonical dual-link physical readback and durable v2 pending
+state then run in `tmp_path` with the exact 10-05 cine clause withheld.
+The grouped candidate checker now recognizes Core's generated `identity`
+reference role as well as its earlier fixture role, still requiring full
+canonical helper resolution and no additional side effects. Injected model
+output is a **test fixture** and no live-model semantic quality evidence has
+been obtained for F14 or the new F27. Separate negative tests prove that a
+missing **safe** past date, selecting the wrong target Day, repeated ambiguous
+`Mañana`, omitted temporal role or absent candidate context cannot bypass
+Core's Temporal proof obligation. Existing source/plan/fact/wiklink proofs,
+polarity and pronoun authority remain mandatory. No paid provider calls,
+DEV/PROD writes or schema migration occurred in this block.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

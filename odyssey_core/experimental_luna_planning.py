@@ -11,7 +11,7 @@ import os
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Protocol
@@ -144,6 +144,7 @@ def validate_luna_experimental_result(
     domain_interpretation: DomainInterpretation | None = None,
     *,
     authorized_calendar_dates: Sequence[str] = (),
+    candidate_context: CoreCandidateContext | None = None,
 ) -> ExperimentalPlannerResult:
     """Validate a Luna result without weakening production planner validation.
 
@@ -170,6 +171,7 @@ def validate_luna_experimental_result(
             schema,
             domain_interpretation,
             authorized_calendar_dates=authorized_calendar_dates,
+            candidate_context=candidate_context,
         )
     if payload.get("outcome") != "ESCALATE":
         return validate_planner_result(payload, schema)
@@ -196,6 +198,7 @@ def _validate_luna_plan(
     domain_interpretation: DomainInterpretation | None = None,
     *,
     authorized_calendar_dates: Sequence[str] = (),
+    candidate_context: CoreCandidateContext | None = None,
 ) -> RequestPlan:
     """Compile semantic writes in provider order and reuse established action/final invariants."""
     required = {"outcome", "actions", "limitations", "clarification_code"}
@@ -240,23 +243,43 @@ def _validate_luna_plan(
                 stage=PlannerValidationStage.WRITE_ACTION,
                 code=PlannerValidationCode.INVALID_MUTATION,
             ) from error
-    _validate_semantic_temporal_evidence(semantic_write_intents, domain_interpretation)
+    excluded_pending_temporals = _validate_semantic_temporal_evidence(
+        semantic_write_intents, domain_interpretation, candidate_context
+    )
+    # Keep Temporal's original evidence immutable. For this opt-in planning
+    # preflight ONLY, drop exactly those mentions which Core has source-located
+    # inside an independently pending ambiguous source candidate. The ordinary
+    # Core temporal validator must still reject every other missing date.
+    scoped_temporal = domain_interpretation
+    if excluded_pending_temporals and domain_interpretation is not None:
+        remainder = excluded_pending_temporals.copy()
+        kept = []
+        for evidence in domain_interpretation.evidence:
+            key = (evidence.source_text, evidence.value)
+            if evidence.kind == "temporal_reference" and remainder[key] > 0:
+                remainder[key] -= 1
+                continue
+            kept.append(evidence)
+        if any(remainder.values()):
+            raise RequestPlanningError("Ambiguous candidate temporal proof is incomplete")
+        scoped_temporal = replace(domain_interpretation, evidence=tuple(kept))
     plan = finalize_request_plan(
         actions,
         payload["limitations"],
         payload.get("presentation_intent", "answer"),
     )
-    validate_plan_against_domain_interpretation(plan, domain_interpretation)
-    return bind_plan_temporal_anchors(plan, domain_interpretation)
+    validate_plan_against_domain_interpretation(plan, scoped_temporal)
+    return bind_plan_temporal_anchors(plan, scoped_temporal)
 
 
 def _validate_semantic_temporal_evidence(
     intents: Sequence[SemanticWriteIntent],
     interpretation: DomainInterpretation | None,
-) -> None:
-    """Bind semantic temporal parts to exact trusted source-text/date evidence pairs."""
+    candidate_context: CoreCandidateContext | None = None,
+) -> Counter[tuple[str, str]]:
+    """Require all non-pending Temporal evidence, returning precisely omitted pending pairs."""
     if interpretation is None:
-        return
+        return Counter()
     allowed = Counter(
         (item.source_text, item.value) for item in interpretation.temporal_references()
     )
@@ -285,12 +308,46 @@ def _validate_semantic_temporal_evidence(
             stage=PlannerValidationStage.WRITE_ACTION,
             code=PlannerValidationCode.INVALID_MUTATION,
         )
-    if intents and required - found:
+    missing = required - found
+    excluded: Counter[tuple[str, str]] = Counter()
+    if missing and candidate_context is not None:
+        # Source candidates are unverified hints; here they may *prevent an
+        # unjustified global temporal-coverage veto*, not grant write authority.
+        # A separate, mandatory Core-owned coverage manifest must still prove
+        # that an omitted ambiguous candidate is explicitly pending.
+        candidate_context.validate(interpretation.source_text)
+        for pair, count in missing.items():
+            mention, _value = pair
+            source = candidate_context.source
+            # Temporal exposes source text, not occurrence offsets. An
+            # ambiguous repeated literal must not be matched to a guessed one.
+            if count != 1 or source.count(mention) != 1:
+                continue
+            start = source.find(mention)
+            end = start + len(mention)
+            scoped = [
+                candidate
+                for candidate in candidate_context.candidates
+                if any(anchor.start <= start and end <= anchor.end for anchor in candidate.anchors)
+            ]
+            if len(scoped) != 1 or scoped[0].state != "ambiguous_identity":
+                continue
+            if not any(
+                role.role in {"date", "date_scope", "time", "time_approx"}
+                and role.span.start <= start
+                and end <= role.span.end
+                for role in scoped[0].roles
+            ):
+                continue
+            excluded[pair] = 1
+        missing -= excluded
+    if intents and missing:
         raise RequestPlanningError(
             "Luna semantic WRITE omitted required temporal wording/temporal evidence",
             stage=PlannerValidationStage.WRITE_ACTION,
             code=PlannerValidationCode.INVALID_MUTATION,
         )
+    return excluded
 
 
 def render_luna_experimental_prompt(
@@ -684,6 +741,7 @@ class OpenAILunaExperimentalPlanner:
                 authorized_calendar_dates=planner_authorized_calendar_dates(
                     self._current_context, self._domain_interpretation
                 ),
+                candidate_context=self._candidate_context,
             )
         except RequestPlanningError as error:
             recorder.add("validate", validation_started, OperationalOutcome.FAILED, error)

@@ -86,7 +86,7 @@ def validate_two_named_participant_fact(
             or helper.target.entity != expected_name
             or helper.target.query != expected_name
             or not helper.target.type
-            or reference.role != helper.target.type
+            or reference.role not in {"identity", helper.target.type}
             or helper.target.filters
             or helper.target.link_scope is not None
             or helper.target.semantic_set is not None
