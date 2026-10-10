@@ -549,9 +549,11 @@ conversation occurrence accessible from both Eric and Luis. A parallel
 **project** test links Odyssey and Atlas through the same Core contract.
 
 **Non-authority and rollout boundary:** Only the frozen *reviewed* tests build
-these Core write plans. The separate Core Luna candidate-attribution proposer
-still rejects reference-bearing plans and **cannot automatically certify this
-group mapping**; ordinary runtime does not enable this opt-in path. These tests
+these Core write plans. The separate Core Luna candidate-attribution proposer can now accept this
+narrow source-grounded linked plan **only as a non-authoritative proposal**;
+its output explicitly remains `semantically_verified=false` and
+`may_authorize_writes=false`. The main Luna planner has not demonstrated it
+can emit that plan unaided. Ordinary runtime does not enable this opt-in path. These tests
 do NOT show that Luna generates grouped canonical links, detects the correct
 pronoun identity, scopes future dates, fixes corrections, or closes the pending
 record on semantic confirmation. The current pilot handles only two explicit
@@ -569,6 +571,27 @@ and the smoke did NOT test its canonical links or semantic Core continuation.
 This is an **oracle correction, not proof of a newly passing live quality
 regression**. F27 has not yet had its own live gate. Re-run the broad frozen
 27-case real-model gate only after final source/plan contracts are reviewed.
+
+**Block 4B12 non-authoritative model attribution for two canonical links
+(2026-10-10, isolated; NOT live-model validated):**
+`odyssey_core/candidate_attribution.py` now reuses the *same Core-only
+source-anchored two-named-participant checker* as the experimental Core
+coverage gate. After Core has independently produced a validated linked
+`RequestPlan`, it can submit that plan's **one** exact placeholder-bearing
+atomic fact to its existing, separate GPT-5.6 Luna/low read-only attribution
+proposal (without modifying the strict output JSON schema, prompt text,
+main Luna Planner or Router). It requires exactly one group candidate able to
+justify the plan's two reference-only helpers; cannot treat helpers as extra
+facts; rejects an omitted, duplicated, mutated or incorrectly targeted helper;
+and refuses to credit that planned ordinal to any different candidate. The
+model still only proposes source-span and fact-ordinal correspondence.
+**Semantic equivalence/identity/date/polarity remains unverified; the model
+has zero write authority and cannot construct or submit the Core coverage
+manifest.** Provider-fake tests confirm this proposed grouped event, the
+separate ambiguous pronoun, no persistence/execute method and fail-closed
+invalid reference plans. No new paid calls and no DEV/PROD wiring or model-
+facing prompt/schema/hash changes occurred; a dedicated production-shape live
+quality gate is still mandatory before enabling this experimental route.
 
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that

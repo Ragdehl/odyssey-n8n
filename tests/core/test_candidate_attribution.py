@@ -290,3 +290,74 @@ def test_old_proposal_cannot_be_reused_after_core_plan_fact_change() -> None:
     )
     assert not proposal.matches_original_plan(source, revised)
     assert not proposal.may_authorize_writes
+
+
+def _f14_group():
+    """Approved source event group, with Core-only reference helpers and pending pronoun."""
+    from tests.runtime.test_fact_multi_participant_event import _core_linked_event
+
+    case, context = _case("F14")
+    plan = _core_linked_event()
+    payload = {
+        "candidates": [
+            _match(1, "Ayer hablé con Eric y Luis", 0, "Hablé con {{ref:0}} y {{ref:1}}."),
+            _pending(2, "Mañana iré al cine con él", "ambiguous_identity"),
+        ]
+    }
+    return case["source"], context, plan, payload
+
+
+def test_grouped_event_core_attributor_can_propose_one_fact_for_two_references() -> None:
+    """Propose one linked statement and one withheld ambiguity without writing."""
+    source, context, plan, payload = _f14_group()
+    proposed = validate_candidate_attribution(source, context, plan, payload)
+    assert len(proposed.candidates) == 2
+    assert proposed.candidates[0].fact_ordinal == 0
+    assert proposed.candidates[0].planned_fact_text == "Hablé con {{ref:0}} y {{ref:1}}."
+    assert proposed.candidates[1].disposition == "pending"
+    assert proposed.candidates[1].pending_reason == "ambiguous_identity"
+    assert proposed.has_grounded_literals
+    assert not proposed.semantically_verified
+    assert not proposed.may_authorize_writes
+    assert proposed.matches_original_plan(source, plan)
+
+
+def test_grouped_reference_proposer_makes_one_injected_call_and_cannot_execute() -> None:
+    """Output schema and Core-only source anchors remain non-executing."""
+    source, context, plan, payload = _f14_group()
+    captured = []
+    reply = SimpleNamespace(status="completed", output_text=json.dumps(payload), usage=None)
+    sdk = SimpleNamespace(
+        responses=SimpleNamespace(create=lambda **kw: captured.append(kw) or reply)
+    )
+    output = OpenAICoreCandidateAttributor(sdk).propose(source, context, plan)
+    assert len(captured) == 1
+    assert captured[0]["store"] is False
+    assert captured[0]["model"] == "gpt-5.6-luna"
+    assert "Hablé con {{ref:0}} y {{ref:1}}." in captured[0]["input"][1]["content"]
+    assert not hasattr(output, "to_execution_manifest")
+    assert not output.may_authorize_writes
+
+
+@pytest.mark.parametrize("kind", ["drop_ref", "wrong_helper", "extra_helper", "mutable_helper"])
+def test_grouped_attribution_rejects_unproven_helper_even_with_exact_model_text(
+    kind: str,
+) -> None:
+    """A fake model cannot make a malformed canonical write shape seem covered."""
+    source, context, plan, payload = _f14_group()
+    action = plan.actions[0]
+    fact, eric, luis = action.units
+    if kind == "drop_ref":
+        fact = replace(fact, references=fact.references[:1])
+    elif kind == "wrong_helper":
+        luis = replace(luis, target=replace(luis.target, entity="Eric"))
+    elif kind == "extra_helper":
+        plan = RequestPlan((WriteAction((fact, eric, luis, luis)),), ())
+    else:
+        luis = replace(luis, facts=("Mutación no autorizada.",), reference_lookup_only=False)
+    if kind != "extra_helper":
+        plan = RequestPlan((WriteAction((fact, eric, luis)),), ())
+    with pytest.raises(
+        CandidateAttributionError, match="group|reference|source-bind|Complex|two-participant"
+    ):
+        validate_candidate_attribution(source, context, plan, payload)

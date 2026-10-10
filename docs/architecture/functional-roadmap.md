@@ -123,7 +123,12 @@ pending continuity. A synthetic pre-reviewed follow-up writes only the
 outstanding cinema fact and reuses original captures; no duplicates. The
 user-approved semantics resolved the F14 unit-count disagreement in the prior
 live smoke, not its still-unverified `plan` vs oracle `occurrence` kind,
-or any held-out model quality gate. No normal runtime or DEV activation yet.
+or any held-out model quality gate. The separate Core-only Luna-attribution
+proposer now accepts **only the same bounded two-name, two-link Core plan**
+for untrusted source/fact matching; its existing model JSON and instructions
+are unchanged and it cannot authorize a write. Provider-fake negative tests
+prove omitted/swapped/extra helpers still fail closed. No normal runtime or
+DEV activation yet.
 
 ## Current functional work — explainable clarification
 

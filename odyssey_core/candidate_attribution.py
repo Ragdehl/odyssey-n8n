@@ -16,6 +16,10 @@ from typing import Any
 
 from .candidate_context import CoreCandidateContext
 from .candidate_coverage import MAX_COVERAGE_FACTS
+from .candidate_multi_participant import (
+    MultiParticipantEvidenceError,
+    validate_two_named_participant_fact,
+)
 from .candidate_semantic_veto import CandidateSemanticVeto, veto_unsafe_literal_match
 from .experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
@@ -64,21 +68,28 @@ class CandidateAttributionProposal:
         )
 
 
-def _facts(plan: RequestPlan) -> dict[int, str]:
-    """Extract only uncomplicated, literal Core facts without changing their plan."""
-    if not isinstance(plan, RequestPlan):
-        raise CandidateAttributionError("Validated Core RequestPlan required")
+def _facts(
+    plan: RequestPlan, context: CoreCandidateContext
+) -> tuple[dict[int, str], dict[int, str]]:
+    """Extract facts for attribution without accepting unclaimed Core helpers.
+
+    Two named, source-scoped participants may share ONE referenced Core fact.
+    This projection remains non-authoritative: Core's separate coverage gate
+    and canonical materializer alone may authorize mutations.
+    """
+    if not isinstance(plan, RequestPlan) or not isinstance(context, CoreCandidateContext):
+        raise CandidateAttributionError("Validated Core plan and context required")
     result: dict[int, str] = {}
+    group_owners: dict[int, str] = {}
+    referenced_helpers: set[tuple[int, int]] = set()
     flattened = iter(plan_fact_ordinals(plan))
-    for action in plan.actions:
+    for action_index, action in enumerate(plan.actions):
         if not isinstance(action, WriteAction):
             continue
-        for unit in action.units:
+        for unit_index, unit in enumerate(action.units):
             ordinals = next(flattened)
             if (
                 unit.intent != "record"
-                or unit.reference_lookup_only
-                or unit.references
                 or unit.properties
                 or unit.tag_changes
                 or unit.destination_type is not None
@@ -88,13 +99,53 @@ def _facts(plan: RequestPlan) -> dict[int, str]:
                 raise CandidateAttributionError(
                     "Complex Core fact requires separate attribution review"
                 )
+            if unit.reference_lookup_only:
+                if unit.facts or unit.references:
+                    raise CandidateAttributionError("Reference helper cannot become an atomic fact")
+                continue
+            if unit.references:
+                if len(unit.facts) != 1 or len(unit.references) != 2:
+                    raise CandidateAttributionError(
+                        "Only one verified two-participant fact is supported"
+                    )
+                possible: list[str] = []
+                for candidate in context.candidates:
+                    try:
+                        validate_two_named_participant_fact(
+                            candidate, plan, action_index, unit_index
+                        )
+                    except MultiParticipantEvidenceError:
+                        continue
+                    possible.append(candidate.candidate_id)
+                if len(possible) != 1:
+                    raise CandidateAttributionError(
+                        "Cannot source-bind a grouped Core fact uniquely"
+                    )
+                group_owners[ordinals[0]] = possible[0]
+                for reference in unit.references:
+                    helper_key = action_index, reference.target_index
+                    if helper_key in referenced_helpers:
+                        raise CandidateAttributionError(
+                            "Core group helper has duplicate source ownership"
+                        )
+                    referenced_helpers.add(helper_key)
             for ordinal, fact in zip(ordinals, unit.facts, strict=True):
                 if not isinstance(fact, str) or not fact.strip() or len(fact) > 600:
                     raise CandidateAttributionError("Invalid or oversized planned fact")
                 result[ordinal] = fact
+    for action_index, action in enumerate(plan.actions):
+        if isinstance(action, WriteAction):
+            for unit_index, unit in enumerate(action.units):
+                if (
+                    unit.reference_lookup_only
+                    and (action_index, unit_index) not in referenced_helpers
+                ):
+                    raise CandidateAttributionError(
+                        "Unclaimed canonical reference helper in attribution"
+                    )
     if len(result) > MAX_COVERAGE_FACTS:
         raise CandidateAttributionError("Core fact attribution exceeds bounded budget")
-    return result
+    return result, group_owners
 
 
 def candidate_attribution_json_schema() -> dict[str, Any]:
@@ -150,7 +201,7 @@ def validate_candidate_attribution(
     if not isinstance(context, CoreCandidateContext):
         raise CandidateAttributionError("Core-owned source candidate context required")
     context.validate(source)
-    facts = _facts(plan)
+    facts, group_owners = _facts(plan, context)
     if not isinstance(payload, dict) or set(payload) != {"candidates"}:
         raise CandidateAttributionError("Closed candidate attribution envelope required")
     entries = payload["candidates"]
@@ -206,6 +257,7 @@ def validate_candidate_attribution(
             if (
                 not isinstance(ordinal, int)
                 or isinstance(ordinal, bool)
+                or (ordinal in group_owners and group_owners[ordinal] != candidate.candidate_id)
                 or ordinal not in facts
                 or ordinal in consumed
                 or planned_text != facts[ordinal]
@@ -257,7 +309,7 @@ class OpenAICoreCandidateAttributor:
         if not isinstance(context, CoreCandidateContext):
             raise CandidateAttributionError("Core-owned candidate context required")
         context.validate(source)
-        facts = _facts(plan)
+        facts, _group_owners = _facts(plan, context)
         prompt_data = json.dumps(
             {
                 "original_source": source,

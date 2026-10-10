@@ -204,3 +204,57 @@ def test_modified_linked_markdown_or_person_note_invalidates_physical_fact_proof
     luis.write_text(luis.read_text() + "\n", encoding="utf-8")
     receipts = readback_core_facts(case["source"], context, plan, result, repo, SCHEMA)
     assert receipts.persisted_facts[0].status == "not_verified"
+
+
+def test_injected_luna_group_attribution_cannot_skip_independent_core_coverage_review(
+    tmp_path: Path,
+) -> None:
+    """Router source -> read-only fake Luna proposal -> independent Core -> real linked Markdown."""
+    import json
+
+    from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
+    from tests.core.test_candidate_attribution import _f14_group
+
+    case, context, repo, pending, plan, manifest, persist = _fixture(tmp_path)
+    source, model_context, model_plan, expected = _f14_group()
+    assert source == case["source"] and model_context == context and model_plan == plan
+    calls = []
+    fake_reply = SimpleNamespace(status="completed", output_text=json.dumps(expected), usage=None)
+    fake = SimpleNamespace(
+        responses=SimpleNamespace(create=lambda **kw: calls.append(kw) or fake_reply)
+    )
+    proposal = OpenAICoreCandidateAttributor(fake).propose(source, context, plan)
+    assert len(calls) == 1
+    assert proposal.candidates[0].fact_ordinal == 0
+    assert proposal.candidates[1].pending_reason == "ambiguous_identity"
+    assert not proposal.may_authorize_writes and not proposal.semantically_verified
+    assert not (repo.root / "calendar/days/2026-10-03.md").exists()
+
+    # This separately human-reviewed manifest is NEVER inferred from the model
+    # proposal. Only ordinary Core's existing writer can persist the two links.
+    result = execute_request(
+        source,
+        planner=SimpleNamespace(plan=lambda _: plan),
+        repository=repo,
+        schema=SCHEMA,
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="synthetic-model-attribution-group",
+        now=NOW,
+        context_limit=5,
+        request_id_factory=lambda: "injected-group-attribution",
+        candidate_context=context,
+        candidate_coverage_factory=lambda *_: manifest,
+        candidate_pending_recorder=persist,
+    )
+    assert result.status is ApplicationStatus.PARTIAL
+    assert result.pending_work.persisted
+    readback = readback_core_facts(source, context, plan, result, repo, SCHEMA)
+    assert readback.persisted_facts[0].status == "verified_in_markdown"
+    assert readback.unresolved_candidate_ids == ("candidate-2",)
+    assert pending.read(result.request_id)["physically_verified_fact_count"] == 1
+    assert "Hablé con [[Eric|Eric]] y [[Luis|Luis]]." in repo.read_text(
+        "calendar/days/2026-10-03.md"
+    )
