@@ -667,6 +667,37 @@ is still required. Offline-only tests freeze model settings, call ordering,
 budget arithmetic and the strict no-network/no-credential separation. The
 user's authorized USD 0.02 ceiling is respected; do not silently expand it.
 
+**Block 4B15 explicit sequential events F27 with Core references (2026-10-10,
+feature branch ONLY, provider-free):** Real (fake-provider) Core semantic
+compilation for `Ayer hablé con Eric y después con Luis. Mañana iré al cine
+con él.` produces **two distinct atomic facts in one dated Core write unit**,
+`Hablé con {{ref:0}}.` and `Después hablé con {{ref:1}}.`, plus **two different
+reference-only helper units**. This is intentionally NOT the F14 one-event
+multi-participant case. A bounded Core-only checker requires the precise
+source `hablé con Eric y después con Luis`, original distinct Eric and Luis
+anchors, the source predicate and date roles for BOTH candidates, strict fact
+order/templates, identical justified fact dates, exact named helper selections,
+and an independently source-anchored ambiguous future `él`. Omitted/swapped
+references, reversed facts, extra helpers, lost temporal scope, edited source
+sequence and missing pronoun reference evidence fail **before any write**.
+This is a first narrow regression shape, not a universal Spanish grammar rule.
+
+Core candidate coverage and the untrusted Luna source/fact attribution
+proposer both accept these two *separate* referenced facts after their own
+Core validation; neither acquires semantic-certification nor write authority.
+The canonical fact readback now binds **each fact's referenced subset**, not
+incorrectly demanding every reference in a multi-fact Core unit be repeated
+in every fact. All actually used links still require guarded Core identity
+and source-note content evidence, exact Markdown markers and exact fact
+strings. Using an isolated vault, both conversation facts and both backlinks
+are physically verified, the future cinema stays in durable v2 pending state,
+then `Con Luis` writes only the future cinema fact without touching the
+original. Editing the source Day (even only one link) invalidates both facts'
+source-note content guards, deliberately failing closed. As before, model
+outputs in this test are explicitly frozen deterministic fakes, NOT real
+GPT-5.6 Luna model acceptance. No new provider calls, DEV/PROD wiring,
+model-facing prompt/schema change or user-vault writes occurred.
+
 **Remaining Block 4B before any DEV activation:** an explicit, reviewed
 Core-owned verified candidate→plan/fact attribution and pending clarification that
 preserves independent/ambiguous partial outcomes and replay semantics; source

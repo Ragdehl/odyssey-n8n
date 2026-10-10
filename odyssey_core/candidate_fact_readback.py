@@ -73,13 +73,21 @@ def _canonical_rendered_fact_text(
 ) -> str | None:
     """Reconstruct one Core-verified linked fact from current canonical evidence.
 
-    Return None if ANY reference lacks a uniquely guarded canonical target.
+    Return None if ANY reference USED BY THIS fact lacks canonical proof.
     Do not treat source/fact word overlap or literal wikilink labels as proof.
     """
     rendered = source_text
     if not references or len(references) > 4:
         return None
+    bound = 0
     for reference_index, reference in enumerate(references):
+        marker = f"{{{{ref:{reference_index}}}}}"
+        occurrences = source_text.count(marker)
+        if occurrences == 0:
+            continue  # The other independent fact may own this canonical link.
+        if occurrences != 1:
+            return None
+        bound += 1
         proofs = [
             item
             for item in result.canonical_reference_evidence
@@ -101,11 +109,10 @@ def _canonical_rendered_fact_text(
             return None
         if name != evidence.canonical_name:
             return None
-        marker = f"{{{{ref:{reference_index}}}}}"
         if rendered.count(marker) != 1 or any(char in reference.mention for char in "|[]\n\r"):
             return None
         rendered = rendered.replace(marker, f"[[{target}|{reference.mention}]]")
-    if "{{ref" in rendered:
+    if not bound or "{{ref" in rendered:
         return None
     return rendered
 
@@ -193,9 +200,9 @@ def readback_core_facts(
                 continue
             unit = plan.actions[action_index].units[unit_index]
             if unit.references:
-                # A real grouped fact has Core-rendered canonical wikilinks,
-                # not literal {{ref:N}} source-plan markers. Verify the whole
-                # rendered string through current dual-guard Core evidence.
+                # Each fact may use one or several of its unit's Core references.
+                # Verify every actually used link with current guarded identity
+                # evidence, not the unrendered {{ref:N}} plan placeholders.
                 rendered = _canonical_rendered_fact_text(
                     text,
                     result=result,

@@ -17,6 +17,7 @@ from .candidate_context import CoreCandidateContext
 from .candidate_fact_readback import CandidateFactReadback
 from .candidate_multi_participant import validate_two_named_participant_fact
 from .candidate_semantic_veto import veto_unsafe_literal_match
+from .candidate_sequential_contacts import validate_two_sequential_contacts
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 MAX_COVERAGE_CLAIMS = 26
@@ -130,7 +131,7 @@ def validate_candidate_coverage_manifest(
         if isinstance(action, WriteAction):
             for unit in action.units:
                 # Reference-only helper units are eligible ONLY if claimed
-                # later by one source-validated grouped fact. They never own
+                # later by a source-validated grouped or sequential fact. They never own
                 # a separately planned fact or mutation.
                 if (
                     unit.intent != "record"
@@ -156,13 +157,13 @@ def validate_candidate_coverage_manifest(
                     raise ValueError("Core fact ordinals do not match plan fact text")
                 for fact_index, ordinal in enumerate(numbered):
                     facts_by_ordinal[ordinal] = unit.facts[fact_index]
-    owners_by_ordinal: dict[int, tuple[int, int]] = {}
+    owners_by_ordinal: dict[int, tuple[int, int, int]] = {}
     next_ordinals = iter(ordinals)
     for action_index, action in enumerate(plan.actions):
         if isinstance(action, WriteAction):
             for unit_index, _unit in enumerate(action.units):
-                for ordinal in next(next_ordinals):
-                    owners_by_ordinal[ordinal] = action_index, unit_index
+                for fact_index, ordinal in enumerate(next(next_ordinals)):
+                    owners_by_ordinal[ordinal] = action_index, unit_index, fact_index
     claimed_ordinals: set[int] = set()
     for candidate, claim in zip(context.candidates, claims, strict=True):
         if not isinstance(claim, CoreCandidateCoverageClaim):
@@ -209,16 +210,33 @@ def validate_candidate_coverage_manifest(
     for index, claim in enumerate(claims):
         if claim.disposition != "planned_fact":
             continue
-        veto_unsafe_literal_match(source, context, index, facts_by_ordinal[claim.fact_ordinal])
-        action_index, unit_index = owners_by_ordinal[claim.fact_ordinal]
+        action_index, unit_index, fact_index = owners_by_ordinal[claim.fact_ordinal]
         action = plan.actions[action_index]
         unit = action.units[unit_index]
+        original = facts_by_ordinal[claim.fact_ordinal]
+        # Let the source-veto see the lexical name chosen by Core, never
+        # confuse transient {{ref:N}} placeholders with grounded identity.
+        lexical = original
+        for ref_index, ref in enumerate(unit.references):
+            lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+        veto_unsafe_literal_match(source, context, index, lexical)
         if unit.references:
-            validate_two_named_participant_fact(
-                context.candidates[index], plan, action_index, unit_index
-            )
+            if len(unit.facts) == 1:
+                validate_two_named_participant_fact(
+                    context.candidates[index], plan, action_index, unit_index
+                )
+                if fact_index != 0:
+                    raise ValueError("Grouped source claim has wrong Core fact")
+            elif len(unit.facts) == 2:
+                validate_two_sequential_contacts(context, plan, action_index, unit_index)
+                if index != fact_index:
+                    raise ValueError("Sequential Core facts are swapped across source candidates")
+            else:
+                raise ValueError("Unreviewed linked Core write shape")
             for reference in unit.references:
                 helper_key = action_index, reference.target_index
+                if len(unit.facts) == 2 and fact_index != 0:
+                    continue  # These helpers were already claimed by first fact.
                 if helper_key in claimed_helpers:
                     raise ValueError("Core participant helper is used by multiple source facts")
                 claimed_helpers.add(helper_key)

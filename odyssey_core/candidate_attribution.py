@@ -21,6 +21,10 @@ from .candidate_multi_participant import (
     validate_two_named_participant_fact,
 )
 from .candidate_semantic_veto import CandidateSemanticVeto, veto_unsafe_literal_match
+from .candidate_sequential_contacts import (
+    SequentialContactEvidenceError,
+    validate_two_sequential_contacts,
+)
 from .experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
     LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -70,10 +74,11 @@ class CandidateAttributionProposal:
 
 def _facts(
     plan: RequestPlan, context: CoreCandidateContext
-) -> tuple[dict[int, str], dict[int, str]]:
+) -> tuple[dict[int, str], dict[int, str], dict[int, str]]:
     """Extract facts for attribution without accepting unclaimed Core helpers.
 
-    Two named, source-scoped participants may share ONE referenced Core fact.
+    Two named participants may share ONE event, or two explicitly sequential
+    contacts may each own one separately referenced Core fact.
     This projection remains non-authoritative: Core's separate coverage gate
     and canonical materializer alone may authorize mutations.
     """
@@ -81,6 +86,7 @@ def _facts(
         raise CandidateAttributionError("Validated Core plan and context required")
     result: dict[int, str] = {}
     group_owners: dict[int, str] = {}
+    lexical_fact: dict[int, str] = {}
     referenced_helpers: set[tuple[int, int]] = set()
     flattened = iter(plan_fact_ordinals(plan))
     for action_index, action in enumerate(plan.actions):
@@ -104,35 +110,49 @@ def _facts(
                     raise CandidateAttributionError("Reference helper cannot become an atomic fact")
                 continue
             if unit.references:
-                if len(unit.facts) != 1 or len(unit.references) != 2:
+                if len(unit.references) != 2:
                     raise CandidateAttributionError(
-                        "Only one verified two-participant fact is supported"
+                        "Only two canonical reference helpers are supported"
                     )
-                possible: list[str] = []
-                for candidate in context.candidates:
-                    try:
-                        validate_two_named_participant_fact(
-                            candidate, plan, action_index, unit_index
+                if len(unit.facts) == 1:
+                    possible: list[str] = []
+                    for candidate in context.candidates:
+                        try:
+                            validate_two_named_participant_fact(
+                                candidate, plan, action_index, unit_index
+                            )
+                        except MultiParticipantEvidenceError:
+                            continue
+                        possible.append(candidate.candidate_id)
+                    if len(possible) != 1:
+                        raise CandidateAttributionError(
+                            "Cannot source-bind a grouped Core fact uniquely"
                         )
-                    except MultiParticipantEvidenceError:
-                        continue
-                    possible.append(candidate.candidate_id)
-                if len(possible) != 1:
-                    raise CandidateAttributionError(
-                        "Cannot source-bind a grouped Core fact uniquely"
-                    )
-                group_owners[ordinals[0]] = possible[0]
+                    group_owners[ordinals[0]] = possible[0]
+                elif len(unit.facts) == 2:
+                    try:
+                        validate_two_sequential_contacts(context, plan, action_index, unit_index)
+                    except SequentialContactEvidenceError as error:
+                        raise CandidateAttributionError(str(error)) from error
+                    for fact_index, ordinal in enumerate(ordinals):
+                        group_owners[ordinal] = context.candidates[fact_index].candidate_id
+                else:
+                    raise CandidateAttributionError("Unreviewed referenced Core fact shape")
                 for reference in unit.references:
                     helper_key = action_index, reference.target_index
                     if helper_key in referenced_helpers:
                         raise CandidateAttributionError(
-                            "Core group helper has duplicate source ownership"
+                            "Core reference helper has duplicate source ownership"
                         )
                     referenced_helpers.add(helper_key)
             for ordinal, fact in zip(ordinals, unit.facts, strict=True):
                 if not isinstance(fact, str) or not fact.strip() or len(fact) > 600:
                     raise CandidateAttributionError("Invalid or oversized planned fact")
                 result[ordinal] = fact
+                lexical = fact
+                for reference_index, reference in enumerate(unit.references):
+                    lexical = lexical.replace(f"{{{{ref:{reference_index}}}}}", reference.mention)
+                lexical_fact[ordinal] = lexical
     for action_index, action in enumerate(plan.actions):
         if isinstance(action, WriteAction):
             for unit_index, unit in enumerate(action.units):
@@ -145,7 +165,7 @@ def _facts(
                     )
     if len(result) > MAX_COVERAGE_FACTS:
         raise CandidateAttributionError("Core fact attribution exceeds bounded budget")
-    return result, group_owners
+    return result, group_owners, lexical_fact
 
 
 def candidate_attribution_json_schema() -> dict[str, Any]:
@@ -201,7 +221,7 @@ def validate_candidate_attribution(
     if not isinstance(context, CoreCandidateContext):
         raise CandidateAttributionError("Core-owned source candidate context required")
     context.validate(source)
-    facts, group_owners = _facts(plan, context)
+    facts, group_owners, lexical_facts = _facts(plan, context)
     if not isinstance(payload, dict) or set(payload) != {"candidates"}:
         raise CandidateAttributionError("Closed candidate attribution envelope required")
     entries = payload["candidates"]
@@ -265,7 +285,7 @@ def validate_candidate_attribution(
             ):
                 raise CandidateAttributionError("Fact ordinal or exact planned text mismatched")
             try:
-                veto_unsafe_literal_match(source, context, position, planned_text)
+                veto_unsafe_literal_match(source, context, position, lexical_facts[ordinal])
             except CandidateSemanticVeto as error:
                 raise CandidateAttributionError(str(error)) from error
             consumed.add(ordinal)
@@ -309,7 +329,7 @@ class OpenAICoreCandidateAttributor:
         if not isinstance(context, CoreCandidateContext):
             raise CandidateAttributionError("Core-owned candidate context required")
         context.validate(source)
-        facts, _group_owners = _facts(plan, context)
+        facts, _group_owners, _lexical_facts = _facts(plan, context)
         prompt_data = json.dumps(
             {
                 "original_source": source,

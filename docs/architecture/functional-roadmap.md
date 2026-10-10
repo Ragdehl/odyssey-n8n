@@ -159,6 +159,17 @@ Only an explicitly security-permitted and reviewed live-gate workflow may
 execute that wave; the file is not an alternate live runner or circumvention.
 See issue #151. No new live-provider data has been collected.
 
+**F27 exact sequential-source Core pilot (2026-10-10):** The two separate
+conversation facts for `hablé con Eric y después con Luis` now also pass a
+real (fake-model) semantic Core compilation, source-before-write candidate
+coverage, per-fact canonical reference verification, two true Markdown
+backlinks, durable pending state and a guarded `Con Luis` continuation.
+Core checks the explicit "después" distinction and two independent dated
+atomic facts; F14 continues using the different one-event/two-participant
+contract. Incorrect order/name/helper/time and invented pending pronoun scope
+fail closed. This is a narrow regression with injected frozen model responses;
+no provider-quality proof or DEV activation is claimed.
+
 ## Current functional work — explainable clarification
 
 [Performance / Latency / Cost P1](performance-cost-p1.md) is complete. Its baseline found that the
