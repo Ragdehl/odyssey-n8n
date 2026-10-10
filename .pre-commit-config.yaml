@@ -12,7 +12,9 @@ repos:
         name: pytest
         entry: bash -c 'unset $(git rev-parse --local-env-vars); exec pytest'
         language: python
-        additional_dependencies: [pytest==9.1.1]
+        # The full suite imports the provider client in offline payload tests.
+        # Keep this pinned to the repository's production SDK requirement.
+        additional_dependencies: [pytest==9.1.1, openai==3.3.1]
         pass_filenames: false
         always_run: true
       - id: validate-note-schema
