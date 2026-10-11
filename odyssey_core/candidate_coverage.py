@@ -70,13 +70,15 @@ class CoreCandidateCoverageItem:
 
 @dataclass(frozen=True, slots=True)
 class CoreCandidateCoverageReview:
-    """Read-only request coverage result; never a complete semantic write receipt."""
+    """Source and persistence coverage, complete only after canonical audit."""
 
     items: tuple[CoreCandidateCoverageItem, ...]
     pending_candidate_ids: tuple[str, ...]
     candidate_semantics_verified: bool
     fully_accounted_for_structurally: bool
     safe_to_report_all_candidates_complete: bool
+    observed_original_fact_ordinals: tuple[int, ...] = ()
+    recovery_state: str | None = None
 
 
 def _digest(value: str) -> str:
@@ -395,4 +397,77 @@ def review_candidate_coverage(
         candidate_semantics_verified=False,
         fully_accounted_for_structurally=True,
         safe_to_report_all_candidates_complete=False,
+    )
+
+
+def review_dependent_candidate_coverage(
+    source: str,
+    context: CoreCandidateContext,
+    plan: RequestPlan,
+    manifest: CoreCandidateCoverageManifest,
+    result: object,
+    repository: object,
+    schema: dict,
+) -> CoreCandidateCoverageReview:
+    """Report independent-fact coverage using a complete canonical audit.
+
+    Source correspondence is revalidated from both independent Core
+    actions. A completed result can be marked fully verified ONLY if the
+    original canonical targets, every linked fact and both request markers
+    pass the independent two-action post-write audit.
+
+    Partial/failed requests expose source-marker presence for diagnostics
+    but keep every candidate 'planned_unverified' rather than assigning
+    a source candidate to a possibly wrong or incomplete physical fact.
+    No implementation path here writes or resumes a request.
+    """
+    from .application import ApplicationResult, ApplicationStatus
+    from .candidate_dependency_attestation import (
+        DependentFactAttestationError,
+        review_combined_persisted_dependency,
+    )
+    from .candidate_dependency_recovery import inspect_dependent_request_recovery
+    from .storage import VaultRepository
+
+    validate_candidate_coverage_manifest(source, context, plan, manifest)
+    if (
+        manifest.dependency_attestation is None
+        or not isinstance(result, ApplicationResult)
+        or not isinstance(repository, VaultRepository)
+        or len(manifest.claims) != 2
+        or any(claim.disposition != "planned_fact" for claim in manifest.claims)
+    ):
+        raise ValueError("Dependent coverage requires the reviewed original two-fact plan")
+    recovery = inspect_dependent_request_recovery(repository, schema, result.request_id)
+    plans = tuple(RequestPlan((action,), ()) for action in plan.actions)
+    completed = False
+    if result.status is ApplicationStatus.COMPLETED and recovery.state == "complete":
+        try:
+            audit = review_combined_persisted_dependency(
+                source, context, plans, manifest.dependency_attestation, result, repository
+            )
+            completed = audit.canonical_reuse_verified and not audit.may_write_notes
+        except (DependentFactAttestationError, ValueError, TypeError, OSError):
+            # A completed action result cannot override corrupted Markdown,
+            # broken original-source identity or a stale canonical link.
+            completed = False
+    items = tuple(
+        CoreCandidateCoverageItem(
+            claim.candidate_id,
+            "physically_written_claim" if completed else "planned_unverified",
+            claim.fact_ordinal,
+            None,
+        )
+        for claim in manifest.claims
+    )
+    return CoreCandidateCoverageReview(
+        items=items,
+        pending_candidate_ids=()
+        if completed
+        else tuple(claim.candidate_id for claim in manifest.claims),
+        candidate_semantics_verified=completed,
+        fully_accounted_for_structurally=True,
+        safe_to_report_all_candidates_complete=completed,
+        observed_original_fact_ordinals=tuple(sorted(recovery.fact_ordinals)),
+        recovery_state=recovery.state,
     )

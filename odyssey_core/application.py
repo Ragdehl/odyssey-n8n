@@ -500,6 +500,14 @@ def execute_request(
         try:
             manifest = candidate_coverage_factory(user_request, candidate_context, plan)
             validate_candidate_coverage_manifest(user_request, candidate_context, plan, manifest)
+            if manifest.dependency_attestation is not None:
+                # A previous dependent first action may have committed before
+                # its second action failed. Do NOT replay both actions under
+                # the same request ID: inspect authoritative Markdown markers
+                # before starting either write, and require manual recovery.
+                from .candidate_dependency_recovery import require_new_dependent_request
+
+                require_new_dependent_request(repository, schema, request_id)
             pending_candidate_ids = tuple(
                 claim.candidate_id for claim in manifest.claims if claim.disposition == "pending"
             )

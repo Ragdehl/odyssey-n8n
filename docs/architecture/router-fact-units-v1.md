@@ -1448,3 +1448,67 @@ antecedent with source anaphora) do NOT constitute general
 language understanding. F19/F20 conditions/corrections remain
 outside this authorization. No DEV/PROD deployment, real Note
 writes, model migration, new paid model calls or schema change.
+
+
+**Block 4B32 — fail-closed dependent-request replay and unified two-fact
+delivery review (2026-10-11, experimental Draft PR only).**
+
+The existing Core multi-action writer is append-first and may leave a
+valid first fact when a later write fails. A **new read-only root-bound
+`candidate_dependency_recovery.py`** scans authoritative original
+canonical Markdown atomic-fact markers for the same request ID, with
+a 5000-note cap and stable-ID uniqueness checks. It classifies two
+expected ordinals as `new`, `partial` (only ordinal 0),
+`complete` (ordinals 0 and 1), or `conflict` (duplicate/misordered/
+unexpected markers). Corrupt/unavailable source Notes fail closed.
+Each state explicitly declares `safe_to_retry_automatically=False`.
+On the separately authorized **opt-in dependent** path only, ordinary
+`execute_request` now checks for existing original fact markers
+after the full original-source candidate coverage proof and BEFORE
+any Core write. Any already persisted marker blocks the entire
+repeat with `CANDIDATE_COVERAGE_REVIEW_REQUIRED` and zero actions.
+All other existing Core requests remain unchanged.
+
+**Injected actual-writer failure E2E:** Replaying the saved real GPT-5.6
+F23 or F26 two-action plan in a disposable vault, an injected failure
+of the second action leaves precisely the first canonical original
+fact. A second invocation with the SAME request ID is blocked before
+writing, with the original Markdown unchanged (also blocked after
+an entirely completed request). Unexpected orphan ordinal 1 is
+reported `conflict`, never automatically resumed. This is **not
+rollback** and **not automatic recovery**: a user/operator-approved
+resume or authoritative compare-and-swap journal is still needed to
+handle interruption before the first marker or a concurrent duplicate
+request. Do not simply issue a new request ID to bypass this guard:
+the prior partial operation must be reconciled first.
+
+The same `CoreCandidateCoverageReview` response type used by the
+original source-candidate coverage API now supports optional
+`observed_original_fact_ordinals` and `recovery_state`, defaulted
+for backward compatibility. The separate reviewed
+`review_dependent_candidate_coverage` route recomputes the exact
+original-source/Core plan attestation, scans the complete current
+root-bound Markdown and requires the full combined two-action
+stable-ID/linked-fact audit before reporting **both** candidates as
+physically written and semantically verified. A tampered link,
+partial action, conflict or stale source results in BOTH candidates
+marked `planned_unverified`, the physically present ordinals
+surfaced separately, and
+`safe_to_report_all_candidates_complete=False`. It cannot mint
+write authority, alter Notes or suppress pending manual recovery.
+This differs from the historical one-action readback that
+appropriately abstains when the canonical source revision changes
+across dependent actions.
+
+**Current status:** Safeguard and reviewed reporting are opt-in
+for the paired dependency manifest and NOT connected to chat/DEV/
+PROD or public runtime delivery. Core continues using GPT-5.6 and
+the original Router v3 prompt unchanged. Synthetic tests replay
+the already obtained real GPT-6/GPT-5.6 provider data, without
+new billable calls. Remaining release checks: concurrent same-ID
+admission/lock or durable intent journal, deterministic and
+authorized single-action resume without duplication, lifecycle
+of newly created typed identities if a failure precedes a fact
+marker, and embedding these verified statuses in user-visible
+response after app integration. F19/F20 corrections/conditionals
+remain separate unrelated safety work.
