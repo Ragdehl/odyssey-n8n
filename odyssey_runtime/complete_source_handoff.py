@@ -257,3 +257,59 @@ def execute_complete_source_with_core(
         candidate_coverage_factory=candidate_coverage_factory,
         candidate_pending_recorder=candidate_pending_recorder,
     )
+
+
+def execute_complete_message_with_core(
+    source: str,
+    *,
+    router: CandidateSourceRouter,
+    temporal: SourceTemporalInterpreter,
+    core_planner_factory: Callable[
+        [CoreCandidateContext, DomainInterpretation | None], OrdinaryCorePlanner
+    ],
+    candidate_coverage_factory: Callable[..., object],
+    repository: object,
+    schema: dict,
+    context_index: object,
+    semantic_index: object,
+    embedder: object,
+    contextual_reasoner: object,
+    actor: object,
+    now: str,
+    context_limit: int,
+    request_id_factory: Callable[[], str],
+    candidate_pending_recorder: Callable[[object], str] | None = None,
+) -> object:
+    """Run the existing entire-message adapters as one isolated vertical entry.
+
+    This is only composition: it adds no semantic branch, planner, candidate
+    ownership rule, fallback, public HTTP route or deployment registration.
+    Router and Temporal each receive the original full source; ordinary Core
+    interprets it once, then the existing coverage and Writer gates execute.
+
+    The independently reviewed coverage callback is still mandatory: lack
+    of a general semantic reviewer is NOT silently replaced with positional
+    candidate-to-fact guesses. Callers must supply an isolated repository
+    while evaluating this inactive integration.
+    """
+    evidence = collect_complete_source_evidence(
+        source,
+        router=router,
+        temporal=temporal,
+    )
+    return execute_complete_source_with_core(
+        evidence,
+        core_planner_factory=core_planner_factory,
+        candidate_coverage_factory=candidate_coverage_factory,
+        repository=repository,
+        schema=schema,
+        context_index=context_index,
+        semantic_index=semantic_index,
+        embedder=embedder,
+        contextual_reasoner=contextual_reasoner,
+        actor=actor,
+        now=now,
+        context_limit=context_limit,
+        request_id_factory=request_id_factory,
+        candidate_pending_recorder=candidate_pending_recorder,
+    )

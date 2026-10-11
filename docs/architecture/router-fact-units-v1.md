@@ -2076,3 +2076,32 @@ these are not interchangeable with a new current
 whole-message live-model check. No new billable provider calls
 or production activation have occurred. Real-provider accuracy
 and safe independent semantic N↔M evidence are still open.
+
+
+**2026-10-11 — One-entry internal complete-message vertical integration.**
+
+The inactive `odyssey_runtime.complete_source_handoff.execute_complete_message_with_core`
+now accepts exactly one original input message and sequentially composes the
+already existing source-level Router, independent full-source Temporal,
+ordinary GPT-5.6 Core semantic planner, source-coverage prewrite gate,
+identity/mutation checks, canonical Markdown Writer and physical readback.
+It simply calls the existing evidence collector and Core executor; it is
+not another planner, linguistic splitter, provider prompt, production HTTP
+route or semantic decision-maker. Tests inject the normal SDK-shaped provider
+responses and a disposable Markdown vault; no real knowledge is accessed.
+
+The 17 new provider-free vertical sentinels cover generated candidate/fact
+counts and distinct 1→N, N→1 and mixed N↔M edges, independently injected
+original-source review, one source-preserving Router/Temporal/Core call each,
+ordinary persisted Core fact/ordinal readback and the explicit distinction
+between structural completeness and semantic correctness. Failures or
+missing evidence at Router, Temporal, Core planning or independent coverage
+stop before any Markdown write. No candidate/fact edge is inferred from
+Router ordering by runtime code.
+
+This confirms the **internal mechanical end-to-end connection** under
+synthetic provider responses; it does not certify arbitrary GPT-5.6 or
+GPT-6 language understanding, independent general N↔M semantic attribution,
+canonical reference identity for all graph shapes, or activation via the
+interactive product ingress. Those release gates remain pending, and the
+new entry stays unregistered outside opt-in tests.
