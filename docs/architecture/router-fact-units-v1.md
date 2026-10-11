@@ -1924,3 +1924,78 @@ with semantically verified capture.
 No new paid provider calls, model switch, permissions, security
 boundary changes, runtime chat activation, DEV/PROD deployment
 or modification of the user's canonical vault.
+
+
+**2026-10-11 — first complete offline execution gate using the EXISTING
+Router → independent Temporal → Core Planner → Core preflight/identity → Writer.**
+
+Phase contract: connect the current full-source candidate/Temporal handoff
+to ordinary `odyssey_core.application.execute_request`, never one Core
+plan per Router candidate or one note per candidate. Acceptance is a
+single source-preserving Router and Temporal pass, a single genuine
+Core SDK planner/semantic compiler pass, the existing mandatory
+original-source coverage preflight and real canonical Markdown
+Writer/readback on disposable, root-bound notes for variable source
+unit/fact counts; refuse unsafe or missing Core review *before* writing.
+Out of scope: new semantic attribution models/prompts, new app
+planner, hosted actor routing, automatic partial-work recovery,
+DEV/PROD deployment or a new HTTP endpoint. Architecture challenge:
+**PROCEED** using the already existing `execute_request` and
+`CoreCandidateCoverageManifest` checks; creating another executor
+or relaxing coverage would repeat the former architecture mistake.
+
+`odyssey_runtime/complete_source_handoff.py` now also exposes
+`execute_complete_source_with_core(evidence, core_planner_factory,
+candidate_coverage_factory, ...)`. It calls **exactly the existing
+`execute_request`** with one unchanged whole-source
+`OpenAILunaExperimentalPlanner` (GPT-5.6) and
+`candidate_context`/independent review callback. There is no
+separate Writer, target resolver, mutation loop, compound
+RequestPlan builder, inferred Core fact ordinal, special vocabulary,
+case ID or per-unit Core model call. The callable remains
+**explicitly non-default**, unregistered in the installed runtime
+server/product dispatcher.
+
+Full-stack deterministic tests in
+`tests/runtime/test_complete_source_execution_e2e.py` use
+provider-shaped Router, Temporal and Core replies through their
+real unchanged SDK parsers. For **1, 2, 3, 5, 8 and 13** source
+candidates, Core's actual semantic JSON compiler emits one
+`WriteAction` with that many atomic facts; Core validates a
+**test fixture's** separately reviewed full-source coverage and
+the actual Writer saves N individually marked facts in ONE
+synthetic canonical Day Markdown note. The physical source request
+IDs/ordinals are re-read using the ordinary Core readback, not
+assumed from planner success. Exactly ONE call to each model-shaped
+adapter is observed. No real model is billed.
+
+Negative tests require an independent review factory; a missing
+review raises before calling the Core provider, and incomplete
+claims cause existing `CANDIDATE_COVERAGE_REVIEW_REQUIRED` with
+**zero** writes. One source candidate trying to claim three planned
+facts remains safely blocked under the existing old
+one-to-one coverage restriction; that is a **known semantic review
+gap**, not support for one-to-many attribution.
+
+A separate real SDK-to-Core write regression uses ordinary
+canonical identities for Eric/Luis, compiles the
+previously frozen provider-shaped multi-person utterance into
+one Day fact containing both real Markdown identity links,
+and retains the subsequent ambiguous `él` candidate
+as pending/partial rather than writing the wrong person's
+future action. This is a test regression, not a code branch for
+names, pronouns or number of speakers.
+
+**Evidence boundaries / remaining work:** Core semantic outputs
+used for this gate are deterministic **synthetic provider replies**.
+The materialization, date/identity/coverage validators and
+Markdown readback are real, but this does not establish the
+current live GPT-5.6 model's accuracy on arbitrary messages.
+The independent coverage callback in tests is a manually
+checked fixture mapping and MUST NOT be generated mechanically
+from Router candidate order in production. Broader N↔M semantic
+Core review, per-user root-authenticated runtime integration,
+live original-source model evidence and genuine crash/partial
+state reconciliation are still required before DEV. No
+production route, provider model, canonical schema, user
+vault or live n8n workflow was modified.

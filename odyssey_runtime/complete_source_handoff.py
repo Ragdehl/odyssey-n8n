@@ -190,3 +190,70 @@ def plan_complete_source_with_core(
     if not callable(getattr(planner, "plan", None)):
         raise ValueError("Ordinary Core planner interface is missing")
     return planner.plan(evidence.source)
+
+
+def execute_complete_source_with_core(
+    evidence: CompleteSourceEvidence,
+    *,
+    core_planner_factory: Callable[
+        [CoreCandidateContext, DomainInterpretation | None], OrdinaryCorePlanner
+    ],
+    candidate_coverage_factory: Callable[..., object],
+    repository: object,
+    schema: dict,
+    context_index: object,
+    semantic_index: object,
+    embedder: object,
+    contextual_reasoner: object,
+    actor: object,
+    now: str,
+    context_limit: int,
+    request_id_factory: Callable[[], str],
+    candidate_pending_recorder: Callable[[object], str] | None = None,
+) -> object:
+    """Execute the whole request through the EXISTING Core Planner and Writer.
+
+    This is an inactive, explicitly injected integration entry for isolated
+    end-to-end testing. It does not register a new public route, rebuild Core,
+    make a second semantic plan or decide a candidate->fact mapping.
+
+    The independently supplied Core review must account for all candidates
+    and all planned facts. Crucially, the integrator MUST NOT synthesize one
+    coverage claim per Router candidate or derive claim ordinals from Router
+    order. Core's existing prewrite validator refuses absent, false, or
+    semantically unsupported mappings BEFORE any canonical write. This
+    currently means some otherwise legitimate complex requests remain
+    unwriteable pending the general Core coverage review, not silently lost.
+    """
+    from odyssey_core.application import execute_request
+    from odyssey_core.storage import VaultRepository
+
+    if not isinstance(evidence, CompleteSourceEvidence):
+        raise ValueError("Validated whole-message evidence required")
+    evidence.validate()
+    if not callable(core_planner_factory) or not callable(candidate_coverage_factory):
+        raise ValueError("Original Core planner and independent Core coverage review required")
+    if not isinstance(repository, VaultRepository):
+        raise ValueError("Core requires an explicitly bound canonical repository")
+    planner = core_planner_factory(evidence.context, evidence.domain_interpretation)
+    if not callable(getattr(planner, "plan", None)):
+        raise ValueError("Existing Core planner is unavailable")
+    # Same validated Planner -> identity/preflight -> Writer as all ordinary
+    # Odyssey requests. Core, not this handoff, controls whether any write is safe.
+    return execute_request(
+        evidence.source,
+        planner=planner,
+        repository=repository,
+        schema=schema,
+        context_index=context_index,
+        semantic_index=semantic_index,
+        embedder=embedder,
+        contextual_reasoner=contextual_reasoner,
+        actor=actor,
+        now=now,
+        context_limit=context_limit,
+        request_id_factory=request_id_factory,
+        candidate_context=evidence.context,
+        candidate_coverage_factory=candidate_coverage_factory,
+        candidate_pending_recorder=candidate_pending_recorder,
+    )
