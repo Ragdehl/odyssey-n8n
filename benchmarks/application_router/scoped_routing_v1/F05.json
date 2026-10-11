@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "case_id": "F05",
+  "original_source_sha256": "7b45b96e714afc16593ee8c8141973b48d41649dab8affa98399b9a64c10edb3",
+  "captured_application_status": null,
+  "route_summaries": [],
+  "written_notes": 0,
+  "error_category": "CandidateDependencyError",
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"cenaremos\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"cenaremos\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"El viernes\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Toulouse\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"el sábado\",\"occurrence\":0},{\"text\":\"con Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"el sábado\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Albi\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"subject\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    }
+  ]
+}

@@ -58,17 +58,20 @@ def previous_spend() -> float:
 def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
     """Make one full scoped model attempt with provider-free mode by default."""
     if attempt not in (1, 2, 3):
-        raise ValueError("Only the original and one explicitly reviewed retry are allowed")
-    if case_id not in {"F09", "F13"}:
-        raise ValueError("The bounded v1 acceptance gate covers only reviewed F09/F13")
+        raise ValueError("Only explicitly bounded attempts 1, 2, or 3 are allowed")
+    if case_id not in {item["id"] for item in CASES}:
+        raise ValueError("Only the frozen 27-case regression corpus may reach the provider")
     row = next(c for c in CASES if c["id"] == case_id)
     total = previous_spend()
     if not live:
         return {"case": case_id, "mode": "offline", "spent_usd": total, "calls": 0}
     if os.environ.get(FLAG) != "1" or not os.environ.get("OPENAI_API_KEY"):
         raise ValueError("A separately armed transient provider unit is required")
-    if MAX_USD - total < 0.035:
-        raise ValueError("Insufficient remaining budget for entire scoped case")
+    # The model wrapper rechecks a conservative reserve BEFORE *each* call.
+    # Stop the next case if only a tiny amount remains, rather than producing
+    # a misleading success after one unfinished billable provider operation.
+    if MAX_USD - total < 0.004:
+        raise ValueError("Insufficient approved budget to start another case")
     RECEIPTS.mkdir(mode=0o700, parents=True, exist_ok=True)
     receipt_id = case_id if attempt == 1 else f"{case_id}-v{attempt}"
     path = RECEIPTS / f"{receipt_id}.json"
@@ -170,6 +173,11 @@ def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
                 }
                 for r in result.execution_flow.get("routes", [])
             ]
+            outcome["route_sources"] = [
+                r.get("source")
+                for r in result.execution_flow.get("routes", [])
+                if isinstance(r, dict) and "source" in r
+            ]
             outcome["written_notes"] = sum(
                 "odyssey:fact request=route-" in repo.read_text(p)
                 for p in repo.list_markdown_paths()
@@ -187,7 +195,7 @@ def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--case", choices=["F09", "F13"], required=True)
+    parser.add_argument("--case", choices=[x["id"] for x in CASES], required=True)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--attempt", type=int, choices=[1, 2, 3], default=1)
     arguments = parser.parse_args()

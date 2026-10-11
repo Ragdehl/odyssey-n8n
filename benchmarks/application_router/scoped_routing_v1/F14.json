@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "case_id": "F14",
+  "original_source_sha256": "7ff4783439fc5a8fddc988f83b57c4482740bc10c0c35a28aed98580d233e33e",
+  "captured_application_status": "partial",
+  "route_summaries": [
+    {
+      "status": "completed",
+      "depends_on": null,
+      "reason": null
+    },
+    {
+      "status": "needs_attention",
+      "depends_on": 0,
+      "reason": "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"
+    }
+  ],
+  "written_notes": 1,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Eric\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré al cine\",\"occurrence\":0},{\"text\":\"él\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Hablé con \"},{\"kind\":\"identity\",\"text\":\"Eric\",\"identity\":{\"description\":\"Eric\",\"binding\":\"described\",\"direct_name\":\"Eric\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"hablé\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Hablé con {{ref:0}} y {{ref:1}}.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}

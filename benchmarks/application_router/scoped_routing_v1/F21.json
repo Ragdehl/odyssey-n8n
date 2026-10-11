@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case_id": "F21",
+  "original_source_sha256": "5c97fbc2a8b2be6ddb166f547228cea234f0275a56bbd5ce7dad2ba64fd951e2",
+  "captured_application_status": "failed",
+  "route_summaries": [
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"tengo clase\",\"occurrence\":0},{\"text\":\"lunes\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"tengo clase\",\"occurrence\":0}},{\"role\":\"date_scope\",\"anchor\":{\"text\":\"La semana que viene\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"lunes\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"18h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"miércoles\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"miércoles\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"date_scope\",\"from_unit\":1},{\"role\":\"time\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "incomplete",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"La semana que viene\",\"temporal\":{\"kind\":\"DATE_RANGE\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":\"2026-10-05\",\"range_end_exclusive\":\"2026-10-12\"}},{\"temporal_text\":\"el lunes\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T18:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"el miércoles a las 18h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\""
+    }
+  ]
+}

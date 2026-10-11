@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "case_id": "F07",
+  "original_source_sha256": "8f4f37a843a75a6baa8a2e2b9b05131f0d13ffa1cff857fcae4184ee5706c279",
+  "captured_application_status": "needs_attention",
+  "route_summaries": [
+    {
+      "status": "needs_attention",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"veo a Bea\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 15h\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"veo\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a las 17h a Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"time\",\"anchor\":{\"text\":\"a las 17h\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy a las 15h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-04T15:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 17h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-04T17:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"Hoy a las 15h\",\"value\":\"2026-10-04T15:00:00+02:00\"},{\"kind\":\"literal\",\"text\":\" veo a \"},{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" y \"},{\"kind\":\"temporal_reference\",\"text\":\"a las 17h\",\"value\":\"2026-10-04T17:00:00+02:00\"},{\"kind\":\"literal\",\"text\":\" a \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"veo a Bea\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"15:00 veo a {{ref:0}} y 17:00 a {{ref:1}}.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"a las 17h a Luis\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"15:00 veo a {{ref:0}} y 17:00 a {{ref:1}}.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "case_id": "F01",
+  "original_source_sha256": "0221d32e67da49a0b9b8f5a9a26d6b4409cfc62649bf65fbe22d5807d6f6f2c2",
+  "captured_application_status": "partial",
+  "route_summaries": [
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    },
+    {
+      "status": "completed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 1,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"fuimos\",\"occurrence\":0},{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las tres por la tarde\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"fuimos\",\"occurrence\":1},{\"text\":\"al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"time_relation\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vamos a ir\",\"occurrence\":0},{\"text\":\"a un concierto\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"a un concierto\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "incomplete",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las tres por la tarde\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-03T15:00:00+02:00\",\"range_start\":null"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vamos a ir a un concierto.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vamos a ir\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Vamos a ir a un concierto.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}

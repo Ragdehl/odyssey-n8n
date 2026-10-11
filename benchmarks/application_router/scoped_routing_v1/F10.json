@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "case_id": "F10",
+  "original_source_sha256": "31d9681685745e71c75b15965d93d87b1cd5c41dacd6b2ed580aee844da15b0f",
+  "captured_application_status": "needs_attention",
+  "route_summaries": [
+    {
+      "status": "needs_attention",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"relationship\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"se conocieron\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se conocieron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Marta y \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" se conocieron en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Luis\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"}]}"
+    }
+  ]
+}

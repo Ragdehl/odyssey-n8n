@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case_id": "F19",
+  "original_source_sha256": "cf7d1169ff59a08eb07c77d5b7687798f514c793beb4f333606b046a968da66f",
+  "captured_application_status": "failed",
+  "route_summaries": [
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos\",\"occurrence\":0},{\"text\":\"al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 12\",\"occurrence\":0}},{\"role\":\"replacement\",\"anchor\":{\"text\":\"no, mejor al cine a las 12\",\"occurrence\":0}}],\"inheritance\":[], \"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "incomplete",
+      "output_text": ""
+    }
+  ]
+}

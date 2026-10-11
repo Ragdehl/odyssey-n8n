@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case_id": "F08",
+  "original_source_sha256": "49628bbe0432791a2a4cb429c1431ff4e06aa4a3919eeda8f3868eb7b579e38f",
+  "captured_application_status": "failed",
+  "route_summaries": [
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"irá al médico\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"irá\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al médico\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"al dentista\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al dentista\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"time\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "incomplete",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 10\",\"temporal\":{\"kind\":\""
+    }
+  ]
+}

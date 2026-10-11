@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "case_id": "F24",
+  "original_source_sha256": "c4bededc3bb541fbfc3ccb26b90d7a97c1601412161121d5f1327c9822e30c42",
+  "captured_application_status": "needs_attention",
+  "route_summaries": [
+    {
+      "status": "needs_attention",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"El coche\",\"occurrence\":0},{\"text\":\"está\",\"occurrence\":0},{\"text\":\"en el taller\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El coche\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"está\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en el taller\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"pasará la revisión\",\"occurrence\":0},{\"text\":\"mañana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"pasará la revisión\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"subject\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El coche\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":null,\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Está en el taller.\"}]},{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"mañana\",\"value\":\"2026-10-05\"},{\"kind\":\"literal\",\"text\":\" pasará la revisión.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"El coche\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Está en el taller.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"mañana\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"needs_clarification\"}]}"
+    }
+  ]
+}

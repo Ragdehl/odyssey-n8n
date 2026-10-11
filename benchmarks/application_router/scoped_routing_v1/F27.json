@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "case_id": "F27",
+  "original_source_sha256": "c49ba37d4cf0463364d17bbbaa5d0872351b976962412aa2f3dc9f61ac93edc9",
+  "captured_application_status": "needs_attention",
+  "route_summaries": [
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    },
+    {
+      "status": "needs_attention",
+      "depends_on": 0,
+      "reason": "ROUTE_DEPENDENCY_PREDECESSOR_NOT_COMPLETED"
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Eric\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"al cine\",\"occurrence\":0},{\"text\":\"él\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"ESCALATE\",\"actions\":null,\"limitations\":null,\"clarification_code\":null}}"
+    }
+  ]
+}

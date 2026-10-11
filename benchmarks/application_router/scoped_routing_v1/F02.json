@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case_id": "F02",
+  "original_source_sha256": "514e7ddc1d70a3e1ab95ef04c98b71656931f47e8cc2df4df70eefea49deebfb",
+  "captured_application_status": "failed",
+  "route_summaries": [
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos a merendar\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"Esta tarde\",\"occurrence\":0}},{\"role\":\"time_approx\",\"anchor\":{\"text\":\"sobre las 16h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a un vide-grenier\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"el domingo\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 11h\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "incomplete",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Esta tarde\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"sobre las 16h\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "case_id": "F06",
+  "original_source_sha256": "f54f0351a71658278e4267e9efde499e9f7d17aabe302ffc0bdbf95de259ae99",
+  "captured_application_status": "needs_attention",
+  "route_summaries": [
+    {
+      "status": "needs_attention",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 0,
+  "error_category": null,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vi\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"compré\",\"occurrence\":0},{\"text\":\"pan\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"transaction\",\"anchor\":{\"text\":\"compré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"pan\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vi a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Compré pan.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Ana\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Vi a {{ref:0}}.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"pan\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Compré pan.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}
