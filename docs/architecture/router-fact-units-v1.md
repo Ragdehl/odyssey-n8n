@@ -1625,3 +1625,75 @@ including restart recovery and separate user/actor roots.
 Client requests with no stable outer request ID must **not**
 enter the dependent Core admission path. No normal production
 route is changed by this analysis.
+
+
+**Block 4B34 — private chat delivery preview using existing runtime
+composition and stable web request IDs (2026-10-11, Draft PR only).**
+
+A new **unregistered** `odyssey_runtime/dependent_candidate_preview.py`
+provides an explicit developer-only
+`DependentCandidateChatPreview(runtime, core_executor).execute()`
+method. It takes the unchanged original message and the **existing
+outer browser `request_id` and `conversation_id`**, resolves the
+existing local actor's operational root with
+`RuntimeComposition.conversation_root_resolver`, and reuses its
+ordinary `_execute_lock` and Core's existing root-isolated vault.
+No new HTTP endpoint, route catalog entry, production
+configuration, application planner or model/prompt modification has
+been registered. Authentication-aware multiuser selection is NOT
+advertised; the preview deliberately supports only the existing
+local `odyssey-runtime` actor until complete actor-to-vault root
+selection is verified. Missing/mislocated operational roots
+fail closed.
+
+The privileged test callback calls the previously reviewed
+`execute_dependent_core_once` with the outer message ID as
+`logical_operation_key` and a distinct internal Core
+`request_id` as its physical fact marker. The preview verifies
+that Core's returned **subordinate ID** agrees with the
+fsynced operation journal, and projects only the external
+outer `request_id` to the existing runtime JSON result envelope.
+It does not rewrite original Markdown fact request markers or
+create independent semantic authority.
+
+A separate actor-root
+`LocalDeliveryResultStore(.../dependent-preview-deliveries)`
+uses the **existing conversation + original-text SHA-256
+fingerprint**. Only the normal Core application result with a
+`completed` journal that has passed the two-fact canonical
+physical audit can be saved as a completed delivery. After a
+simulated runtime restart, the cached result is returned
+with `delivery_replayed=true` without rerunning either Core
+action or model. The cache verifies the durable operation journal
+before replay and rejects a deleted/stale journal, a different
+conversation, or the same outer request ID bound to a different
+source message. A partial operation cannot enter this cache;
+on explicit retry its durable Core admission declines further
+writes and the preview returns a typed
+`needs_attention` result with zero new actions.
+
+Offline full-stack vertical tests replay original **real saved**
+GPT-6 Router/GPT-5.6 Core F23 and F26 data through
+`RuntimeComposition`, the existing Core mutation boundary,
+isolated Markdown notes, actor-local journal and durable
+delivery-result cache. Tests cover one original two-fact success,
+both existing and newly created document identity, reboot by
+recreating the runtime object, partial second-action failure
+and retry, conversation/source ID collisions, forged subordinate
+Core result IDs, missing operational state and the absence of
+normal HTTP/runtime composition registration. No API provider
+calls or real vault mutations occur.
+
+**Outstanding before activation:** This is a privately callable
+product-style preview, *not* the HTTP chat endpoint. Its callback
+is presently injected only by tests using frozen real model
+outputs. The actual deployed n8n/Router → Temporal → independent
+Core planner → executor assembly is not switched onto this path;
+the frontend cannot invoke this preview, so no changes appear
+in the user's running Odyssey chat. Need a separately reviewed
+non-default experimental wiring point that maintains trusted
+per-actor vault + operational roots; manual reconciliation after
+crash, mid-write failure or note-only CREATE with no first marker
+continues to block automatic resume. Current original F19/F20
+conditional/correction cases are not supported by this
+limited dependency path.
