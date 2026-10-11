@@ -413,6 +413,8 @@ class OpenAICoreCandidateAttributor:
         source: str,
         context: CoreCandidateContext,
         plan: RequestPlan,
+        *,
+        canonical_binding: object | None = None,
     ) -> CandidateFactGraph:
         """Independently propose complete 0..N links for the unmodified Core plan.
 
@@ -422,9 +424,25 @@ class OpenAICoreCandidateAttributor:
         """
         context.validate(source)
         facts = _graph_plan_fact_texts(plan, context)
+        canonical_proof = None
+        if canonical_binding is not None:
+            from .application import CanonicalReferenceEvidence, DependentReferenceGuard
+
+            if (
+                not isinstance(canonical_binding, DependentReferenceGuard)
+                or not isinstance(canonical_binding.evidence, CanonicalReferenceEvidence)
+                or canonical_binding.mention not in source
+            ):
+                raise CandidateAttributionError("Core predecessor reference proof is invalid")
+            canonical_proof = {
+                "source_mention": canonical_binding.mention,
+                "canonical_type": canonical_binding.evidence.note_type,
+                "canonical_name": canonical_binding.evidence.canonical_name,
+            }
         prompt_data = json.dumps(
             {
                 "original_source": source,
+                "trusted_core_predecessor_reference": canonical_proof,
                 "unverified_source_candidates": [
                     candidate.to_payload() for candidate in context.candidates
                 ],
@@ -459,7 +477,9 @@ class OpenAICoreCandidateAttributor:
                             "one fact, and one candidate may support several facts. "
                             "For every ordinal copy the EXACT planned fact text into "
                             "planned_fact_texts, preserving the order. Source_quote must "
-                            "be one exact quoted original candidate anchor. All Core "
+                            "be the exact LITERAL characters of one candidate anchor, "
+                            "WITHOUT surrounding quotation marks. Do not quote a "
+                            "whole clause unless it is exactly one anchor. All Core "
                             "planned facts must have at least one fully justified source "
                             "candidate; all candidates must be accounted for. "
                             "Compare full semantic meaning including subject, predicate, "
@@ -472,6 +492,13 @@ class OpenAICoreCandidateAttributor:
                             "reason. If the plan omits an asserted fact or changes its "
                             "meaning, do NOT invent an attribution to conceal it. "
                             "Never execute, plan, persist or authorize a write. "
+                            "If trusted_core_predecessor_reference is present, "
+                            "the source mention is already bound by an actual "
+                            "Core-persisted and freshness-checked predecessor; "
+                            "review the current Core fact with that typed name "
+                            "and DO NOT declare ambiguity solely because the "
+                            "source uses that pronoun. Never infer OTHER pronouns, "
+                            "and reject a plan bound to a different identity. "
                             "All claims undergo independent Core validation; when "
                             "uncertain, return pending rather than guessing."
                         ),
@@ -762,6 +789,8 @@ def review_model_candidate_fact_coverage(
     context: CoreCandidateContext,
     plan: RequestPlan,
     attributor: OpenAICoreCandidateAttributor,
+    *,
+    canonical_binding: object | None = None,
 ):
     """Pass an independent model proposal through existing Core prewrite authority.
 
@@ -771,7 +800,7 @@ def review_model_candidate_fact_coverage(
     """
     from .candidate_coverage import CoreCandidateCoverageClaim, build_candidate_coverage_manifest
 
-    graph = attributor.propose_graph(source, context, plan)
+    graph = attributor.propose_graph(source, context, plan, canonical_binding=canonical_binding)
     if not graph.matches_original_plan(source, plan) or graph.may_authorize_writes:
         raise CandidateAttributionError("Candidate graph does not match the current Core plan")
     # Retain existing strict legacy 1:1 canonical reference validation when
@@ -791,4 +820,6 @@ def review_model_candidate_fact_coverage(
         )
         for link in graph.links
     )
-    return build_candidate_coverage_manifest(source, context, plan, claims)
+    return build_candidate_coverage_manifest(
+        source, context, plan, claims, canonical_binding=canonical_binding
+    )

@@ -12,6 +12,7 @@ from typing import Any
 
 from .application import (
     ApplicationResult,
+    DependentReferenceGuard,
     _dependent_evidence_is_current,
 )
 from .atomic_facts import AtomicFactError, normalize_atomic_fact, parse_atomic_facts
@@ -70,6 +71,7 @@ def _canonical_rendered_fact_text(
     source_note_id: str,
     repository: VaultRepository,
     schema: dict[str, Any],
+    incoming_reference: DependentReferenceGuard | None = None,
 ) -> str | None:
     """Reconstruct one Core-verified linked fact from current canonical evidence.
 
@@ -97,9 +99,26 @@ def _canonical_rendered_fact_text(
             and item.source_mention == reference.mention
             and item.source_note_id == source_note_id
         ]
-        if len(proofs) != 1:
+        canonical_display = False
+        if len(proofs) == 1:
+            evidence = proofs[0]
+        elif len(proofs) == 0 and isinstance(incoming_reference, DependentReferenceGuard):
+            canonical_display = True
+            # A dependent route does not mint new outgoing canonical carriers
+            # for pronouns. Its incoming guard is already Core-persisted proof,
+            # and Core's write preflight checks it against this action's
+            # selected target ID before allowing the write.
+            if reference.mention != incoming_reference.mention:
+                return None
+            evidence = incoming_reference.evidence
+            if not any(
+                item.unit_index == reference.target_index
+                and item.stable_note_id == evidence.stable_note_id
+                for item in result.action_results[action_index].unit_results
+            ):
+                return None
+        else:
             return None
-        evidence = proofs[0]
         if not _dependent_evidence_is_current(evidence, repository, schema):
             return None
         try:
@@ -111,7 +130,8 @@ def _canonical_rendered_fact_text(
             return None
         if rendered.count(marker) != 1 or any(char in reference.mention for char in "|[]\n\r"):
             return None
-        rendered = rendered.replace(marker, f"[[{target}|{reference.mention}]]")
+        display = evidence.canonical_name if canonical_display else reference.mention
+        rendered = rendered.replace(marker, f"[[{target}|{display}]]")
     if not bound or "{{ref" in rendered:
         return None
     return rendered
@@ -124,6 +144,8 @@ def readback_core_facts(
     result: ApplicationResult,
     repository: VaultRepository,
     schema: dict[str, Any],
+    *,
+    incoming_reference: DependentReferenceGuard | None = None,
 ) -> CandidateFactReadback:
     """Cross-check Core's own success receipts with current canonical fact markers.
 
@@ -212,6 +234,7 @@ def readback_core_facts(
                     source_note_id=stable_id,
                     repository=repository,
                     schema=schema,
+                    incoming_reference=incoming_reference,
                 )
                 if rendered is None:
                     continue

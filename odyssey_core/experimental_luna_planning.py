@@ -437,6 +437,32 @@ def render_luna_experimental_prompt(
         semantic_dynamic += candidate_section
         if size_components is not None:
             size_components["candidate_context_bytes"] = len(candidate_section.encode("utf-8"))
+    # This opt-in route-local suffix is present ONLY when runtime supplies a
+    # Core-verified predecessor carrier. It cannot authorize a write: the
+    # ordinary source/coverage and freshness-bound dependent guard still decide.
+    if domain_interpretation is not None:
+        canonical = [
+            item.to_payload()
+            for item in domain_interpretation.evidence
+            if item.kind == "canonical_reference"
+        ]
+        if canonical:
+            semantic_dynamic += (
+                "\\n\\nCore predecessor reference context for THIS routed fragment only. "
+                "The following binding was established from previously persisted, "
+                "freshness-checked Core reference evidence, NOT guessed by Router: "
+                + json.dumps(canonical, ensure_ascii=False, separators=(",", ":"))
+                + "\\nFor an identity reference whose source-text mention matches that binding, "
+                "KEEP the original pronoun or referring expression in the identity "
+                "part's text, but set identity.description and identity.direct_name "
+                "to the canonical name in the supplied type:name value and set "
+                "identity.note_type to that type. Never create a person whose name "
+                "is merely the pronoun. Do not substitute an unrelated name, "
+                "invent additional facts, or reinterpret earlier sibling fragments. "
+                "If the binding cannot be represented safely, ESCALATE. "
+                "The subsequent Core prewrite guard independently checks the "
+                "canonical ID and fresh Markdown before any persistence.\\n"
+            )
     luna_static = f"""{semantic_static}
 
 Choose the outcome before drafting fields:

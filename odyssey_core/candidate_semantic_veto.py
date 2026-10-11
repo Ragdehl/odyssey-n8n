@@ -55,6 +55,8 @@ def veto_unsafe_literal_match(
     context: CoreCandidateContext,
     candidate_index: int,
     fact_text: str,
+    *,
+    canonical_binding: object | None = None,
 ) -> None:
     """Reject obvious source contradiction, cross-candidate swap, or pronoun alias.
 
@@ -66,7 +68,19 @@ def veto_unsafe_literal_match(
     if any(role.role == "reference" for role in candidate.roles) or any(
         edge.role == "reference" for edge in candidate.inherits
     ):
-        raise CandidateSemanticVeto("Unverified source reference requires Core identity evidence")
+        from .application import CanonicalReferenceEvidence, DependentReferenceGuard
+
+        mentions = [role.span.text for role in candidate.roles if role.role == "reference"]
+        if (
+            len(mentions) != 1
+            or any(edge.role == "reference" for edge in candidate.inherits)
+            or not isinstance(canonical_binding, DependentReferenceGuard)
+            or not isinstance(canonical_binding.evidence, CanonicalReferenceEvidence)
+            or mentions[0] != canonical_binding.mention
+        ):
+            raise CandidateSemanticVeto(
+                "Unverified source reference requires Core identity evidence"
+            )
     if not candidate_distinctive_overlap(context, candidate_index, fact_text):
         raise CandidateSemanticVeto("Candidate fact lacks distinctive original source evidence")
     # Only reject NEW denial vocabulary that never occurs in the original

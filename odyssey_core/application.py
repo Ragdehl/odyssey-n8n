@@ -499,7 +499,17 @@ def execute_request(
         candidate_started = monotonic()
         try:
             manifest = candidate_coverage_factory(user_request, candidate_context, plan)
-            validate_candidate_coverage_manifest(user_request, candidate_context, plan, manifest)
+            validate_candidate_coverage_manifest(
+                user_request,
+                candidate_context,
+                plan,
+                manifest,
+                canonical_binding=(
+                    write_preflight_guard
+                    if isinstance(write_preflight_guard, DependentReferenceGuard)
+                    else None
+                ),
+            )
             pending_candidate_ids = tuple(
                 claim.candidate_id for claim in manifest.claims if claim.disposition == "pending"
             )

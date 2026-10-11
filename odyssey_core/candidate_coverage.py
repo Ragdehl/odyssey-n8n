@@ -15,7 +15,10 @@ from typing import Literal
 
 from .candidate_context import CoreCandidateContext
 from .candidate_fact_readback import CandidateFactReadback
-from .candidate_multi_participant import validate_two_named_participant_fact
+from .candidate_multi_participant import (
+    validate_one_named_participant_fact,
+    validate_two_named_participant_fact,
+)
 from .candidate_mutual_relation import validate_one_mutual_relationship_fact
 from .candidate_property_evidence import validate_subject_property_fact
 from .candidate_semantic_veto import veto_unsafe_literal_match
@@ -87,6 +90,8 @@ def build_candidate_coverage_manifest(
     context: CoreCandidateContext,
     plan: RequestPlan,
     claims: tuple[CoreCandidateCoverageClaim, ...],
+    *,
+    canonical_binding: object | None = None,
 ) -> CoreCandidateCoverageManifest:
     """Build a plan-bound candidate checklist after explicit Core review.
 
@@ -94,7 +99,9 @@ def build_candidate_coverage_manifest(
     caller must supply every candidate claim; invalid or incomplete claims raise.
     """
     manifest = CoreCandidateCoverageManifest(_digest(source), _digest(repr(plan)), claims)
-    validate_candidate_coverage_manifest(source, context, plan, manifest)
+    validate_candidate_coverage_manifest(
+        source, context, plan, manifest, canonical_binding=canonical_binding
+    )
     return manifest
 
 
@@ -103,6 +110,8 @@ def validate_candidate_coverage_manifest(
     context: CoreCandidateContext,
     plan: RequestPlan,
     manifest: CoreCandidateCoverageManifest,
+    *,
+    canonical_binding: object | None = None,
 ) -> None:
     """Reject omitted candidates, invented ordinals, ambiguity and stale plans.
 
@@ -264,12 +273,23 @@ def validate_candidate_coverage_manifest(
                 lexical,
                 other_source_subjects=other_subjects,
             )
-        veto_unsafe_literal_match(source, context, index, lexical)
+        veto_unsafe_literal_match(
+            source, context, index, lexical, canonical_binding=canonical_binding
+        )
         if unit.references:
             if len(unit.facts) == 1:
                 if context.candidates[index].kind == "relationship":
                     validate_one_mutual_relationship_fact(
                         source, context.candidates[index], plan, action_index, unit_index
+                    )
+                elif len(unit.references) == 1:
+                    validate_one_named_participant_fact(
+                        source,
+                        context.candidates[index],
+                        plan,
+                        action_index,
+                        unit_index,
+                        canonical_binding=canonical_binding,
                     )
                 else:
                     validate_two_named_participant_fact(

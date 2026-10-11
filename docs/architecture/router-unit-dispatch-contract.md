@@ -167,3 +167,85 @@ completeness of candidate source coverage, and physical canonical
 Markdown readback. Keep the original 27-case corpus and associated
 synthetic Notes; do not change case-specific product logic to make
 the tests pass.
+
+
+## Scoped execution implementation checkpoint (2026-10-11)
+
+The opt-in **test-only** adapter
+`odyssey_runtime/candidate_route_dispatch.py` now compiles the existing
+validated Router v1 proposal into a `RoutePlan` whose routes carry ONLY
+their own original `source_text`. It reuses the old and already tested
+`odyssey_runtime.routing.execute_routed_request` sequential guarded
+executor. The real model's complete source is supplied to Router ONCE;
+only route-local source goes to Temporal and the ordinary GPT-5.6 Core
+Planner/reviewer. Core handles canonical name/Note identity resolution and
+writes; readback proves physical Markdown. Source candidates that share a
+predicate/date or lexical inheritance are grouped conservatively, rather
+than fabricated as independent original source strings. A later
+unverifiable inheritance (historical F27) still fails closed.
+
+For explicit successor pronouns, the executor waits for the predecessor,
+checks its real Core-persisted `CanonicalReferenceEvidence` and passes
+`DependentReferenceGuard` and bounded canonical Domain evidence to the
+successor only. Router's preliminary `ambiguous_identity` source hint
+can become eligible for review ONLY for the exact referring candidate
+whose unique identity was actually proven by the previous Core result,
+after freshness checks; never via Router guessing. Independent Core
+candidate-coverage still reviews that successor, and the actual Core
+write preflight checks the identity/guards again before mutation.
+A forged/stale carrier does not lift ambiguity.
+
+The Core planner and its independent reviewer now each consume the same
+bounded, typed predecessor evidence when present, while maintaining
+independent model calls and unchanged GPT-5.6 model selection. The
+reviewer does not inherit authority from the Core planner. This is an
+explicit opt-in model-prompt/contract change only for dependent routes;
+ordinary stand-alone prompt content remains as previously rendered.
+
+**Verification:**
+
+- Permanent synthetic canonical Notes: same 13-note disposable vault fixture
+  from `tests/fixtures/full_message_corpus_v1/`.
+- All 27 frozen prior GPT-6 Router v3 proposals compile through the new
+  route generator except F27, which correctly remains blocked for
+  unsatisfied inherited-role provenance.
+- No-date F09/F10/F16/F23/F25 go directly to Core, no Temporal call.
+- Generic Eric three-route fixture executes route 1 then verified
+  route 2, plus independent route 3. Three physical Day fact readbacks
+  verified. A deliberately misdirected dependent canonical target
+  blocks only that route, leaving independent facts written.
+- F09 **fresh real models**, 2026-10-11: one grouped, original source
+  `Marta y Luis viven en Lyon.`; one GPT-6 Router call and two
+  GPT-5.6 Core planner/reviewer calls; **no Temporal invocation**;
+  Core updated the two existing synthetic person Notes, status COMPLETED.
+- F13 **fresh real models**: all three scoped Router routes were
+  exercised with GPT-6 Temporal and GPT-5.6 Core/review when needed.
+  The first and third routes wrote physically verified Day facts.
+  The dependent second route remained needs_attention across three
+  original paid attempts for three distinct provider-contract issues.
+  Its last original live result is **PARTIAL**, not a real-provider full
+  completion claim. Preserve every attempt in private one-shot receipts.
+- Frozen authentic F09-v2 and F13-v3 model-output sequences now live
+  (synthetic data only) under
+  `benchmarks/application_router/scoped_routing_v1/`. The deterministic
+  regression `tests/runtime/test_scoped_route_recorded_real_replay.py`
+  replays each real output through the updated adapter and verifies
+  **F13's three Markdown facts**, including Eric's canonical dependent
+  link, with **zero additional paid provider calls**. A forged/stale
+  carrier test proves the model cannot override Router ambiguity alone.
+  This is a meaningful corrected offline E2E proof, NOT a freshly
+  billed live-model pass after the final identity-state fix.
+- Latest cumulative estimated API spend **USD 0.1399806** of the user
+  approved USD 0.25; no DEV, PROD, real personal notes, merge or
+  production model switch. No later retry was performed after identifying
+  the Router ambiguity-state inheritance mismatch.
+
+Remaining: more live scoped-language acceptance cases beyond F09/F13,
+including F27's broken predecessor role, conditional/negated candidates,
+shared tense and approximate dates. The experimental route-local adapter
+still is not wired into the interactive chat's active DEV path; do not
+describe its isolated success as a production deployment or complete
+acceptance of all 27 cases. Do not reactivate full-source Temporal/Core
+handoff to fix those cases. Before DEV promotion, review and test this
+opt-in route adapter with actor isolation, durable replay/pending semantics
+and model-quality gate for the changed dependent-prompt contract.

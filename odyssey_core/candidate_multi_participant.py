@@ -149,3 +149,108 @@ def validate_two_named_participant_fact(
         raise MultiParticipantEvidenceError("Grouped Core write includes an unclaimed helper")
     if "{{ref" in unit.facts[0].replace("{{ref:0}}", "").replace("{{ref:1}}", ""):
         raise MultiParticipantEvidenceError("Grouped fact has an unverified extra reference")
+
+
+def validate_one_named_participant_fact(
+    source: str,
+    candidate: CoreCandidate,
+    plan: RequestPlan,
+    action_index: int,
+    unit_index: int,
+    *,
+    canonical_binding: object | None = None,
+) -> None:
+    """Certify one Core link: an explicit name or a guarded prior-result reference.
+
+    A bare model substitution of an unbound pronoun never passes. The second
+    shape needs the actual Core-persisted and later revalidated predecessor
+    reference, checked again by DependentReferenceGuard during mutation.
+    """
+    action = plan.actions[action_index]
+    if not isinstance(action, WriteAction) or not 0 <= unit_index < len(action.units):
+        raise MultiParticipantEvidenceError("Single linked fact requires a Core write")
+    unit = action.units[unit_index]
+    if (
+        unit.intent != "record"
+        or unit.reference_lookup_only
+        or unit.force_create
+        or unit.properties
+        or unit.tag_changes
+        or unit.destination_type is not None
+        or len(unit.facts) != 1
+        or len(unit.references) != 1
+        or len(action.units) != 2
+        or unit.facts[0].count("{{ref:0}}") != 1
+        or "{{ref:" in unit.facts[0].replace("{{ref:0}}", "")
+    ):
+        raise MultiParticipantEvidenceError("Unreviewed single-reference mutation")
+    reference = unit.references[0]
+    helper_index = reference.target_index
+    if (
+        not isinstance(helper_index, int)
+        or isinstance(helper_index, bool)
+        or helper_index == unit_index
+        or not 0 <= helper_index < len(action.units)
+    ):
+        raise MultiParticipantEvidenceError("Single reference helper index is invalid")
+    helper = action.units[helper_index]
+    mention = reference.mention
+    matching_names = [
+        role.span
+        for role in candidate.roles
+        if role.role in {"subject", "object", "participants"} and role.span.text == mention
+    ]
+    named_source = any(
+        source[span.start : span.end] == mention
+        and (
+            any(
+                anchor.start <= span.start and span.end <= anchor.end
+                for anchor in candidate.anchors
+            )
+            or any(
+                role.role == "predicate"
+                and role.span.end < span.start
+                and not any(ch in source[role.span.end : span.start] for ch in ".;!?\n\r")
+                for role in candidate.roles
+            )
+        )
+        for span in matching_names
+    )
+    if not named_source:
+        from .application import CanonicalReferenceEvidence, DependentReferenceGuard
+
+        references = [
+            role.span
+            for role in candidate.roles
+            if role.role == "reference" and role.span.text == mention
+        ]
+        if (
+            len(references) != 1
+            or source[references[0].start : references[0].end] != mention
+            or not isinstance(canonical_binding, DependentReferenceGuard)
+            or not isinstance(canonical_binding.evidence, CanonicalReferenceEvidence)
+            or canonical_binding.mention != mention
+            or canonical_binding.evidence.canonical_name != helper.target.entity
+            or canonical_binding.evidence.note_type != helper.target.type
+        ):
+            raise MultiParticipantEvidenceError("Unverified pronoun-to-identity substitution")
+    if (
+        not helper.reference_lookup_only
+        or helper.force_create
+        or helper.intent != "record"
+        or helper.facts
+        or helper.references
+        or helper.properties
+        or helper.tag_changes
+        or helper.destination_type is not None
+        or (named_source and helper.target.entity != mention)
+        or helper.target.query != helper.target.entity
+        or not helper.target.type
+        or reference.role not in {"identity", helper.target.type}
+        or helper.target.filters
+        or helper.target.link_scope is not None
+        or helper.target.semantic_set is not None
+        or helper.target.relational_reference is not None
+        or helper.target.self_target is not None
+    ):
+        raise MultiParticipantEvidenceError("Core helper does not match the source identity")
