@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import tempfile
 from datetime import datetime
@@ -44,9 +45,17 @@ DEFAULT_SOURCE = "Hoy compré cuaderno, lápiz y carpeta."
 class CappedResponses:
     """Pre-authorize each provider call using the pinned conservative prices."""
 
-    def __init__(self, *, client, models: dict) -> None:
+    def __init__(self, *, client, models: dict, cap_usd: float = MAX_SPEND_USD) -> None:
+        if (
+            not isinstance(cap_usd, (int, float))
+            or isinstance(cap_usd, bool)
+            or not math.isfinite(cap_usd)
+            or not 0 < cap_usd <= 1
+        ):
+            raise ValueError("A positive finite authorized cap up to one USD is required")
         self._client = client
         self._models = models
+        self.cap_usd = float(cap_usd)
         self.spent = PREVIOUS_ESTIMATED_SPEND_USD
         self.calls: list[dict] = []
         self.responses = SimpleNamespace(create=self.create)
@@ -68,10 +77,10 @@ class CappedResponses:
         reserve = (
             input_upper * rates["input_per_million"] + output_upper * rates["output_per_million"]
         ) / 1_000_000
-        if self.spent + reserve > MAX_SPEND_USD:
+        if self.spent + reserve > self.cap_usd:
             raise ValueError(
                 f"Provider cap reached before {model}: spent={self.spent:.6f} "
-                f"reservation={reserve:.6f} cap={MAX_SPEND_USD:.2f}"
+                f"reservation={reserve:.6f} cap={self.cap_usd:.2f}"
             )
         # Charge full conservative reservation on transport uncertainty;
         # successful completed usage allows releasing unused budget.

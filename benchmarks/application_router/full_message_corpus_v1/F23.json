@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F23",
+  "original_source_sha256": "755e70ca4d78ca30605872e66f5893c19eb538aa2508967699e6255070464ec0",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal resolution is not an exact Core anchor",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"El proyecto Odyssey\",\"occurrence\":0},{\"text\":\"un fallo en Router\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El proyecto Odyssey\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"un fallo en Router\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"otro en Temporal\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"object\",\"anchor\":{\"text\":\"otro en Temporal\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"subject\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\": [{\"temporal_text\": \"Temporal\", \"temporal\": {\"kind\": \"UNSPECIFIED\", \"exact_date\": null, \"exact_datetime\": null, \"range_start\": null, \"range_end_exclusive\": null}}]}",
+      "status": "completed"
+    }
+  ]
+}

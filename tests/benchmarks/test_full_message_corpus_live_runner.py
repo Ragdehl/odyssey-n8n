@@ -44,7 +44,8 @@ def test_existing_valid_receipt_is_charged_before_new_attempt(monkeypatch, tmp_p
     monkeypatch.setattr(gate, "RESULTS", tmp_path / "receipts")
     gate.RESULTS.mkdir()
     (gate.RESULTS / "F11.json").write_text(
-        '{"case":"F11","reserved_or_estimated_usd":0.0003639}', encoding="utf-8"
+        '{"case":"F11","outcome":"stopped_before_completion","reserved_or_estimated_usd":0.0003639}',
+        encoding="utf-8",
     )
     info = gate.run("F12")
     assert info["already_consumed_estimated_usd"] == round(

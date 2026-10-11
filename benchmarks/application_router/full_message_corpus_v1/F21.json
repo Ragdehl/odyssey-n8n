@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F21",
+  "original_source_sha256": "5c97fbc2a8b2be6ddb166f547228cea234f0275a56bbd5ce7dad2ba64fd951e2",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal provider response was not completed",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"tengo clase\",\"occurrence\":0},{\"text\":\"el lunes\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"tengo clase\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"el lunes\",\"occurrence\":0}},{\"role\":\"date_scope\",\"anchor\":{\"text\":\"La semana que viene\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 18h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"tengo clase\",\"occurrence\":0},{\"text\":\"el miércoles\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"tengo clase\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"el miércoles\",\"occurrence\":0}},{\"role\":\"date_scope\",\"anchor\":{\"text\":\"La semana que viene\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 18h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "",
+      "status": "incomplete"
+    }
+  ]
+}

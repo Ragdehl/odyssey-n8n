@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F12",
+  "original_source_sha256": "8a8bddf2be35cef1b5c5d1540e1653f9612d5c8367427195cff141813f09af0b",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal provider response was not completed",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"limpiaron\",\"occurrence\":0},{\"text\":\"el garaje\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea y mis hijos\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"limpiaron\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el garaje\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"montaron\",\"occurrence\":0},{\"text\":\"los muebles\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"montaron\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"los muebles\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"subject\",\"from_unit\":1},{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"ambiguous_identity\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":  [  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  \n  ",
+      "status": "incomplete"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "case_id": "F18",
+  "original_source_sha256": "7c1535b90daba02d56af56310a2be835e880a2f762c6bd30e60e1dc2e80ef0e0",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": "needs_attention",
+  "captured_clarification_code": "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+  "captured_error_type": "ValueError",
+  "captured_error_summary": "Core plan/result actions differ; outcomes cannot be correlated",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vi\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"polarity\",\"anchor\":{\"text\":\"no\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"polarity\",\"anchor\":{\"text\":\"sí\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ayer no vi a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\", pero sí hablé con \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vi\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ayer no vi a {{ref:0}}, pero sí hablé con {{ref:1}}.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"hablé\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ayer no vi a {{ref:0}}, pero sí hablé con {{ref:1}}.\"],\"pending_reason\":null}]}",
+      "status": "completed"
+    }
+  ]
+}

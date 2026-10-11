@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case_id": "F14",
+  "original_source_sha256": "7ff4783439fc5a8fddc988f83b57c4482740bc10c0c35a28aed98580d233e33e",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TypeError",
+  "captured_error_summary": "planner must return a PlannerResult",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"ESCALATE\",\"actions\":null,\"limitations\":null,\"clarification_code\":null}}",
+      "status": "completed"
+    }
+  ]
+}

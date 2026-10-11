@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F09",
+  "original_source_sha256": "d9f44a49cd5cee063fb32cbd5c945004e5d6645c0d9cb4e7cfffb9bc0410e5cd",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal wording must be non-empty",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"Lyon\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"property\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"Lyon\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\": [ \t{ \t\"temporal_text\": \"\", \t\"temporal\": { \t\"kind\": \"UNSPECIFIED\", \t\"exact_date\": null, \t\"exact_datetime\": null, \t\"range_start\": null, \t\"range_end_exclusive\": null \t} \t} ] }",
+      "status": "completed"
+    }
+  ]
+}

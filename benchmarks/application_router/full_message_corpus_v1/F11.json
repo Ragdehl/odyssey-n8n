@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "case_id": "F11",
+  "original_source_sha256": "aa0012f7d6ba435426017f7369b0efe6f45d39199b02d1425a0d81f0dbbfcce4",
+  "captured_live_outcome": "persisted_and_read_back",
+  "captured_application_status": "completed",
+  "captured_clarification_code": null,
+  "captured_error_type": null,
+  "captured_error_summary": null,
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"pan\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"object\",\"anchor\":{\"text\":\"pan\",\"occurrence\":0}},{\"role\":\"transaction\",\"anchor\":{\"text\":\"compré\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"leche\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"object\",\"anchor\":{\"text\":\"leche\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"transaction\",\"from_unit\":1},{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Compré pan y leche.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"pan\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Compré pan y leche.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"leche\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Compré pan y leche.\"],\"pending_reason\":null}]}",
+      "status": "completed"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case_id": "F26",
+  "original_source_sha256": "1af4b497d9380cd4f99b4f5e098f703618a5686bcb42e3b1bd2a65263266bc2d",
+  "captured_live_outcome": "pending_or_failed",
+  "captured_application_status": "failed",
+  "captured_clarification_code": null,
+  "captured_error_type": null,
+  "captured_error_summary": "Luna semantic WRITE omitted required temporal wording/temporal evidence",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"El informe\",\"occurrence\":0},{\"text\":\"llegó\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El informe\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"llegó\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"envié\",\"occurrence\":0},{\"text\":\"lo\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"envié\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"el informe\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"document\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Llegó \"},{\"kind\":\"temporal_reference\",\"text\":\"ayer\",\"value\":\"2026-10-03\"},{\"kind\":\"literal\",\"text\":\".\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Lo envié hoy a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "status": "completed"
+    }
+  ]
+}

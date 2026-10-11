@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F10",
+  "original_source_sha256": "31d9681685745e71c75b15965d93d87b1cd5c41dacd6b2ed580aee844da15b0f",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal wording must be non-empty",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"relationship\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"se conocieron\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se conocieron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\": [ \t{ \"temporal_text\": \"\", \"temporal\": { \"kind\": \"UNSPECIFIED\", \"exact_date\": null, \"exact_datetime\": null, \"range_start\": null, \"range_end_exclusive\": null } } ]}",
+      "status": "completed"
+    }
+  ]
+}

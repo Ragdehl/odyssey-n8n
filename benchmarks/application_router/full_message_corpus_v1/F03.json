@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "case_id": "F03",
+  "original_source_sha256": "cfe1642c88d826967071b2f1f8b530cdce0312cd1b4f3aa3f4debb38ddf7f3a2",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "RouterError",
+  "captured_error_summary": "Fact candidate output lacks grounded source evidence",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vamos de paseo al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"luego\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    }
+  ]
+}

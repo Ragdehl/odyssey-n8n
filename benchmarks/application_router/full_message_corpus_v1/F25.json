@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F25",
+  "original_source_sha256": "cae3f2182e3f33c847b380c0023fb0c1963e4bbd8a70bfd45faa2e6055d2bdc9",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal provider response was not completed",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"humedad\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"humedad\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en el sótano\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"task\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"reparar el tejado\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"reparar\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el tejado\",\"occurrence\":0}},{\"role\":\"modality\",\"anchor\":{\"text\":\"necesita\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\": [ \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r \r ",
+      "status": "incomplete"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 """One complete corpus case against the real models and a cloned canonical test vault.
 
 Offline by default, no personal Notes, no DEV/PROD, no silent retries.
-Only the previously approved *cumulative* USD 0.07 cap has provider authority.
-A larger 27-case gate needs its own explicit approval before any cap increase.
+The user approved a new *cumulative* USD 0.25 cap on 2026-10-11.
+The previous USD 0.056766 spent is charged before any new provider call.
 """
 
 from __future__ import annotations
@@ -11,10 +11,9 @@ import argparse
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 from benchmarks.fact_candidate_core_live.run_complete_message_smoke import (
-    MAX_SPEND_USD,
-    PREVIOUS_ESTIMATED_SPEND_USD,
     CappedResponses,
 )
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
@@ -34,8 +33,12 @@ from tests.runtime.test_fact_candidate_semantic_luna_vertical import CLOCK, SCHE
 from tests.runtime.test_full_message_corpus_regression import FIXTURE
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULTS = Path("/home/ragdehl/projects/odyssey-experimental-receipts/full-message-corpus")
-APPROVAL_FLAG = "ODYSSEY_CORE_FACT_LIVE_APPROVED"
+# A separate authorized campaign: the previous F11 partial response remains
+# immutable under /full-message-corpus/F11.json and is already in baseline.
+RESULTS = Path("/home/ragdehl/projects/odyssey-experimental-receipts/full-message-corpus-cap025")
+MAX_SPEND_USD = 0.25
+PREVIOUS_ESTIMATED_SPEND_USD = 0.056766
+APPROVAL_FLAG = "ODYSSEY_CORE_FACT_MATRIX_025_APPROVED"
 # Refuse an incomplete four-model run BEFORE any provider call. Existing
 # Core request envelopes can require USD 0.0146 of conservative reservation.
 MIN_COMPLETE_CASE_HEADROOM_USD = 0.028
@@ -58,8 +61,18 @@ def previous_spend() -> float:
         receipt = json.loads(path.read_text(encoding="utf-8"))
         if receipt.get("case") != path.stem:
             raise ValueError("Mismatched corpus receipt")
+        # A process may terminate after one charged provider call and before
+        # its final receipt. Never assume that the partially observed cost is
+        # complete, even when one or more successful replies were persisted.
+        if receipt.get("outcome") not in (
+            "stopped_before_completion",
+            "pending_or_failed",
+            "persisted_and_read_back",
+            "harness_error",
+        ):
+            raise ValueError("Incomplete corpus receipt has uncertain cost")
         prior = receipt.get("reserved_or_estimated_usd")
-        if not isinstance(prior, (float, int)) or prior < 0:
+        if not isinstance(prior, (float, int)) or isinstance(prior, bool) or prior < 0:
             raise ValueError("Incomplete corpus receipt has uncertain cost")
         total += prior
     if total > MAX_SPEND_USD:
@@ -103,7 +116,9 @@ def run(case_id: str, *, live: bool = False) -> dict:
     from openai import OpenAI
 
     rates = json.loads((ROOT / "config/runtime-pricing-snapshot.json").read_text())["models"]
-    client = CappedResponses(client=OpenAI(max_retries=0, timeout=90), models=rates)
+    client = CappedResponses(
+        client=OpenAI(max_retries=0, timeout=90), models=rates, cap_usd=MAX_SPEND_USD
+    )
     client.spent = total
     result: dict = {
         "case": case_id,
@@ -113,6 +128,40 @@ def run(case_id: str, *, live: bool = False) -> dict:
         "written_notes": 0,
         "core_facts_verified": [],
     }
+    # Preserve authentic provider outputs for future provider-free replay. This
+    # private receipt is updated after EACH returned call, not only at the end.
+    # Failed/unknown transports retain the "armed" bill-uncertain state.
+    captured_provider_replies: list[dict] = []
+
+    class RecordingProvider:
+        def __init__(self):
+            self.responses = SimpleNamespace(create=self.create)
+
+        def create(self, **request):
+            response = client.responses.create(**request)
+            captured_provider_replies.append(
+                {
+                    "model": request["model"],
+                    "output_text": getattr(response, "output_text", None),
+                    "status": getattr(response, "status", None),
+                }
+            )
+            receipt_path.write_text(
+                json.dumps(
+                    {
+                        "case": case_id,
+                        "status": "in_progress",
+                        "reserved_or_estimated_usd": round(client.spent - total, 8),
+                        "provider_calls": client.calls,
+                        "provider_replies": captured_provider_replies,
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            return response
+
+    provider = RecordingProvider()
     try:
         with tempfile.TemporaryDirectory(prefix=f"odyssey-corpus-{case_id}-") as temp:
             vault = Path(temp) / "vault"
@@ -130,7 +179,7 @@ def run(case_id: str, *, live: bool = False) -> dict:
             semantic_index.rebuild(repo, SCHEMA, embedder)
 
             captured = {}
-            actual_router = OpenAIFactCandidateRouter(client, prompt_revision="v3")
+            actual_router = OpenAIFactCandidateRouter(provider, prompt_revision="v3")
 
             class RecordingRouter:
                 def propose(self, source):
@@ -141,7 +190,7 @@ def run(case_id: str, *, live: bool = False) -> dict:
             def core_factory(context, domain):
                 captured["context"] = context
                 planner = OpenAILunaExperimentalPlanner(
-                    client, SCHEMA, CLOCK, candidate_context=context, domain_interpretation=domain
+                    provider, SCHEMA, CLOCK, candidate_context=context, domain_interpretation=domain
                 )
 
                 class RecordingPlanner:
@@ -160,9 +209,9 @@ def run(case_id: str, *, live: bool = False) -> dict:
                 outcome = execute_complete_message_with_core(
                     row["source"],
                     router=RecordingRouter(),
-                    temporal=OpenAITemporalInterpreter(client, CLOCK),
+                    temporal=OpenAITemporalInterpreter(provider, CLOCK),
                     core_planner_factory=core_factory,
-                    core_candidate_attributor=OpenAICoreCandidateAttributor(client),
+                    core_candidate_attributor=OpenAICoreCandidateAttributor(provider),
                     repository=repo,
                     schema=SCHEMA,
                     context_index=context_index,
@@ -217,6 +266,7 @@ def run(case_id: str, *, live: bool = False) -> dict:
         result["error"] = str(error)[:180]
 
     result["provider_calls"] = client.calls
+    result["provider_replies"] = captured_provider_replies
     result["reserved_or_estimated_usd"] = round(client.spent - total, 8)
     result["estimated_total_usd"] = round(client.spent, 8)
     receipt_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -228,7 +278,9 @@ def main() -> None:
     parser.add_argument("--case", choices=case_ids(), required=True)
     parser.add_argument("--live", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(run(args.case, live=args.live), ensure_ascii=False, indent=2))
+    result = run(args.case, live=args.live)
+    result.pop("provider_replies", None)
+    print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
 
 
 if __name__ == "__main__":

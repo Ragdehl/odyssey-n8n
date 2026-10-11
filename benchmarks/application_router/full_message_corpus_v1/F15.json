@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "case_id": "F15",
+  "original_source_sha256": "ae96ff2636edcc62c8364bf14f803d538f164fc8ef357d5ab1b98a7b1a851d1a",
+  "captured_live_outcome": "stopped_before_completion",
+  "captured_application_status": null,
+  "captured_clarification_code": null,
+  "captured_error_type": "TemporalInterpreterError",
+  "captured_error_summary": "Temporal resolution is not an exact Core anchor",
+  "provider_replies": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"fueron\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"fueron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"se quedó\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se quedó\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en casa\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"yo\",\"occurrence\":0},{\"text\":\"preparé\",\"occurrence\":0},{\"text\":\"la cena\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"preparé\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"la cena\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"después\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "status": "completed"
+    }
+  ]
+}
