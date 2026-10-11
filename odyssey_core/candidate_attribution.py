@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .candidate_context import CoreCandidateContext
-from .candidate_coverage import MAX_COVERAGE_FACTS
+from .candidate_coverage import MAX_COVERAGE_CLAIMS, MAX_COVERAGE_FACTS
 from .candidate_multi_participant import (
     MultiParticipantEvidenceError,
     validate_two_named_participant_fact,
@@ -407,3 +407,130 @@ class OpenAICoreCandidateAttributor:
             raise CandidateAttributionError(
                 "Attribution provider output failed Core validation"
             ) from error
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateFactLinks:
+    """One source candidate's nonauthoritative relationship to 0..N Core facts.
+
+    Empty fact_ordinals means *pending*, never silently dropped. This is a
+    Core-owned diagnostic, not a PlannerResult, writer instruction or durable
+    semantic attestation. Multiple source candidates can propose the same
+    fact ordinal without assigning a canonical identity.
+    """
+
+    candidate_id: str
+    source_quote: str
+    fact_ordinals: tuple[int, ...]
+    pending_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateFactGraph:
+    """Complete N:M candidate/fact graph, explicitly NOT a write authority."""
+
+    links: tuple[CandidateFactLinks, ...]
+    source_digest: str
+    plan_digest: str
+    candidate_count: int
+    fact_count: int
+    semantically_verified: bool = False
+    may_authorize_writes: bool = False
+
+    def matches_original_plan(self, source: str, plan: RequestPlan) -> bool:
+        """Prevent unrelated messages/plans from using an old graph."""
+        return (
+            isinstance(source, str)
+            and isinstance(plan, RequestPlan)
+            and self.source_digest == hashlib.sha256(source.encode("utf-8")).hexdigest()
+            and self.plan_digest == hashlib.sha256(repr(plan).encode("utf-8")).hexdigest()
+        )
+
+
+def inspect_candidate_fact_graph(
+    source: str,
+    context: CoreCandidateContext,
+    plan: RequestPlan,
+    links: tuple[CandidateFactLinks, ...],
+) -> CandidateFactGraph:
+    """Check structural completeness for N source candidates vs M atomic facts.
+
+    Unlike the legacy one-to-one attribution pilot this never assumes that a
+    Router unit is one Core fact. It deliberately does NOT authorize any
+    canonical write or claim semantic equivalence: source-quote overlap,
+    plausible ordinal assignments or a model's claim cannot establish that
+    shared subjects, implied relations, polarity or anaphora are correct.
+
+    No dependency on lexical wording, identity subtype, sentence punctuation
+    or candidate position. Pending or sensitive candidates are preserved
+    as unresolved rather than being converted to an invented planned fact.
+    """
+    if not isinstance(context, CoreCandidateContext) or not isinstance(plan, RequestPlan):
+        raise CandidateAttributionError("Original Core context and validated plan required")
+    context.validate(source)
+    if (
+        not isinstance(links, tuple)
+        or len(links) != len(context.candidates)
+        or any(not isinstance(link, CandidateFactLinks) for link in links)
+    ):
+        raise CandidateAttributionError("Each source candidate requires one typed graph link")
+    if len(links) > MAX_COVERAGE_CLAIMS:
+        raise CandidateAttributionError("Source graph exceeds the current technical budget")
+
+    actual: set[int] = set()
+    for ordinal_group in plan_fact_ordinals(plan):
+        actual.update(ordinal_group)
+    if len(actual) > MAX_COVERAGE_FACTS:
+        raise CandidateAttributionError("Atomic fact graph exceeds the technical budget")
+    accounted: set[int] = set()
+    for candidate, link in zip(context.candidates, links, strict=True):
+        if link.candidate_id != candidate.candidate_id:
+            raise CandidateAttributionError("Graph source candidate ID or ordering mismatch")
+        if link.source_quote not in {anchor.text for anchor in candidate.anchors}:
+            raise CandidateAttributionError(
+                "Graph source quote is not an original candidate anchor"
+            )
+        ordinals = link.fact_ordinals
+        if (
+            not isinstance(ordinals, tuple)
+            or any(not isinstance(number, int) or isinstance(number, bool) for number in ordinals)
+            or len(set(ordinals)) != len(ordinals)
+            or any(number not in actual for number in ordinals)
+            or tuple(sorted(ordinals)) != ordinals
+        ):
+            raise CandidateAttributionError("Invalid, duplicated or invented fact edge")
+        if ordinals:
+            if link.pending_reason is not None:
+                raise CandidateAttributionError("Planned candidate cannot also claim to be pending")
+            if (
+                candidate.state == "ambiguous_identity"
+                or candidate.kind in {"conditional", "negative"}
+                or any(
+                    role.role in {"condition", "polarity", "replacement", "modality"}
+                    for role in candidate.roles
+                )
+            ):
+                raise CandidateAttributionError(
+                    "Sensitive or ambiguous meaning requires a separate Core semantic review"
+                )
+            accounted.update(ordinals)
+        elif link.pending_reason not in {
+            "ambiguous_identity",
+            "needs_clarification",
+            "needs_capability",
+            "unsupported_scope",
+        } or (candidate.state == "ambiguous_identity") != (
+            link.pending_reason == "ambiguous_identity"
+        ):
+            raise CandidateAttributionError(
+                "Unplanned candidate requires an explicit pending reason"
+            )
+    if accounted != actual:
+        raise CandidateAttributionError("Every planned Core fact needs explicit source evidence")
+    return CandidateFactGraph(
+        links=links,
+        source_digest=hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        plan_digest=hashlib.sha256(repr(plan).encode("utf-8")).hexdigest(),
+        candidate_count=len(context.candidates),
+        fact_count=len(actual),
+    )
