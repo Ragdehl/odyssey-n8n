@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from odyssey_core.candidate_dependent_scope import (
+from benchmarks.fact_candidate_core_live.legacy_dependent_scope import (
     CoreDependentScopeError,
     preview_dependent_clause_scopes,
 )

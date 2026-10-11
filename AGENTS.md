@@ -60,6 +60,41 @@ variance never weakens the gate. Generalize the regression with additional note 
 shapes when the product invariant is type-generic. Do not remove or relax an accepted real-chat
 sentinel merely to make a later prompt or architecture change pass.
 
+### Generality invariant for Router and Core
+
+A Router candidate is an untrusted description of part of the ORIGINAL
+message, **not** a Core fact, Note, request or write action. One user
+message may contain a variable number of candidates; one candidate can
+produce zero, one or several Core facts, and several candidates can
+contribute to one fact. Do not translate candidate ordinals into Core
+write ordinals or require an arbitrary fixed number of candidates,
+participants, predicates or actions. Technical limits on provider bytes,
+source size and model context must be explicit budgets; they are not
+semantic rules and must not silently discard surplus information.
+
+Router may propose source-grounded grammatical roles and backwards
+lexical dependencies. It never chooses canonical identities, fact counts,
+Note types, Core plans or mutation order. Temporal independently resolves
+date/time language from the entire relevant original source; Router need
+not recognize every temporal mention. Ordinary Core owns semantic
+interpretation, reference resolution, identity selection, planning and
+persistence. Preserve the **entire original message** as Core's request,
+with bounded source-context and Temporal evidence rather than creating
+one model prompt and a second mini-planner per Router candidate.
+
+**Never implement a linguistic failure by branching on a specific user
+phrase, name, pronoun, conjunction or benchmark ID.** Preserve such cases
+as tests, then identify the general invariant they expose. If a feature
+requires a narrowly bounded pilot, isolate and label it explicitly,
+do not accumulate production-facing infrastructure on that restriction,
+and do not present its passing tests as general-language coverage.
+Before accepting changes to this flow, test independently chosen source
+shapes and candidate counts (including 1, 3, 5 and larger); verify both
+the source-to-plan cardinality and canonical readback without treating
+syntactic overlap as semantic proof. Unknown or unverified mappings must
+remain pending or fail closed rather than using a shortcut that weakens
+Core's identity or write checks.
+
 ### Human-approved singular identity creation invariant
 
 For WRITE, when semantic planning classifies a mention as one singular identity with a canonical

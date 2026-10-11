@@ -1846,3 +1846,81 @@ general Router v3 replacement for all 27 cases. F19 and
 F20 semantic correction/condition alternatives remain
 separate. No DEV/PROD, personal vault, secrets, model migration
 or source schema changes.
+
+
+**2026-10-11 — General Router/Temporal/Core refactor, replacing the misleading two-fact pilot (Draft PR #152, NOT DEPLOYED).**
+
+**Problem discovered:** The preceding experimental path constrained the
+user message to exactly two source candidates, one coordinating 'y',
+two independently scoped Core plans and one fact per plan. Additional
+validators recognized particular word patterns such as 'otro',
+'lo', 'hablé con' or 'él' and were extended with admission journals
+and private runtime preview infrastructure before proving a general
+linguistic contract. Passing those experimental tests had been
+incorrectly described as readiness of the general architecture.
+
+**Architectural decision:** The existing ordinary Core planner already
+accepts the unchanged **whole source**, the entire validated variable
+Router candidate context, optional Temporal DomainInterpretation,
+and emits a normal RequestPlan containing zero/multiple actions and
+zero/multiple facts per action. Return to THAT path rather than
+another split-and-plan-per-candidate coordinator. Router describes
+source spans/roles/dependencies, Temporal independently interprets
+the original whole message, Core alone decides semantics and writes.
+No model/prompt/schema changes.
+
+**Actual reversible feature-branch changes:** The two-candidate
+runtime preview/pipeline, its Core dependent-pair attestation,
+recovery and admission modules, and its custom source coverage
+exception were removed; ordinary Core's original prewrite
+coverage gate remains unchanged and fail-closed. Original frozen
+GPT-6/GPT-5.6 receipts remain untouched. Historical two-candidate
+test-harness scoping was moved out of `odyssey_core/` into
+`benchmarks/fact_candidate_core_live/legacy_dependent_scope.py`
+and the meaningful offline source and real-model frozen tests
+were retained as benchmarks. Tests solely exercising removed
+private infrastructure were retired, not silently counted as
+regressions or evidence of general language capability.
+
+New **read-only**, cardinality-independent
+`odyssey_runtime/complete_source_handoff.py` calls the original
+Router adapter once on the whole message, uses the already existing
+Core source-role and backward-inheritance validator on all N
+candidates, optionally calls the original independent Temporal
+adapter on the whole source **even when Router did not propose a
+temporal role**, validates precise source/time provenance, and
+passes the full source and all evidence to the existing Core
+planner **ONCE**. It does not produce a Core RequestPlan itself,
+infer identity, set Note types, split actions or authorize writes.
+
+Focused tests cover 1/2/3/5/8/13/26 candidates, transitive
+inherited roles, repeated/ambiguous pronouns, full-message dates,
+missing/mismatched Temporal role evidence and arbitrary Core
+action counts. A separate actual-Core-write vertical uses 1,
+3, 5, 8 and 13 independently provided original source facts,
+one normal WriteAction and one canonical synthetic Day note,
+with the existing Core original-source coverage check and actual
+Markdown fact-marker readback. In that physical test the Core
+plan is synthetic, not a newly observed GPT-5.6 completion, and
+the existing coverage result itself continues to say
+`candidate_semantics_verified=False`.
+
+**Crucial release blocker:** The existing opt-in general
+`candidate_coverage.py` still assumes one explicitly attributed
+fact ordinal per Router candidate and contains prior narrow
+lexical/person/relation validators. It is NOT sufficient to
+certify all real sentences, paraphrases, one-to-many or many-to-one
+source-to-fact associations, correction/condition semantics and
+multiple subjects/pronouns. The new handoff is therefore
+READ-ONLY and NOT connected to ordinary Core mutation or to
+the deployed chat. The next justified work is Core-owned
+semantic completeness/attribution for *variable candidate and
+fact cardinality* while preserving its existing identity and
+source validation, followed by live GPT-5.6 evidence and
+safe per-user runtime dispatch. Do not reintroduce a
+two-candidate special-case bypass or equate a mechanical write
+with semantically verified capture.
+
+No new paid provider calls, model switch, permissions, security
+boundary changes, runtime chat activation, DEV/PROD deployment
+or modification of the user's canonical vault.

@@ -900,3 +900,26 @@ bounded coordinated two-fact pilot for general handling of
 all user free-form messages; expand from abstract invariants
 and new-vocabulary negative tests, not F23/F26
 word-specific rules.
+
+
+**Fact interpretation refactor status (2026-10-11, Draft PR #152):**
+Retired the experimental exactly-two-facts runtime/Core attestation
+branch, keeping its frozen real-model evidence and historically
+scoped benchmark tests. The replacement is a **read-only full-source
+Router → independent Temporal → ordinary Core planner** handoff
+that supports the existing bounded variable candidate collection,
+backward role provenance, and arbitrary Core action/fact cardinality.
+It does not alter the production planner, provider prompts or Notes.
+Actual normal Core Markdown persistence has been mechanically tested
+with 1/3/5/8/13 synthetic facts and real source coverage/readback.
+
+**Not complete:** Generic Core-owned semantic source-to-plan attribution
+is still needed for many-to-one and one-to-many mappings, shared
+subjects, references and conditional/corrective statements, without
+phrase-specific validators. The existing opt-in source coverage
+preflight remains conservative and does not certify these cases,
+so the new generic adapter is NOT a write-enabled chat path. Before
+DEV, require comprehensive candidate/plan/readback correctness on
+novel 1/3/5+ fact messages, explicit ambiguous/pending accounting,
+focused live GPT-5.6 Core regression evidence, and independent
+architecture/PR review. No PROD changes, no Core model switch.

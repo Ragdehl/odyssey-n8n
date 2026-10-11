@@ -14,10 +14,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .candidate_context import CoreCandidateContext
-from .candidate_dependency_attestation import (
-    CoreDependentFactAttestation,
-    attest_two_dependent_core_plans,
-)
 from .candidate_fact_readback import CandidateFactReadback
 from .candidate_multi_participant import validate_two_named_participant_fact
 from .candidate_mutual_relation import validate_one_mutual_relationship_fact
@@ -55,7 +51,6 @@ class CoreCandidateCoverageManifest:
     source_digest: str
     plan_digest: str
     claims: tuple[CoreCandidateCoverageClaim, ...]
-    dependency_attestation: CoreDependentFactAttestation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,8 +72,6 @@ class CoreCandidateCoverageReview:
     candidate_semantics_verified: bool
     fully_accounted_for_structurally: bool
     safe_to_report_all_candidates_complete: bool
-    observed_original_fact_ordinals: tuple[int, ...] = ()
-    recovery_state: str | None = None
 
 
 def _digest(value: str) -> str:
@@ -102,39 +95,6 @@ def build_candidate_coverage_manifest(
     return manifest
 
 
-def build_dependent_candidate_coverage_manifest(
-    source: str,
-    context: CoreCandidateContext,
-    independently_compiled_plans: tuple[RequestPlan, RequestPlan],
-    claims: tuple[CoreCandidateCoverageClaim, CoreCandidateCoverageClaim],
-) -> tuple[RequestPlan, CoreCandidateCoverageManifest]:
-    """Core-only opt-in two-clause coverage with independent source attestation.
-
-    Returns the exact original model actions in source order, combined
-    mechanically; no new model, target, fact, or helper is synthesized.
-    A paired typed dependency proof is revalidated inside normal Core's
-    existing write preflight. Callers must not interpret this structural
-    mapping as final canonical identity proof or write completion.
-    """
-    if (
-        not isinstance(independently_compiled_plans, tuple)
-        or len(independently_compiled_plans) != 2
-    ):
-        raise ValueError("Exactly two independently compiled Core plans required")
-    evidence = attest_two_dependent_core_plans(source, context, independently_compiled_plans)
-    if any(
-        plan.limitations or plan.presentation_intent != "answer"
-        for plan in independently_compiled_plans
-    ) or any(len(plan.actions) != 1 for plan in independently_compiled_plans):
-        raise ValueError("Unreviewed Core plan presentation or additional action")
-    combined = RequestPlan(tuple(plan.actions[0] for plan in independently_compiled_plans), ())
-    manifest = CoreCandidateCoverageManifest(
-        _digest(source), _digest(repr(combined)), claims, evidence
-    )
-    validate_candidate_coverage_manifest(source, context, combined, manifest)
-    return combined, manifest
-
-
 def validate_candidate_coverage_manifest(
     source: str,
     context: CoreCandidateContext,
@@ -156,26 +116,6 @@ def validate_candidate_coverage_manifest(
         or manifest.plan_digest != _digest(repr(plan))
     ):
         raise ValueError("Coverage manifest is stale or mismatched")
-    dependency = manifest.dependency_attestation
-    if dependency is not None:
-        # Never trust a caller-supplied "verified" flag. Recompute the
-        # independent two-fact attestation from the *same actions* that
-        # ordinary Core will execute. This is opt-in; the old path remains
-        # byte-for-byte fail-closed when the carrier is absent.
-        if (
-            not isinstance(dependency, CoreDependentFactAttestation)
-            or dependency.may_write_notes
-            or dependency.canonical_reuse_verified
-            or len(plan.actions) != 2
-            or plan.limitations
-            or plan.presentation_intent != "answer"
-            or any(not isinstance(action, WriteAction) for action in plan.actions)
-        ):
-            raise ValueError("Unreviewed dependent Core coverage proof")
-        fragments = tuple(RequestPlan((action,), ()) for action in plan.actions)
-        expected = attest_two_dependent_core_plans(source, context, fragments)
-        if expected != dependency:
-            raise ValueError("Dependent Core proof does not bind the executed source and plan")
     claims = manifest.claims
     if not isinstance(claims, tuple) or not 1 <= len(claims) <= MAX_COVERAGE_CLAIMS:
         raise ValueError("Coverage claim count is invalid")
@@ -281,26 +221,6 @@ def validate_candidate_coverage_manifest(
         lexical = original
         for ref_index, ref in enumerate(unit.references):
             lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
-        if dependency is not None:
-            # The old independent-property/relationship lexical veto cannot
-            # interpret source omission or typed anaphora. Only the exact
-            # two independently planned facts already re-attested above
-            # can take this separately reviewed route. All reference-only
-            # Core helpers still require a one-to-one claimed owner.
-            if (
-                action_index != index
-                or unit_index != 0
-                or fact_index != 0
-                or claim.fact_ordinal != index
-                or not isinstance(action, WriteAction)
-            ):
-                raise ValueError("Dependent Core source candidates were reordered")
-            for reference in unit.references:
-                key = (action_index, reference.target_index)
-                if key in claimed_helpers:
-                    raise ValueError("Dependent Core reference helper has duplicate ownership")
-                claimed_helpers.add(key)
-            continue
         if context.candidates[index].kind == "property":
             other_subjects = tuple(
                 role.span.text
@@ -397,77 +317,4 @@ def review_candidate_coverage(
         candidate_semantics_verified=False,
         fully_accounted_for_structurally=True,
         safe_to_report_all_candidates_complete=False,
-    )
-
-
-def review_dependent_candidate_coverage(
-    source: str,
-    context: CoreCandidateContext,
-    plan: RequestPlan,
-    manifest: CoreCandidateCoverageManifest,
-    result: object,
-    repository: object,
-    schema: dict,
-) -> CoreCandidateCoverageReview:
-    """Report independent-fact coverage using a complete canonical audit.
-
-    Source correspondence is revalidated from both independent Core
-    actions. A completed result can be marked fully verified ONLY if the
-    original canonical targets, every linked fact and both request markers
-    pass the independent two-action post-write audit.
-
-    Partial/failed requests expose source-marker presence for diagnostics
-    but keep every candidate 'planned_unverified' rather than assigning
-    a source candidate to a possibly wrong or incomplete physical fact.
-    No implementation path here writes or resumes a request.
-    """
-    from .application import ApplicationResult, ApplicationStatus
-    from .candidate_dependency_attestation import (
-        DependentFactAttestationError,
-        review_combined_persisted_dependency,
-    )
-    from .candidate_dependency_recovery import inspect_dependent_request_recovery
-    from .storage import VaultRepository
-
-    validate_candidate_coverage_manifest(source, context, plan, manifest)
-    if (
-        manifest.dependency_attestation is None
-        or not isinstance(result, ApplicationResult)
-        or not isinstance(repository, VaultRepository)
-        or len(manifest.claims) != 2
-        or any(claim.disposition != "planned_fact" for claim in manifest.claims)
-    ):
-        raise ValueError("Dependent coverage requires the reviewed original two-fact plan")
-    recovery = inspect_dependent_request_recovery(repository, schema, result.request_id)
-    plans = tuple(RequestPlan((action,), ()) for action in plan.actions)
-    completed = False
-    if result.status is ApplicationStatus.COMPLETED and recovery.state == "complete":
-        try:
-            audit = review_combined_persisted_dependency(
-                source, context, plans, manifest.dependency_attestation, result, repository
-            )
-            completed = audit.canonical_reuse_verified and not audit.may_write_notes
-        except (DependentFactAttestationError, ValueError, TypeError, OSError):
-            # A completed action result cannot override corrupted Markdown,
-            # broken original-source identity or a stale canonical link.
-            completed = False
-    items = tuple(
-        CoreCandidateCoverageItem(
-            claim.candidate_id,
-            "physically_written_claim" if completed else "planned_unverified",
-            claim.fact_ordinal,
-            None,
-        )
-        for claim in manifest.claims
-    )
-    return CoreCandidateCoverageReview(
-        items=items,
-        pending_candidate_ids=()
-        if completed
-        else tuple(claim.candidate_id for claim in manifest.claims),
-        candidate_semantics_verified=completed,
-        fully_accounted_for_structurally=True,
-        safe_to_report_all_candidates_complete=completed,
-        observed_original_fact_ordinals=tuple(sorted(recovery.fact_ordinals)),
-        recovery_state=recovery.state,
     )

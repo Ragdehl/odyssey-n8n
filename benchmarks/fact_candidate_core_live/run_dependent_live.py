@@ -16,8 +16,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+from benchmarks.fact_candidate_core_live.legacy_dependent_scope import (
+    preview_dependent_clause_scopes,
+)
 from benchmarks.fact_candidate_core_live.run_live import ROOT, _stable
-from odyssey_core.candidate_dependent_scope import preview_dependent_clause_scopes
 from odyssey_core.domain_interpretation import (
     TEMPORAL_REFERENCE_EVIDENCE,
     DomainEvidence,

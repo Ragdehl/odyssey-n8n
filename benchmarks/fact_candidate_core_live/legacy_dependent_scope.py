@@ -1,4 +1,4 @@
-"""Generic, fail-closed lexical clause-scoping for dependent Core candidates.
+"""RETIRED historical two-candidate evaluator, not a Core implementation.
 
 Router only proposed source roles. Core selects original source substrings
 as individual planner tasks; a sibling clause may be quoted as linguistic
@@ -13,8 +13,11 @@ import re
 from dataclasses import dataclass
 from hashlib import sha256
 
-from .candidate_context import CoreCandidateContext, CoreSourceSpan
-from .candidate_dependencies import CoreDependencyRole, trace_core_candidate_dependencies
+from odyssey_core.candidate_context import CoreCandidateContext, CoreSourceSpan
+from odyssey_core.candidate_dependencies import (
+    CoreDependencyRole,
+    trace_core_candidate_dependencies,
+)
 
 _SENSITIVE_ROLES = frozenset({"condition", "polarity", "replacement", "modality"})
 _SENSITIVE_CONNECTORS = re.compile(

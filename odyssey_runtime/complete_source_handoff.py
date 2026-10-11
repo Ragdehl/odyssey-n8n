@@ -1,0 +1,192 @@
+"""Read-only handoff of a complete Router/Temporal message to ordinary Core.
+
+A Router candidate is evidence about original source wording, not a Core fact,
+action or Note. This adapter never partitions the original message into
+independently planned mini-requests. Core receives *all* the source, all source
+hints, and separately computed Temporal evidence in its normal one-shot
+planning interface. Only Core's existing execute_request/coverage checks may
+later authorize writes.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Protocol
+
+from odyssey_apps.fact_candidate_core import to_core_candidate_context
+from odyssey_apps.fact_candidates import FactCandidateProposal
+from odyssey_apps.fact_temporal import CandidateTemporalEvidence, bind_temporal_to_fact_candidates
+from odyssey_core.candidate_context import CoreCandidateContext
+from odyssey_core.candidate_dependencies import (
+    CoreDependencyUnit,
+    trace_core_candidate_dependencies,
+)
+from odyssey_core.domain_interpretation import DomainInterpretation
+from odyssey_core.temporal_interpretation import TemporalInterpretation
+
+
+class CandidateSourceRouter(Protocol):
+    """Existing Router may only propose source-grounded candidate roles."""
+
+    def propose(self, source: str) -> FactCandidateProposal:
+        """Return source evidence for the exact entire user message."""
+
+
+class SourceTemporalInterpreter(Protocol):
+    """Temporal reads the whole original message independently of Router."""
+
+    def interpret(self, source: str) -> TemporalInterpretation:
+        """Return verified temporal mentions or an empty interpretation."""
+
+
+class OrdinaryCorePlanner(Protocol):
+    """Existing Core planner, not an application-specific planning substitute."""
+
+    def plan(self, request: str) -> object:
+        """Interpret the complete original request in Core."""
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteSourceEvidence:
+    """Untrusted source-role hints plus separately validated temporal output."""
+
+    source: str
+    context: CoreCandidateContext
+    dependency_trace: tuple[CoreDependencyUnit, ...]
+    temporal_interpretation: TemporalInterpretation | None
+    temporal_bindings: tuple[CandidateTemporalEvidence, ...]
+    domain_interpretation: DomainInterpretation | None
+
+    def validate(self) -> None:
+        """Recheck full-source identity and every source-dependent role."""
+        self.context.validate(self.source)
+        if self.dependency_trace != trace_core_candidate_dependencies(self.source, self.context):
+            raise ValueError("Source role dependency trace is stale or mismatched")
+        # Router only *locates* possible time wording. Temporal alone
+        # normalizes it, and its whole-message interpretation is separate.
+        from odyssey_apps.fact_temporal import TEMPORAL_SOURCE_ROLES
+
+        expected = tuple(
+            (
+                unit.candidate_id,
+                role.role,
+                role.span.start,
+                role.span.end,
+                role.inherited,
+            )
+            for unit in self.dependency_trace
+            for role in unit.roles
+            if role.role in TEMPORAL_SOURCE_ROLES
+        )
+        bound = tuple(
+            (
+                binding.candidate_id,
+                binding.role,
+                binding.source.start,
+                binding.source.end,
+                binding.origin == "inherited",
+            )
+            for binding in self.temporal_bindings
+        )
+        if expected != bound:
+            raise ValueError("Temporal roles were lost, added or assigned to another source unit")
+        if self.temporal_interpretation is None:
+            if expected or self.domain_interpretation is not None:
+                raise ValueError("Source time roles need the independent Temporal interpreter")
+        else:
+            if self.temporal_interpretation.source_text != self.source:
+                raise ValueError("Temporal interpretation does not match the original message")
+            if (
+                self.domain_interpretation
+                != self.temporal_interpretation.core_domain_interpretation()
+            ):
+                raise ValueError("Core temporal evidence differs from the original interpretation")
+            mentions = tuple(
+                (mention.temporal_text, mention.resolution)
+                for mention in self.temporal_interpretation.mentions
+            )
+            for binding in self.temporal_bindings:
+                if self.source[binding.source.start : binding.source.end] != binding.source.text:
+                    raise ValueError("Temporal role is not an original source span")
+                if (
+                    binding.status == "matched"
+                    and (binding.temporal_text, binding.resolution) not in mentions
+                ):
+                    raise ValueError("Temporal role claims an unverified normalized time")
+                if binding.status == "missing" and (
+                    binding.temporal_text is not None or binding.resolution is not None
+                ):
+                    raise ValueError("Unresolved temporal role contains invented evidence")
+
+
+def collect_complete_source_evidence(
+    source: str,
+    *,
+    router: CandidateSourceRouter,
+    temporal: SourceTemporalInterpreter | None = None,
+) -> CompleteSourceEvidence:
+    """Collect N Router candidates and independently interpret whole-source time.
+
+    No linguistic punctuation, conjunction, candidate kind or source count
+    controls which plan Core may eventually produce. Technical source length
+    and candidate-count caps still belong to existing source contracts.
+
+    Args:
+        source: Exact original user message.
+        router: Existing non-authoritative candidate-producing Router.
+        temporal: Optional independent full-source Temporal capability.
+            When supplied, it runs on the original message regardless of
+            which temporal roles Router did or did not spot.
+
+    Returns:
+        Read-only source evidence. Missing/approximate dates are retained as
+        evidence, never silently turned into exact dates or write authority.
+
+    Raises:
+        ValueError: Altered/unverified source, role inheritance or clock link.
+    """
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("An unchanged, nonempty user message is required")
+    proposal = router.propose(source)
+    if not isinstance(proposal, FactCandidateProposal) or proposal.source != source:
+        raise ValueError("Router did not preserve the original user message")
+    context = to_core_candidate_context(proposal)
+    context.validate(source)
+    trace = trace_core_candidate_dependencies(source, context)
+    interpretation = temporal.interpret(source) if temporal is not None else None
+    if interpretation is not None and (
+        not isinstance(interpretation, TemporalInterpretation)
+        or interpretation.source_text != source
+    ):
+        raise ValueError("Temporal returned evidence for a different user message")
+    bindings = bind_temporal_to_fact_candidates(proposal, interpretation)
+    domain = interpretation.core_domain_interpretation() if interpretation is not None else None
+    evidence = CompleteSourceEvidence(source, context, trace, interpretation, bindings, domain)
+    evidence.validate()
+    return evidence
+
+
+def plan_complete_source_with_core(
+    evidence: CompleteSourceEvidence,
+    *,
+    core_planner_factory: Callable[
+        [CoreCandidateContext, DomainInterpretation | None], OrdinaryCorePlanner
+    ],
+) -> object:
+    """Invoke the SAME ordinary Core planner exactly once on the whole source.
+
+    The factory supplies Core's existing model/prompt and passes validated
+    context and Temporal evidence to it. A candidate is not required to
+    yield one Core action or fact; clarification/escalation remain possible.
+    Neither this function nor Router authorizes writes or fabricates a plan.
+    """
+    if not isinstance(evidence, CompleteSourceEvidence):
+        raise ValueError("Core requires validated complete source evidence")
+    evidence.validate()
+    if not callable(core_planner_factory):
+        raise ValueError("Ordinary Core planner factory is required")
+    planner = core_planner_factory(evidence.context, evidence.domain_interpretation)
+    if not callable(getattr(planner, "plan", None)):
+        raise ValueError("Ordinary Core planner interface is missing")
+    return planner.plan(evidence.source)
