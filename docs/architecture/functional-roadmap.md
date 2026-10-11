@@ -817,3 +817,35 @@ No Core live calls, DEV/PROD activation, canonical Markdown writes or
 model migration occurred in this gate. Keep PR #152 draft; fix
 F19/F20/F25 in general source-only prompt/contract, then separately
 validate Core/Temporal relationships for the reviewed concerns.
+
+
+**Block 4B33 local-first dependent write concurrency (2026-10-11):**
+A **Core-owned opt-in stable logical operation admission** now
+exists in `candidate_dependency_admission.py`. The outer client
+must pass one stable, authenticated/actor-root-scoped message ID
+**unchanged across retries**; the Core-generated technical request
+ID may differ without admitting a duplicate. A root-local
+`flock` lock spans both normal Core actions, authoritative
+Markdown readback and an atomic/fsynced non-knowledge journal record.
+Only digests + ID + status are stored outside the vault. Tests show
+two threads and two OS processes cannot concurrently admit the
+same logical operation, and an abrupt process death leaves a durable
+reservation that blocks unsafe automatic replay. An injected
+failure of the second original-source fact leaves state `partial`
+and even another technical request ID cannot rewrite the first
+fact; same message text with two distinct intentional message
+IDs is not conflated.
+
+This is still an **experimental Core facade**, not connected to
+the normal app/chat dispatcher, and does not replace the
+existing Core planner, identity/write/coverage guards. Core GPT-5.6
+remains unchanged. No rollback or automatic resume is claimed.
+To prepare a DEV activation, the existing runtime must reliably
+deliver the durable per-message stable key from the authenticated
+outer boundary, configure its isolated state directory, and
+ensure all relevant dependent writes cooperate with the root
+admission lock. A caller using a *different* key to retry the
+same logical message remains unsafe. Failure after Note creation
+but before the first marker requires manual recovery. Neither
+F19/F20 prompt semantics nor complete generalized candidate
+routing are solved by this block.

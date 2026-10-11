@@ -1512,3 +1512,77 @@ of newly created typed identities if a failure precedes a fact
 marker, and embedding these verified statuses in user-visible
 response after app integration. F19/F20 corrections/conditionals
 remain separate unrelated safety work.
+
+
+**Block 4B33 — root-local durable admission and cross-process concurrency
+for dependent two-fact Core operations (2026-10-11, experimental only).**
+
+The current `candidate_dependency_recovery.py` protects one **Core
+request ID** using authoritative Markdown ordinal 0/1 markers, but a
+transport retry can arrive with a NEW technical request ID. To
+address this without guessing that equal message text is a retry,
+the new Core-owned opt-in `candidate_dependency_admission.py`
+requires a **trusted stable logical operation key supplied by the
+outer chat/delivery boundary**, distinct from the generated Core
+request ID. The same key MUST be reused across transport retries.
+Repeated legitimate messages with identical text but **different**
+outer message IDs remain distinct operations.
+
+The implementation reuses Odyssey's existing local Linux
+`fcntl.flock` and fsynced atomic JSON state pattern, NOT a new
+service, database, graph, app planner or user-vault metadata.
+A configured, actor/root-isolated state directory **outside the
+canonical Markdown vault** contains only SHA-256 digests of the
+logical key, full source, plan and vault root; technical request
+ID; and bounded status (`reserved`, `completed`, `partial`,
+`unknown`). No original personal conversation text, identity
+or Markdown is copied into the state record. One root-wide
+advisory lock spans reservation, normal Core's original-source
+coverage/identity write path, full two-fact canonical readback
+and durable final status. A second thread or *different process*
+with the same stable key cannot pass admission, even if it supplies
+a different Core request ID. The persisted record is written and
+fsynced **before any canonical Note mutation**.
+
+`execute_dependent_core_once` is an **opt-in Core facade** for
+already independently compiled, validated GPT-5.6 Core plans.
+It mechanically invokes the existing `execute_request` with
+the full source, original Core candidate coverage and ordinary
+identity materialization. The facade adds only journal admission,
+does not call an LLM and never creates a new specialized semantic
+planner. It is NOT connected to runtime dispatch/DEV/PROD.
+
+**Frozen-real-model tests in disposable Markdown** confirm:
+- Both F23 and F26 finish with one operation and one durable
+  `completed` journal, including an existing and a newly
+  created typed document.
+- A same-logical-message retry with a different Core request ID
+  is denied without a new Markdown write.
+- Two simultaneous threads running Core F23 produce exactly one
+  two-fact canonical write; two independent operating-system
+  processes on the same actor root produce exactly one admission.
+- A simulated second-action failure leaves one physical fact,
+  records `partial` and blocks a new technical ID with the
+  same original logical key.
+- Process death via `os._exit` immediately after a journal
+  reservation leaves durable `reserved` state; restart cannot
+  silently retry it, regardless of whether any fact marker exists.
+- State path inside the vault, symlinked state/lock, invalid key,
+  or journal read/size/capacity failures refuse mutation.
+- Two separate, deliberate messages with the same natural-language
+  text and different stable operation IDs are NOT conflated.
+
+**Still unproven / never claim ready:** The outer Odyssey chat
+must provide and persist a reliable per-message operation ID, and
+all relevant cooperating writers must respect the root-bound
+admission protocol; direct normal Core calls are not protected by
+this new optional facade. A crash after creating a typed Note
+but before its first atomic fact may leave an orphan requiring
+manual reconciliation. A different logical key passed for an
+actual retry is indistinguishable from a new user message
+without trusted transport identity and **must not be accepted as
+a safe replay mechanism**. No automatic resume/rollback, no
+retention/deletion of uncertain journal entries, and no active
+runtime wiring are provided yet. F19/F20 correction/conditional
+semantics are separate work. All work is on the Draft feature
+branch and uses no additional paid provider calls.
