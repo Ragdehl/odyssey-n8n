@@ -449,6 +449,11 @@ class OpenAICoreCandidateAttributor:
                 "shared_source_provenance": [
                     role.to_payload() for role in context.source_provenance
                 ],
+                "core_verified_inherited_subject": (
+                    context.verified_inherited_subject.prompt_payload()
+                    if context.verified_inherited_subject is not None
+                    else None
+                ),
                 "core_planned_atomic_facts": [
                     {"fact_ordinal": ordinal, "fact_text": value}
                     for ordinal, value in facts.items()

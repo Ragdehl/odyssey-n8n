@@ -272,6 +272,7 @@ def validate_candidate_coverage_manifest(
                 unit,
                 lexical,
                 other_source_subjects=other_subjects,
+                inherited_subject=context.verified_inherited_subject,
             )
         veto_unsafe_literal_match(
             source, context, index, lexical, canonical_binding=canonical_binding

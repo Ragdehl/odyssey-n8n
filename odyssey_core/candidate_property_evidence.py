@@ -10,6 +10,7 @@ from __future__ import annotations
 from .candidate_context import CoreCandidate
 from .candidate_semantic_veto import normalized_words
 from .request_planning import KnowledgeUnit
+from .scoped_subject_evidence import CoreVerifiedInheritedSubject
 
 
 class CandidatePropertyEvidenceError(ValueError):
@@ -23,6 +24,7 @@ def validate_subject_property_fact(
     fact: str,
     *,
     other_source_subjects: tuple[str, ...] = (),
+    inherited_subject: CoreVerifiedInheritedSubject | None = None,
 ) -> str:
     """Return source-grounded lexical evidence including a verified target name.
 
@@ -42,17 +44,85 @@ def validate_subject_property_fact(
     if candidate.kind != "property" or candidate.state != "candidate":
         raise CandidatePropertyEvidenceError("Independent source property required")
     subjects = [role.span for role in candidate.roles if role.role == "subject"]
+    if not subjects and inherited_subject is not None:
+        inherited_subject.validate()
+        if (
+            any(
+                role.role in {"subject", "reference", "condition", "polarity", "replacement"}
+                for role in candidate.roles
+            )
+            or unit.target.entity != inherited_subject.canonical_name
+            or unit.target.type != inherited_subject.canonical_type
+            or unit.target.query
+            not in {inherited_subject.canonical_name, inherited_subject.source_text}
+            or len(candidate.anchors) < 1
+            or any(
+                anchor
+                not in {
+                    role.span
+                    for role in candidate.roles
+                    if role.role in {"object", "location", "predicate", "transaction"}
+                }
+                for anchor in candidate.anchors
+            )
+            or unit.target.filters
+            or unit.target.link_scope is not None
+            or unit.target.semantic_set is not None
+            or unit.target.relational_reference is not None
+            or unit.target.self_target is not None
+            or unit.reference_lookup_only
+            or unit.force_create
+            or unit.intent != "record"
+            or unit.properties
+            or unit.tag_changes
+            or unit.references
+            or len(unit.facts) != 1
+            or unit.destination_type is not None
+            or unit.fact_temporal_anchors != ()
+        ):
+            raise CandidatePropertyEvidenceError(
+                "Inherited property target lacks verified Core subject"
+            )
+        words = normalized_words(fact)
+        local_roles = [role for role in candidate.roles if role.role in {"object", "location"}]
+        if not local_roles or any(
+            not normalized_words(role.span.text) <= words for role in local_roles
+        ):
+            raise CandidatePropertyEvidenceError("Inherited property changed local source content")
+        permitted = (
+            normalized_words(source)
+            | normalized_words(inherited_subject.source_text)
+            | normalized_words(inherited_subject.predecessor_fact)
+        )
+        if not words <= permitted:
+            raise CandidatePropertyEvidenceError("Inherited property adds unknown lexical material")
+        return inherited_subject.source_text + " " + fact
     if (
         len(subjects) != 1
-        or len(candidate.anchors) != 1
-        or candidate.anchors[0] != subjects[0]
+        or subjects[0] not in candidate.anchors
+        or any(
+            anchor
+            not in {
+                role.span
+                for role in candidate.roles
+                if role.role in {"subject", "object", "location", "predicate", "transaction"}
+            }
+            for anchor in candidate.anchors
+        )
         or any(role.role in {"reference", "condition", "polarity"} for role in candidate.roles)
     ):
         raise CandidatePropertyEvidenceError("Property subject is not individually grounded")
     subject = subjects[0]
     if (
         source[subject.start : subject.end] != subject.text
-        or unit.target.entity != subject.text
+        or (
+            unit.target.entity != subject.text
+            and not (
+                isinstance(unit.target.entity, str)
+                and unit.target.entity.strip()
+                and subject.text.casefold().endswith(" " + unit.target.entity.casefold())
+            )
+        )
         or unit.target.query != subject.text
         or not unit.target.type
         or unit.target.filters

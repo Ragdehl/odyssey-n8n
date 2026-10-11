@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .scoped_subject_evidence import CoreVerifiedInheritedSubject
+
 MAX_CORE_CANDIDATE_CONTEXT_BYTES = 16_384
 MAX_CORE_CANDIDATES = 26
 MAX_CORE_ROLES = 16
@@ -236,6 +238,7 @@ class CoreCandidateContext:
     source: str
     candidates: tuple[CoreCandidate, ...]
     source_provenance: tuple[CoreSourceRoleProvenance, ...] = ()
+    verified_inherited_subject: CoreVerifiedInheritedSubject | None = None
 
     def validate(self, requested_source: str) -> None:
         """Prohibit stale, altered, oversized or ungrounded candidate hints."""
@@ -260,6 +263,19 @@ class CoreCandidateContext:
             proof.validate()
             if proof.candidate_id not in {item.candidate_id for item in self.candidates}:
                 raise ValueError("Shared source provenance has no local candidate")
+        if self.verified_inherited_subject is not None:
+            proof = self.verified_inherited_subject
+            if not isinstance(proof, CoreVerifiedInheritedSubject):
+                raise ValueError("Inherited Core subject proof is invalid")
+            proof.validate()
+            if not any(
+                role.role == "subject"
+                and (role.original_start, role.original_end, role.text)
+                == (proof.original_start, proof.original_end, proof.source_text)
+                and role.original_sha256 == proof.original_sha256
+                for role in self.source_provenance
+            ):
+                raise ValueError("Inherited Core subject has no exact source provenance")
         if len(self.prompt_payload_bytes()) > MAX_CORE_CANDIDATE_CONTEXT_BYTES:
             raise ValueError("Core candidate context is oversized")
 
@@ -269,6 +285,10 @@ class CoreCandidateContext:
             "version": 1,
             "candidates": [c.to_payload() for c in self.candidates],
         }
+        if self.verified_inherited_subject is not None:
+            payload["core_verified_inherited_subject"] = (
+                self.verified_inherited_subject.prompt_payload()
+            )
         if self.source_provenance:
             payload["shared_source_provenance"] = [
                 item.to_payload() for item in self.source_provenance
@@ -310,6 +330,17 @@ class CoreCandidateContext:
                 "role needs validation by another capability, keep that action "
                 "pending rather than asserting it as fact."
                 if self.source_provenance
+                else ""
+            )
+            + (
+                "\nThe separate core_verified_inherited_subject is a verified "
+                "PREDECESSOR fact and canonical Note identity, not another "
+                "user request. Use it only to resolve the elliptical grammatical "
+                "subject of the CURRENT source fragment. Never plan the "
+                "predecessor fact again or create a different target. Core "
+                "will independently recheck the same Note ID and Markdown "
+                "guard before writing anything."
+                if self.verified_inherited_subject is not None
                 else ""
             )
         )

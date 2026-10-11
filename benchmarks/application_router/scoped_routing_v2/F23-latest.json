@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "case_id": "F23",
+  "original_source_sha256": "755e70ca4d78ca30605872e66f5893c19eb538aa2508967699e6255070464ec0",
+  "captured_application_status": "partial",
+  "route_summaries": [
+    {
+      "status": "completed",
+      "depends_on": null,
+      "reason": null
+    },
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 1,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"El proyecto Odyssey\",\"occurrence\":0},{\"text\":\"un fallo\",\"occurrence\":0},{\"text\":\"Router\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El proyecto Odyssey\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"un fallo\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Router\",\"occurrence\":0}}] ,\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"property\",\"anchors\":[{\"text\":\"El proyecto Odyssey\",\"occurrence\":0},{\"text\":\"otro\",\"occurrence\":0},{\"text\":\"Temporal\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El proyecto Odyssey\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"otro\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Temporal\",\"occurrence\":0}}],\"inheritance\": [{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El proyecto Odyssey\",\"binding\":\"described\",\"direct_name\":\"Odyssey\",\"note_type\":\"project\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene un fallo en Router.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"un fallo\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Tiene un fallo en Router.\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "recorded_receipt_id": "F23-v3"
+}

@@ -488,6 +488,38 @@ def execute_request(
             started,
             monotonic,
         )
+    if candidate_context is not None and candidate_context.verified_inherited_subject is not None:
+        # Only verified-subject continuation opts into typed escalation.
+        # Historical Core/candidate replay contracts remain unchanged.
+        # The experimental planner may decline without inventing a plan.
+        # Treat that as a safe pending decision, not a provider/runtime crash.
+        from .experimental_luna_planning import PlannerEscalation
+
+        if isinstance(plan, PlannerEscalation):
+            stages.append(
+                OperationalStage(
+                    "planner",
+                    OperationalOutcome.COMPLETED,
+                    planner_duration_ms,
+                    model=getattr(planner, "model", None),
+                    reasoning_effort=getattr(planner, "reasoning_effort", None),
+                    usage=normalize_provider_usage(getattr(planner, "last_usage", None)),
+                    provider_calls=_planner_attempts(planner, provider_recorder.calls),
+                )
+            )
+            stages.append(OperationalStage("pending", OperationalOutcome.SKIPPED))
+            return _with_operational(
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="CORE_PLANNER_ESCALATED",
+                ),
+                stages,
+                started,
+                monotonic,
+            )
     if not isinstance(plan, RequestPlan):
         raise TypeError("planner must return a PlannerResult")
     pending_candidate_ids: tuple[str, ...] = ()

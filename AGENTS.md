@@ -107,8 +107,14 @@ source-role provenance to the selected unit. Cohort only a genuinely atomic
 joint event or a correction that must not write its retracted alternative.
 Untrusted inherited date wording is not a Temporal-normalized Core-authorized
 date: keep the affected write pending until a separately verified temporal
-result has been transferred. Never invent a source phrase, canonical identity,
-resolved date or write authority to make a split appear successful. Do not
+result has been transferred. Likewise, an inherited grammatical subject is
+not a canonical identity unless a predecessor Core WRITE and actual Markdown
+readback verify the unique same-target Note, whose identity/content are
+rechecked at write preflight. Inherited predicates for a **new** subject still
+need separate Core-verified predecessor-event proof; lexical Router hints alone
+MUST NOT authorize copying facts to another person. Never invent a source
+phrase, canonical identity, resolved date or write authority to make a split
+appear successful. Do not
 equate one candidate with one action, one Core fact or one model call. Validate
 complete original-source accounting without sending all original sibling text
 as a new downstream planning request.

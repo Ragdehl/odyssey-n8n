@@ -426,3 +426,78 @@ Remaining independent follow-up: extend fresh split-input model coverage
 beyond F04/F06, particularly lexical subject ownership, user tasks,
 polarity/corrections, F27 bad inheritance, and approximate/non-exact
 temporal resolutions; do not downgrade Core's write guards.
+
+
+## Verified Core subject/predicate continuation (2026-10-11)
+
+Subsequent fresh split-input regression F23 uncovered a new boundary:
+Router can express an inherited source subject either as
+`inheritance:[subject/from_unit]` or as an explicit second candidate
+`scoped_source.subject` referring to **the same original text span**.
+Both are valid lexical provenance when their offsets/digest match the
+original; neither is independently canonical identity authority.
+
+The test-only scoped executor now additionally tracks a
+`ScopedCoreSubjectHandoff`, minted only **after** an ordinary Core
+fact-bearing WRITE completes and `readback_core_facts` verifies that
+fact's exact request/ordinal marker in canonical Markdown. It requires
+a unique source subject with the same exact original offsets, a single
+actual persisted Core write target, a canonical subject name grounded in
+that source mention, and a currently unique canonical Note ID/name/type
+with a full-content guard. It refuses attempts to transfer a subject
+that merely appeared in Router's lexical hints.
+
+Later separate fragments receive one bounded
+`CoreVerifiedInheritedSubject`: source text/offsets, actual canonical
+name/type, and a **read-only prior verified fact**. The stable Note ID
+and content guard are NOT sent to the model, and the previous sibling
+is NOT pasted back as a new user request. An independently rechecked
+`CoreInheritedSubjectWriteGuard` permits only one atomic same-target
+fact write and rejects missing/stale canonical Notes, guessed targets,
+cross-note writes, or multi-action smuggling. Core's independent fact
+coverage retains source-object/location lexical checks and rejects extra
+unsourced words. The earlier property validator now permits multiple
+independently grounded source anchors; it no longer assumes every
+property source must have exactly one subject anchor.
+
+F23, with authentic new Router replies citing the same subject span
+twice, now writes the first fact to the synthetic `Odyssey` Note in
+one full real-provider run. Its second Core model call was **not
+completed** in that run; the bounded provider budget gate prevented
+an additional recorded response. This is not evidence of a model
+semantic rejection. All raw outputs and observed results remain
+frozen as `scoped_routing_v2/F23-latest.json`. Earlier F23-v2
+Core ESCALATE outputs are separately preserved in
+`scoped_routing_v2/F23.json`: replay after the first source
+validator correction proves the first property writes and the second
+is explicitly NEEDS_ATTENTION. The opt-in application boundary now
+translates a typed `PlannerEscalation` into safe NEEDS_ATTENTION
+instead of a misleading TypeError/FAILED result, with zero writes
+for that route.
+
+Deterministic full Writer + readback acceptance:
+- F23: two separate Core fragments produce two verified facts in the
+  same canonical Odyssey project Note, if both Core plans are safe.
+- F25: a house property and a second same-house repair-need assertion
+  can be recorded separately in the same canonical house Note, without
+  implicitly creating a Task or marking an operation complete.
+- F16: a new local subject, Luis, is never silently bound to Ana just
+  because the two share `compró entradas` in the original sentence.
+  Typed inherited predicate/object/transaction context alone is not
+  enough to certify an independent action by Luis, so that route
+  stays blocked until a Core-verified predecessor-event carrier is
+  implemented.
+- Stale canonical Markdown, a different target Note ID, a missing
+  completed predecessor, and multiple atomic writes are rejected.
+
+The Core subject handoff is intentionally **same-target only**:
+cross-subject parallel events, Day-note continuations citing a
+separate subject and pronoun+subject composite guards still require
+independently reviewed general contracts. No automatic use of
+untrusted lexical pronouns, task modality or negations was added.
+The pre-existing per-route split remains unchanged, as do active
+DEV/PROD, model versions and all personal Notes.
+
+The current cumulative estimated authorized provider spend is
+**USD 0.2357768 / 0.25** (not an OpenAI billing statement). All
+new tests and corrected adapters continue to run without API calls.

@@ -14,6 +14,7 @@ from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidates import FactCandidateProposal
 from odyssey_apps.router import RouterError
 from odyssey_core.candidate_context import CoreCandidateContext
+from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
     ScopedTemporalHandoff,
     with_scoped_inherited_temporal,
@@ -75,7 +76,7 @@ def resolve_scoped_reference_with_core_proof(
         return context
     candidates = list(context.candidates)
     candidates[position] = replace(target, state="candidate")
-    refreshed = CoreCandidateContext(context.source, tuple(candidates))
+    refreshed = replace(context, candidates=tuple(candidates))
     refreshed.validate(context.source)
     return refreshed
 
@@ -166,6 +167,7 @@ def execute_candidate_routed_message(
         for ordinal, item in enumerate(bundle.units)
     }
     temporal_handoff = ScopedTemporalHandoff(source)
+    subject_handoff = ScopedCoreSubjectHandoff(source)
 
     def run_unit(
         unit_source: str,
@@ -239,11 +241,40 @@ def execute_candidate_routed_message(
             else:
                 domain = replace(domain, evidence=(*domain.evidence, canonical))
             guard = DependentReferenceGuard(dependent_handoff.mention, dependent_handoff.evidence)
+        subject = subject_handoff.inherit(
+            context=scoped.context,
+            route_index=ordinal,
+            start=scoped.original_start,
+            end=scoped.original_end,
+            repository=repository,
+            schema=schema,
+        )
+        if subject is not None and guard is not None:
+            raise ValueError("Mixed canonical subject and reference guards require explicit review")
+        # Lexical Router reuse of a predicate, object or transaction is not
+        # Core-certified event evidence. Never infer a second participant\u0027s
+        # action solely from a shared source verb. Same-target elliptical
+        # properties can use the separately persisted Core subject/fact guard;
+        # changed-subject continuations need a future independently reviewed
+        # Core predecessor-event carrier and must not write yet.
+        inherited_fact_roles = {
+            role.role
+            for role in scoped.context.source_provenance
+            if role.role in {"predicate", "predicate_relation", "object", "transaction"}
+        }
+        if inherited_fact_roles and subject is None:
+            raise ValueError("Inherited predicate requires Core-verified predecessor fact")
         route_context = (
             resolve_scoped_reference_with_core_proof(scoped.context, guard, repository, schema)
             if guard is not None
             else scoped.context
         )
+        if subject is not None:
+            route_context = replace(route_context, verified_inherited_subject=subject)
+            route_context.validate(unit_source)
+        from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard
+
+        subject_guard = CoreInheritedSubjectWriteGuard(subject) if subject is not None else None
         planner = core_planner_factory(route_context, domain)
         if not callable(getattr(planner, "plan", None)):
             raise ValueError("Only the ordinary Core planner may interpret a scoped route")
@@ -287,7 +318,7 @@ def execute_candidate_routed_message(
                 )
             ),
             candidate_pending_recorder=candidate_pending_recorder,
-            write_preflight_guard=guard,
+            write_preflight_guard=subject_guard or guard,
         )
         if result.status is ApplicationStatus.COMPLETED and "plan" in captured:
             plan = captured["plan"]
@@ -309,6 +340,17 @@ def execute_candidate_routed_message(
                 # This test-only composition uses a disposable canonical vault.
                 context_index.rebuild(repository, schema, embedder)
                 semantic_index.rebuild(repository, schema, embedder)
+                subject_handoff.remember(
+                    context=route_context,
+                    plan=plan,
+                    result=result,
+                    readback=evidence,
+                    repository=repository,
+                    schema=schema,
+                    start=scoped.original_start,
+                    end=scoped.original_end,
+                    route_index=ordinal,
+                )
         return result
 
     selected_router = SimpleNamespace(route=lambda current, _prior=(): bundle.plan)
