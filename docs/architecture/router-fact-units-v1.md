@@ -1586,3 +1586,42 @@ retention/deletion of uncertain journal entries, and no active
 runtime wiring are provided yet. F19/F20 correction/conditional
 semantics are separate work. All work is on the Draft feature
 branch and uses no additional paid provider calls.
+
+
+**Existing chat-ID contract verified (read-only, 2026-10-11):**
+This does **not** require a new browser-generated ID or frontend
+payload field. `odyssey_web/client.js:createSubmission()`
+already creates one secure `web-<UUID>` per user message;
+`requestProductResult()` sends it as `request_id`;
+`findRecoverableSubmission()` reconstructs a retry using the
+**same original user-turn request ID** instead of generating
+another. The runtime's existing HTTP `/execute` accepts that
+validated `request_id`, and
+`odyssey_runtime/composition.py:execute_product()` already
+performs root/actor-bound completed-delivery replay via
+`LocalDeliveryResultStore`. Routed subunits derive separate
+deterministic `route_execution_id(outer_request_id, ordinal)`
+values while preserving the outer delivery ID as the user's
+logical request identity.
+
+The proper opt-in integration is therefore to pass the
+**existing authenticated outer request ID** as
+`logical_operation_key` to the new Core durable admission
+facade, and keep any internal subroute execution ID only as
+the subordinate Core request ID. The existing actor-isolated
+conversation/state root should supply `state_root`; do
+not put journal files in the canonical Markdown vault.
+Existing completed-delivery replay remains authoritative for
+returning a cached successful response; the Core admission
+journal additionally protects the **in-progress/crash/partial**
+window not covered by a completed response cache.
+The current `_execute_lock` serializes one local runtime
+instance but is not a substitute for cross-process file locks.
+
+Before switching on this opt-in path, validate the actual
+runtime/n8n route owns the same externally supplied request ID
+for both original submission and explicit network retry,
+including restart recovery and separate user/actor roots.
+Client requests with no stable outer request ID must **not**
+enter the dependent Core admission path. No normal production
+route is changed by this analysis.
