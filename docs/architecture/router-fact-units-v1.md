@@ -2014,3 +2014,65 @@ Because current remote development session has **no `OPENAI_API_KEY` environment
 The saved **real GPT-6 Temporal F08 result** validates through the current full-source Temporal adapter and source bindings. Two full original **real GPT-5.6 Core** previously recorded plans (F09, F10) decode successfully with the current original-source Router candidate context using exactly one ordinary Core planning call each; F09 includes two facts, F10 one. These receipts are model observations from the previous authorized runs, not fresh live checks or full 27-case real Core semantics. These saved model outputs are not written to private or synthetic notes in this benchmark. Synthetic E2E writes from the preceding stage remain covered by separate tests.
 
 **Still blocked for DEV:** N:M candidate/fact *semantic equivalence* verification (not just graph shape), old Core execution coverage gate's 1:1 assumption, missing explicit-source inherited roles, modern live GPT-6/GPT-5.6 calls when authorized credentials become available, and trusted actor-bound end-to-end runtime/n8n routing. Do not overstate structurally tested graph as authorized general write coverage; do not migrate GPT-5.6 Core to GPT-6. No schema, model prompt, HTTP route, n8n workflow, real vault or DEV/PROD changes.
+
+
+**2026-10-11 — Generic Core candidate↔fact graph validation (not a semantic-certification bypass).**
+
+The existing `odyssey_core/candidate_coverage.py` now accepts an
+**explicit independently reviewed edge set** through optional typed
+`CoreCandidateCoverageClaim.fact_ordinals: tuple[int, ...]`.
+This is the SAME existing Core prewrite coverage gate and the SAME
+canonical Markdown writer/readback, not a new planner/attributor,
+router mode or application. Legacy `fact_ordinal` one-to-one
+claims retain their exact prior contract, including duplicate
+rejection. In graph mode every source candidate must be accounted
+for, and every ordinary Core atomic fact must be explicitly
+covered, even when several candidates jointly support one fact
+or one source candidate expands into several facts. The edges
+are supplied by an **independent Core review callback**; neither
+Router order nor the adapter infers them. Strictly typed,
+source-bound, plan-digest-bound, nonempty and internally unique
+ordinal sets are mandatory; invented, omitted, lexically
+unsupported, reordered, negation-altered and conditional claims
+fail closed before mutation. True ambiguous source referents
+remain pending. Canonical links with shared/expanded source
+coverage remain blocked until **independently reviewed typed
+identity provenance** exists; lexical evidence must not be
+promoted to a canonical identity.
+
+Core's existing postwrite `review_candidate_coverage` now
+checks **every** physical fact ordinal associated with each
+source candidate, so a missing/corrupted one cannot result in
+that candidate being marked physically complete. It records
+the explicit list of graph ordinals without changing prior
+one-ordinal callers. Physical proofs, even when complete, keep
+`candidate_semantics_verified=False` and
+`safe_to_report_all_candidates_complete=False`. Thus this
+change solves a structural one-to-many/many-to-one contract
+restriction, but does **not** prove an arbitrary fact really
+matches a source interpretation.
+
+N↔M vertical offline tests drive existing Router and Temporal
+SDK adapters, the unchanged GPT-5.6 model-shaped Core JSON
+semantic compiler, Core prewrite validator, original Core Writer
+and actual synthetic Markdown fact-marker readback. Generated
+1→N, N→1 and mixed N↔M mappings vary sizes 2/3/5/8/13 and
+verify genuine physical persistence. Unjustified swapped edges,
+duplicates, invented ordinals, unclaimed facts, explicit
+negation/conditional scopes, attempted ambiguous-pronoun
+attribution and forged/missing physical markers are rejected
+or reported pending. No synthetic mapping is auto-generated
+in runtime; only independently reviewed TEST fixtures supply
+the correspondence.
+
+**Remaining validation gates:** The automatic Core semantic
+reviewer (`candidate_attribution.py`) is still a *read-only
+one-to-one proposer*; it does not yet establish N↔M semantic
+equivalence nor canonical reference attestation. The recovered
+historical actual GPT-5.6 **whole-source** F14/F27 replies
+were `ESCALATE`, whereas prior successful saved GPT-5.6
+Core fact outputs were for separately scoped candidate inputs;
+these are not interchangeable with a new current
+whole-message live-model check. No new billable provider calls
+or production activation have occurred. Real-provider accuracy
+and safe independent semantic N↔M evidence are still open.

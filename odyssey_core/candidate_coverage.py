@@ -33,15 +33,17 @@ PENDING_REASONS = frozenset(
 class CoreCandidateCoverageClaim:
     """Independently proposed ownership or explicit non-execution of one source unit.
 
-    `planned_fact` binds exactly one candidate to one Core fact ordinal in this
-    pilot. Other legitimate shapes must remain pending until separately reviewed.
-    A proposed ordinal is neither a persisted fact nor proof of semantic fidelity.
+    Legacy `fact_ordinal` supports the reviewed one-to-one shape. An explicitly
+    reviewed `fact_ordinals` tuple permits variable candidate-to-fact edges:
+    one candidate may support several facts; a fact may depend on several
+    candidates. Neither shape is independent semantic certification.
     """
 
     candidate_id: str
     disposition: Literal["planned_fact", "pending"]
     fact_ordinal: int | None = None
     pending_reason: str | None = None
+    fact_ordinals: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +63,7 @@ class CoreCandidateCoverageItem:
     status: Literal["physically_written_claim", "planned_unverified", "pending"]
     fact_ordinal: int | None
     pending_reason: str | None
+    fact_ordinals: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,13 +169,18 @@ def validate_candidate_coverage_manifest(
             for unit_index, _unit in enumerate(action.units):
                 for fact_index, ordinal in enumerate(next(next_ordinals)):
                     owners_by_ordinal[ordinal] = action_index, unit_index, fact_index
+    # A reviewed edge set, not an assumption about candidate/write cardinality.
+    # Legacy one-to-one claims remain strict, including their uniqueness rule.
+    graph_mode = any(claim.fact_ordinals is not None for claim in claims)
     claimed_ordinals: set[int] = set()
-    for candidate, claim in zip(context.candidates, claims, strict=True):
+    claimed_pairs: list[tuple[int, int]] = []
+    for index, (candidate, claim) in enumerate(zip(context.candidates, claims, strict=True)):
         if not isinstance(claim, CoreCandidateCoverageClaim):
             raise ValueError("Coverage claim must be Core-owned typed evidence")
         if claim.disposition == "pending":
             if (
                 claim.fact_ordinal is not None
+                or claim.fact_ordinals is not None
                 or not isinstance(claim.pending_reason, str)
                 or claim.pending_reason not in PENDING_REASONS
                 or (candidate.state == "ambiguous_identity")
@@ -189,33 +197,53 @@ def validate_candidate_coverage_manifest(
             for role in candidate.roles
         ):
             raise ValueError("Sensitive scoped fact requires specialized semantic coverage proof")
-        ordinal = claim.fact_ordinal
-        if (
-            not isinstance(ordinal, int)
-            or isinstance(ordinal, bool)
-            or ordinal not in fact_ordinals
-            or ordinal in claimed_ordinals
-            or claim.pending_reason is not None
-        ):
-            raise ValueError("Coverage fact ordinal is missing, duplicate or invented")
-        # No review factory, even a human-fixture stub, may bypass basic
-        # negative checks by claiming ordinals that have no lexical provenance.
-        # Passing is NOT semantic certification, nor permission to skip normal
-        # Core identity, date, plan and reference checks.
-        claimed_ordinals.add(ordinal)
+        if graph_mode:
+            if (
+                claim.fact_ordinal is not None
+                or not isinstance(claim.fact_ordinals, tuple)
+                or not claim.fact_ordinals
+                or len(claim.fact_ordinals) > MAX_COVERAGE_FACTS
+                or len(set(claim.fact_ordinals)) != len(claim.fact_ordinals)
+            ):
+                raise ValueError("Graph claims require nonempty unique fact ordinal tuples")
+            linked_ordinals = claim.fact_ordinals
+        else:
+            if claim.fact_ordinals is not None:
+                raise ValueError("Legacy fact claims must use one ordinal")
+            linked_ordinals = (claim.fact_ordinal,)
+        if claim.pending_reason is not None:
+            raise ValueError("Planned coverage cannot also be pending")
+        for ordinal in linked_ordinals:
+            if (
+                not isinstance(ordinal, int)
+                or isinstance(ordinal, bool)
+                or ordinal not in fact_ordinals
+                or (not graph_mode and ordinal in claimed_ordinals)
+            ):
+                raise ValueError("Coverage fact ordinal is missing, duplicate or invented")
+            claimed_pairs.append((index, ordinal))
+            claimed_ordinals.add(ordinal)
     if claimed_ordinals != fact_ordinals:
-        raise ValueError("Each planned atomic fact must have one explicit source candidate")
+        raise ValueError("Every planned atomic fact needs original source evidence")
+    # Canonical referents require separately certified identity evidence across
+    # shared/expanded graph edges. Preserve existing narrow reference guards
+    # rather than treating lexical overlap as proof of a link.
+    if graph_mode and any(
+        unit.references or unit.reference_lookup_only
+        for action in plan.actions
+        if isinstance(action, WriteAction)
+        for unit in action.units
+    ):
+        raise ValueError("Shared/expanded referenced Core facts need reviewed identity provenance")
     # Check typed dispositions, negative/sensitive scopes and complete coverage
     # BEFORE lexical evidence, so a later ambiguous candidate cannot be hidden
     # behind an earlier unrelated wrong lexical mapping.
     claimed_helpers: set[tuple[int, int]] = set()
-    for index, claim in enumerate(claims):
-        if claim.disposition != "planned_fact":
-            continue
-        action_index, unit_index, fact_index = owners_by_ordinal[claim.fact_ordinal]
+    for index, ordinal in claimed_pairs:
+        action_index, unit_index, fact_index = owners_by_ordinal[ordinal]
         action = plan.actions[action_index]
         unit = action.units[unit_index]
-        original = facts_by_ordinal[claim.fact_ordinal]
+        original = facts_by_ordinal[ordinal]
         # Let the source-veto see the lexical name chosen by Core, never
         # confuse transient {{ref:N}} placeholders with grounded identity.
         lexical = original
@@ -291,7 +319,12 @@ def review_candidate_coverage(
         raise ValueError("Readback does not match unverified candidate context")
     statuses = {fact.ordinal: fact.status for fact in readback.persisted_facts}
     claimed = {
-        claim.fact_ordinal for claim in manifest.claims if claim.disposition == "planned_fact"
+        ordinal
+        for claim in manifest.claims
+        if claim.disposition == "planned_fact"
+        for ordinal in (
+            claim.fact_ordinals if claim.fact_ordinals is not None else (claim.fact_ordinal,)
+        )
     }
     if claimed - statuses.keys():
         raise ValueError("Core write receipts missing planned fact ordinals")
@@ -304,12 +337,21 @@ def review_candidate_coverage(
                 CoreCandidateCoverageItem(claim.candidate_id, "pending", None, claim.pending_reason)
             )
         else:
-            verified = statuses[claim.fact_ordinal] == "verified_in_markdown"
+            mapped = (
+                claim.fact_ordinals if claim.fact_ordinals is not None else (claim.fact_ordinal,)
+            )
+            verified = all(statuses.get(ordinal) == "verified_in_markdown" for ordinal in mapped)
             state = "physically_written_claim" if verified else "planned_unverified"
             if not verified:
                 pending.append(claim.candidate_id)
             items.append(
-                CoreCandidateCoverageItem(claim.candidate_id, state, claim.fact_ordinal, None)
+                CoreCandidateCoverageItem(
+                    claim.candidate_id,
+                    state,
+                    mapped[0] if len(mapped) == 1 else None,
+                    None,
+                    mapped if claim.fact_ordinals is not None else None,
+                )
             )
     return CoreCandidateCoverageReview(
         tuple(items),
