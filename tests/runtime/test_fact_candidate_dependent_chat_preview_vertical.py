@@ -130,7 +130,7 @@ def test_runtime_preview_second_action_failure_survives_restart_without_replay(
     assert replay["affected_stable_note_ids"] == []
     assert replay["actions"] == []
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
-    assert len(calls) == 2  # attempted but blocked by Core durable admission
+    assert len(calls) == 1  # journal refuses retry BEFORE any new Core or provider work
 
 
 def test_stale_success_cache_is_not_replayed_without_core_operation_proof(tmp_path):

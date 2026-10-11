@@ -21,6 +21,7 @@ from odyssey_core.candidate_dependency_admission import (
     DependentOperationAdmissionError,
     DependentOperationJournal,
 )
+from odyssey_core.identity_boundary import AuthenticatedActorContext, ExternalPrincipal
 from odyssey_core.storage import VaultRepository
 
 from .delivery_results import LocalDeliveryResultStore
@@ -53,6 +54,9 @@ class DependentCandidateChatPreview:
         source: str,
         request_id: str,
         conversation_id: str,
+        *,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
     ) -> dict[str, object]:
         """Replay completed dependent submissions, or safely run Core once.
 
@@ -66,6 +70,10 @@ class DependentCandidateChatPreview:
             DependentOperationAdmissionError: A tampered operational
                 journal or an unresolvable state failure was detected.
         """
+        if authenticated_actor is not None or external_principal is not None:
+            # This private pilot owns only its local vault. Never silently
+            # assign an authenticated other actor to this user's Notes.
+            raise ValueError("Authenticated multiuser preview requires actor-bound vault selection")
         if (
             not isinstance(source, str)
             or not source.strip()
@@ -105,6 +113,25 @@ class DependentCandidateChatPreview:
                     )
                 previous["delivery_replayed"] = True
                 return previous
+            # Check the durable operation record BEFORE invoking any
+            # Router/Temporal/Core model provider. A partial/crashed write
+            # must never be re-planned simply because a client retried.
+            existing = ledger.inspect(request_id)
+            if existing is not None:
+                if existing.source_digest != hashlib.sha256(source.encode("utf-8")).hexdigest():
+                    raise DependentOperationAdmissionError(
+                        "Stable message ID is already bound to different source"
+                    )
+                return application_result_to_response(
+                    ApplicationResult(
+                        request_id,
+                        ApplicationStatus.NEEDS_ATTENTION,
+                        (),
+                        (),
+                        clarification_code="CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+                        planning_error="DEPENDENT_OPERATION_ALREADY_ADMITTED",
+                    )
+                )
             try:
                 result = self.core_executor(source, request_id, actor_root)
             except DependentOperationAdmissionError:

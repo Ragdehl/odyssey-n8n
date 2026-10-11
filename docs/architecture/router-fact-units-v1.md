@@ -1697,3 +1697,152 @@ crash, mid-write failure or note-only CREATE with no first marker
 continues to block automatic resume. Current original F19/F20
 conditional/correction cases are not supported by this
 limited dependency path.
+
+
+**Block 4B35 — source-validated Router → Temporal → existing Core provider pipeline
+connected to the *private* chat-delivery preview (2026-10-11).**
+The new `odyssey_runtime/dependent_candidate_pipeline.py` assembles the
+already present `OpenAIFactCandidateRouter(..., prompt_revision="v3")`
+and `OpenAITemporalInterpreter` with independently instantiated
+`OpenAILunaExperimentalPlanner` for each bounded source-clause
+candidate. The Router adapter is only allowed to return original-text
+source roles; the existing Core dependent-scope validator independently
+proves safe clause boundaries BEFORE either Core plan call. Temporal
+alone resolves original date/time roles from the entire user text,
+and missing/approximate or ungrounded date evidence fails closed.
+For each Core planner request, only its original literal clause
+and a non-operative linguistic quote of the preceding clause are
+supplied; the same existing GPT-5.6 Core prompt/schema decides Note
+targets, canonical person/document identities, content and task
+ownership. There is no miniature planner in Router, Temporal,
+Calendar or the runtime adapter.
+
+The private `DependentCandidateChatPreview` envelope can invoke
+this pipeline through an explicitly injected callback, and the Core
+original-source two-candidate coverage, actor-local operation admission
+flock, persisted canonical Markdown and two-ordinal physical audit
+remain the sole write authority. A retry that has a completed
+delivery cache is replayed from the original root. The preview now
+checks a *reserved/partial/unknown* operation journal before the
+callback or any model provider is called; the client receives a
+typed `needs_attention` without a duplicate or unnecessary model
+re-planning. Core keeps its subordinate request ID on atomic fact
+markers; the chat response keeps the external browser message ID.
+
+**Vertical evidence uses saved genuine provider outputs:** For F23
+and F26 the unchanged **actual SDK-backed Router GPT-6 v3 adapter**
+consumes previously captured real provider JSON and the existing
+**GPT-5.6 Core model planner** independently reparses the four
+actual saved Core JSON outputs. The private runtime calls
+`execute_dependent_core_once`, which runs normal Core against
+disposable synthetic canonical Notes, checks original-source
+coverage and actual same-stable-ID links, and persists an isolated
+delivery record. Simulated runtime reboot with the SAME outer
+request ID replays the result without another Router, Temporal,
+Core model call or Note write. F26's temporal interpretation in
+these replay tests uses **synthetic fixed-clock exact date responses**
+through the real Temporal adapter, *not a new genuine provider
+response* for F26; previously F08's relative time was separately
+verified with genuine Temporal. No provider calls or personal
+knowledge access are made by this block.
+
+Safety examples F19 correction and F20 conditional are explicitly
+rejected BEFORE Core model planning; insufficient/extra Temporal
+evidence, mismatched Router original source, Core planner
+`ESCALATE`, changed multiuser principal and lost actor-local
+roots also abstain. Two separate local-instance state/vault
+roots remain independent even when their browser message IDs
+happen to match. The private preview is **not registered** in
+the normal production/DEV HTTP `/execute`, normal chat
+composition, n8n routes or web client. Actor-bound hosted
+multiuser vault selection remains unresolved, and the preview
+fails closed on authenticated/external principals rather than
+silently writing another actor's local vault.
+
+**Remaining activation boundary:** The verified provider-shaped
+end-to-end chain is available only through *injected offline
+preview callbacks*. No live provider call has tested this exact
+full source-to-persistence flow under the user's current model
+configuration, and no deployed switch or opt-in HTTP entry
+exists. The current reviewed dependency scopes are still
+deliberately limited to two unambiguous coordinated facts
+with certified shared subject or one typed antecedent, NOT
+general all-sentence support. Recovery of partial/crash writes
+still needs review, not an automatic retry or rollback.
+Keep PR Draft, GPT-5.6 Core, normal chat and real vault unchanged.
+
+
+**Block 4B35 — actual source-based Router → Temporal → independent Core
+pipeline assembled in PRIVATE chat delivery preview (2026-10-11,
+Draft PR only).**
+
+`odyssey_runtime/dependent_candidate_pipeline.py` now wraps
+**existing actual adapter classes**:
+`OpenAIFactCandidateRouter(prompt_revision="v3")` on the exact
+original user text, `OpenAITemporalInterpreter` on that SAME full
+source only if original candidate source roles actually contain
+dates/times, `bind_temporal_to_fact_candidates` for the unchanged
+source-offset evidence, `to_core_candidate_context` and
+`preview_dependent_clause_scopes` for Core's existing dependent
+two-clause source guard, and **TWO** ordinary
+`OpenAILunaExperimentalPlanner` instances (Core GPT-5.6 low)
+each planning its own original selected clause with prior lexical
+context read-only. No Router app plan, no custom temporal resolver,
+no alternate Note schema, no new Core semantic planner.
+Only source-grounded exact/date typed Temporal facts can be passed
+as Core-owned `DomainInterpretation`; unproven/relative/ambiguous
+clocks and inherited dates without a separately reviewed clause
+scope fail closed. Every present candidate temporal source role
+must be verified for **both** units BEFORE any Core model call.
+For requests without dates (e.g. F23), Temporal is correctly not
+called and no artificial current-day event is introduced.
+
+**Actual existing provider adapters, no new billable calls:**
+Tests inject previously frozen **REAL completed** GPT-6 Router v3
+and GPT-5.6 Core model response JSON through the adapters'
+unchanged SDK interface. F26 Temporal uses a transparently
+**synthetic deterministic** date response (2026-10-03
+for "ayer" and 2026-10-04 for "hoy") through the existing
+Temporal adapter — F26's independent real provider Temporal output
+has NOT been evaluated in this block. F23 needs no Temporal.
+Tests check true provider-facing model names/low effort and the
+same separately source-scoped Core requests as the prior paid
+receipts, without calling a live network.
+
+The prepared immutable pair is passed to the previously
+reviewed Core `execute_dependent_core_once` and from there to
+the NORMAL Core `execute_request` with original-source two-fact
+coverage, canonical typed identity resolution, real disposable
+Markdown writes, post-write atomic fact provenance/wikilink
+readback, actor-root durable operation journal and the separate
+preview chat result cache. Simulated runtime restart with same
+outer browser message ID returns cached JSON without calling
+Router/Temporal/Core again. A partial write leaves the journal
+marked `partial` and **is denied BEFORE calling any model
+provider** on retry, avoiding both duplicate Notes and
+unnecessary LLM cost. A changed original message with saved
+candidate source spans, omitted/superfluous temporal mention,
+unspecified clock, negative/corrective condition and non-PLAN
+Core result never reaches the canonical writer.
+
+**Isolation/security:** The existing private
+`DependentCandidateChatPreview` currently supports ONLY
+the local `odyssey-runtime` actor. It explicitly rejects a
+non-null `AuthenticatedActorContext` or
+`ExternalPrincipal`, rather than silently writing another
+actor's request into a single local vault; true multiuser
+preview requires an actor-bound vault selector. Separate
+local instances with independent vault and state roots may
+reuse an outer message ID without cross-instance replay.
+
+**Crucial incomplete release boundary:** This is an
+*injected, private runtime pilot* and is NOT registered with the
+normal public HTTP `/execute` endpoint, frontend chat
+dispatcher or n8n production route. Provider replies are
+replayed/faked in tests, not live called in this block. The
+current code only authorizes the conservative two-clause
+dependent semantic shapes demonstrated; it is not yet a
+general Router v3 replacement for all 27 cases. F19 and
+F20 semantic correction/condition alternatives remain
+separate. No DEV/PROD, personal vault, secrets, model migration
+or source schema changes.
