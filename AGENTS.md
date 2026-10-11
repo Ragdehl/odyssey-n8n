@@ -95,6 +95,22 @@ syntactic overlap as semantic proof. Unknown or unverified mappings must
 remain pending or fail closed rather than using a shortcut that weakens
 Core's identity or write checks.
 
+### Stable whole-message regression corpus invariant
+
+For Router/Temporal/Core/Writer behavioral work, always run the versioned
+original-message corpus together with an isolated copy of the committed
+canonical synthetic-note fixture in `tests/fixtures/full_message_corpus_v1/`.
+A regression test must not change, seed or read the actual user's vault.
+Tests for existing entities and links must validate persisted Markdown,
+canonical identities and backlinks in a fresh disposable vault; preserve
+negative/pending outcomes. When a new real chat failure arrives, preserve
+its original message and the necessary fictional canonical Notes in a
+versioned successor fixture, then replay it after every relevant change.
+Keep saved authentic provider outputs and deterministic SDK-shaped tests
+clearly separated from *fresh live* model evidence; green replay does not
+mean 27 live model passes. Never change production interpretation for a
+specific test case or guess candidate-to-fact links to make the corpus green.
+
 ### Human-approved singular identity creation invariant
 
 For WRITE, when semantic planning classifies a mention as one singular identity with a canonical

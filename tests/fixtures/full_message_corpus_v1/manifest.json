@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "scope": "synthetic canonical notes only",
+  "clock": {
+    "date": "2026-10-04",
+    "time": "17:35",
+    "timezone": "Europe/Paris"
+  },
+  "case_design": "benchmarks/application_router/fact_units_v2.design.json",
+  "case_ids": [
+    "F01",
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08",
+    "F09",
+    "F10",
+    "F11",
+    "F12",
+    "F13",
+    "F14",
+    "F15",
+    "F16",
+    "F17",
+    "F18",
+    "F19",
+    "F20",
+    "F21",
+    "F22",
+    "F23",
+    "F24",
+    "F25",
+    "F26",
+    "F27"
+  ],
+  "seeded_notes": [
+    {
+      "id": "fixture-person-alex",
+      "type": "person",
+      "name": "Alex",
+      "path": "Alex.md"
+    },
+    {
+      "id": "fixture-person-ana",
+      "type": "person",
+      "name": "Ana",
+      "path": "Ana.md"
+    },
+    {
+      "id": "fixture-person-bea",
+      "type": "person",
+      "name": "Bea",
+      "path": "Bea.md"
+    },
+    {
+      "id": "fixture-person-eric",
+      "type": "person",
+      "name": "Eric",
+      "path": "Eric.md"
+    },
+    {
+      "id": "fixture-person-luis",
+      "type": "person",
+      "name": "Luis",
+      "path": "Luis.md"
+    },
+    {
+      "id": "fixture-person-marta",
+      "type": "person",
+      "name": "Marta",
+      "path": "Marta.md"
+    },
+    {
+      "id": "fixture-person-nina",
+      "type": "person",
+      "name": "Nina",
+      "path": "Nina.md"
+    },
+    {
+      "id": "fixture-person-pablo",
+      "type": "person",
+      "name": "Pablo",
+      "path": "Pablo.md"
+    },
+    {
+      "id": "fixture-project-odyssey",
+      "type": "project",
+      "name": "Odyssey",
+      "path": "Odyssey.md"
+    },
+    {
+      "id": "fixture-project-atlas",
+      "type": "project",
+      "name": "Atlas",
+      "path": "Atlas.md"
+    },
+    {
+      "id": "fixture-concept-el-coche",
+      "type": "concept",
+      "name": "El coche",
+      "path": "El coche.md"
+    },
+    {
+      "id": "fixture-concept-la-casa-de-toulouse",
+      "type": "concept",
+      "name": "La casa de Toulouse",
+      "path": "La casa de Toulouse.md"
+    },
+    {
+      "id": "fixture-document-el-informe",
+      "type": "document",
+      "name": "El informe",
+      "path": "El informe.md"
+    }
+  ]
+}

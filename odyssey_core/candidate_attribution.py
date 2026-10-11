@@ -421,7 +421,7 @@ class OpenAICoreCandidateAttributor:
         is checked again by the ordinary Core prewrite coverage validator.
         """
         context.validate(source)
-        facts, _groups, _lexical = _facts(plan, context)
+        facts = _graph_plan_fact_texts(plan, context)
         prompt_data = json.dumps(
             {
                 "original_source": source,
@@ -629,6 +629,41 @@ def inspect_candidate_fact_graph(
     )
 
 
+def _graph_plan_fact_texts(plan: RequestPlan, context: CoreCandidateContext) -> dict[int, str]:
+    """Project arbitrary Core-recorded fact ordinals without limiting helper count.
+
+    Source attribution NEVER approves references or Note targets. The ordinary
+    coverage preflight verifies all reference helpers, canonical identities,
+    and source meaning after the model proposes candidate/fact edges.
+    """
+    if not isinstance(plan, RequestPlan) or not isinstance(context, CoreCandidateContext):
+        raise CandidateAttributionError("Validated Core plan/context required")
+    facts: dict[int, str] = {}
+    ordinals = iter(plan_fact_ordinals(plan))
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            continue
+        for unit in action.units:
+            unit_ordinals = next(ordinals)
+            if (
+                unit.intent != "record"
+                or unit.properties
+                or unit.tag_changes
+                or unit.destination_type is not None
+                or unit.force_create
+                or len(unit_ordinals) != len(unit.facts)
+                or (unit.reference_lookup_only and (unit.facts or unit.references))
+            ):
+                raise CandidateAttributionError("Complex graph Core plan needs separate review")
+            for ordinal, fact in zip(unit_ordinals, unit.facts, strict=True):
+                if not isinstance(fact, str) or not fact.strip() or len(fact) > 600:
+                    raise CandidateAttributionError("Graph planned fact is invalid")
+                facts[ordinal] = fact
+    if not 1 <= len(facts) <= MAX_COVERAGE_FACTS:
+        raise CandidateAttributionError("Graph fact count exceeds technical budget")
+    return facts
+
+
 def candidate_fact_graph_json_schema() -> dict[str, Any]:
     """Strict non-executing N:M graph proposal schema for independent Core review."""
     item = {
@@ -674,17 +709,19 @@ def validate_candidate_fact_graph_proposal(
 ) -> CandidateFactGraph:
     """Validate each model-claimed N:M edge and source quotation before prewrite review.
 
-    A model's attestation is never taken as semantic proof. Physical writing
-    also requires the original Core coverage and canonical mutation checks.
+    Do not duplicate Core's semantic fact/target review here: the established
+    coverage validator checks both literal and canonically scoped target
+    evidence, including facts whose subject belongs to the target Note.
+    The result is not authority to write until that validator passes.
     """
-    facts, _owners, lexical = _facts(plan, context)
+    facts = _graph_plan_fact_texts(plan, context)
     if not isinstance(payload, dict) or set(payload) != {"candidates"}:
         raise CandidateAttributionError("Closed graph proposal required")
     entries = payload["candidates"]
     if not isinstance(entries, list) or len(entries) != len(context.candidates):
         raise CandidateAttributionError("Every source candidate needs one graph proposal")
     links: list[CandidateFactLinks] = []
-    for index, (_candidate, entry) in enumerate(zip(context.candidates, entries, strict=True)):
+    for _candidate, entry in zip(context.candidates, entries, strict=True):
         if not isinstance(entry, dict) or set(entry) != {
             "candidate_id",
             "source_quote",
@@ -709,11 +746,6 @@ def validate_candidate_fact_graph_proposal(
             for ordinal, text in zip(ordinals, planned_texts, strict=True)
         ):
             raise CandidateAttributionError("Graph proposes a fabricated or modified Core fact")
-        for ordinal in ordinals:
-            try:
-                veto_unsafe_literal_match(source, context, index, lexical[ordinal])
-            except CandidateSemanticVeto as error:
-                raise CandidateAttributionError("Graph fact/source meaning is unsafe") from error
         links.append(
             CandidateFactLinks(
                 entry["candidate_id"],
@@ -742,11 +774,19 @@ def review_model_candidate_fact_coverage(
     graph = attributor.propose_graph(source, context, plan)
     if not graph.matches_original_plan(source, plan) or graph.may_authorize_writes:
         raise CandidateAttributionError("Candidate graph does not match the current Core plan")
+    # Retain existing strict legacy 1:1 canonical reference validation when
+    # the independent model proposes exactly one unshared fact per candidate.
+    # General 1:N / N:1 graphs use the separate existing N:M gate instead.
+    occupied = [ordinal for link in graph.links for ordinal in link.fact_ordinals]
+    one_to_one = len(occupied) == len(set(occupied)) and all(
+        len(link.fact_ordinals) <= 1 for link in graph.links
+    )
     claims = tuple(
         CoreCandidateCoverageClaim(
             link.candidate_id,
             "planned_fact" if link.fact_ordinals else "pending",
-            fact_ordinals=link.fact_ordinals if link.fact_ordinals else None,
+            fact_ordinal=link.fact_ordinals[0] if link.fact_ordinals and one_to_one else None,
+            fact_ordinals=link.fact_ordinals if link.fact_ordinals and not one_to_one else None,
             pending_reason=link.pending_reason,
         )
         for link in graph.links
