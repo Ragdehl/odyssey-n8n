@@ -344,3 +344,69 @@ interactive runtime is not routed to this flow. This is narrowly
 validated on these F14/F27 shapes; arbitrary clauses, conditional
 corrections, references, and the other 23 Router examples have
 not passed this scoped-planner integration gate.
+
+
+## Full original-source GPT-5.6 acceptance gate (2026-10-11)
+
+The experimental whole-message handoff is separate from the historical
+per-candidate planner. It passes the **unchanged complete source once**
+to the existing GPT-5.6 Luna/low Core planner, alongside all genuine,
+previously saved GPT-6 Router v3 hints and original-source independent
+Temporal evidence. The runner is **offline by default** and uses no personal
+identity lookup, vault, Writer, mutation authority or DEV/PROD activation.
+It changes neither prompt, model, reasoning effort nor Core schema.
+
+An important negative control is now fixed as an offline regression:
+the authentic earlier GPT-5.6 **F14** complete-message response remains
+`ESCALATE` through the new handoff; the actual F27 Router dependency trace
+still rejects the unsupported implicit subject inheritance **before** Core.
+Therefore mechanical N:M candidate/fact coverage cannot be taken as proof
+that full-source linguistic planning is solved.
+
+Fixed synthetic stages under review:
+- **F23**: independent project Router/Temporal defects, 2 source candidates.
+  No dates in the original source; no Temporal date fixture required.
+- **F26**: a report arrived yesterday and was sent today to Ana; 2 source
+  candidates, independent whole-message deterministic Temporal evidence.
+- **F13**: three original clauses with a referent ambiguity; 3 source
+  candidates, independent whole-message deterministic Temporal evidence.
+
+Only test harnesses name these sentences or case IDs. **No production code
+branches on them.** Future conclusions must test unrelated original-source
+shapes and compare actual Core fact cardinality, unsupported conditions,
+references and independent semantic correspondence; strict JSON is not
+semantic correctness.
+
+The production-generated full provider envelopes and checksums are pinned
+in `reviewed_full_source_requests.json`. The live runner uses one unchanged
+original-source Core call per invocation, `store=false`, strict Structured
+Outputs, GPT-5.6 Luna/low, 2048 max output, no automatic retries. It saves
+one synthetic-only timestamped response receipt, never a Note. An already
+recorded attempt cannot be retried silently.
+
+**Previously authorized cumulative USD 0.07 ceiling remains unchanged.**
+The preserved earlier focused receipts are charged at noncached prices:
+USD **0.04385660 estimated** before any new call. F23 currently reserves
+at most USD **0.01822660**, so its conservative cumulative bound is
+USD **0.06208320**. A subsequent request is permitted only after
+verifying the previous receipt and token consumption and reserving its
+entire maximum possible cost under the same ceiling; otherwise execution
+must stop. Cost estimates are not provider invoices.
+
+Provider-free checks:
+
+```bash
+python -m benchmarks.fact_candidate_core_live.run_full_source_live --case F23
+python -m pytest -q tests/benchmarks/test_complete_source_core_live_gate.py
+```
+
+A paid stage is only possible with `--live`, the fixed reviewed
+`EnvironmentFile=/home/ragdehl/.config/odyssey/secrets.env` in the
+existing transient `systemd --user` environment, and
+`ODYSSEY_CORE_FACT_LIVE_APPROVED=1`. No script loads or prints secrets.
+If the authorized transport is unavailable or rejects the operation,
+stop and report it; do not change credential or execution routes.
+
+Do not activate Core writes based solely on a planner `PLAN`: a separate
+independent general candidate-to-fact semantic reviewer, normal identity
+checks, and verified physical canonical Markdown coverage remain necessary.
