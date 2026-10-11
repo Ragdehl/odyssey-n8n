@@ -249,3 +249,71 @@ acceptance of all 27 cases. Do not reactivate full-source Temporal/Core
 handoff to fix those cases. Before DEV promotion, review and test this
 opt-in route adapter with actor isolation, durable replay/pending semantics
 and model-quality gate for the changed dependent-prompt contract.
+
+
+## Per-candidate source routing correction (2026-10-11, subsequent checkpoint)
+
+The historical 25-case live matrix revealed that the opt-in
+`candidate_route_dispatch.py` compiler was grouping unrelated assertions
+whenever they reused a subject, predicate or date. This was a violation of
+the above contract, even though all predecessor canonical identity guards
+worked in the initial Eric experiment.
+
+The compiler has now been replaced by
+`odyssey_runtime/source_scope_compiler.py`. The corrected compiler:
+
+- Segments Router's actual **primary original-source candidate anchors**
+  into independently routed clauses, preserving an exact, ordered partition
+  of the original message; no insertion, deletion or duplication of source
+  characters occurs.
+- Validates every shared or inherited grammatical role on the original
+  message **by exact character offsets and an immutable SHA-256**, and
+  carries the bounded `CoreSourceRoleProvenance` object *outside* the
+  next Core fragment as untrusted read-only provenance. The local Planner's
+  request remains just its own literal route source. Nothing in this
+  provenance is a canonical identity, resolved date, or permission to write.
+- Preserves grouping only for a genuinely joint predicate/property event,
+  a coordinated purchase with one buyer and several objects, or a correction
+  that must not persist its retracted alternative first. Distinct buyers
+  and otherwise independent facts do not silently merge.
+- Examples with the previously captured, real GPT-6 Router outputs:
+  - F06: `Hoy vi a Ana` → ` y compré pan.`, with the second route
+    carrying typed **unresolved** source date evidence `Hoy`.
+  - F23: `El proyecto Odyssey tiene un fallo en Router` →
+    ` y otro en Temporal.`, with typed inherited lexical subject/predicate.
+  - F22: now three distinct scoped task routes.
+  - F25: now two independent routes; the repeated `La casa de Toulouse`
+    source anchor remains proven context, never fabricated in route 2.
+  - F16: `Ana compró entradas para el concierto` →
+    ` y Luis también.`: two purchasers, not one combined purchase.
+  - F19: correction/replacement remains *one guarded atomic interpretation*;
+    it must not write the subsequently retracted first plan.
+  - F09/F11: compatible true joint-property / one-buyer transaction groups
+    may remain atomic. F27 still fails closed for missing lexical provenance.
+- Exact downstream dispatch and group counts are asserted for every
+  original frozen Router proposal by
+  `tests/runtime/test_source_scope_compiler.py`; source corruption,
+  external-role offset mismatch and unwanted writes are explicitly rejected.
+
+**Critical open work before DEV:** external `date` provenance does **not**
+yet constitute an exact resolved and Core-authorized Temporal anchor.
+For F06's second route, Core sees that `Hoy` originated in the earlier
+fragment, but the system must NOT manufacture an ISO date from that
+untrusted hint. Implement a safe typed transfer of the earlier Temporal
+result, with exact role scope and freshness, into the subsequent Core
+Planner/Writer contract before claiming that both F06 facts can be
+persisted on the same Day. Likewise, inherited canonical subjects and
+shared predicates must be audited by Core against actual Notes and not
+treated as guaranteed identities.
+
+**Regression distinction:** All 25 previous real Core responses were
+generated against the *historical merged model inputs*. For faithful
+provider-free comparison, their existing replay tests use a frozen copy
+of that original compiler in
+`tests/runtime/_historical_candidate_route_compiler.py`, **test-only**.
+Product routing uses only the corrected compiler. Replaying an old
+whole-source Core response as though it were generated for a new split
+source would falsify the regression result. A newly generated live-model
+matrix is needed after the typed Temporal/result carriers are complete,
+within separately checked API spend. No part of this checkpoint changes
+the current GPT-5.6 Core model, DEV, PROD, production Notes or n8n.

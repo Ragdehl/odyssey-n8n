@@ -17,12 +17,16 @@ from pathlib import Path
 
 import pytest
 
+import odyssey_runtime.candidate_route_dispatch as dispatcher
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
 from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 from odyssey_core.temporal_interpretation import OpenAITemporalInterpreter
 from odyssey_runtime.candidate_route_dispatch import execute_candidate_routed_message
 from tests.apps.test_fact_candidates import CASES
+from tests.runtime._historical_candidate_route_compiler import (
+    compile_candidate_route_bundle as historical_compiler,
+)
 from tests.runtime.test_candidate_pending_state import NOW
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import CLOCK, SCHEMA
 from tests.runtime.test_full_message_corpus_regression import (
@@ -39,8 +43,11 @@ REPLAY_IDS = tuple(
 
 @pytest.mark.parametrize("case_id", REPLAY_IDS)
 def test_remaining_live_model_captures_replay_without_new_provider_calls(
-    case_id: str, tmp_path: Path
+    case_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # These frozen Core outputs were generated on the PREVIOUS grouping
+    # contract. Replay that historical contract without ever reactivating it.
+    monkeypatch.setattr(dispatcher, "compile_candidate_route_bundle", historical_compiler)
     case = next(item for item in CASES if item["id"] == case_id)
     capture = json.loads((SAVED / f"{case_id}.json").read_text(encoding="utf-8"))
     assert capture["version"] == 1

@@ -446,6 +446,9 @@ class OpenAICoreCandidateAttributor:
                 "unverified_source_candidates": [
                     candidate.to_payload() for candidate in context.candidates
                 ],
+                "shared_source_provenance": [
+                    role.to_payload() for role in context.source_provenance
+                ],
                 "core_planned_atomic_facts": [
                     {"fact_ordinal": ordinal, "fact_text": value}
                     for ordinal, value in facts.items()

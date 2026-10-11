@@ -100,12 +100,18 @@ independent units may complete.
 Differentiate (a) source-context inheritance (shared date, predicate,
 subject or negation) from (b) dependency on a canonical identity
 resolved/persisted by an earlier Core operation. They are NOT interchangeable.
-Some candidate scopes share an original predicate or date, so an exact
-v0 RoutePlan partition cannot necessarily represent every v1 fact candidate:
-group those contexts or pass typed inherited source anchors while preserving
-original evidence. Do not equate one candidate with one action, one Core
-fact or one model call. Validate complete original-source accounting without
-sending all original sibling text as a new downstream planning request.
+Some candidate scopes share an original predicate, date or subject. **Do not
+merge independently writable facts merely because their source spans or roles
+overlap.** Preserve the exact partition and pass typed, original-offset-verified
+source-role provenance to the selected unit. Cohort only a genuinely atomic
+joint event or a correction that must not write its retracted alternative.
+Untrusted inherited date wording is not a Temporal-normalized Core-authorized
+date: keep the affected write pending until a separately verified temporal
+result has been transferred. Never invent a source phrase, canonical identity,
+resolved date or write authority to make a split appear successful. Do not
+equate one candidate with one action, one Core fact or one model call. Validate
+complete original-source accounting without sending all original sibling text
+as a new downstream planning request.
 
 **Authoritative routing guidance:** see
 `docs/architecture/router-unit-dispatch-contract.md` for the restored
