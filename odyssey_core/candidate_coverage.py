@@ -258,6 +258,16 @@ def validate_candidate_coverage_manifest(
         lexical = original
         for ref_index, ref in enumerate(unit.references):
             lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+        if context.verified_inherited_event is not None:
+            from .scoped_event_evidence import validate_event_target_fact
+
+            validate_event_target_fact(
+                source,
+                context.candidates[index],
+                unit,
+                lexical,
+                context.verified_inherited_event,
+            )
         if context.candidates[index].kind == "property":
             other_subjects = tuple(
                 role.span.text

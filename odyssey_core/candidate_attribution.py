@@ -454,6 +454,11 @@ class OpenAICoreCandidateAttributor:
                     if context.verified_inherited_subject is not None
                     else None
                 ),
+                "core_verified_inherited_event": (
+                    context.verified_inherited_event.prompt_payload()
+                    if context.verified_inherited_event is not None
+                    else None
+                ),
                 "core_planned_atomic_facts": [
                     {"fact_ordinal": ordinal, "fact_text": value}
                     for ordinal, value in facts.items()

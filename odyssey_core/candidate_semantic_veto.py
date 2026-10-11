@@ -81,7 +81,23 @@ def veto_unsafe_literal_match(
             raise CandidateSemanticVeto(
                 "Unverified source reference requires Core identity evidence"
             )
-    if not candidate_distinctive_overlap(context, candidate_index, fact_text):
+    from .scoped_event_evidence import _tokens
+
+    inherited_event = context.verified_inherited_event
+    # The new subject is in the local source, but the verified shared verb and
+    # object are deliberately NOT copied into it. This *only* bypasses the
+    # ordinary local-token overlap test; Core separately validates the exact
+    # event/target and canonical source guard before mutation.
+    verified_ellipsis = (
+        inherited_event is not None
+        and candidate_index == 0
+        and candidate.kind == "purchase_item"
+        and candidate.state == "candidate"
+        and _tokens(fact_text) == _tokens(inherited_event.verified_fact)
+    )
+    if not verified_ellipsis and not candidate_distinctive_overlap(
+        context, candidate_index, fact_text
+    ):
         raise CandidateSemanticVeto("Candidate fact lacks distinctive original source evidence")
     # Only reject NEW denial vocabulary that never occurs in the original
     # request. Negation scope within mixed clauses is not resolved here.

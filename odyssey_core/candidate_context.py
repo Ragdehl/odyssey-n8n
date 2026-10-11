@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .scoped_event_evidence import CoreVerifiedInheritedEvent
 from .scoped_subject_evidence import CoreVerifiedInheritedSubject
 
 MAX_CORE_CANDIDATE_CONTEXT_BYTES = 16_384
@@ -239,6 +240,7 @@ class CoreCandidateContext:
     candidates: tuple[CoreCandidate, ...]
     source_provenance: tuple[CoreSourceRoleProvenance, ...] = ()
     verified_inherited_subject: CoreVerifiedInheritedSubject | None = None
+    verified_inherited_event: CoreVerifiedInheritedEvent | None = None
 
     def validate(self, requested_source: str) -> None:
         """Prohibit stale, altered, oversized or ungrounded candidate hints."""
@@ -276,6 +278,23 @@ class CoreCandidateContext:
                 for role in self.source_provenance
             ):
                 raise ValueError("Inherited Core subject has no exact source provenance")
+        if self.verified_inherited_event is not None:
+            proof = self.verified_inherited_event
+            if (
+                not isinstance(proof, CoreVerifiedInheritedEvent)
+                or self.verified_inherited_subject is not None
+            ):
+                raise ValueError("Inherited Core event proof is invalid or mixed")
+            proof.validate()
+            external = {
+                (p.role, p.text, p.original_start, p.original_end)
+                for p in self.source_provenance
+                if p.role in {"predicate", "object", "transaction"}
+                and p.original_sha256 == proof.original_sha256
+            }
+            expected = {(r.role, r.text, r.original_start, r.original_end) for r in proof.roles}
+            if external != expected or len(self.candidates) != 1:
+                raise ValueError("Inherited Core event has no exact Router provenance")
         if len(self.prompt_payload_bytes()) > MAX_CORE_CANDIDATE_CONTEXT_BYTES:
             raise ValueError("Core candidate context is oversized")
 
@@ -285,6 +304,10 @@ class CoreCandidateContext:
             "version": 1,
             "candidates": [c.to_payload() for c in self.candidates],
         }
+        if self.verified_inherited_event is not None:
+            payload["core_verified_inherited_event"] = (
+                self.verified_inherited_event.prompt_payload()
+            )
         if self.verified_inherited_subject is not None:
             payload["core_verified_inherited_subject"] = (
                 self.verified_inherited_subject.prompt_payload()
@@ -330,6 +353,16 @@ class CoreCandidateContext:
                 "role needs validation by another capability, keep that action "
                 "pending rather than asserting it as fact."
                 if self.source_provenance
+                else ""
+            )
+            + (
+                "\nThe core_verified_inherited_event contains the previously "
+                "written/physically confirmed purchase content, NOT the "
+                "identity or Note of its original buyer. Interpret the CURRENT "
+                "fragment only, with its own new subject. The writer will "
+                "reject any target that is not independently verified. Do not "
+                "invent, alter or extend the predecessor event."
+                if self.verified_inherited_event is not None
                 else ""
             )
             + (

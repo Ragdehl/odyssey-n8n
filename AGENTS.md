@@ -112,7 +112,12 @@ not a canonical identity unless a predecessor Core WRITE and actual Markdown
 readback verify the unique same-target Note, whose identity/content are
 rechecked at write preflight. Inherited predicates for a **new** subject still
 need separate Core-verified predecessor-event proof; lexical Router hints alone
-MUST NOT authorize copying facts to another person. Never invent a source
+MUST NOT authorize copying facts to another person. A narrow affirmative
+purchase ellipsis may reuse ONLY predicate/object/transaction from a single
+physically verified prior Core purchase fact, while independently resolving
+the explicitly new buyer. The previous buyer identity never transfers and
+the writer must recheck the source Note digest and new buyer canonical Note;
+other event types or conditional/negative uses stay pending. Never invent a source
 phrase, canonical identity, resolved date or write authority to make a split
 appear successful. Do not
 equate one candidate with one action, one Core fact or one model call. Validate

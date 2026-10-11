@@ -14,6 +14,7 @@ from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidates import FactCandidateProposal
 from odyssey_apps.router import RouterError
 from odyssey_core.candidate_context import CoreCandidateContext
+from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
     ScopedTemporalHandoff,
@@ -168,6 +169,7 @@ def execute_candidate_routed_message(
     }
     temporal_handoff = ScopedTemporalHandoff(source)
     subject_handoff = ScopedCoreSubjectHandoff(source)
+    event_handoff = ScopedCoreEventHandoff(source)
 
     def run_unit(
         unit_source: str,
@@ -254,16 +256,29 @@ def execute_candidate_routed_message(
         # Lexical Router reuse of a predicate, object or transaction is not
         # Core-certified event evidence. Never infer a second participant\u0027s
         # action solely from a shared source verb. Same-target elliptical
-        # properties can use the separately persisted Core subject/fact guard;
-        # changed-subject continuations need a future independently reviewed
-        # Core predecessor-event carrier and must not write yet.
+        # properties use separately persisted same-subject Core proof; a
+        # changed-subject affirmative purchase needs verified predecessor
+        # event content, never the old buyer identity. Any unsupported event
+        # shape stays pending rather than copying a Router lexical hint.
         inherited_fact_roles = {
             role.role
             for role in scoped.context.source_provenance
             if role.role in {"predicate", "predicate_relation", "object", "transaction"}
         }
+        event = None
         if inherited_fact_roles and subject is None:
-            raise ValueError("Inherited predicate requires Core-verified predecessor fact")
+            event = event_handoff.inherit(
+                context=scoped.context,
+                route_index=ordinal,
+                start=scoped.original_start,
+                end=scoped.original_end,
+                repository=repository,
+                schema=schema,
+            )
+            if event is None:
+                raise ValueError("Inherited predicate requires Core-verified predecessor fact")
+        if event is not None and guard is not None:
+            raise ValueError("Mixed predecessor-event and canonical-reference proof is unsupported")
         route_context = (
             resolve_scoped_reference_with_core_proof(scoped.context, guard, repository, schema)
             if guard is not None
@@ -271,10 +286,18 @@ def execute_candidate_routed_message(
         )
         if subject is not None:
             route_context = replace(route_context, verified_inherited_subject=subject)
-            route_context.validate(unit_source)
+        if event is not None:
+            route_context = replace(route_context, verified_inherited_event=event)
+        route_context.validate(unit_source)
+        from odyssey_core.scoped_event_evidence import CoreInheritedEventWriteGuard
         from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard
 
         subject_guard = CoreInheritedSubjectWriteGuard(subject) if subject is not None else None
+        event_guard = (
+            CoreInheritedEventWriteGuard(event, unit_source, route_context.candidates[0])
+            if event is not None
+            else None
+        )
         planner = core_planner_factory(route_context, domain)
         if not callable(getattr(planner, "plan", None)):
             raise ValueError("Only the ordinary Core planner may interpret a scoped route")
@@ -318,7 +341,7 @@ def execute_candidate_routed_message(
                 )
             ),
             candidate_pending_recorder=candidate_pending_recorder,
-            write_preflight_guard=subject_guard or guard,
+            write_preflight_guard=subject_guard or event_guard or guard,
         )
         if result.status is ApplicationStatus.COMPLETED and "plan" in captured:
             plan = captured["plan"]
@@ -340,6 +363,17 @@ def execute_candidate_routed_message(
                 # This test-only composition uses a disposable canonical vault.
                 context_index.rebuild(repository, schema, embedder)
                 semantic_index.rebuild(repository, schema, embedder)
+                event_handoff.remember(
+                    context=route_context,
+                    plan=plan,
+                    result=result,
+                    readback=evidence,
+                    repository=repository,
+                    schema=schema,
+                    start=scoped.original_start,
+                    end=scoped.original_end,
+                    route_index=ordinal,
+                )
                 subject_handoff.remember(
                     context=route_context,
                     plan=plan,

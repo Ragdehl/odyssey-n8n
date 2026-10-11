@@ -501,3 +501,71 @@ DEV/PROD, model versions and all personal Notes.
 The current cumulative estimated authorized provider spend is
 **USD 0.2357768 / 0.25** (not an OpenAI billing statement). All
 new tests and corrected adapters continue to run without API calls.
+
+
+## Core-verified event handoff to a different subject (2026-10-11)
+
+An additional independent, opt-in route-local contract now handles the
+**bounded affirmative purchase ellipsis**:
+
+`Ana compró entradas para el concierto y Luis también.`
+
+Router still makes two exact user-source routes. In the first route,
+ordinary Core and its independent candidate→fact reviewer authorize
+and physically write `Compró entradas para el concierto.` to Ana's
+canonical Note. A successful complete write is not enough by itself:
+`ScopedCoreEventHandoff` requires an independently verified Markdown
+readback marker, a unique actual canonical predecessor Note,
+one explicit source subject and three EXACT source roles
+(`predicate`, `object`, `transaction`). The verified Core fact must
+match those three roles in **word order and multiplicity**, not merely
+token-set overlap. Negations, conditional scope, unrelated or truncated
+source roles are not certified as transferable events.
+
+The second fragment ` y Luis también.` carries only source-verified
+external predicate/object/transaction coordinates; the runtime can
+attach one `CoreVerifiedInheritedEvent` after checking all three
+coordinates against the original message SHA-256 and an earlier
+physically verified Core event. It does **not** carry Ana's identity as
+the new subject. The previous Note ID and content guard are private
+to the writer and are NOT sent to the LLM. The context visible to
+Core is its own current fragment plus read-only event evidence; no
+sibling request is concatenated into the model input.
+
+The ordinary Core planner and candidate graph reviewer remain the
+only plan/coverage authorities. A separate `CoreInheritedEventWriteGuard`
+requires exactly one atomic affirmative purchase fact, identical
+normalized event wording, a distinct explicitly named NEW subject,
+a separately preflight-resolved EXISTING canonical person Note with
+the same name, and a fresh unchanged predecessor Note guard.
+It refuses mismatched destinations, new creations, more than one
+fact/action, altered/reordered/duplicated event text, negative or
+conditional clauses and stale previous Notes. A missing predecessor
+Core write cannot authorize any second-fact planning or mutation.
+It is intentionally a **narrow supported ellipsis**: other event
+kinds, tasks, alternate grammatical constructions and composite
+identity+event dependencies remain pending, not guessed.
+
+Deterministic acceptance exercises the complete scoped executor,
+Core's real writer, readback and thirteen canonical synthetic Notes,
+for BOTH saved, authentic GPT-6 Router shapes. Tests include
+two different existing buyers, failed first Core operation, wrong
+destination, duplicate or rearranged event wording, invented negation,
+unrelated action and stale previous Note content. The new Router
+provider output is preserved in
+`benchmarks/application_router/scoped_routing_v2/F16-router-only.json`.
+
+A single approved real-provider F16-v2 attempt used GPT-6 Router,
+then stopped BEFORE the first Core provider call. The budget gate
+conservatively reserved ~USD 0.01408 for that request, but after
+Router's USD 0.0003201 cost only ~USD 0.01390 remained. Thus this
+attempt is **not** evidence of a real Core semantic failure or a
+fresh-model end-to-end success. The estimated total accumulated
+provider cost is **USD 0.2360969 of the approved USD 0.25**.
+Do not weaken the spend cap or make an unauthorized retry to
+manufacture a green result.
+
+The historical split architecture, original full-source Router only,
+Temporal date proof, same-subject canonical proof, independent Core
+semantic coverage and verified Markdown Writer remain unchanged.
+DEV, PROD, model choices and the user's personal Notes are untouched.
