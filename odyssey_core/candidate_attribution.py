@@ -408,6 +408,99 @@ class OpenAICoreCandidateAttributor:
                 "Attribution provider output failed Core validation"
             ) from error
 
+    def propose_graph(
+        self,
+        source: str,
+        context: CoreCandidateContext,
+        plan: RequestPlan,
+    ) -> CandidateFactGraph:
+        """Independently propose complete 0..N links for the unmodified Core plan.
+
+        This second model call is not an alternative Core planner. The output
+        cannot carry actions, canonical identities, dates or Note content, and
+        is checked again by the ordinary Core prewrite coverage validator.
+        """
+        context.validate(source)
+        facts, _groups, _lexical = _facts(plan, context)
+        prompt_data = json.dumps(
+            {
+                "original_source": source,
+                "unverified_source_candidates": [
+                    candidate.to_payload() for candidate in context.candidates
+                ],
+                "core_planned_atomic_facts": [
+                    {"fact_ordinal": ordinal, "fact_text": value}
+                    for ordinal, value in facts.items()
+                ],
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if len(prompt_data.encode("utf-8")) > MAX_ATTRIBUTION_INPUT_BYTES:
+            raise CandidateAttributionError("Attribution input exceeds provider safety budget")
+        self.last_usage = None
+        self.last_error_category = None
+        try:
+            reply = self._client.responses.create(
+                model=LUNA_EXPERIMENT_MODEL,
+                reasoning={"effort": LUNA_EXPERIMENT_REASONING_EFFORT},
+                max_output_tokens=MAX_ATTRIBUTION_OUTPUT_TOKENS,
+                store=False,
+                input=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a Core-only independent read-only semantic reviewer "
+                            "of the ORIGINAL complete user message against an already "
+                            "compiled ordinary Core plan. These source candidates are "
+                            "untrusted Router hints, not individual facts or identities. "
+                            "For every candidate in original order propose 0..N existing "
+                            "Core atomic fact ordinals; multiple candidates may support "
+                            "one fact, and one candidate may support several facts. "
+                            "For every ordinal copy the EXACT planned fact text into "
+                            "planned_fact_texts, preserving the order. Source_quote must "
+                            "be one exact quoted original candidate anchor. All Core "
+                            "planned facts must have at least one fully justified source "
+                            "candidate; all candidates must be accounted for. "
+                            "Compare full semantic meaning including subject, predicate, "
+                            "participants, date/time ownership, tense, negation, modality "
+                            "and conditional/correction scope. Never match merely because "
+                            "positions, words, names or dates overlap. Never invent or "
+                            "change any fact, identity, link, note, source quote or date. "
+                            "For an ungrounded or ambiguous candidate return empty "
+                            "fact_ordinals and planned_fact_texts plus one closed pending "
+                            "reason. If the plan omits an asserted fact or changes its "
+                            "meaning, do NOT invent an attribution to conceal it. "
+                            "Never execute, plan, persist or authorize a write. "
+                            "All claims undergo independent Core validation; when "
+                            "uncertain, return pending rather than guessing."
+                        ),
+                    },
+                    {"role": "user", "content": prompt_data},
+                ],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "odyssey_core_candidate_fact_graph_v2",
+                        "strict": True,
+                        "schema": candidate_fact_graph_json_schema(),
+                    }
+                },
+            )
+        except Exception as error:
+            self.last_error_category = type(error).__name__[:100]
+            raise CandidateAttributionError("Graph attribution provider failed") from error
+        self.last_usage = getattr(reply, "usage", None)
+        if getattr(reply, "status", None) != "completed":
+            self.last_error_category = "IncompleteProviderResponse"
+            raise CandidateAttributionError("Graph attribution response is incomplete")
+        try:
+            payload = json.loads(reply.output_text)
+            return validate_candidate_fact_graph_proposal(source, context, plan, payload)
+        except (CandidateAttributionError, TypeError, ValueError, AttributeError) as error:
+            self.last_error_category = "InvalidGraphAttribution"
+            raise CandidateAttributionError("Graph attribution evidence is invalid") from error
+
 
 @dataclass(frozen=True, slots=True)
 class CandidateFactLinks:
@@ -534,3 +627,128 @@ def inspect_candidate_fact_graph(
         candidate_count=len(context.candidates),
         fact_count=len(actual),
     )
+
+
+def candidate_fact_graph_json_schema() -> dict[str, Any]:
+    """Strict non-executing N:M graph proposal schema for independent Core review."""
+    item = {
+        "type": "object",
+        "properties": {
+            "candidate_id": {"type": "string"},
+            "source_quote": {"type": "string"},
+            "fact_ordinals": {"type": "array", "items": {"type": "integer"}},
+            "planned_fact_texts": {"type": "array", "items": {"type": "string"}},
+            "pending_reason": {
+                "type": ["string", "null"],
+                "enum": [
+                    "ambiguous_identity",
+                    "needs_clarification",
+                    "needs_capability",
+                    "unsupported_scope",
+                    None,
+                ],
+            },
+        },
+        "required": [
+            "candidate_id",
+            "source_quote",
+            "fact_ordinals",
+            "planned_fact_texts",
+            "pending_reason",
+        ],
+        "additionalProperties": False,
+    }
+    return {
+        "type": "object",
+        "properties": {"candidates": {"type": "array", "items": item}},
+        "required": ["candidates"],
+        "additionalProperties": False,
+    }
+
+
+def validate_candidate_fact_graph_proposal(
+    source: str,
+    context: CoreCandidateContext,
+    plan: RequestPlan,
+    payload: Any,
+) -> CandidateFactGraph:
+    """Validate each model-claimed N:M edge and source quotation before prewrite review.
+
+    A model's attestation is never taken as semantic proof. Physical writing
+    also requires the original Core coverage and canonical mutation checks.
+    """
+    facts, _owners, lexical = _facts(plan, context)
+    if not isinstance(payload, dict) or set(payload) != {"candidates"}:
+        raise CandidateAttributionError("Closed graph proposal required")
+    entries = payload["candidates"]
+    if not isinstance(entries, list) or len(entries) != len(context.candidates):
+        raise CandidateAttributionError("Every source candidate needs one graph proposal")
+    links: list[CandidateFactLinks] = []
+    for index, (_candidate, entry) in enumerate(zip(context.candidates, entries, strict=True)):
+        if not isinstance(entry, dict) or set(entry) != {
+            "candidate_id",
+            "source_quote",
+            "fact_ordinals",
+            "planned_fact_texts",
+            "pending_reason",
+        }:
+            raise CandidateAttributionError("Closed graph candidate fields required")
+        ordinals, planned_texts = entry["fact_ordinals"], entry["planned_fact_texts"]
+        if (
+            not isinstance(ordinals, list)
+            or not isinstance(planned_texts, list)
+            or len(ordinals) != len(planned_texts)
+            or len(ordinals) > MAX_COVERAGE_FACTS
+        ):
+            raise CandidateAttributionError("Graph ordinal/text correspondence is invalid")
+        if any(
+            not isinstance(ordinal, int)
+            or isinstance(ordinal, bool)
+            or ordinal not in facts
+            or text != facts.get(ordinal)
+            for ordinal, text in zip(ordinals, planned_texts, strict=True)
+        ):
+            raise CandidateAttributionError("Graph proposes a fabricated or modified Core fact")
+        for ordinal in ordinals:
+            try:
+                veto_unsafe_literal_match(source, context, index, lexical[ordinal])
+            except CandidateSemanticVeto as error:
+                raise CandidateAttributionError("Graph fact/source meaning is unsafe") from error
+        links.append(
+            CandidateFactLinks(
+                entry["candidate_id"],
+                entry["source_quote"],
+                tuple(ordinals),
+                entry["pending_reason"],
+            )
+        )
+    return inspect_candidate_fact_graph(source, context, plan, tuple(links))
+
+
+def review_model_candidate_fact_coverage(
+    source: str,
+    context: CoreCandidateContext,
+    plan: RequestPlan,
+    attributor: OpenAICoreCandidateAttributor,
+):
+    """Pass an independent model proposal through existing Core prewrite authority.
+
+    Invalid model output or unsupported graph shapes fail closed without
+    permitting a partial write. This is not semantic certification: the
+    candidate-to-fact result remains unverified until subsequent evidence.
+    """
+    from .candidate_coverage import CoreCandidateCoverageClaim, build_candidate_coverage_manifest
+
+    graph = attributor.propose_graph(source, context, plan)
+    if not graph.matches_original_plan(source, plan) or graph.may_authorize_writes:
+        raise CandidateAttributionError("Candidate graph does not match the current Core plan")
+    claims = tuple(
+        CoreCandidateCoverageClaim(
+            link.candidate_id,
+            "planned_fact" if link.fact_ordinals else "pending",
+            fact_ordinals=link.fact_ordinals if link.fact_ordinals else None,
+            pending_reason=link.pending_reason,
+        )
+        for link in graph.links
+    )
+    return build_candidate_coverage_manifest(source, context, plan, claims)

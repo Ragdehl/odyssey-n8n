@@ -267,7 +267,8 @@ def execute_complete_message_with_core(
     core_planner_factory: Callable[
         [CoreCandidateContext, DomainInterpretation | None], OrdinaryCorePlanner
     ],
-    candidate_coverage_factory: Callable[..., object],
+    candidate_coverage_factory: Callable[..., object] | None = None,
+    core_candidate_attributor: object | None = None,
     repository: object,
     schema: dict,
     context_index: object,
@@ -287,11 +288,29 @@ def execute_complete_message_with_core(
     Router and Temporal each receive the original full source; ordinary Core
     interprets it once, then the existing coverage and Writer gates execute.
 
-    The independently reviewed coverage callback is still mandatory: lack
-    of a general semantic reviewer is NOT silently replaced with positional
-    candidate-to-fact guesses. Callers must supply an isolated repository
+    Accepts the independent existing Core model attributor OR a previously
+    verified review callback. Proposed model edges must pass the unchanged
+    Core prewrite validator; neither route ordinals nor output order can
+    silently determine semantic ownership. Callers must supply an isolated repository
     while evaluating this inactive integration.
     """
+    if (candidate_coverage_factory is None) == (core_candidate_attributor is None):
+        raise ValueError("Independent Core coverage review required: provide exactly one source")
+    if core_candidate_attributor is not None:
+        from odyssey_core.candidate_attribution import (
+            OpenAICoreCandidateAttributor,
+            review_model_candidate_fact_coverage,
+        )
+
+        if not isinstance(core_candidate_attributor, OpenAICoreCandidateAttributor):
+            raise ValueError("Use the existing independent Core candidate attributor")
+
+        def model_review(source: str, context: CoreCandidateContext, plan: object) -> object:
+            return review_model_candidate_fact_coverage(
+                source, context, plan, core_candidate_attributor
+            )
+
+        candidate_coverage_factory = model_review
     evidence = collect_complete_source_evidence(
         source,
         router=router,

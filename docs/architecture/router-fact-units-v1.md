@@ -2105,3 +2105,64 @@ GPT-6 language understanding, independent general N↔M semantic attribution,
 canonical reference identity for all graph shapes, or activation via the
 interactive product ingress. Those release gates remain pending, and the
 new entry stays unregistered outside opt-in tests.
+
+
+**2026-10-11 — Completed independent Core graph-review connection and real-provider
+isolated end-to-end smoke.**
+
+The previously unbound source/fact correspondence is now composed internally,
+without hand-supplying model-produced edges at execution time:
+`execute_complete_message_with_core` accepts the existing Core-owned
+`OpenAICoreCandidateAttributor` and routes one entire original message through
+Router v3 → independent Temporal → one original Core GPT-5.6 semantic plan →
+independent read-only Core graph review → existing Core coverage/mutation guard →
+canonical Writer. The legacy injection path remains available only for
+verified deterministic tests. The graph review accepts 0..N proposed fact
+ordinals per source candidate, supports shared ordinals, requires original
+source quotations and exact Core fact text, and rejects ungrounded/invented
+links. The source candidates do not acquire write authority, and the
+postwrite readback still distinguishes verified physical facts from semantic
+proof. No model is permitted to bypass current Core reference/identity,
+polarity or conditional safety checks. A refusal may mean a legitimate
+complex message is not yet safely representable; do not silently drop it.
+
+17 new generated offline integration scenarios exercise the model-review
+boundary with 1→N, N→1, mixed candidate↔fact cardinalities, the ordinary
+GPT-5.6 structured-output parser, physical Writer and readback, plus
+rejections of incomplete/forged model replies. Existing general regression
+tests remain in place.
+
+An explicit one-shot, per-call cost-guarded real-provider smoke under
+`benchmarks.fact_candidate_core_live.run_complete_message_smoke` ran via the
+existing authorized transient systemd user unit. The original synthetic
+message was passed UNCHANGED to real GPT-6 Router, real GPT-6 Temporal,
+real GPT-5.6 Core Planner, and real GPT-5.6 independent graph reviewer.
+The one generated Core Day fact preserved all three original objects.
+The ordinary Core writer created one Markdown Day note in a disposable
+vault and canonical readback verified the exact atomic fact. Final outcome:
+`completed`; provider calls 4/4 completed; fact physical proof verified;
+no user data, DEV, PROD or n8n activation.
+
+The first two live attempts reached Core but did not write. Investigation
+reproduced the cause without model calls: the isolated smoke runner supplied
+`datetime.isoformat()` with microseconds, while
+`atomic_facts._parse_recorded_at` requires second precision. Only the
+test runner clock was corrected (`microsecond=0`); ordinary production
+materialization was unchanged. The corrected standalone offline Calendar
+Day write succeeded before the final live smoke. One-time receipts are
+kept privately outside the repository at
+`/home/ragdehl/projects/odyssey-experimental-receipts/`, with no keys
+or personal note content. All three new live attempts together cost
+approximately USD 0.00993 at pinned standard noncached rates. Cumulative
+approved focused testing including earlier experiments is approximately
+USD 0.0564021, beneath the prior USD 0.07 cap (not invoice data).
+The smoke gate is single-use; a NEW approved bounded run is necessary for
+additional live inputs and must first account for this new observed spend.
+
+This establishes one REAL provider-backed end-to-end success, not arbitrary
+language-model reliability, all Note shapes, a complete live matrix, or
+an actual interactive-chat deployment. The internal general path is
+now ready for additional end-to-end semantic cases in isolated vaults.
+Before DEV activation, verify identity-rich cases/partial states, user-bound
+runtime integration, independent PR review and any additional live
+regression budget. No special-case phrase/name/code routes were introduced.

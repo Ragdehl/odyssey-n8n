@@ -266,3 +266,149 @@ def test_complete_raw_message_provider_failure_stops_before_any_markdown(
         assert result.status is ApplicationStatus.FAILED
         assert [len(router_calls), len(temporal_calls), len(core_calls)] == [1, 1, 1]
     assert repo.list_markdown_paths() == []
+
+
+def _automatic_review_payload(configuration, edges):
+    """Generate a separate model response from independently supplied N:M edges."""
+    (_source, _values, raw_router, raw_core) = configuration
+    atoms = raw_core["result"]["actions"][0]["operations"][0]["facts"]
+    texts = [fact["parts"][0]["text"] for fact in atoms]
+    return {
+        "candidates": [
+            {
+                "candidate_id": f"candidate-{i + 1}",
+                "source_quote": unit["anchors"][0]["text"],
+                "fact_ordinals": list(ordinals),
+                "planned_fact_texts": [texts[j] for j in ordinals],
+                "pending_reason": None,
+            }
+            for i, (unit, ordinals) in enumerate(zip(raw_router["units"], edges, strict=True))
+        ]
+    }
+
+
+def _run_automatic_review(tmp_path, count, shape, *, transform=None):
+    """One message enters Router/Temporal/Core and its own independent graph reviewer."""
+    from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
+
+    configuration, edges = _configuration(count, shape)
+    source, _values, raw_router, raw_core = configuration
+    raw_review = _automatic_review_payload(configuration, edges)
+    if transform is not None:
+        transform(raw_review)
+    router_sdk, router_calls = _sdk_fake(raw_router)
+    temporal_sdk, temporal_calls = _sdk_fake({"mentions": [_exact_date("Hoy", "2026-10-04")]})
+    core_sdk, core_calls = _sdk_fake(raw_core)
+    review_sdk, review_calls = _sdk_fake(raw_review)
+
+    def planner_factory(context, domain):
+        return OpenAILunaExperimentalPlanner(
+            core_sdk, SCHEMA, CLOCK, candidate_context=context, domain_interpretation=domain
+        )
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repo = VaultRepository(vault)
+    result = execute_complete_message_with_core(
+        source,
+        router=OpenAIFactCandidateRouter(router_sdk, prompt_revision="v3"),
+        temporal=OpenAITemporalInterpreter(temporal_sdk, CLOCK),
+        core_planner_factory=planner_factory,
+        core_candidate_attributor=OpenAICoreCandidateAttributor(review_sdk),
+        repository=repo,
+        schema=SCHEMA,
+        context_index=object(),
+        semantic_index=object(),
+        embedder=object(),
+        contextual_reasoner=object(),
+        actor="isolated-auto-core-review",
+        now=NOW,
+        context_limit=5,
+        request_id_factory=lambda: f"auto-review-{shape}-{count}",
+    )
+    assert [len(calls) for calls in (router_calls, temporal_calls, core_calls, review_calls)] == [
+        1,
+        1,
+        1,
+        1,
+    ]
+    assert router_calls[0]["input"][1]["content"] == source
+    assert temporal_calls[0]["input"][1]["content"] == source
+    assert core_calls[0]["input"][1]["content"] == source
+    assert core_calls[0]["model"] == "gpt-5.6-luna"
+    assert review_calls[0]["model"] == "gpt-5.6-luna"
+    review_input = review_calls[0]["input"][1]["content"]
+    assert source in review_input
+    assert "core_planned_atomic_facts" in review_input
+    assert "unverified_source_candidates" in review_input
+    assert review_calls[0]["text"]["format"]["strict"] is True
+    assert review_calls[0]["store"] is False
+    return result, repo, edges
+
+
+@pytest.mark.parametrize(
+    "shape,count",
+    [
+        ("one_to_many", 2),
+        ("one_to_many", 3),
+        ("one_to_many", 5),
+        ("one_to_many", 8),
+        ("one_to_many", 13),
+        ("many_to_one", 2),
+        ("many_to_one", 5),
+        ("many_to_one", 8),
+        ("mixed", 5),
+        ("mixed", 8),
+    ],
+)
+def test_automatically_proposed_core_graph_passes_full_source_core_writer_and_readback(
+    tmp_path: Path, shape: str, count: int
+):
+    result, repo, edges = _run_automatic_review(tmp_path, count, shape)
+    assert result.status is ApplicationStatus.COMPLETED
+    assert len(repo.list_markdown_paths()) == 1
+    markdown = repo.read_text("calendar/days/2026-10-04.md")
+    assert len([part for part in markdown.splitlines() if "request=auto-review-" in part]) == len(
+        {ordinal for group in edges for ordinal in group}
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "fake_fact",
+        "wrong_quote",
+        "missing_source",
+        "uncovered_fact",
+        "duplicate_edge",
+        "wrong_fact_text",
+        "unsorted_edges",
+    ],
+)
+def test_automatic_core_graph_rejects_unsafe_model_claims_before_any_write(
+    tmp_path: Path, mutation: str
+):
+    def change(payload):
+        rows = payload["candidates"]
+        if mutation == "fake_fact":
+            rows[0]["fact_ordinals"][0] = 99
+        elif mutation == "wrong_quote":
+            rows[0]["source_quote"] = "invented source"
+        elif mutation == "missing_source":
+            rows.pop()
+        elif mutation == "uncovered_fact":
+            rows[0]["fact_ordinals"] = [0]
+            rows[0]["planned_fact_texts"] = [rows[0]["planned_fact_texts"][0]]
+        elif mutation == "duplicate_edge":
+            rows[0]["fact_ordinals"].append(0)
+            rows[0]["planned_fact_texts"].append(rows[0]["planned_fact_texts"][0])
+        elif mutation == "wrong_fact_text":
+            rows[0]["planned_fact_texts"][0] = "An entirely different fact"
+        elif mutation == "unsorted_edges":
+            rows[0]["fact_ordinals"].reverse()
+            rows[0]["planned_fact_texts"].reverse()
+
+    result, repo, _edges = _run_automatic_review(tmp_path, 5, "one_to_many", transform=change)
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "CANDIDATE_COVERAGE_REVIEW_REQUIRED"
+    assert repo.list_markdown_paths() == []
