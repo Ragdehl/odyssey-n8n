@@ -849,3 +849,54 @@ same logical message remains unsafe. Failure after Note creation
 but before the first marker requires manual recovery. Neither
 F19/F20 prompt semantics nor complete generalized candidate
 routing are solved by this block.
+
+
+**Block 4B35 — experimental full Router/Temporal/Core semantic
+assembly (2026-10-11, still private):** Real source-adapter
+`OpenAIFactCandidateRouter` v3 validates original source roles
+and dependencies; existing `OpenAITemporalInterpreter` reads
+the FULL original message only when required; existing
+`bind_temporal_to_fact_candidates` source-proves each date
+or time before providing per-unit
+`DomainInterpretation` evidence to the unchanged
+GPT-5.6-low `OpenAILunaExperimentalPlanner`. Two separately
+validated Core `RequestPlan` objects enter the already tested
+original-source global coverage and durable local-operation
+admission. The private chat preview returns the original outer
+message ID; full F23/F26 Markdown readback and restart replay
+succeed with frozen REAL Router+Core provider replies via
+fake SDK clients. **F26 Temporal model response remains a
+deterministic synthetic exact-date fixture, not a genuine paid
+provider reading in this evaluation.**
+
+All candidate dates/time scopes are now checked **before any
+Core planning call** so a missing second relative date does not
+consume a first Core provider request or allow a partial
+planning state. F19/F20 correction/condition cases, inaccurate
+original Router provenance, unsupported or nonexact dates,
+and Core escalation all abstain before granting Core write
+authority. No extra provider calls occurred.
+
+The private preview now explicitly rejects an authenticated
+multiuser actor/external principal until the runtime has a
+verified per-actor canonical vault selector. Two isolated
+local instances may reuse the same outer client request ID
+without sharing the durable journal or knowledge root.
+On partial previous writes the private chat preview refuses
+**before any model call** to plan the same request again.
+Normal HTTP `/execute` remains untouched, and the real
+n8n/route planner is NOT configured to invoke this preview.
+
+Before DEV adoption, review a non-default, authenticated,
+actor-root-aware integration of the actual source-only
+Router/Temporal/Core provider factory into the existing
+runtime/n8n composition, including independent model-call
+budget/telemetry, failure after creating a typed Note but
+before its first fact, true per-user vault isolation,
+normal chat response serialization/recovery and at least
+one separately approved real provider regression covering
+any material new provider contract. Never substitute this
+bounded coordinated two-fact pilot for general handling of
+all user free-form messages; expand from abstract invariants
+and new-vocabulary negative tests, not F23/F26
+word-specific rules.

@@ -19,6 +19,7 @@ from typing import Protocol
 from odyssey_apps.fact_candidate_core import to_core_candidate_context
 from odyssey_apps.fact_candidates import FactCandidateProposal, OpenAIFactCandidateRouter
 from odyssey_apps.fact_temporal import bind_temporal_to_fact_candidates
+from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_dependent_scope import preview_dependent_clause_scopes
 from odyssey_core.domain_interpretation import (
     TEMPORAL_REFERENCE_EVIDENCE,
@@ -42,7 +43,7 @@ class PreparedDependentCoreFacts:
     """Full original source, untouched Core context, independent Core plans."""
 
     source: str
-    context: object
+    context: CoreCandidateContext
     plans: tuple[RequestPlan, RequestPlan]
 
 
