@@ -317,3 +317,112 @@ source would falsify the regression result. A newly generated live-model
 matrix is needed after the typed Temporal/result carriers are complete,
 within separately checked API spend. No part of this checkpoint changes
 the current GPT-5.6 Core model, DEV, PROD, production Notes or n8n.
+
+
+## Completed Temporal-to-Temporal and Temporal-to-Core carrier (2026-10-11)
+
+The missing typed inherited Temporal-result transfer is now implemented in
+`odyssey_runtime/scoped_temporal_handoff.py` and
+`odyssey_core/domain_interpretation.py`. It is an **opt-in experimental
+branch-only interface**, not a production workflow switch.
+
+1. Router's scoped source role only states that a later fragment inherited
+   wording such as `Hoy` from an earlier original span. That statement
+   has no date-normalization authority.
+2. Temporal runs against the first local source and returns its verified
+   `TemporalInterpretation`. The route executor records only exact
+   DATE/DATETIME results keyed by the original, immutable source offsets.
+3. A later route can obtain `InheritedTemporalReference` only if its
+   `CoreSourceRoleProvenance` matches that exact earlier Temporal span,
+   the original SHA-256 source, the expected original words, and a strictly
+   earlier execution route. A role with no such proof **fails before
+   Core planning or mutation**; none is manufactured from Router wording.
+4. If the later route has no new temporal expression, Core's ordinary
+   Planner receives only its own source plus that typed inherited date
+   as a separate `DomainInterpretation.inherited_temporal` entry.
+   Existing Core temporal target/anchor validation consumes that trusted
+   coordinate without treating old sibling text as the current request.
+5. If a later route also contains a new clock expression, Temporal receives
+   its own local user source and a separate bounded typed inherited carrier.
+   The Temporal response must still contain only original words from that
+   local source. Any new exact datetime conflicting with a single inherited
+   exact date is rejected before Core. Unqualified time is **not** silently
+   assumed to mean today's date.
+6. Core/Writer/physical Markdown readback continue to be the only write
+   authority. Canonical identity handoff remains separate.
+
+**New deterministic acceptance examples:** F06
+`Hoy vi a Ana y compré pan.` routes as two separate requests; Temporal
+is called once for `Hoy vi a Ana`, and both Core writes can finish on
+the correct real synthetic calendar day. If the first Core operation is
+non-executable but Temporal completed, the second independent fact can
+still use the verified date. If Temporal fails, the second fact cannot
+write using Router's lexical `Hoy`. F04
+`Mañana iremos al parque a las 12 y luego a las 18 iremos al cine.`
+routes twice, with the second Temporal call receiving the exact
+`Mañana → YYYY-MM-DD` typed first-route proof to resolve its own
+`a las 18` into a datetime. A model returning an incompatible day is
+rejected. Tests additionally guard offset/digest tampering, future-route
+references, fake untyped domain evidence, and prompt source boundaries.
+
+A separate real-model finding: five prior 27-case responses were truncated
+at Temporal's 512-token output ceiling. The **historical default remains
+512**; only the opt-in scoped provider runner uses a validated upper bound
+of **1536 tokens**, preserving existing benchmark budget/contract invariants.
+This does not change model choice, inference authority or retry policy. It
+reduces but cannot guarantee elimination of provider truncation.
+
+**Still not proven:** Every F01–F27 behavior as a freshly generated
+split-input four-model result. Previous saved Core outputs belong to
+the historical merged-input contract; never represent their replay as
+new split-input responses. Conditional/polarity, tasks, source-inherited
+canonical *subjects* and non-exact/duration time formats still need
+independent acceptance tests and the general Core graph reviewer gate.
+No DEV/PROD deployment or personal-vault access is authorized by this
+checkpoint.
+
+
+## Fresh real-model split-input acceptance (2026-10-11, same user approval)
+
+The above transfer has now also been exercised end-to-end with **new**
+provider responses (not earlier whole-source captures), on isolated
+disposable copies of the committed synthetic canonical Notes.
+
+- **F06** `Hoy vi a Ana y compré pan.` — **COMPLETED** with genuine
+  GPT-6 Router, one genuine GPT-6 Temporal call, two separate GPT-5.6
+  Core plans and two independent Core fact reviews. Both distinct facts
+  were physically verified in the **same synthetic Day note**. Cost
+  estimate for this try: USD 0.0059360; frozen source-bound provider
+  record `benchmarks/application_router/scoped_routing_v2/F06.json`.
+- **F04** `Mañana iremos al parque a las 12 y luego a las 18 iremos al
+  cine.` — the first fresh attempt after the handoff was **FAILED**
+  when the original Temporal model returned an unnormalized clock. After
+  adding opt-in exact date/clock composition, the next attempt was
+  **PARTIAL**: first fact persisted, while the second Temporal response
+  included a non-anchoring ordering connector as UNSPECIFIED. That
+  exact response is retained as
+  `scoped_routing_v2/F04-earlier-partial.json`.
+- **F04 final approved attempt** — **COMPLETED**, with two separate Core
+  plans/reviews and two separate Temporal interpretations, the second
+  using a validated first-route inherited exact date. The provider
+  returned only original local temporal wording, including 12:00 and
+  18:00 on the same day. Both writes passed canonical Markdown readback.
+  The general opt-in Temporal prompt now differentiates pure order
+  connectors from material date/time mentions; ordinary historical
+  Temporal prompting is unchanged. Estimated cost of final attempt:
+  USD 0.0071354. The final real outputs are frozen at
+  `scoped_routing_v2/F04.json`.
+- Both F04 outcomes and F06 are regression-tested with **all actual
+  saved provider outputs** under
+  `tests/runtime/test_scoped_temporal_real_provider_replay.py`. This
+  tests saved authentic calls, NOT a claim of additional live calls.
+- The cumulative estimated provider spend is **USD 0.2273444** out of
+  the previously authorized total USD 0.25; no more model retries are
+  planned for these two tests. The original 25 cases remain saved with
+  their initial outcomes and original source formats.
+
+No changes to active DEV, PROD, personal Notes, model versions or n8n.
+Remaining independent follow-up: extend fresh split-input model coverage
+beyond F04/F06, particularly lexical subject ownership, user tasks,
+polarity/corrections, F27 bad inheritance, and approximate/non-exact
+temporal resolutions; do not downgrade Core's write guards.

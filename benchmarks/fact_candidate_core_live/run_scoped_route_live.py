@@ -57,8 +57,8 @@ def previous_spend() -> float:
 
 def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
     """Make one full scoped model attempt with provider-free mode by default."""
-    if attempt not in (1, 2, 3):
-        raise ValueError("Only explicitly bounded attempts 1, 2, or 3 are allowed")
+    if attempt not in (1, 2, 3, 4):
+        raise ValueError("Only explicitly bounded attempts 1 through 4 are allowed")
     if case_id not in {item["id"] for item in CASES}:
         raise ValueError("Only the frozen 27-case regression corpus may reach the provider")
     row = next(c for c in CASES if c["id"] == case_id)
@@ -142,7 +142,9 @@ def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
             result = execute_candidate_routed_message(
                 row["source"],
                 router=OpenAIFactCandidateRouter(provider, prompt_revision="v3"),
-                temporal=OpenAITemporalInterpreter(provider, CLOCK),
+                temporal=OpenAITemporalInterpreter(
+                    provider, CLOCK, max_output_tokens=1536, scoped_date_time_context=True
+                ),
                 core_planner_factory=lambda candidate_context, domain: (
                     OpenAILunaExperimentalPlanner(
                         provider,
@@ -197,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", choices=[x["id"] for x in CASES], required=True)
     parser.add_argument("--live", action="store_true")
-    parser.add_argument("--attempt", type=int, choices=[1, 2, 3], default=1)
+    parser.add_argument("--attempt", type=int, choices=[1, 2, 3, 4], default=1)
     arguments = parser.parse_args()
     print(
         json.dumps(

@@ -14,6 +14,10 @@ from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidates import FactCandidateProposal
 from odyssey_apps.router import RouterError
 from odyssey_core.candidate_context import CoreCandidateContext
+from odyssey_runtime.scoped_temporal_handoff import (
+    ScopedTemporalHandoff,
+    with_scoped_inherited_temporal,
+)
 from odyssey_runtime.source_scope_compiler import (
     compile_candidate_route_bundle,
     validate_bundle_original_provenance,
@@ -158,8 +162,10 @@ def execute_candidate_routed_message(
         raise ValueError("Outer request id must be non-empty")
 
     route_scopes = {
-        route_execution_id(outer_id, ordinal): item for ordinal, item in enumerate(bundle.units)
+        route_execution_id(outer_id, ordinal): (ordinal, item)
+        for ordinal, item in enumerate(bundle.units)
     }
+    temporal_handoff = ScopedTemporalHandoff(source)
 
     def run_unit(
         unit_source: str,
@@ -174,18 +180,48 @@ def execute_candidate_routed_message(
         # keyword. It must never be repurposed to carry sibling route text.
         if conversation_context_override is not None and _prior_turns not in ((), None):
             raise ValueError("Two competing route contexts are not allowed")
-        scoped = route_scopes[locator]
+        ordinal, scoped = route_scopes[locator]
         if scoped.route.source_text != unit_source:
             raise ValueError("Route source changed before Core interpretation")
+        inherited = temporal_handoff.inherited(
+            scoped.context,
+            current_route_index=ordinal,
+            start=scoped.original_start,
+            end=scoped.original_end,
+        )
+        required_temporal_origins = {
+            (role.original_start, role.original_end)
+            for role in scoped.context.source_provenance
+            if role.role in {"date", "date_scope", "time", "time_approx"}
+        }
+        proven_temporal_origins = {
+            (proof.original_start, proof.original_end) for proof in inherited
+        }
+        if required_temporal_origins - proven_temporal_origins:
+            from odyssey_core.temporal_interpretation import TemporalInterpreterError
+
+            raise TemporalInterpreterError(
+                "Inherited temporal scope has no verified earlier Temporal result"
+            )
         interpretation = None
         domain = None
         if scoped.route.capability_id == "temporal":
             if temporal is None or not callable(getattr(temporal, "interpret", None)):
                 raise ValueError("Temporal resolution is unavailable for dated route")
-            interpretation = temporal.interpret(unit_source)
+            if inherited:
+                interpretation = temporal.interpret(unit_source, inherited_temporal=inherited)
+            else:
+                interpretation = temporal.interpret(unit_source)
             if interpretation.source_text != unit_source:
                 raise ValueError("Temporal must interpret only its routed source")
             domain = interpretation.core_domain_interpretation()
+            temporal_handoff.remember(
+                interpretation,
+                route_index=ordinal,
+                start=scoped.original_start,
+                end=scoped.original_end,
+            )
+        domain = with_scoped_inherited_temporal(domain, source=unit_source, inherited=inherited)
         guard = None
         if dependent_handoff is not None:
             if not isinstance(dependent_handoff, DependentRouteHandoff):

@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "case_id": "F04",
+  "original_source_sha256": "bd04a702d9e565681ade2ea48706d7f4b5288c419fc6b7963a81df53174d3075",
+  "captured_application_status": "partial",
+  "route_summaries": [
+    {
+      "status": "completed",
+      "depends_on": null,
+      "reason": null
+    },
+    {
+      "status": "failed",
+      "depends_on": null,
+      "reason": null
+    }
+  ],
+  "written_notes": 1,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 12\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":1}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 18\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"luego\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 12\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T12:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"iremos al parque \"},{\"kind\":\"temporal_reference\",\"text\":\"a las 12\",\"value\":\"2026-10-05T12:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"iremos al parque\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"12:00 — iremos al parque\"],\"pending_reason\":null}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"luego\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 18\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T18:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    }
+  ],
+  "recorded_receipt_id": "F04-v3"
+}

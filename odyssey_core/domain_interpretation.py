@@ -56,6 +56,51 @@ class DomainEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class InheritedTemporalReference:
+    """An exact earlier Temporal resolution, not a new local source mention.
+
+    Only a route-local executor holding a prior validated TemporalInterpretation
+    may mint this carrier. Exact source offsets and digest are rechecked at
+    dispatch; neither Router role guesses nor provider-supplied date values
+    can enter this path.
+    """
+
+    source_text: str
+    value: str
+    original_start: int
+    original_end: int
+    original_sha256: str
+    origin_route_index: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.source_text, str)
+            or not self.source_text.strip()
+            or len(self.source_text) > 400
+            or type(self.original_start) is not int
+            or type(self.original_end) is not int
+            or self.original_start < 0
+            or self.original_end - self.original_start != len(self.source_text)
+            or type(self.origin_route_index) is not int
+            or self.origin_route_index < 0
+            or not isinstance(self.original_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", self.original_sha256) is None
+        ):
+            raise ValueError("Inherited Temporal source provenance is invalid")
+        DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, self.source_text, self.value)
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "source_text": self.source_text,
+            "value": self.value,
+            "original_start": self.original_start,
+            "original_end": self.original_end,
+            "original_sha256": self.original_sha256,
+            "origin_route_index": self.origin_route_index,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class DomainInterpretation:
     """Describe only application-specialized interpretation for one exact routed source."""
 
@@ -63,6 +108,7 @@ class DomainInterpretation:
     source_text: str
     intent: str
     evidence: tuple[DomainEvidence, ...] = ()
+    inherited_temporal: tuple[InheritedTemporalReference, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -80,6 +126,15 @@ class DomainInterpretation:
             raise ValueError("domain interpretation evidence is invalid")
         if len(self.evidence) > 16:
             raise ValueError("domain interpretation evidence is too large")
+        if (
+            not isinstance(self.inherited_temporal, tuple)
+            or len(self.inherited_temporal) > 16
+            or not all(
+                isinstance(item, InheritedTemporalReference) for item in self.inherited_temporal
+            )
+            or len(set(self.inherited_temporal)) != len(self.inherited_temporal)
+        ):
+            raise ValueError("inherited Temporal references are invalid")
         non_temporal = tuple(
             item for item in self.evidence if item.kind != TEMPORAL_REFERENCE_EVIDENCE
         )
@@ -90,15 +145,23 @@ class DomainInterpretation:
 
     def to_prompt_payload(self) -> dict[str, object]:
         """Return bounded evidence for Core planning without granting mutation authority."""
-        return {
+        payload: dict[str, object] = {
             "capability_id": self.capability_id,
             "intent": self.intent,
             "evidence": [item.to_payload() for item in self.evidence],
         }
+        if self.inherited_temporal:
+            payload["inherited_temporal"] = [item.to_payload() for item in self.inherited_temporal]
+        return payload
 
     def temporal_references(self) -> tuple[DomainEvidence, ...]:
         """Return exact date/date-time evidence that may anchor Core writes."""
-        return tuple(item for item in self.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE)
+        explicit = tuple(item for item in self.evidence if item.kind == TEMPORAL_REFERENCE_EVIDENCE)
+        inherited = tuple(
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, item.source_text, item.value)
+            for item in self.inherited_temporal
+        )
+        return explicit + inherited
 
     def property_evidence(self) -> tuple[DomainEvidence, ...]:
         """Return app-normalized property evidence without interpreting its business meaning."""

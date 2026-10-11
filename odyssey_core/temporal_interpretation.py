@@ -13,6 +13,7 @@ from odyssey_core.domain_interpretation import (
     TEMPORAL_REFERENCE_EVIDENCE,
     DomainEvidence,
     DomainInterpretation,
+    InheritedTemporalReference,
 )
 from odyssey_core.temporal import TemporalValueError, normalize_iso_date
 from odyssey_core.temporal_resolution import (
@@ -25,6 +26,7 @@ from odyssey_core.temporal_resolution import (
 TEMPORAL_INTERPRETER_MODEL = "gpt-6-luna"
 TEMPORAL_INTERPRETER_REASONING_EFFORT = "low"
 TEMPORAL_INTERPRETER_MAX_OUTPUT_TOKENS = 512
+TEMPORAL_SCOPED_MAX_OUTPUT_TOKENS = 1536  # Opt-in; historical default and budgets unchanged
 TEMPORAL_INTERPRETER_TIMEOUT_SECONDS = 30.0
 TEMPORAL_INTERPRETER_KINDS = tuple(TemporalResolutionKind)
 TEMPORAL_INTERPRETER_MAX_ITEMS = 8
@@ -200,7 +202,25 @@ def render_temporal_prompt(current_context: Mapping[str, str]) -> str:
 class OpenAITemporalInterpreter:
     """Resolve one routed temporal source with one bounded model call and no retries."""
 
-    def __init__(self, client: ResponsesClient, current_context: Mapping[str, str]) -> None:
+    def __init__(
+        self,
+        client: ResponsesClient,
+        current_context: Mapping[str, str],
+        *,
+        max_output_tokens: int = TEMPORAL_INTERPRETER_MAX_OUTPUT_TOKENS,
+        scoped_date_time_context: bool = False,
+    ) -> None:
+        if (
+            type(max_output_tokens) is not int
+            or not TEMPORAL_INTERPRETER_MAX_OUTPUT_TOKENS
+            <= max_output_tokens
+            <= TEMPORAL_SCOPED_MAX_OUTPUT_TOKENS
+        ):
+            raise TemporalInterpreterError("Temporal output token allowance is invalid")
+        if type(scoped_date_time_context) is not bool:
+            raise TemporalInterpreterError("Temporal scoped date/time mode is invalid")
+        self.scoped_date_time_context = scoped_date_time_context
+        self.max_output_tokens = max_output_tokens
         self._client = client
         self._current_context = dict(current_context)
         self.model = TEMPORAL_INTERPRETER_MODEL
@@ -227,20 +247,65 @@ class OpenAITemporalInterpreter:
         )
 
     def interpret(
-        self, source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()
+        self,
+        source_text: str,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+        *,
+        inherited_temporal: tuple[InheritedTemporalReference, ...] = (),
     ) -> TemporalInterpretation:
         """Resolve one exact routed source; prior context never supplies current temporal wording."""
         del conversation_context
         if not isinstance(source_text, str) or not source_text.strip():
             raise TemporalInterpreterError("Temporal source must be non-empty")
         prompt = render_temporal_prompt(self._current_context)
+        if self.scoped_date_time_context:
+            prompt += (
+                "\nScoped date/time composition: an unqualified clock phrase "
+                "in the current user fragment may use a clearly applicable "
+                "explicit calendar date in THAT SAME bounded fragment, or "
+                "the separately supplied verified inherited Temporal date. "
+                "Return the original date wording as its own EXACT_DATE "
+                "mention; return the original clock wording as a distinct "
+                "EXACT_DATETIME mention with that established date and local "
+                "timezone. Do not merge their source substrings. Pure relative "
+                "sequencing connectors that only order two events, without "
+                "naming a date, time, duration or interval, are not standalone "
+                "temporal mentions: leave their ordering to Core rather than "
+                "outputting UNSPECIFIED for the connector. A clock "
+                "with neither an applicable exact source date nor a verified "
+                "inherited day remains UNSPECIFIED; never invent a date, "
+                "choose among conflicting dates, or resolve a cancelled time."
+            )
+        if inherited_temporal:
+            if (
+                not isinstance(inherited_temporal, tuple)
+                or len(inherited_temporal) > TEMPORAL_INTERPRETER_MAX_ITEMS
+                or not all(
+                    isinstance(item, InheritedTemporalReference) for item in inherited_temporal
+                )
+            ):
+                raise TemporalInterpreterError("Inherited Temporal context must be verified")
+            prompt += (
+                "\nVerified preceding route Temporal results for this one scoped "
+                "fragment. Only normalize temporal wording contained in the "
+                "current user fragment; the prior anchors are context, NOT "
+                "additional source mentions or permission to write. For "
+                "unqualified clock times referring to a verified inherited "
+                "calendar date, use that date rather than today's default. "
+                "Do not silently override an explicit conflicting local date.\n"
+                + json.dumps(
+                    [item.to_payload() for item in inherited_temporal],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
         self.last_call = True
         try:
             response = self._client.responses.create(
                 model=TEMPORAL_INTERPRETER_MODEL,
                 reasoning={"effort": TEMPORAL_INTERPRETER_REASONING_EFFORT},
                 store=False,
-                max_output_tokens=TEMPORAL_INTERPRETER_MAX_OUTPUT_TOKENS,
+                max_output_tokens=self.max_output_tokens,
                 input=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": source_text},
@@ -270,9 +335,25 @@ class OpenAITemporalInterpreter:
             self.last_error_category = "MalformedTemporalJSON"
             raise TemporalInterpreterError("Temporal provider returned malformed output") from error
         try:
-            return parse_temporal_interpretation(
+            parsed = parse_temporal_interpretation(
                 payload, source_text, timezone=self._current_context["timezone"]
             )
+            inherited_days = {
+                item.value[:10] for item in inherited_temporal if len(item.value) >= 10
+            }
+            if inherited_days and len(inherited_days) == 1:
+                from odyssey_core.temporal_resolution import TemporalResolutionKind
+
+                for mention in parsed.mentions:
+                    if (
+                        mention.resolution.kind is TemporalResolutionKind.EXACT_DATETIME
+                        and mention.resolution.exact_datetime is not None
+                        and mention.resolution.exact_datetime[:10] not in inherited_days
+                    ):
+                        raise TemporalInterpreterError(
+                            "Local time disagrees with verified inherited Temporal day"
+                        )
+            return parsed
         except TemporalInterpreterError:
             self.last_error_category = "LocalTemporalValidationError"
             raise
