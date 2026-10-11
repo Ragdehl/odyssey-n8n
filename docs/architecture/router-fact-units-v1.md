@@ -1382,3 +1382,69 @@ original-source completeness. Do not use post-write evidence as
 a pre-write permission. F19/F20 conditions/corrections are not
 authorized by this work. No new provider calls, production prompt
 or schema changes, DEV/PROD deployments, or personal-vault access.
+
+
+**Block 4B31: opt-in global Core candidate coverage for independently
+planned dependent facts (2026-10-11, Draft PR only).** Normal
+`build_candidate_coverage_manifest` retains its historical strict
+behavior and STILL blocks unverified dependent claims. The
+**separate opt-in**
+`build_dependent_candidate_coverage_manifest` takes the original
+user text, real Router source-bound candidates and the TWO existing
+unchanged GPT-5.6 Core `RequestPlan` objects. It recomputes Core's
+earlier original-source dependency attestation, creates a composite
+`RequestPlan` by concatenating the actual two Core actions
+**without making or changing any fact, target, date or reference**,
+and binds the original source + complete combined plan SHA digests
+to explicit one-source-candidate-per-fact coverage claims.
+
+`CoreCandidateCoverageManifest` now has an optional, immutable
+`dependency_attestation` with a default of None. When supplied, the
+**existing normal application pre-write validator** independently
+recomputes the full semantic/source dependency attestation from
+**the exact two actions that are about to execute**. It rejects a
+missing, stale, forged, already-postwritten or write-authorizing
+certificate, reordered candidates, extra actions/facts/claims,
+conditional/correction roles, mismatched typed targets, wrong
+pronoun referent or any changed Core helper. Only this uniquely
+re-attested pair can bypass the older *independent* property/
+participant/unknown-pronoun lexical checks that cannot represent
+shared subjects or recovered typed antecedents. All ordinary
+Core identity resolution/preflights still run. No stored copy of
+Router's proposed interpretation is granted selection authority.
+
+**Physical validation with saved real GPT-5.6 model JSON:** Core's
+ordinary application was executed using the composite F23 and F26
+plans in isolated disposable Markdown vaults, with both existing
+and originally missing typed documents. Both request-level actions
+succeed and the global candidate-coverage preflight passes.
+A new read-only
+`review_combined_persisted_dependency` verifies the two **distinct
+atomic fact provenance markers**, canonical stable IDs and Core
+unit-result helper IDs, exact Markdown linked paths and content,
+and the same newly created/reused typed document ID as the
+previous unit's written subject. It supports harmless differences
+in display-label capitalization, without accepting a changed
+wikilink target or a forged fact marker. All certificates continue
+to say `may_write_notes=False`; post-write facts NEVER grant
+pre-write authority. The original generic
+`readback_core_facts` currently abstains on one fact in each pair,
+because one canonical link/source revision changes after the
+second action and it has no *joint two-action source proof*.
+**Do not report its old individual per-reference receipts as 2/2
+verified**; use only the separate, exact two-fact atomic-marker
+audit for the experimental path until the normal unified receipt
+layer is extended and reviewed.
+
+**Remaining release blockers:** The experimental opt-in flow is
+still not connected to live Odyssey chat/Router dispatch. The
+ordinary Core multi-action writer can already reuse an identity
+created by its first action in these isolated tests, but a
+mid-request failure cannot be claimed transactionally rolled back;
+idempotent/pending recovery and stale-target competition should
+be tested before activation. The two shape classes implemented
+so far (originally coordinated property subjects, one typed
+antecedent with source anaphora) do NOT constitute general
+language understanding. F19/F20 conditions/corrections remain
+outside this authorization. No DEV/PROD deployment, real Note
+writes, model migration, new paid model calls or schema change.

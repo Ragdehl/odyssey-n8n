@@ -373,3 +373,119 @@ def review_persisted_dependency(
         canonical_reuse_verified=True,
         may_write_notes=False,
     )
+
+
+def review_combined_persisted_dependency(
+    source: str,
+    context: CoreCandidateContext,
+    plans: tuple[RequestPlan, RequestPlan],
+    evidence: CoreDependentFactAttestation,
+    result: object,
+    repository: object,
+) -> CoreDependentFactAttestation:
+    """Audit both source-attributed facts after ONE normal Core execution.
+
+    This proves two new physical atomic fact markers with the SAME complete
+    request ID and separate original-source ordinals. Wikilink targets are
+    resolved from actual Core unit-result stable IDs, rather than labels,
+    plan-mentioned names or stale first-action reference snapshots.
+    It never supplies pre-write authority or promises atomic rollback.
+    """
+    from .application import ApplicationResult, ApplicationStatus
+    from .atomic_facts import normalize_atomic_fact, parse_atomic_facts
+    from .notes import parse_note
+    from .reference_binding import _wikilink_target
+    from .storage import VaultRepository
+
+    current = attest_two_dependent_core_plans(source, context, plans)
+    if current != evidence:
+        raise DependentFactAttestationError("Stale original source or Core plans")
+    if (
+        not isinstance(result, ApplicationResult)
+        or result.status is not ApplicationStatus.COMPLETED
+        or len(result.action_results) != 2
+        or not isinstance(repository, VaultRepository)
+    ):
+        raise DependentFactAttestationError("Two completed Core actions are required")
+    paths_by_id: dict[str, str] = {}
+    notes_by_id: dict[str, object] = {}
+    for path in repository.list_markdown_paths():
+        note = parse_note(repository.read_text(path))
+        identity = note.metadata.get("id")
+        if isinstance(identity, str):
+            if identity in paths_by_id:
+                raise DependentFactAttestationError("Duplicate canonical stable identity")
+            paths_by_id[identity] = path
+            notes_by_id[identity] = note
+    written_ids: list[str] = []
+    for index, (action, outcome) in enumerate(
+        zip((plan.actions[0] for plan in plans), result.action_results, strict=True)
+    ):
+        if (
+            outcome.action_index != index
+            or outcome.kind != "write"
+            or len(outcome.unit_results) != len(action.units)
+        ):
+            raise DependentFactAttestationError("Core action results differ from original plans")
+        indexed = {unit.unit_index: unit for unit in outcome.unit_results}
+        if len(indexed) != len(action.units) or set(indexed) != set(range(len(action.units))):
+            raise DependentFactAttestationError("Missing or duplicate Core unit outcomes")
+        if any(
+            unit.status.value != "succeeded" or not unit.stable_note_id for unit in indexed.values()
+        ):
+            raise DependentFactAttestationError("Unsuccessful canonical write or reference")
+        target_id = indexed[0].stable_note_id
+        written_ids.append(target_id)
+        if target_id not in paths_by_id:
+            raise DependentFactAttestationError("Missing original write destination")
+        if notes_by_id[target_id].metadata.get("type") != action.units[0].target.type:
+            raise DependentFactAttestationError("Canonical target type drift")
+        intended = action.units[0].facts[0]
+        for ref_index, ref in enumerate(action.units[0].references):
+            stable_ref_id = indexed[ref.target_index].stable_note_id
+            if stable_ref_id not in paths_by_id:
+                raise DependentFactAttestationError("Missing referenced canonical identity")
+            helper = action.units[ref.target_index]
+            if (
+                helper.target.type is not None
+                and notes_by_id[stable_ref_id].metadata.get("type") != helper.target.type
+            ):
+                raise DependentFactAttestationError("Canonical reference type drift")
+            marker = f"{{{{ref:{ref_index}}}}}"
+            if intended.count(marker) != 1:
+                raise DependentFactAttestationError("Original Core reference marker mismatched")
+            wikilink_path = _wikilink_target(paths_by_id[stable_ref_id])
+            intended = intended.replace(marker, f"[[{wikilink_path}|{ref.mention}]]")
+        if "{{ref:" in intended:
+            raise DependentFactAttestationError("Unresolved reference placeholder")
+        matching = [
+            fact
+            for fact in parse_atomic_facts(notes_by_id[target_id].content)
+            if fact.request_id == result.request_id and fact.ordinal == index
+        ]
+        if (
+            len(matching) != 1
+            or normalize_atomic_fact(matching[0].text).casefold()
+            != normalize_atomic_fact(intended).casefold()
+        ):
+            raise DependentFactAttestationError("Canonical Markdown fact provenance mismatch")
+    if evidence.relation == "shared_subject":
+        if written_ids[0] != written_ids[1]:
+            raise DependentFactAttestationError("Inherited subject changed canonical note")
+    elif evidence.relation == "source_anaphora":
+        doc_stable = written_ids[0]
+        referenced_document = result.action_results[1].unit_results[1].stable_note_id
+        if doc_stable != referenced_document or written_ids[1] == doc_stable:
+            raise DependentFactAttestationError("Anaphora changed physical antecedent identity")
+    else:
+        raise DependentFactAttestationError("Unrecognized source dependency")
+    return CoreDependentFactAttestation(
+        evidence.source_digest,
+        evidence.plan_digests,
+        evidence.candidate_ids,
+        evidence.relation,
+        evidence.source_antecedent,
+        evidence.plan_referent,
+        canonical_reuse_verified=True,
+        may_write_notes=False,
+    )
