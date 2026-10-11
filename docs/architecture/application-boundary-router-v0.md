@@ -10,6 +10,20 @@ Status: **approved architecture contract; current conversational flow is Router 
 - `calendar_day` is a Core-owned deterministic destination. Core may target only a trusted exact date supplied by Temporal, or the current local date for ordinary day/diary capture; it is never an unrestricted semantic note type.
 - Specialized applications such as Tasks remain routing owners for their own domain semantics and may consume Temporal as a dependency before returning canonical writes to Core.
 
+## Route-local dispatch clarification (2026-10-11)
+
+The authoritative segmentation/dependency contract is
+[Router unit dispatch and dependency handoff](router-unit-dispatch-contract.md).
+Downstream models receive **only their validated route or scoped work
+unit**, never the complete current message. The current `Route` schema
+also carries optional `depends_on` and `dependent_mention` fields,
+although the original minimal v0 design below predates their approval.
+Where an explicit pronoun can be grounded by a uniquely persisted earlier
+Core reference, the successor is a separate dependent route; implicit
+ellipses or shared predicates/dates that cannot survive a literal split
+instead require scoped shared evidence or a grouped original route.
+The full-source fact-candidate experiment does not supersede this rule.
+
 ## Objective
 
 Introduce the smallest application boundary that lets Odyssey add Calendar, Tasks, Events, and later capabilities without making the established Core planner absorb each application's domain contract.

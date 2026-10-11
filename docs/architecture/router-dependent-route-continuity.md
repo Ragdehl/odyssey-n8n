@@ -2,6 +2,17 @@
 
 Status: **DEV implementation in progress. No activation until verified.**
 
+**Current-contract clarification (2026-10-11):** the early milestones below
+describe earlier internal-only `depends_on`/`dependent_mention` fields.
+The actual current `route_plan_json_schema` in
+`odyssey_apps/router.py` **does** expose both nullable dependency fields
+after the later focused Router gate; consult the code for the currently
+accepted closed shape. The essential approved behavior remains: each
+successor receives only its own routed source and a Core-proven canonical
+antecedent carrier after its predecessor completes, never the complete
+sibling message. [Dispatch contract](router-unit-dispatch-contract.md).
+
+
 ## Objective
 
 Prevent anaphora/ellipsis inside one user message from losing a person/subject

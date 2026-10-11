@@ -72,15 +72,54 @@ participants, predicates or actions. Technical limits on provider bytes,
 source size and model context must be explicit budgets; they are not
 semantic rules and must not silently discard surplus information.
 
-Router may propose source-grounded grammatical roles and backwards
+Router may propose source-grounded grammatical roles and backward
 lexical dependencies. It never chooses canonical identities, fact counts,
-Note types, Core plans or mutation order. Temporal independently resolves
-date/time language from the entire relevant original source; Router need
-not recognize every temporal mention. Ordinary Core owns semantic
-interpretation, reference resolution, identity selection, planning and
-persistence. Preserve the **entire original message** as Core's request,
-with bounded source-context and Temporal evidence rather than creating
-one model prompt and a second mini-planner per Router candidate.
+Note types, Core plans or mutation order. **Router is the owner of
+current-message segmentation and dispatch**: downstream Temporal, Core
+and specialized application interpreters MUST receive only their selected
+validated route or independently scoped work unit, plus the minimum
+source-grounded dependencies needed by that unit. Do NOT invoke Temporal
+or the ordinary Core planner with the entire current original message
+as a second planning request after Router has divided it. The full
+original message can remain separately as read-only provenance for
+offset/coverage/negative-scope checks; it is NOT the downstream
+model's request or permission to reinterpret siblings.
+
+A unit requiring dates/times is processed by Temporal on that unit's
+bounded source and relevant inherited context. Independent units without
+temporal language skip Temporal. Core processes the selected unit and
+its verified Temporal/identity evidence, and retains authority over
+semantics, canonical identity selection, relationships, planning and
+persistence. On a backward **execution** dependency (e.g. "él"), the
+dependent unit waits for its predecessor's Core result; pass only
+freshness-checked, uniquely verified canonical reference evidence to
+the next unit. Never substitute a guessed entity, copy all predecessor
+text, or execute the dependent unit when the proof is missing. Other
+independent units may complete.
+
+Differentiate (a) source-context inheritance (shared date, predicate,
+subject or negation) from (b) dependency on a canonical identity
+resolved/persisted by an earlier Core operation. They are NOT interchangeable.
+Some candidate scopes share an original predicate or date, so an exact
+v0 RoutePlan partition cannot necessarily represent every v1 fact candidate:
+group those contexts or pass typed inherited source anchors while preserving
+original evidence. Do not equate one candidate with one action, one Core
+fact or one model call. Validate complete original-source accounting without
+sending all original sibling text as a new downstream planning request.
+
+**Authoritative routing guidance:** see
+`docs/architecture/router-unit-dispatch-contract.md` for the restored
+source-slice and dependency handoff contract, and
+`docs/architecture/router-dependent-route-continuity.md` for
+Core-grounded canonical reference carriers. The isolated experimental
+`odyssey_runtime/complete_source_handoff.py` currently sends whole-source
+inputs to Temporal/Core: this conflicts with the approved routing contract.
+Treat it and its full-source provider gates as historical regression evidence,
+NOT a template, an approved replacement architecture or an activated path.
+Before activation, replace the experimental handoff with per-unit dispatch
+and prove route-local execution, canonical dependency handoff and physical
+Markdown readback. Retain existing GPT-5.6 Core model configuration for
+this work.
 
 **Never implement a linguistic failure by branching on a specific user
 phrase, name, pronoun, conjunction or benchmark ID.** Preserve such cases

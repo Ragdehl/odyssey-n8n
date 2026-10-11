@@ -24,6 +24,27 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
+## Restored Router per-unit dispatch — user decision (2026-10-11)
+
+**Router splits the message and dispatches scoped units; Temporal and the
+ordinary Core Planner MUST NOT receive the complete current message as a
+replacement for those units.** Runtime may keep the original source in a
+read-only validation context. An explicit dependent reference waits until the
+preceding Core unit has produced uniquely verified, current canonical
+reference evidence. Source-role inheritance (a shared date, predicate, or
+subject) is distinct from this result dependency. Independent routes may
+complete despite an unresolved dependent unit. See
+[Router unit dispatch and dependency handoff](router-unit-dispatch-contract.md)
+and [dependent-route continuity](router-dependent-route-continuity.md).
+
+The experimental `odyssey_runtime/complete_source_handoff.py` and its 27
+real-model source-level results are **historical evidence for a different,
+incorrect integration**, not the approved per-unit implementation. The
+per-unit reconstruction must precede further live gates or DEV activation;
+keep existing Core GPT-5.6 model and canonical mutation guards. This section
+supersedes all later historical full-source integration claims in this
+roadmap without deleting their regression observations.
+
 ## Deferred model consolidation — user decision (2026-10-10)
 
 **Do not change models during the current Router fact-candidate / Temporal / Core work.**

@@ -1,5 +1,19 @@
 # Router fact-candidate units v1 — design contract (not active)
 
+
+> **ARCHITECTURAL CORRECTION — 2026-10-11:** The approved dispatch
+> contract is **Router splits into scoped units → Temporal (only when
+> needed, only on each relevant scope) → Core on each scoped unit with
+> verified dependencies → guarded Writer**. See
+> [Router unit dispatch and dependency handoff](router-unit-dispatch-contract.md).
+> The later dated experiments in this historical log that sent the complete
+> original message to Temporal and Core are **NOT** the approved product
+> architecture. Do not copy or reactivate `complete_source_handoff.py` for
+> live routing. The original complete message remains audit/source-coverage
+> provenance, never the downstream ordinary Planner's current request.
+> Existing candidate→fact N:M safety, pending-state and canonical identity
+> guards must be preserved when replacing the experimental handoff.
+
 Status: **BLOCK 1 / PROPOSED SEMANTIC CONTRACT — awaiting human design review.** Block 2 checkpoint storage remains optional and inactive. Block 3 has a frontend-only diagnostic preparation: it can render already-validated v1 route evidence, an explicitly supplied source-free checkpoint snapshot, and a local test-only candidate preview. It adds no prompt, runtime, note schema, provider call, n8n/browser transport, deployment, or canonical data change. Historical Router v0 behavior and its frozen evidence are unchanged.
 
 ## User outcome and objective
