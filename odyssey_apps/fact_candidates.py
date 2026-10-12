@@ -189,6 +189,15 @@ def _anchored_candidate(source: str, raw: Mapping[str, Any], index: int) -> Fact
         if not isinstance(role, str) or role not in SOURCE_ROLES:
             raise RouterError("Unknown source context role")
         scopes.append(SourceRole(role, resolve_source_anchor(source, scope["anchor"])))
+    # One original word span cannot independently be both the event verb
+    # and its event object/qualifier. An LLM can cite an exact substring yet
+    # assign an incoherent role; never repair this by guessing source words.
+    predicates = {(r.anchor.start, r.anchor.end) for r in scopes if r.role == "predicate"}
+    complements = {
+        (r.anchor.start, r.anchor.end) for r in scopes if r.role in {"object", "transaction"}
+    }
+    if predicates & complements:
+        raise RouterError("Contradictory predicate and complement source roles")
     inheritance: list[SourceInheritance] = []
     for item in _bounded_array(
         raw["inheritance"],
@@ -460,6 +469,18 @@ FACT_CANDIDATE_PROMPT_V3_EXTENSION = (
 )
 
 
+# New opt-in extension; V3 remains byte-for-byte immutable for all existing
+# frozen provider contracts and their hash-pinned model-budget regressions.
+FACT_CANDIDATE_PROMPT_V4_EXTENSION = (
+    "Predicate/verb source text is NOT a transaction qualifier or object. "
+    "For a purchase, cite the verb only as predicate; label independently "
+    "quoted noun phrases or distinct qualifiers as object or transaction. "
+    "A transaction qualifier is optional when the object already contains "
+    "the full relevant qualification. Never reuse an identical source span "
+    "both as predicate and transaction/object, or invent extra source roles. "
+)
+
+
 class OpenAIFactCandidateRouter:
     """Opt-in, non-executing Router v1 proposal adapter with an injected provider.
 
@@ -469,7 +490,7 @@ class OpenAIFactCandidateRouter:
 
     def __init__(self, client: Any, *, prompt_revision: str = "v1") -> None:
         """Select a reviewed source-only teaching revision without changing Router v0."""
-        if prompt_revision not in {"v1", "v2", "v3"}:
+        if prompt_revision not in {"v1", "v2", "v3", "v4"}:
             raise ValueError("Unknown fact-candidate prompt revision")
         self._client = client
         self._prompt_revision = prompt_revision
@@ -527,12 +548,17 @@ class OpenAIFactCandidateRouter:
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V2_EXTENSION
-                            if self._prompt_revision in {"v2", "v3"}
+                            if self._prompt_revision in {"v2", "v3", "v4"}
                             else ""
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V3_EXTENSION
-                            if self._prompt_revision == "v3"
+                            if self._prompt_revision in {"v3", "v4"}
+                            else ""
+                        )
+                        + (
+                            FACT_CANDIDATE_PROMPT_V4_EXTENSION
+                            if self._prompt_revision == "v4"
                             else ""
                         ),
                     },

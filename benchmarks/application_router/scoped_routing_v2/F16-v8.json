@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "case_id": "F16",
+  "original_source_sha256": "ac8222b27f7983ce3960a3aff6d0e41fb7132f16912921e32877b92d49174429",
+  "recorded_receipt_id": "F16-v8",
+  "captured_application_status": "partial",
+  "captured_route_statuses": [
+    "completed",
+    "needs_attention"
+  ],
+  "captured_written_notes": 1,
+  "responses": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"Ana\",\"occurrence\":0},{\"text\":\"compró\",\"occurrence\":0},{\"text\":\"entradas para el concierto\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"compró\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"entradas para el concierto\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"también\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate_relation\",\"anchor\":{\"text\":\"también\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"object\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ana compró entradas para el concierto.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"compró\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ana compró entradas para el concierto.\"],\"pending_reason\":null}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"compró entradas para el concierto.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Luis\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"compró entradas para el concierto.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}

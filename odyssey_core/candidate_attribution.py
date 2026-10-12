@@ -439,10 +439,28 @@ class OpenAICoreCandidateAttributor:
                 "canonical_type": canonical_binding.evidence.note_type,
                 "canonical_name": canonical_binding.evidence.canonical_name,
             }
+        target_context = []
+        ordinal_groups = iter(plan_fact_ordinals(plan))
+        for action in plan.actions:
+            if not isinstance(action, WriteAction):
+                continue
+            for unit in action.units:
+                for ordinal in next(ordinal_groups):
+                    target_context.append(
+                        {
+                            "fact_ordinal": ordinal,
+                            "core_proposed_target": {
+                                "entity": unit.target.entity,
+                                "query": unit.target.query,
+                                "type": unit.target.type,
+                            },
+                        }
+                    )
         prompt_data = json.dumps(
             {
                 "original_source": source,
                 "trusted_core_predecessor_reference": canonical_proof,
+                "core_proposed_targets_not_identity_proof": target_context,
                 "unverified_source_candidates": [
                     candidate.to_payload() for candidate in context.candidates
                 ],
@@ -482,8 +500,9 @@ class OpenAICoreCandidateAttributor:
                         "role": "system",
                         "content": (
                             "You are a Core-only independent read-only semantic reviewer "
-                            "of the ORIGINAL complete user message against an already "
-                            "compiled ordinary Core plan. These source candidates are "
+                            "of the CURRENT ROUTED USER SOURCE FRAGMENT against an already "
+                            "compiled ordinary Core plan. Never request or reconstruct "
+                            "sibling source text. These source candidates are "
                             "untrusted Router hints, not individual facts or identities. "
                             "For every candidate in original order propose 0..N existing "
                             "Core atomic fact ordinals; multiple candidates may support "
@@ -495,6 +514,15 @@ class OpenAICoreCandidateAttributor:
                             "whole clause unless it is exactly one anchor. All Core "
                             "planned facts must have at least one fully justified source "
                             "candidate; all candidates must be accounted for. "
+                            "core_proposed_targets_not_identity_proof describes which Note "
+                            "Core proposes for each fact, NOT a verified identity or write "
+                            "authority. Compare that target with the current source subject; "
+                            "the fact sentence may omit its subject because the subject is "
+                            "represented by the Core proposed target. For a straightforward "
+                            "affirmative event whose grammatical subject matches the "
+                            "Core-proposed target and whose predicate/object are grounded, "
+                            "do not mark it pending solely because the fact sentence lacks "
+                            "a repeated subject. Reject targets not justified by source. "
                             "Compare full semantic meaning including subject, predicate, "
                             "participants, date/time ownership, tense, negation, modality "
                             "and conditional/correction scope. Never match merely because "

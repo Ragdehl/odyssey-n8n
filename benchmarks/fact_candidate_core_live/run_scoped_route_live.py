@@ -2,7 +2,9 @@
 
 No production workflows, personal Notes or retries; each case uses a fresh
 clone of the thirteen committed synthetic canonical Notes. Prior capped test
-spend of USD 0.1096283 is ALWAYS debited from the USD 0.25 total authorization.
+spend of USD 0.1096283 and every historical receipt are ALWAYS debited.
+The user increased the accumulated maximum from USD 0.25 to USD 0.50 on
+2026-10-12; a separate 050 approval flag is mandatory for live calls.
 """
 
 from __future__ import annotations
@@ -31,9 +33,9 @@ from tests.runtime.test_full_message_corpus_regression import FIXTURE
 
 ROOT = Path(__file__).resolve().parents[2]
 RECEIPTS = Path("/home/ragdehl/projects/odyssey-experimental-receipts/unit-routing-cap025")
-MAX_USD = 0.25
+MAX_USD = 0.50
 BASELINE_USD = 0.1096283
-FLAG = "ODYSSEY_ROUTE_SCOPED_025_APPROVED"
+FLAG = "ODYSSEY_ROUTE_SCOPED_050_APPROVED"
 
 
 def previous_spend() -> float:
@@ -57,8 +59,8 @@ def previous_spend() -> float:
 
 def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
     """Make one full scoped model attempt with provider-free mode by default."""
-    if attempt not in (1, 2, 3, 4):
-        raise ValueError("Only explicitly bounded attempts 1 through 4 are allowed")
+    if attempt not in (1, 2, 3, 4, 5, 6, 7, 8, 9):
+        raise ValueError("Only explicitly bounded attempts 1 through 9 are allowed")
     if case_id not in {item["id"] for item in CASES}:
         raise ValueError("Only the frozen 27-case regression corpus may reach the provider")
     row = next(c for c in CASES if c["id"] == case_id)
@@ -141,7 +143,7 @@ def run_one(case_id: str, *, live: bool = False, attempt: int = 1) -> dict:
             semantic.rebuild(repo, SCHEMA, embedder)
             result = execute_candidate_routed_message(
                 row["source"],
-                router=OpenAIFactCandidateRouter(provider, prompt_revision="v3"),
+                router=OpenAIFactCandidateRouter(provider, prompt_revision="v4"),
                 temporal=OpenAITemporalInterpreter(
                     provider, CLOCK, max_output_tokens=1536, scoped_date_time_context=True
                 ),
@@ -199,7 +201,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", choices=[x["id"] for x in CASES], required=True)
     parser.add_argument("--live", action="store_true")
-    parser.add_argument("--attempt", type=int, choices=[1, 2, 3, 4], default=1)
+    parser.add_argument("--attempt", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9], default=1)
     arguments = parser.parse_args()
     print(
         json.dumps(

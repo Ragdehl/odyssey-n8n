@@ -110,7 +110,9 @@ def dispatch(
             assert proof.predecessor_name == "Ana"
             assert proof.predecessor_type == "person"
             assert proof.predecessor_note_id == "fixture-person-ana"
-            assert proof.verified_fact == FACT
+            from odyssey_core.scoped_event_evidence import _tokens
+
+            assert _tokens(proof.verified_fact) == _tokens(FACT)
             assert {role.role: role.text for role in proof.roles} == {
                 "predicate": "compró",
                 "object": "entradas",
@@ -142,14 +144,17 @@ def dispatch(
 
 
 @pytest.mark.parametrize("latest_router", [False, True])
-def test_two_buyers_get_separate_notes_only_after_real_core_readback(tmp_path, latest_router):
-    result, repo, requests = dispatch(tmp_path, latest_router=latest_router)
+@pytest.mark.parametrize("first_fact", [FACT, "Ana compró entradas para el concierto."])
+def test_two_buyers_get_separate_notes_only_after_real_core_readback(
+    tmp_path, latest_router, first_fact
+):
+    result, repo, requests = dispatch(tmp_path, latest_router=latest_router, first_fact=first_fact)
     assert result.status is ApplicationStatus.COMPLETED
     assert [r["status"] for r in result.execution_flow["routes"]] == ["completed", "completed"]
     assert len(requests) == 2
     assert requests[0][1] is None
     assert requests[1][1] is not None
-    assert FACT in repo.read_text("Ana.md")
+    assert first_fact in repo.read_text("Ana.md")
     assert FACT in repo.read_text("Luis.md")
 
 
@@ -252,3 +257,62 @@ def test_wrong_kind_and_unrelated_destination_rejected_even_with_carrier(tmp_pat
             FACT,
             proof,
         )
+
+
+def test_graph_reviewer_sees_core_target_but_is_not_given_identity_authority():
+    """A routed fact may omit its grammatical subject, represented by the proposed target."""
+    import json
+
+    from odyssey_apps.fact_candidates import validate_fact_candidate_proposal
+    from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
+    from odyssey_runtime.source_scope_compiler import compile_candidate_route_bundle
+    from tests.benchmarks.test_recorded_real_models_source_replay import _saved_router_outputs
+
+    context = (
+        compile_candidate_route_bundle(
+            validate_fact_candidate_proposal(SOURCE, _saved_router_outputs()["F16"])
+        )
+        .units[0]
+        .context
+    )
+    provider_calls = []
+
+    def answer(**kwargs):
+        provider_calls.append(kwargs)
+        return SimpleNamespace(
+            status="completed",
+            usage=None,
+            output_text=json.dumps(
+                {
+                    "candidates": [
+                        {
+                            "candidate_id": "candidate-1",
+                            "source_quote": "Ana",
+                            "fact_ordinals": [0],
+                            "planned_fact_texts": [FACT],
+                            "pending_reason": None,
+                        }
+                    ],
+                }
+            ),
+        )
+
+    sdk = SimpleNamespace(responses=SimpleNamespace(create=answer))
+    graph = OpenAICoreCandidateAttributor(sdk).propose_graph(
+        context.source,
+        context,
+        plan("Ana"),
+    )
+    assert len(provider_calls) == 1
+    reviewed = json.loads(provider_calls[0]["input"][1]["content"])
+    assert reviewed["original_source"] == "Ana compró entradas para el concierto"
+    assert reviewed["core_proposed_targets_not_identity_proof"] == [
+        {
+            "fact_ordinal": 0,
+            "core_proposed_target": {"entity": "Ana", "query": "Ana", "type": "person"},
+        }
+    ]
+    assert graph.links[0].fact_ordinals == (0,)
+    assert not graph.may_authorize_writes
+    assert not graph.semantically_verified
+    assert "CURRENT ROUTED USER SOURCE FRAGMENT" in provider_calls[0]["input"][0]["content"]

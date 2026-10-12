@@ -64,8 +64,10 @@ class CoreVerifiedInheritedEvent:
             or type(self.predecessor_route_index) is not int
             or self.predecessor_route_index < 0
             or not isinstance(self.roles, tuple)
-            or len(self.roles) != 3
-            or {x.role for x in self.roles} != _ROLE_SET
+            or not 2 <= len(self.roles) <= 8
+            or sum(x.role == "predicate" for x in self.roles) != 1
+            or not any(x.role == "object" for x in self.roles)
+            or any(x.role not in _ROLE_SET for x in self.roles)
             or not all(isinstance(x, EventRole) for x in self.roles)
             or not isinstance(self.verified_fact, str)
             or not self.verified_fact.strip()
@@ -84,10 +86,12 @@ class CoreVerifiedInheritedEvent:
             role.validate()
         # Exact normalized word *sequence*, not a set: duplicate/reordered
         # event words must never be laundered by this source-only carrier.
-        role_text = " ".join(
-            next(role.text for role in self.roles if role.role == kind)
-            for kind in ("predicate", "object", "transaction")
-        )
+        in_order = sorted(self.roles, key=lambda role: (role.original_start, role.original_end))
+        if in_order[0].role != "predicate" or any(
+            a.original_end > b.original_start for a, b in zip(in_order, in_order[1:], strict=False)
+        ):
+            raise ValueError("Verified source event roles overlap or are reordered")
+        role_text = " ".join(role.text for role in in_order)
         if _tokens(self.verified_fact) != _tokens(role_text):
             raise ValueError("Predecessor event was not an exact source-grounded purchase")
 
@@ -109,18 +113,30 @@ def validate_event_target_fact(
     from odyssey_core.request_planning import KnowledgeUnit
 
     proof.validate()
+    subjects = (
+        [role for role in candidate.roles if role.role == "subject"]
+        if isinstance(candidate, CoreCandidate)
+        else []
+    )
     if (
         not isinstance(candidate, CoreCandidate)
         or candidate.kind != "purchase_item"
         or candidate.state != "candidate"
         or not isinstance(unit, KnowledgeUnit)
         or len(unit.facts) != 1
-        or len(candidate.roles) != 1
-        or candidate.roles[0].role != "subject"
-        or candidate.roles[0].span not in candidate.anchors
-        or len(candidate.anchors) != 2
+        or len(subjects) != 1
         or any(
-            span != candidate.roles[0].span and not (normalized_words(span.text) & _ADDITIVE)
+            role.role not in {"subject", "predicate_relation"}
+            or (
+                role.role == "predicate_relation"
+                and not (normalized_words(role.span.text) & _ADDITIVE)
+            )
+            for role in candidate.roles
+        )
+        or subjects[0].span not in candidate.anchors
+        or not 1 <= len(candidate.anchors) <= 2
+        or any(
+            span != subjects[0].span and not (normalized_words(span.text) & _ADDITIVE)
             for span in candidate.anchors
         )
         or not (normalized_words(source) & _ADDITIVE)
@@ -128,8 +144,8 @@ def validate_event_target_fact(
             word in normalized_words(source)
             for word in ("no", "nunca", "not", "never", "jamais", "pas", "si", "if")
         )
-        or unit.target.entity != candidate.roles[0].span.text
-        or unit.target.query != candidate.roles[0].span.text
+        or unit.target.entity != subjects[0].span.text
+        or unit.target.query != subjects[0].span.text
         or unit.target.type != "person"
         or unit.target.entity == proof.predecessor_name
         or unit.target.filters
@@ -187,7 +203,10 @@ class CoreInheritedEventWriteGuard:
         if len(preflight) != 1 or len(action.units) != 1:
             raise WritePreflightGuardError("INHERITED_EVENT_TARGET_CARDINALITY")
         target = preflight[0]
-        local_subject = self.candidate.roles[0].span.text
+        local_subjects = [role.span.text for role in self.candidate.roles if role.role == "subject"]
+        if len(local_subjects) != 1:
+            raise WritePreflightGuardError("INHERITED_EVENT_LOCAL_SUBJECT_INVALID")
+        local_subject = local_subjects[0]
         if (
             target.outcome is not WriteTargetOutcome.UPDATE
             or not target.stable_id

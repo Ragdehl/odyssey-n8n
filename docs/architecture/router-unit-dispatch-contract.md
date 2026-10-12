@@ -569,3 +569,134 @@ The historical split architecture, original full-source Router only,
 Temporal date proof, same-subject canonical proof, independent Core
 semantic coverage and verified Markdown Writer remain unchanged.
 DEV, PROD, model choices and the user's personal Notes are untouched.
+
+
+## Authorization increase and F16 fresh real E2E (2026-10-12)
+
+The user expressly increased the **TOTAL cumulative experimental API
+authorization to USD 0.50**, rather than allowing the earlier self-imposed
+USD 0.25 gate to block further validation. The scoped-runner preflight
+now sets `MAX_USD = 0.50`, still debits the USD 0.1096283 original
+baseline and every previous receipt, retains the conservative
+input+max-output reservation before **each** provider call, disables
+automatic retries, and requires the *new* transient environment flag
+`ODYSSEY_ROUTE_SCOPED_050_APPROVED=1`. The old `025` flag does
+**not** approve spending under the new cap. If the remaining balance
+cannot reserve the next material call, **ask the user whether to
+authorize more**; do not silently weaken the gate or imply the
+semantic route failed. Historical USD 0.25 statistics elsewhere in
+this report describe earlier checkpoints, NOT the present cap.
+
+### Real evidence and generalized corrections
+
+- **F16-v3**: original Router and correct Ana Core plan; independent
+  semantic reviewer returned `unsupported_scope` for the source
+  attribution. Investigation showed the reviewer did not see the
+  **Core-proposed target** associated with each atomic fact. The
+  current-route graph reviewer now receives an explicitly *untrusted*
+  target-name/type/query projection by fact ordinal and understands
+  that fact text can omit the actor when the target describes it.
+  Identity resolution and mutation authority still belong to Core
+  preflight/Writer. The graph review system instruction also correctly
+  refers to the *current scoped source*, not a whole original
+  message that Core never received.
+- **F16-v4**: Ana's first write completed, second Core Planner
+  `ESCALATE`d. The planner's typed `core_verified_inherited_event`
+  instruction was clarified: independently interpret a positive
+  additive ellipsis using a previously *physically verified* event
+  and a separately resolved new subject, but retain safe escalation
+  when anything is uncertain.
+- **F16-v5 and v6**: the model showed legitimate variance in the
+  first fact's wording (actor omitted, actor included, or unexpected
+  translation) and in the source-role grouping. The event proof now
+  strips **only a verified literal initial subject name** from an
+  otherwise physically verified Core fact, preserving precisely its
+  grounded verb and objects. The planner's scoped prompt requires
+  the source language when writing factual content, and the event
+  carrier supports a bounded, non-overlapping, source-ordered set of
+  predicate plus one or more object/transaction spans. It never
+  invents or reinterprets a role.
+- **F16-v7**: Router incorrectly called `compró` both the predicate
+  and a transaction qualifier. A new general Router role consistency
+  check rejects identical verb/object or verb/transaction source
+  spans before downstream execution, and the V3 Router prompt tells
+  the model to omit optional qualifiers instead of duplicating
+  predicate evidence. All 27 previously frozen genuine Router
+  proposals continue to validate.
+- **F16-v8**: all five authentic model responses were semantically
+  valid, both Core plans and independent fact reviews passed, and
+  Ana was written. The only failure was a source validator that
+  disallowed a correctly grounded local additive
+  `predicate_relation: también`. It now accepts a positive
+  additive marker either as a source-only anchor or as that local
+  grammatical role; changed-subject Core canonical checks,
+  note content guards, scope checks, and prohibited negations remain
+  mandatory. The **unchanged five real model outputs**, frozen under
+  `benchmarks/application_router/scoped_routing_v2/F16-v8.json`,
+  now replay with **both** Ana/Luis notes physically written. The
+  historical capture still says PARTIAL; it is not falsified.
+- **F16-v9**: a fully **fresh live provider** end-to-end proof with
+  GPT-6 Router, GPT-5.6 Core Planner (twice), and independent GPT-5.6
+  Core reviewer (twice) returned **COMPLETED/COMPLETED** and
+  **2 independently written, physically checked canonical synthetic
+  Markdown Notes**, Ana and Luis. Router split the user message
+  into exact original fragments; neither downstream Core model
+  saw the full original as a new user prompt, and Luis's Note did
+  not inherit Ana's identity. Cost estimate **USD 0.0057485**
+  for F16-v9, with cumulative total **USD 0.2653759 / 0.50**.
+  All five real provider replies are frozen in
+  `benchmarks/application_router/scoped_routing_v2/F16-v9.json`
+  and are independently replayed by
+  `tests/runtime/test_scoped_event_real_provider_replay.py`.
+  The original captures remain preserved for history; spending
+  figures are estimates, not actual provider billing invoices.
+
+**Next functional boundary:** this proof only establishes a strictly
+positive purchase ellipsis with an explicitly named second actor
+and verb/object content previously verified by Core. Other event
+types, negations/conditions, task modalities, and references still
+require independently accepted contracts. Do not broaden the exception
+by disabling source attribution or freshness preflight. Continue
+offline or with separately bounded live provider tests; no DEV/PROD
+or personal Markdown activation occurred.
+
+
+### V4 isolation / regression closure
+
+After the successful live F16-v9 run, the full legacy suite exposed two
+unacceptable broad changes: altering the historical Router **V3** system
+prompt changed hash-pinned API budgets, and changing the default Core
+candidate prompt altered previously frozen Core request envelopes.
+The correction is intentionally opt-in:
+
+- `FACT_CANDIDATE_PROMPT_V3_EXTENSION` remains unchanged; the
+  additional consistent-source-role instruction lives in
+  `FACT_CANDIDATE_PROMPT_V4_EXTENSION`. The scoped benchmark invokes
+  `OpenAIFactCandidateRouter(prompt_revision="v4")` only. V3 and all
+  earlier revisions retain their previous exact prompt bytes; a
+  deterministic test asserts that V4 adds only the new suffix.
+- `CoreCandidateContext.scoped_route_source` defaults to `False`;
+  the source-language preservation instruction is present only for
+  the new `source_scope_compiler`-created work units. Existing Core
+  source/context prompts remain byte-compatible.
+- The source validator rejects a predicate reusing exactly the same
+  original span as an incompatible object/transaction qualifier. The
+  captured F16-v7 malformed Router output is an immutable, provider-free
+  negative regression fixture; it cannot be silently repaired into a
+  different transaction role.
+- F16-v8 and the fresh fully **COMPLETED F16-v9** provider outputs
+  both replay through the current Core Writer in disposable canonical
+  Notes. Their original captured application outcomes remain separately
+  recorded, not rewritten to make tests green.
+- The last full deterministic suite after isolation reported
+  **2,820 passing, 80 skipped, the same 10 historically failing
+  benchmark gates**, and no new failures. Two subsequent provider-free
+  V4/role-provenance sentinels passed their focused run.
+  The user authorized spending up to USD 0.50 cumulatively;
+  **observed estimated cumulative spend was USD 0.2653759**, with
+  about USD 0.2346241 remaining. No DEV, PROD, personal vault, n8n,
+  canonical schema, or Core model-version changes were made.
+
+The PR remains Draft for review and human merge; completion of this
+narrow positive-purchase ellipsis does not certify the other 27-case
+semantic shapes or activate the experimental runtime in DEV/PROD.

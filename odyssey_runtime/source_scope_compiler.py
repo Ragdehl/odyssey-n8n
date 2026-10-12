@@ -226,7 +226,9 @@ def _local_context(
                 tuple(inherits),
             )
         )
-    result = CoreCandidateContext(text, tuple(selected), tuple(provenance))
+    result = CoreCandidateContext(
+        text, tuple(selected), tuple(provenance), scoped_route_source=True
+    )
     result.validate(text)
     return result
 

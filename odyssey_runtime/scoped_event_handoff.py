@@ -71,9 +71,11 @@ class ScopedCoreEventHandoff:
             for r in candidate.roles
             if r.role in {"predicate", "object", "transaction"}
         )
-        if {r.role for r in local_roles} != {"predicate", "object", "transaction"} or len(
-            local_roles
-        ) != 3:
+        if (
+            not 2 <= len(local_roles) <= 8
+            or sum(r.role == "predicate" for r in local_roles) != 1
+            or not any(r.role == "object" for r in local_roles)
+        ):
             return
         unit = plan.actions[0].units[0]
         actual = result.action_results[0]
@@ -108,11 +110,21 @@ class ScopedCoreEventHandoff:
         canonical = _current_canonical_reference(repository, schema, note_id)
         if canonical is None or canonical[:2] != ("person", subjects[0].text):
             return
+        verified_core_fact = unit.facts[0]
+        # Core may legitimately write "Ana compró..." to Ana\u0027s Note or
+        # omit the owner as "Compró...". Normalize only an EXACT initial
+        # source-subject prefix after the full fact passed Markdown readback.
+        # Never reuse that actor prefix for the following person.
+        literal_subject = subjects[0].text
+        if verified_core_fact.casefold().startswith(literal_subject.casefold() + " "):
+            verified_event = verified_core_fact[len(literal_subject) :].strip()
+        else:
+            verified_event = verified_core_fact
         proof = CoreVerifiedInheritedEvent(
             original_digest(self.original),
             route_index,
             local_roles,
-            unit.facts[0],
+            verified_event,
             note_id,
             canonical[1],
             canonical[0],
@@ -144,8 +156,9 @@ class ScopedCoreEventHandoff:
             return None
         if (
             len(context.candidates) != 1
-            or len(required) != 3
-            or {r.role for r in required} != {"predicate", "object", "transaction"}
+            or not 2 <= len(required) <= 8
+            or sum(r.role == "predicate" for r in required) != 1
+            or not any(r.role == "object" for r in required)
         ):
             raise ValueError("Inherited event lacks one exact source-role set")
         viable = []

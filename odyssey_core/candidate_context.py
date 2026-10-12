@@ -241,6 +241,7 @@ class CoreCandidateContext:
     source_provenance: tuple[CoreSourceRoleProvenance, ...] = ()
     verified_inherited_subject: CoreVerifiedInheritedSubject | None = None
     verified_inherited_event: CoreVerifiedInheritedEvent | None = None
+    scoped_route_source: bool = False
 
     def validate(self, requested_source: str) -> None:
         """Prohibit stale, altered, oversized or ungrounded candidate hints."""
@@ -257,6 +258,8 @@ class CoreCandidateContext:
             if not isinstance(candidate, CoreCandidate):
                 raise ValueError("Core candidate item must be a validated candidate")
             candidate.validate(self.source, ordinal)
+        if type(self.scoped_route_source) is not bool:
+            raise ValueError("Scoped-route context flag must be explicit")
         if not isinstance(self.source_provenance, tuple) or len(self.source_provenance) > 96:
             raise ValueError("Shared source provenance exceeds bounds")
         for proof in self.source_provenance:
@@ -344,6 +347,13 @@ class CoreCandidateContext:
             "do not force one action or note per candidate. Do not infer canonical people or type "
             "from roles. If representation is unsafe, use the existing safe escalation path."
             + (
+                "\nWhen saving an asserted fact from this route, preserve the "
+                "user's source language and event wording. Do not translate the "
+                "statement to another language unless explicitly requested."
+                if self.scoped_route_source
+                else ""
+            )
+            + (
                 "\nIMPORTANT: This source is ONE selected Router fragment. The "
                 "shared_source_provenance entries point to exact words in other "
                 "original fragments, with immutable source digests and offsets. "
@@ -356,12 +366,23 @@ class CoreCandidateContext:
                 else ""
             )
             + (
-                "\nThe core_verified_inherited_event contains the previously "
-                "written/physically confirmed purchase content, NOT the "
-                "identity or Note of its original buyer. Interpret the CURRENT "
-                "fragment only, with its own new subject. The writer will "
-                "reject any target that is not independently verified. Do not "
-                "invent, alter or extend the predecessor event."
+                "\nThe core_verified_inherited_event is a fact that Core ALREADY "
+                "wrote and physically checked in a previous route, not a mere "
+                "Router guess. It certifies the prior event predicate, object "
+                "and qualifying context, but NOT the previous buyer as the "
+                "subject of the CURRENT route. In an affirmative additive "
+                "ellipsis (such as a new named person followed by también / "
+                "also / too), that proven action can supply the omitted verb "
+                "and object while the NEW PERSON must be independently selected "
+                "and resolved to an existing canonical Note. This is a valid "
+                "ordinary Core record-plan shape when the current fragment "
+                "really asserts that person performed the same action. The "
+                "candidate hint does not compel any write: still escalate if "
+                "the actor, intent, scope or target is uncertain. Never plan "
+                "the predecessor action again, copy its identity, invent "
+                "extra activity, or choose another target. The Writer will "
+                "independently verify the new person and the predecessor Note "
+                "content guard before any write."
                 if self.verified_inherited_event is not None
                 else ""
             )
