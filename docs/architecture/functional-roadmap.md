@@ -71,13 +71,30 @@ See the [hybrid target and implementation checkpoint](router-hybrid-interpretati
 This is **experimental code, not deployed behavior**, and is NOT an
 authorization to declare all cases semantically solved.
 
-**NEXT ORDER:** (1) extend semantic coverage beyond the three narrow
-positive shapes to the remaining 27-case corpus (negation, condition,
-correction, tasks, partial writes and F14/F27 ambiguity), with F06/F13/F22
-independence controls; (2) run full deterministic and bounded genuine
-model/regression checks; (3) review opt-in hybrid integration and seek
-separate approval before DEV, and later PROD. Do not migrate Core GPT-5.6
-or confuse code committed to this experimental branch with deployment.
+**Sensitive-scope testing checkpoint (2026-10-12):** Fresh real
+GPT-6/5.6 grouped tests now cover F17, F19 and F20, and separate-route
+tests cover F18 and F22. F17 remains pending on negation, F19 fails
+closed rather than writing a cancelled plan, F20 stays pending for its
+conditional branches, and F18 leaves both mixed-polarity routes pending.
+The original F22 execution was **partial**, writing only its final
+preparation intent to a Day Note rather than to a Task; new opt-in
+hybrid coverage explicitly blocks this **false Task completion**. F25
+likewise cannot silently promote a repair need to a Task. Authentic
+outputs and the historical F22 partial outcome are frozen in
+`benchmarks/application_router/hybrid_sensitive_v1/`. Ambiguous F14
+remains unwritten and F27 fails provenance validation. These are safe
+negative/partial results, **not** a claim that negations, corrections,
+conditionals or the Tasks lifecycle are fully supported.
+
+**NEXT ORDER:** (1) design and independently validate specialized Core
+coverage for safely *representing* negative facts, cancelled/corrected
+plans and mutually exclusive conditionals without treating them as
+completed occurrences; (2) connect a real Tasks capability/lifecycle
+for independent tasks and shared-date/modality dependencies;
+(3) resolve remaining ambiguous or under-proven references only with
+canonical evidence, preserve full 27-case and adversarial regressions;
+(4) assess live model quality and explicitly request approval before
+DEV/PROD activation. Do not migrate Core GPT-5.6 during this phase.
 
 ## Deferred model consolidation — user decision (2026-10-10)
 

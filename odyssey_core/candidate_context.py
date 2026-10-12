@@ -244,6 +244,7 @@ class CoreCandidateContext:
     verified_inherited_event: CoreVerifiedInheritedEvent | None = None
     scoped_route_source: bool = False
     verified_group_temporal: DomainInterpretation | None = None
+    hybrid_interpretation_mode: bool = False
 
     def validate(self, requested_source: str) -> None:
         """Prohibit stale, altered, oversized or ungrounded candidate hints."""
@@ -262,6 +263,10 @@ class CoreCandidateContext:
             candidate.validate(self.source, ordinal)
         if type(self.scoped_route_source) is not bool:
             raise ValueError("Scoped-route context flag must be explicit")
+        if type(self.hybrid_interpretation_mode) is not bool or (
+            self.hybrid_interpretation_mode and not self.scoped_route_source
+        ):
+            raise ValueError("Hybrid interpretation requires explicit scoped source")
         if not isinstance(self.source_provenance, tuple) or len(self.source_provenance) > 96:
             raise ValueError("Shared source provenance exceeds bounds")
         for proof in self.source_provenance:

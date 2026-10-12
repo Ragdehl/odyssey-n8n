@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "case_id": "F20",
+  "source_sha256": "717f05433b026ba65bc2e40bceb21e692f43da4e7cc9a303092d43b6d4be77f6",
+  "real_model_captured_status": "needs_attention",
+  "real_model_written_notes": [],
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"El sábado\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-10\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"the authenticated human\",\"binding\":\"self\",\"direct_name\":null,\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"El sábado\",\"value\":\"2026-10-10\"},{\"kind\":\"literal\",\"text\":\" iremos al cine si no llueve, y si llueve nos quedaremos en casa.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"iremos al cine\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"unsupported_scope\"},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"nos quedaremos en casa\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"unsupported_scope\"}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0032521,
+  "description": "Historic opt-in hybrid sensitive scope real model output; no canonical user Notes."
+}

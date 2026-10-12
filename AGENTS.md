@@ -135,6 +135,22 @@ writes reference-free literal component names to ONE canonical project
 Note when real component identity cannot be verified. These are narrowly
 bounded positive examples, NOT universal language or canonical-link proof.
 
+**Subsequent sensitive-scope checkpoint (2026-10-12):** Fresh model
+attempts on F17 (joint negation), F19 (corrected plan), F20
+(conditionals), F18 (mixed negation/affirmation) and F22 (independent
+tasks) remain **not fully supported**. Their real replies are frozen
+in `benchmarks/application_router/hybrid_sensitive_v1/` and replayed
+through copied Notes. Negations, cancelled events, and conditional
+branches stay pending/fail closed rather than becoming affirmative
+occurrences. F18 has two separate pending routes; F14 remains ambiguous
+and F27 has an invalid source dependency. F22 originally saved its
+last intent as a plain Day fact, NOT a Task; the new **opt-in hybrid**
+Task safety gate rejects ordinary WriteActions for task candidates until
+a real Tasks capability and lifecycle are reviewed. The old atomic mode
+retains its historical behaviour. F25 repair-need must not silently
+become a Task. **No broad task, negation, correction or conditional
+write capability is claimed by these safety tests.**
+
 Continue the frozen 27-message corpus, semantic/negative/conditional,
 partial-write and prompt-gate testing before promotion. Existing v0 route
 behavior, deferred model-version migration and active DEV/PROD must not

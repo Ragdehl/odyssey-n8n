@@ -204,3 +204,53 @@ entre chats, separación entre OBJETIVO/IMPLEMENTADO/DESPLEGADO y regla
 de prevención, consultar la
 [auditoría de coherencia 2026-10-12](router-hybrid-documentation-audit-20261012.md).
 El registro es documentación de esta decisión, no otra autoridad normativa.
+
+
+## 2026-10-12: Sensitive-scope source regression checkpoint (NOT a functional release)
+
+The approved hybrid grouping is unchanged. Five fresh real-provider probes
+were run on disposable canonical Notes with the previously saved authentic
+Router GPT-6 source proposals. **Results are fail-closed evidence, not five
+successful semantic writes:**
+
+| Case | Fresh model result | Safe physical result |
+| --- | --- | --- |
+| F17, common negation of Ana and Luis | Core proposed one joint negative fact; independent reviewer could not authorize specialized negative coverage | NEEDS_ATTENTION, 0 writes |
+| F19, cancelled park then cinema correction | Core attempted unsupported temporal wording/evidence; date-scoped planner validation rejected before reviewer | FAILED, 0 writes; do not save the cancelled park |
+| F20, mutually exclusive Saturday alternatives | Core proposed a combined condition with an unsafe personal destination; reviewer declined | NEEDS_ATTENTION, 0 writes; not two confirmed occurrences |
+| F18, no Ana / yes Luis | Two independent groups, each Core/reviewer declined unproven person binding; second group must not guess previous date/actor | NEEDS_ATTENTION, 0 writes |
+| F22, three independent task intents | Core declined first two, historically stored the third "preparar la factura" as a Day fact | PARTIAL in **original provider receipt**, one Day write which is **not a Task** |
+
+A corrective opt-in hybrid guard has now been added:
+`CoreCandidateContext.hybrid_interpretation_mode` is marked **only** by the
+hybrid source compiler. The Core candidate coverage gate blocks all ordinary
+`WriteAction`s involving `task` candidates in this mode until a reviewed
+specialized Task lifecycle contract exists. Hence replaying the unchanged F22
+authentic model outputs with the new guard must produce **no false completed
+Tasks or Day facts**. F25 (house repair need) is similarly prevented from
+being silently promoted to a Task. Older atomic contexts are untouched.
+
+Real provider outputs in
+`benchmarks/application_router/hybrid_sensitive_v1/F17.json`,
+`F18.json`, `F19.json`, `F20.json`, `F22.json` remain immutable,
+with the historical captured statuses preserved (do not relabel F22's actual
+original partial outcome). Regression tests in
+`tests/runtime/test_hybrid_sensitive_boundaries.py` and
+`tests/runtime/test_hybrid_multi_route_sensitive_replay.py` check
+source-group coverage, sensitive-write refusal, F14 ambiguity, F27 invalid
+dependencies, independent Task scopes, replay of real model outputs, and
+forbidden generic Day writes. No user Notes, DEV/PROD, model versions,
+Task schema or plugin/app internals were changed.
+
+Current cumulative **estimated** provider spend after these probes was
+**USD 0.3193113 out of the approved USD 0.50**. Do not count as official
+billing. No additional model calls are required to replay these results.
+
+**Next technical work:** establish a distinct reviewed Core semantics for
+negative/hypothetical/corrected plans (the resulting Note content must
+explicitly preserve modality and polarity), plus actual specialized
+Tasks ownership with completion state and date/modality inheritance.
+An unsafe broad exception in the ordinary fact coverage validator is
+not an acceptable way to make these tests green. Continue F14/F27
+source/identity gates and test an independent negative-plus-positive
+case before considering DEV/PROD promotion.

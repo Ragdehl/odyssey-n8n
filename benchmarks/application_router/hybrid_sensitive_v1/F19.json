@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "case_id": "F19",
+  "source_sha256": "cf7d1169ff59a08eb07c77d5b7687798f514c793beb4f333606b046a968da66f",
+  "real_model_captured_status": "failed",
+  "real_model_written_notes": [],
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 12\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T12:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Iremos al cine a las \"},{\"kind\":\"temporal_reference\",\"text\":\"12\",\"value\":\"2026-10-05T12:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\": [] ,\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    }
+  ],
+  "estimated_new_usd": 0.0027889,
+  "description": "Historic opt-in hybrid sensitive scope real model output; no canonical user Notes."
+}

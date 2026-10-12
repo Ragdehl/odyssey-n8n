@@ -139,6 +139,12 @@ def validate_candidate_coverage_manifest(
         or tuple(claim.candidate_id for claim in claims) != expected_ids
     ):
         raise ValueError("Every source candidate requires one ordered coverage claim")
+    if (
+        context.hybrid_interpretation_mode
+        and any(candidate.kind == "task" for candidate in context.candidates)
+        and any(isinstance(action, WriteAction) for action in plan.actions)
+    ):
+        raise ValueError("Hybrid task needs specialized Tasks capability, not an ordinary Day fact")
     ordinals = plan_fact_ordinals(plan)
     fact_ordinals: set[int] = set()
     for action in plan.actions:

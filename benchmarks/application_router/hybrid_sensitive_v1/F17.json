@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "case_id": "F17",
+  "source_sha256": "2595ee91c4125d6d514094de869c114e585933d37303aae3a230564b2ea62d02",
+  "real_model_captured_status": "needs_attention",
+  "real_model_written_notes": [],
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ayer no vi ni a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" ni a \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"a Ana\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"a Luis\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0031328,
+  "description": "Historic opt-in hybrid sensitive scope real model output; no canonical user Notes."
+}

@@ -8,6 +8,8 @@ This compiler is opt-in and does not change active routing.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidate_core import to_core_candidate_context
 from odyssey_apps.fact_candidates import FactCandidateProposal
@@ -119,7 +121,10 @@ def compile_hybrid_candidate_bundle(proposal: FactCandidateProposal) -> Candidat
     routes: list[Route] = []
     for ordinal, group in enumerate(groups):
         start, end = boundaries[ordinal : ordinal + 2]
-        context = _local_context(original, traced, group, primary, start, end)
+        context = replace(
+            _local_context(original, traced, group, primary, start, end),
+            hybrid_interpretation_mode=True,
+        )
         references = [
             role.span.text
             for candidate in context.candidates
