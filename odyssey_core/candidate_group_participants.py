@@ -20,7 +20,7 @@ def validate_group_participant_literal(
     fact: str,
 ) -> None:
     if not (
-        2 <= len(context.candidates) <= 8
+        len(context.candidates) >= 1
         and len(unit.facts) == len(context.candidates)
         and unit.target.type == "calendar_day"
         and unit.intent == "record"

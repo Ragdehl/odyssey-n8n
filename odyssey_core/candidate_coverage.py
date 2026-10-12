@@ -236,9 +236,7 @@ def validate_candidate_coverage_manifest(
             and any(role.role == "replacement" for role in candidate.roles)
         )
         sensitive_literal = (
-            context.hybrid_interpretation_mode
-            and context.verified_sensitive_temporal is not None
-            and len(context.candidates) == 2
+            context.hybrid_interpretation_mode and context.verified_sensitive_temporal is not None
         )
         if (
             (
@@ -361,7 +359,7 @@ def validate_candidate_coverage_manifest(
 
             validate_group_participant_literal(source, context, index, unit, lexical)
         if context.verified_sensitive_temporal is not None:
-            pass  # Whole-source literal has its own strict 1-fact/2-candidate validator.
+            pass  # Whole-source literal has its own strict N:1 validator.
         elif context.verified_group_temporal is not None:
             from .candidate_grouped_temporal import validate_grouped_dated_occurrence
 

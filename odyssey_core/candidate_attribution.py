@@ -40,7 +40,6 @@ def _reviewable_sensitive_literal(context: CoreCandidateContext) -> bool:
     return (
         context.hybrid_interpretation_mode
         and context.verified_sensitive_temporal is not None
-        and len(context.candidates) == 2
         and all(c.state == "candidate" for c in context.candidates)
     )
 

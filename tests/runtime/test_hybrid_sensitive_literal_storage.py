@@ -13,6 +13,13 @@ from types import SimpleNamespace
 import pytest
 
 from odyssey_core.application import ApplicationStatus
+from odyssey_core.candidate_attribution import CandidateFactLinks, inspect_candidate_fact_graph
+from odyssey_core.candidate_context import (
+    CoreCandidate,
+    CoreCandidateContext,
+    CoreCandidateRole,
+    CoreSourceSpan,
+)
 from odyssey_core.candidate_coverage import (
     CoreCandidateCoverageClaim,
     build_candidate_coverage_manifest,
@@ -62,6 +69,138 @@ def claims():
         CoreCandidateCoverageClaim(f"candidate-{i}", "planned_fact", fact_ordinals=(0,))
         for i in (1, 2)
     )
+
+
+def _span(source, text, start=0):
+    position = source.index(text, start)
+    return CoreSourceSpan(text, position, position + len(text))
+
+
+def _synthetic_sensitive_context(count, *, conditional=False):
+    """Create source-provenanced N:1 literal evidence without Router semantics."""
+    date_text = "2031-07-14"
+    objects = tuple(f"item-{index}" for index in range(1, count + 1))
+    if conditional:
+        clauses = tuple(
+            f"condition-{index} action-{index} {item}" for index, item in enumerate(objects, 1)
+        )
+        source = date_text + ": " + "; ".join(clauses) + "."
+        candidates = tuple(
+            CoreCandidate(
+                f"candidate-{index}",
+                "occurrence",
+                "candidate",
+                (_span(source, clause),),
+                (
+                    CoreCandidateRole("condition", _span(source, f"condition-{index}")),
+                    CoreCandidateRole("predicate", _span(source, f"action-{index}")),
+                    CoreCandidateRole("object", _span(source, item)),
+                    CoreCandidateRole("date", _span(source, date_text)),
+                ),
+                (),
+            )
+            for index, (clause, item) in enumerate(zip(clauses, objects, strict=True), 1)
+        )
+    else:
+        source = date_text + ": not observed " + ", ".join(objects) + "."
+        candidates = tuple(
+            CoreCandidate(
+                f"candidate-{index}",
+                "negative",
+                "candidate",
+                (_span(source, item),),
+                (
+                    CoreCandidateRole("polarity", _span(source, "not")),
+                    CoreCandidateRole("predicate", _span(source, "observed")),
+                    CoreCandidateRole("object", _span(source, item)),
+                    CoreCandidateRole("date", _span(source, date_text)),
+                ),
+                (),
+            )
+            for index, item in enumerate(objects, 1)
+        )
+    domain = parse_temporal_interpretation(
+        {
+            "mentions": [
+                {
+                    "temporal_text": date_text,
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": date_text,
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                }
+            ]
+        },
+        source,
+        timezone="Europe/Paris",
+    ).core_domain_interpretation()
+    return (
+        source,
+        date_text,
+        CoreCandidateContext(
+            source,
+            candidates,
+            scoped_route_source=True,
+            hybrid_interpretation_mode=True,
+            verified_sensitive_temporal=domain,
+        ),
+    )
+
+
+@pytest.mark.parametrize("count", (1, 3, 5, 9))
+@pytest.mark.parametrize("conditional", (False, True))
+def test_sensitive_literal_n_to_one_accepts_variable_verified_candidate_counts(count, conditional):
+    source, day, context = _synthetic_sensitive_context(count, conditional=conditional)
+    plan = full_literal_plan(source, day)
+    graph = inspect_candidate_fact_graph(
+        source,
+        context,
+        plan,
+        tuple(
+            CandidateFactLinks(candidate.candidate_id, candidate.anchors[0].text, (0,))
+            for candidate in context.candidates
+        ),
+    )
+    manifest = build_candidate_coverage_manifest(
+        source,
+        context,
+        plan,
+        tuple(
+            CoreCandidateCoverageClaim(candidate.candidate_id, "planned_fact", fact_ordinals=(0,))
+            for candidate in context.candidates
+        ),
+    )
+    assert graph.fact_count == 1
+    assert len(manifest.claims) == count
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("wrong_type", "wrong_target", "partial_coverage", "mixed_polarity", "wrong_date"),
+)
+def test_sensitive_literal_n_to_one_rejects_adversarial_mutations(mutation):
+    source, day, context = _synthetic_sensitive_context(3)
+    plan = full_literal_plan(
+        source,
+        "2031-07-15" if mutation in {"wrong_target", "wrong_date"} else day,
+        note_type="person" if mutation == "wrong_type" else "calendar_day",
+    )
+    if mutation == "mixed_polarity":
+        context = replace(
+            context,
+            candidates=(replace(context.candidates[0], kind="occurrence"), *context.candidates[1:]),
+        )
+    claims = tuple(
+        CoreCandidateCoverageClaim(candidate.candidate_id, "planned_fact", fact_ordinals=(0,))
+        for candidate in context.candidates
+    )
+    if mutation == "partial_coverage":
+        claims = claims[:-1]
+    with pytest.raises(ValueError):
+        build_candidate_coverage_manifest(source, context, plan, claims)
 
 
 @pytest.mark.parametrize("case_id", ("F17", "F20"))

@@ -8,6 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 from odyssey_core.application import ApplicationStatus
+from odyssey_core.candidate_context import (
+    CoreCandidate,
+    CoreCandidateContext,
+    CoreCandidateInheritance,
+    CoreCandidateRole,
+    CoreSourceSpan,
+)
 from odyssey_core.candidate_coverage import (
     CoreCandidateCoverageClaim,
     build_candidate_coverage_manifest,
@@ -115,6 +122,64 @@ def test_group_events_with_unresolved_children_can_be_written_literally(tmp_path
     assert all(day.count(item) == 1 for item in VALID)
     assert "{{ref:" not in day
     assert "mis hijos" in day
+
+
+@pytest.mark.parametrize("count", (1, 3, 5, 9))
+def test_participant_literal_accepts_any_bounded_number_of_source_proven_events(count):
+    """The ordinary candidate context budget, not an event count, bounds this gate."""
+    participant = "the cohort"
+    activities = (
+        "orchid",
+        "harbor",
+        "quartz",
+        "willow",
+        "meadow",
+        "summit",
+        "cobalt",
+        "fernery",
+        "lantern",
+    )[:count]
+    source = participant + " completed " + "; ".join(activities) + "."
+
+    def span(text):
+        start = source.index(text)
+        return CoreSourceSpan(text, start, start + len(text))
+
+    candidates = tuple(
+        CoreCandidate(
+            f"candidate-{index}",
+            "occurrence",
+            "candidate",
+            (span(activity),),
+            (
+                *((CoreCandidateRole("participants", span(participant)),) if index == 1 else ()),
+                CoreCandidateRole("object", span(activity)),
+            ),
+            () if index == 1 else (CoreCandidateInheritance("participants", 1),),
+        )
+        for index, activity in enumerate(activities, 1)
+    )
+    context = CoreCandidateContext(source, candidates, scoped_route_source=True)
+    facts = tuple(f"{participant} completed {activity}." for activity in activities)
+    unit = KnowledgeUnit(
+        SelectionCriteria(None, "2031-07-14", "calendar_day", (), None),
+        "record",
+        (),
+        (),
+        facts,
+        (),
+    )
+    plan = RequestPlan((WriteAction((unit,)),), ())
+    manifest = build_candidate_coverage_manifest(
+        source,
+        context,
+        plan,
+        tuple(
+            CoreCandidateCoverageClaim(candidate.candidate_id, "planned_fact", fact_ordinal=index)
+            for index, candidate in enumerate(candidates)
+        ),
+    )
+    assert len(manifest.claims) == count
 
 
 @pytest.mark.parametrize(

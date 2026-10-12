@@ -302,6 +302,25 @@ ambiguities and broad 27-case N:M regression quality. These must not be
 described as functional successes merely because unsafe writes are
 blocked. Promotion to DEV and PROD remains separately gated.
 
+### Auditoría de cardinalidades acotadas (2026-10-12)
+
+El literal sensible de Day ya usa el presupuesto técnico ordinario de Core
+(candidatos, bytes, claims y hechos) y una revisión N:M, no un número de
+cláusulas. Mantiene un único hecho literal idéntico a la fuente, sin enlaces ni
+afirmación de ocurrencias, y exige evidencia Temporal para el único Day.
+
+Dos límites siguen cerrados deliberadamente:
+
+- `candidate_corrected_plan.py` modela una rectificación binaria: una acción
+  descartada y una sustitución final. Generalizarla a cadenas o bifurcaciones
+  requeriría un contrato explícito de alcance, precedencia y contabilidad de
+  cada acción sustituida; no basta relajar `len(...)=2`.
+- El adaptador histórico `validate_candidate_attribution` mantiene su propuesta
+  1:1 para compatibilidad con sus pruebas de referencias. El camino híbrido
+  usa el revisor de grafo N:M y después el validador de cobertura canónico. No
+  se debe convertir el adaptador legado en permisivo sin una revisión separada
+  de sus helpers de identidad y readback.
+
 ## Actualizacion posterior 2026-10-12: correcciones y Tasks (solo rama experimental)
 
 F19 ya tiene un contrato de Core delimitado: ante una rectificacion

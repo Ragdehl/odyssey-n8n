@@ -1,8 +1,9 @@
-"""Exact-source compound negative/conditional statement, not an occurred event.
+"""Exact-source sensitive statement, not an occurred event.
 
-An intentionally narrow N:1 information-only contract: two source candidates,
-one fully preserved literal statement, one proven Day destination, and no
-canonical identity refs. Temporal/independent Core attribution still required.
+This is an information-only N:1 contract: every verified candidate supports
+one fully preserved literal statement on one proven Day Note, with no
+canonical identity refs. Candidate cardinality is bounded by the ordinary Core
+context and coverage budgets, never by a semantic scenario count.
 """
 
 from __future__ import annotations
@@ -19,9 +20,9 @@ def validate_sensitive_group_statement(
         raise ValueError("Sensitive statement lacks scoped Temporal proof")
     candidates = context.candidates
     if (
-        len(candidates) != 2
+        not candidates
         or any(c.state != "candidate" for c in candidates)
-        or len(claims) != 2
+        or len(claims) != len(candidates)
         or any(
             c.disposition != "planned_fact" or c.fact_ordinal is not None or c.fact_ordinals != (0,)
             for c in claims
@@ -35,14 +36,16 @@ def validate_sensitive_group_statement(
 
     negative = all(
         c.kind == "negative"
-        and any(r.role == "polarity" for r in c.roles)
-        and any(r.role == "object" for r in c.roles)
+        and all(
+            any(r.role == role for r in c.roles) for role in ("polarity", "predicate", "object")
+        )
+        and not any(r.role == "condition" for r in c.roles)
         for c in candidates
     )
     conditional = all(
         c.kind == "occurrence"
-        and any(r.role == "condition" for r in c.roles)
-        and any(r.role == "predicate" for r in c.roles)
+        and all(any(r.role == role for r in c.roles) for role in ("condition", "predicate"))
+        and not any(r.role == "polarity" for r in c.roles)
         for c in candidates
     )
     if not (negative or conditional):
@@ -55,18 +58,43 @@ def validate_sensitive_group_statement(
         predicates = {
             (r.span.start, r.span.end) for c in candidates for r in c.roles if r.role == "predicate"
         }
-        objects = {r.span.text for c in candidates for r in c.roles if r.role == "object"}
-        if len(polarity) != 1 or len(predicates) != 1 or len(objects) != 2:
-            raise ValueError("Negative group does not prove common negated verb and two objects")
-    else:
-        conditions = {r.span.text for c in candidates for r in c.roles if r.role == "condition"}
-        predicates = {r.span.text for c in candidates for r in c.roles if r.role == "predicate"}
-        if len(conditions) != 2 or len(predicates) != 2:
-            raise ValueError("Alternative conditions must both remain explicit and distinct")
-        if not any("no " in c.lower() for c in conditions) or not any(
-            "no " not in c.lower() for c in conditions
+        objects = [
+            tuple((r.span.start, r.span.end) for r in c.roles if r.role == "object")
+            for c in candidates
+        ]
+        if (
+            len(polarity) != 1
+            or len(predicates) != 1
+            or any(len(scopes) != 1 for scopes in objects)
+            or len({scope[0] for scope in objects}) != len(objects)
         ):
-            raise ValueError("Conditional branches are not proven as alternatives")
+            raise ValueError(
+                "Negative group does not prove common negated predicate and each object scope"
+            )
+    else:
+        conditions = [
+            tuple((r.span.start, r.span.end) for r in c.roles if r.role == "condition")
+            for c in candidates
+        ]
+        predicates = [
+            tuple((r.span.start, r.span.end) for r in c.roles if r.role == "predicate")
+            for c in candidates
+        ]
+        objects = [
+            tuple((r.span.start, r.span.end) for r in c.roles if r.role == "object")
+            for c in candidates
+        ]
+        if (
+            any(len(scopes) != 1 for scopes in conditions + predicates)
+            or any(len(scopes) > 1 for scopes in objects)
+            or len({scope[0] for scope in conditions}) != len(conditions)
+            or len({scope[0] for scope in predicates}) != len(predicates)
+            or len({scope[0] for scopes in objects for scope in scopes})
+            != sum(len(scopes) for scopes in objects)
+        ):
+            raise ValueError(
+                "Conditional clauses need distinct exact condition, predicate and object scopes"
+            )
     unit = plan.actions[0].units[0]
     target = unit.target
     if (
