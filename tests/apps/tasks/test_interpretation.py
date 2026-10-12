@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -10,18 +11,23 @@ import pytest
 from odyssey_apps.tasks import (
     OpenAITaskInterpreter,
     TaskActivityTarget,
+    TaskInheritedTemporalRole,
     TaskInterpretation,
     TaskInterpretationError,
     TaskOperation,
     TaskQueryScope,
     TaskRelationshipMention,
     TaskRelationshipRole,
+    TaskScopedEvidence,
+    TaskScopedInterpretation,
     TaskTemporalMention,
     TaskTemporalRole,
+    compose_scoped_task_domain_interpretation,
     compose_task_domain_interpretation,
     compose_work_session_activity_date,
     compose_work_session_times,
 )
+from odyssey_core.domain_interpretation import InheritedTemporalReference
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 
 
@@ -50,6 +56,23 @@ def evidence_map(domain):  # type: ignore[no-untyped-def]
     return {item.kind: item.value for item in domain.evidence}
 
 
+def scoped_evidence(source: str, *values: str) -> TaskScopedEvidence:
+    """Build bounded synthetic predecessor proof; original validation belongs to dispatch tests."""
+    original = "Hoy tengo que llamar. " + source
+    start = original.index("Hoy")
+    return TaskScopedEvidence(
+        source,
+        hashlib.sha256(original.encode()).hexdigest(),
+        1,
+        tuple(
+            InheritedTemporalReference(
+                "Hoy", value, start, start + 3, hashlib.sha256(original.encode()).hexdigest(), 0
+            )
+            for value in values
+        ),
+    )
+
+
 def test_create_composes_status_and_target_date_without_temporal_fact_authority() -> None:
     source = "Tengo que llamar al banco el viernes"
     task = TaskInterpretation(
@@ -66,6 +89,130 @@ def test_create_composes_status_and_target_date_without_temporal_fact_authority(
         "property.target_date": "2026-10-09",
     }
     assert not domain.temporal_references()
+
+
+def test_scoped_interpreter_selects_only_verified_reference_and_sends_bounded_wire_contract() -> (
+    None
+):
+    source = " y escribir el informe"
+    evidence = scoped_evidence(source, "2026-10-04")
+    output = {
+        "operation": "CREATE",
+        "temporal_mentions": [],
+        "relationship_mentions": [],
+        "clear_fields": [],
+        "query_scope": None,
+        "task_reference": "",
+        "activity_text": "",
+        "activity_target": "NONE",
+        "inherited_temporal_roles": [{"reference_index": 0, "role": "TARGET_DATE"}],
+    }
+    response = SimpleNamespace(status="completed", output_text=json.dumps(output))
+    calls = []
+
+    class Responses:
+        def create(self, **kwargs):  # type: ignore[no-untyped-def]
+            calls.append(kwargs)
+            return response
+
+    interpreted = OpenAITaskInterpreter(SimpleNamespace(responses=Responses())).interpret_scoped(
+        source, scoped_evidence=evidence
+    )
+    domain = compose_scoped_task_domain_interpretation(
+        interpreted, None, evidence, now="2026-10-04T12:00:00+02:00"
+    )
+    assert evidence_map(domain) == {
+        "property.status": "pending",
+        "property.target_date": "2026-10-04",
+    }
+    assert [(item.source_text, item.value) for item in domain.inherited_temporal] == [
+        ("Hoy", "2026-10-04")
+    ]
+    wire = calls[0]
+    assert wire["input"][1]["content"] == source
+    assert "Hoy" in wire["input"][0]["content"]
+    assert "llamar" not in wire["input"][0]["content"]
+    schema = wire["text"]["format"]["schema"]
+    assert wire["text"]["format"]["name"] == "odyssey_scoped_task_interpretation"
+    assert schema["additionalProperties"] is False
+    assert "inherited_temporal_roles" in schema["required"]
+
+
+@pytest.mark.parametrize(
+    "payload, match",
+    [
+        ({"reference_index": 1, "role": "TARGET_DATE"}, "unavailable"),
+        ({"reference_index": 0, "role": "WORK_SESSION_AT"}, "invalid"),
+    ],
+)
+def test_scoped_interpretation_rejects_forged_or_unsupported_reference_choice(
+    payload, match
+) -> None:  # type: ignore[no-untyped-def]
+    source = "escribir el informe"
+    evidence = scoped_evidence(source, "2026-10-04")
+    raw = {
+        "operation": "CREATE",
+        "temporal_mentions": [],
+        "relationship_mentions": [],
+        "clear_fields": [],
+        "query_scope": None,
+        "task_reference": "",
+        "activity_text": "",
+        "activity_target": "NONE",
+        "inherited_temporal_roles": [payload],
+    }
+    from odyssey_apps.tasks import parse_scoped_task_interpretation
+
+    with pytest.raises(TaskInterpretationError, match=match):
+        parse_scoped_task_interpretation(raw, source, evidence)
+
+
+def test_scoped_interpretation_fails_closed_for_duplicate_conflicting_or_imprecise_dates() -> None:
+    source = "escribir el informe hoy"
+    task = TaskInterpretation(
+        source,
+        TaskOperation.CREATE,
+        (TaskTemporalMention("hoy", TaskTemporalRole.TARGET_DATE),),
+    )
+    with pytest.raises(TaskInterpretationError, match="conflicts locally"):
+        TaskScopedInterpretation(
+            task, (TaskInheritedTemporalRole(0, TaskTemporalRole.TARGET_DATE),)
+        )
+    bare = TaskInterpretation("escribir el informe", TaskOperation.CREATE)
+    with pytest.raises(TaskInterpretationError, match="duplicate"):
+        TaskScopedInterpretation(
+            bare,
+            (
+                TaskInheritedTemporalRole(0, TaskTemporalRole.TARGET_DATE),
+                TaskInheritedTemporalRole(0, TaskTemporalRole.DEADLINE_AT),
+            ),
+        )
+    bare_evidence = scoped_evidence(bare.source_text, "2026-10-05T09:00:00+02:00")
+    with pytest.raises(TaskInterpretationError, match="exact date"):
+        compose_scoped_task_domain_interpretation(
+            TaskScopedInterpretation(
+                bare, (TaskInheritedTemporalRole(0, TaskTemporalRole.TARGET_DATE),)
+            ),
+            None,
+            bare_evidence,
+            now="2026-10-04T12:00:00+02:00",
+        )
+
+
+@pytest.mark.parametrize(
+    "operation",
+    (TaskOperation.START, TaskOperation.COMPLETE, TaskOperation.REOPEN, TaskOperation.CANCEL),
+)
+def test_scoped_temporal_role_cannot_mutate_task_schedule_during_lifecycle_transition(
+    operation: TaskOperation,
+) -> None:
+    source = "trabajar en el informe"
+    task = TaskInterpretation(source, operation)
+    with pytest.raises(TaskInterpretationError, match="cannot set inherited scheduling"):
+        TaskScopedInterpretation(
+            task,
+            (TaskInheritedTemporalRole(0, TaskTemporalRole.TARGET_DATE),),
+        )
 
 
 def test_deadline_preserves_date_only_and_exact_datetime_without_inventing_clock() -> None:

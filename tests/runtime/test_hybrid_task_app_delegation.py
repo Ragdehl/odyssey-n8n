@@ -16,12 +16,14 @@ import pytest
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
+    OpenAITaskInterpreter,
     TaskCorePlanner,
     TaskInterpretation,
     TaskLifecycleGuard,
     TaskOperation,
     TaskScopedEvidence,
     TaskScopedExecution,
+    compose_scoped_task_domain_interpretation,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
 from odyssey_core.notes import parse_note, validate_note
@@ -239,6 +241,7 @@ def test_scoped_task_executor_reuses_verified_date_without_predecessor_task_writ
         def execute_scoped(self, fragment, locator, _actor, _prior, *, scoped_evidence):
             nonlocal created
             seen.append(fragment)
+            task = TaskInterpretation(fragment, TaskOperation.CREATE)
             if fragment == "Hoy tengo que llamar a Ana":
                 date, temporal = "2026-10-04", _source_temporal(fragment)
             elif fragment == " y escribir a Luis":
@@ -249,14 +252,31 @@ def test_scoped_task_executor_reuses_verified_date_without_predecessor_task_writ
                     ("modality", "tengo que")
                 ]
                 assert "Hoy" not in fragment and "tengo que" not in fragment
-                date, temporal = "2026-10-04", None
+                response = SimpleNamespace(
+                    status="completed",
+                    output_text=(
+                        '{"operation":"CREATE","temporal_mentions":[],"relationship_mentions":[],'
+                        '"clear_fields":[],"query_scope":null,"task_reference":"",'
+                        '"activity_text":"","activity_target":"NONE",'
+                        '"inherited_temporal_roles":[{"reference_index":0,"role":"TARGET_DATE"}]}'
+                    ),
+                )
+                task = OpenAITaskInterpreter(
+                    SimpleNamespace(responses=SimpleNamespace(create=lambda **_kwargs: response))
+                ).interpret_scoped(fragment, scoped_evidence=scoped_evidence)
+                domain = compose_scoped_task_domain_interpretation(
+                    task, None, scoped_evidence, now=NOW
+                )
+                date = next(
+                    item.value for item in domain.evidence if item.kind == "property.target_date"
+                )
+                temporal = None
             else:
                 assert fragment == "; mañana preparar la factura."
                 date = "2026-10-05"
                 temporal = parse_temporal_interpretation(
                     {"mentions": [_exact_date("mañana", date)]}, fragment, timezone="Europe/Paris"
                 )
-            task = TaskInterpretation(fragment, TaskOperation.CREATE)
             planner = TaskCorePlanner(
                 SimpleNamespace(
                     plan=lambda _request, _context=(): task_plan(
@@ -264,7 +284,7 @@ def test_scoped_task_executor_reuses_verified_date_without_predecessor_task_writ
                     ),
                     is_local_replay=True,
                 ),
-                task,
+                task.task if hasattr(task, "task") else task,
             )
             created += 1
             result = execute_request(
@@ -281,7 +301,9 @@ def test_scoped_task_executor_reuses_verified_date_without_predecessor_task_writ
                 context_limit=5,
                 request_id_factory=lambda: locator,
                 preflight_id_allocator=lambda: f"scoped-task-{created}",
-                write_preflight_guard=TaskLifecycleGuard(task.operation),
+                write_preflight_guard=TaskLifecycleGuard(
+                    task.task.operation if hasattr(task, "task") else task.operation
+                ),
             )
             return TaskScopedExecution(result, temporal)
 

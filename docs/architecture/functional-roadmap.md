@@ -180,10 +180,21 @@ date, the independent route stays `NEEDS_ATTENTION` instead of guessing it.
 Frozen third-route real GPT-6/GPT-5.6 reply/readback remains unchanged.
 **F22 stays PARTIAL**, because no real model-based Tasks interpretation and
 Core planner/reviewer acceptance exists for its first two intents. The
-existing TaskInterpretation provider schema does not yet represent choosing
-a nonlocal inherited temporal role. That requires a separately reviewed
-model-facing contract, adversarial evidence and focused live gate before
-activation. DEV/PROD, n8n, personal vaults, and model settings remain untouched.
+ordinary `TaskInterpretation` provider schema and frozen responses remain
+unchanged. An additional opt-in `interpret_scoped` contract now permits a
+model to choose only `{reference_index, role}` from a bounded verified
+Temporal list; it cannot send a date, copy external wording as a local
+mention, select Work Session semantics, choose identity, or mutate. The
+sidecar is parsed fail-closed for exact fields, bounds, duplicates, local
+set/clear conflicts and exact date/date-time compatibility. Its mapper emits
+current-fragment property evidence plus exactly the selected inherited
+references, so Core retains planning and lifecycle authority. Deterministic
+strict-provider tests capture the on-wire prompt/schema and a full synthetic
+three-Task Markdown replay now exercises the second fragment through that
+selection. This is **not fresh provider evidence** and does not alter the
+27-case score. A focused live gate, adversarial evidence and Core review are
+still required before any activation. DEV/PROD, n8n, personal vaults, and
+model settings remain untouched.
 
 **NEXT ORDER:** (1) obtain a new Router prompt gate before relying on new
 standalone-negative proposals beyond deterministic source fixtures;

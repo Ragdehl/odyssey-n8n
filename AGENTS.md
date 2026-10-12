@@ -182,6 +182,23 @@ two source tasks pending. This is **NOT** three-task F22 success,
 nor DEV/PROD app integration. Approx cumulative authorized-test spend
 USD **0.3356791 of USD 0.50** (estimate).
 
+**Scoped Tasks interpreter checkpoint (2026-10-12):** The opt-in Tasks
+surface now has a separate `interpret_scoped` contract for a route holding
+trusted `TaskScopedEvidence`. It preserves the ordinary legacy
+interpretation schema, parser, prompt and frozen responses unchanged. The
+new strict schema adds only bounded `{reference_index, role}` selections over
+the passed exact Temporal references; the model cannot propose a date, turn
+external text into a local mention, select a Work Session operation, choose a
+Task identity or mutate. Parsing/composition reject unknown/out-of-range or
+duplicate selections, local set/clear conflicts, unsupported roles and exact
+date/date-time incompatibility. A sidecar maps selected proof to
+current-fragment Task property evidence plus exactly the selected inherited
+references for Core. Strict fake-provider wire tests and a three-Task
+synthetic Markdown replay exercise this path; **no new provider call was
+made**, the whole F22 case remains PARTIAL, and the 27-message score is
+unchanged. A focused live Tasks gate remains required before claiming model
+acceptance or considering DEV/PROD activation.
+
 **Further opt-in implementation checkpoint (2026-10-12):** F19 now has
 `odyssey_core/candidate_corrected_plan.py`: the first occurrence is
 source-proven superseded, and only the replacement FUTURE INTENTION may
