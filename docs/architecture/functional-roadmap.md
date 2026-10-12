@@ -104,10 +104,31 @@ executor fails closed. No real-model hybrid Tasks integration was claimed.
 Mixed F25 property+repair descriptions are not automatically Task creates.
 The source compiler defaults to the previous route contract.
 
-**NEXT ORDER:** (1) design specialized negative-statement/conditional
-semantic storage without inventing completed occurrences or violating
-singular canonical identity rules; (2) validate live GPT-6 Tasks route
-interpretation and bounded shared-modality/date evidence for F22;
+**Latest validated checkpoint (2026-10-12, opt-in branch only):**
+F17 and F20 are now **completed** in *new* fresh GPT-6/5.6 tests:
+a joint negative or mutually exclusive conditional is persisted as
+**one source-identical literal sentence** on the Temporal-certified
+Day Note, not as two real occurrences. An independent N:1 Core graph
+reviewer must account for both source candidates; the special
+prewrite gate rejects altered polarity, altered condition, added
+identities and wrong Day targets. New actual model captures in
+`hybrid_sensitive_literal_v1/` are replayable and do **not**
+overwrite the initial fail-closed F17/F20 receipts.
+
+For F22, the **third** task `mañana preparar la factura` now has a
+separate fresh-model GPT-6 Tasks + GPT-6 Temporal + GPT-5.6 Core
+successful CREATE: one `task` Note with `pending` status and proven
+target date, with physical synthetic Markdown. Saved output under
+`hybrid_tasks_v1/F22-last.json`. The hybrid dispatcher replay
+reuses those real outputs and leaves F22's first two task fragments
+pending; the whole original F22 case has **NOT** been completed.
+No change to app deployment, task schema or human Notes.
+Estimated cumulative model experiment spend: USD 0.3356791 / 0.50.
+
+**NEXT ORDER:** (1) extend the validated literal-statement scopes beyond
+the narrow two-candidate F17/F20 shapes without inventing events or links;
+(2) resolve F18 independent negative/positive semantics and the remaining
+F22 task intents with verified cross-group modality/date ownership;
 (3) expand mixed-polarity F18 and ambiguous F14/F27 with canonical proof,
 regression across all 27 original cases, and adversarial readback;
 (4) review quality/cost and request separate approval before DEV/PROD.

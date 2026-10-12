@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "case_id": "F22-task-last",
+  "source_sha256": "a2d3d980cc298eaec345aaf41c0a347df4630576595ac011e48acc950db72db0",
+  "source": "; mañana preparar la factura.",
+  "task_operation": "CREATE",
+  "task_temporal_mentions": [
+    {
+      "text": "mañana",
+      "role": "TARGET_DATE"
+    }
+  ],
+  "historical_application_status": "completed",
+  "historical_created_task": {
+    "file": "preparar la factura - f22-real-task-unique.md",
+    "type": "task",
+    "status": "pending",
+    "target_date": "2026-10-05",
+    "content": "# Added [[calendar/days/2026-10-04|04-10-2026]]\n- preparar la factura.\n  <!-- odyssey:fact request=hybrid-real-F22-last-task ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 -->"
+  },
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"operation\":\"CREATE\",\"temporal_mentions\":[{\"text\":\"mañana\",\"role\":\"TARGET_DATE\"}],\"relationship_mentions\":[],\"clear_fields\":[],\"query_scope\":null,\"task_reference\":\"\",\"activity_text\":\"\",\"activity_target\":\"NONE\"}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"preparar la factura\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"task\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[],\"properties\":[{\"field\":\"status\",\"op\":\"set\",\"value\":\"pending\"},{\"field\":\"target_date\",\"op\":\"set\",\"value\":\"2026-10-05\"}],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    }
+  ],
+  "estimated_new_usd": 0.0031228,
+  "mode": "Fresh GPT-6 Tasks + GPT-6 Temporal + GPT-5.6 Core for F22 last independent route, disposable synthetic Note, earlier routes not tested"
+}

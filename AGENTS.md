@@ -151,6 +151,37 @@ retains its historical behaviour. F25 repair-need must not silently
 become a Task. **No broad task, negation, correction or conditional
 write capability is claimed by these safety tests.**
 
+**Latest source-preserving sensitive-scope checkpoint (2026-10-12):**
+The EARLIER F17/F20 NEEDS_ATTENTION results in
+`hybrid_sensitive_v1/` are historical. After implementing the typed
+`verified_sensitive_temporal` gate and the strict
+`candidate_sensitive_statement.py` whole-source validator, F17
+(shared negation) and F20 (mutually exclusive weather conditions) now
+both **COMPLETED** with fresh genuine GPT-6 Temporal, GPT-5.6 Core and
+independent graph reviewer. The Writer read back **one EXACT original
+literal statement per Day Note**, with no inferred occurrence, guessed
+person link, condition deletion, or extra fact. Real outputs frozen in
+`benchmarks/application_router/hybrid_sensitive_literal_v1/`; replay
+without new provider calls in
+`tests/runtime/test_hybrid_sensitive_literal_real_replay.py`.
+This supports only **two-candidate same-Day positive-source-form
+literal statements** preserving their original negation/condition,
+NOT arbitrary counterfactuals, event creation or confirmed visits.
+F18 (one negative plus one positive in independent groups) is still
+pending subject/date evidence.
+
+A separate fresh GPT-6 Tasks + GPT-6 Temporal + GPT-5.6 Core probe of
+F22's **THIRD FRAGMENT ONLY**, `mañana preparar la factura`, created
+one real Tasks Note on a disposable vault: `type: task`,
+`status: pending`, target_date `2026-10-05` per fixture clock,
+through the actual Tasks Core Planner and TaskLifecycleGuard. Its
+immutable provider results live in
+`benchmarks/application_router/hybrid_tasks_v1/F22-last.json`; a
+hybrid dispatcher end-to-end replay deliberately leaves the other
+two source tasks pending. This is **NOT** three-task F22 success,
+nor DEV/PROD app integration. Approx cumulative authorized-test spend
+USD **0.3356791 of USD 0.50** (estimate).
+
 **Further opt-in implementation checkpoint (2026-10-12):** F19 now has
 `odyssey_core/candidate_corrected_plan.py`: the first occurrence is
 source-proven superseded, and only the replacement FUTURE INTENTION may

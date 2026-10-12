@@ -333,3 +333,44 @@ Siguen abiertos los contratos de negaciones F17/F18, condiciones F20,
 el extremo a extremo real del interprete Tasks con fechas/modalidades
 heredadas, y la ambiguedad F14/F27. La evidencia de F19 no los autoriza.
 Presupuesto estimado acumulado: USD 0.3263055 de USD 0.50 autorizados.
+
+
+## 2026-10-12: Literal shared-negation/conditional statement — independently verified
+
+**Feature branch only, still not DEV/PROD.** Following the earlier original
+F17/F20 fail-closed model attempts, an opt-in `verified_sensitive_temporal`
+context was added for exactly two source-grounded candidates sharing one
+negative predicate (F17) or two complementary explicit conditions (F20).
+The bounded `candidate_sensitive_statement.py` checks the ENTIRE exact
+original sentence, original role spans, complete one-fact/two-candidate
+coverage, a single canonical Day destination proven by Temporal, and no
+canonical references, new entities, changes of polarity, dropped clauses,
+extra event claims or hidden mutations. The group reviewer must attribute
+**both candidates to the SAME fact**. The approved write is an
+**informational literal statement**, not a completed occurrence, calendar
+event or a claim that either conditional branch happened. The original
+source text remains unchanged within the Day Note.
+
+Fresh GPT-6 Temporal + GPT-5.6 Planner/independent graph-reviewer calls
+for both F17 and F20 **COMPLETED** on disposable synthetic Markdown with
+one physically verified source-identical statement each. Freeze and
+replay from `benchmarks/application_router/hybrid_sensitive_literal_v1/`
+and `tests/runtime/test_hybrid_sensitive_literal_real_replay.py`.
+The old `hybrid_sensitive_v1/` NEEDS_ATTENTION receipts remain valid
+historical observations. F18's separated affirmative/negative person
+claims and ambiguous canonical links remain unresolved; do not promote
+them by the literal group exception.
+
+**Real Tasks model gate (F22 third route only):** an opt-in GPT-6 Tasks
+interpreter selected `CREATE`, GPT-6 Temporal resolved `mañana` to
+the fixture's 2026-10-05, and GPT-5.6 Core with existing TaskCorePlanner
+and TaskLifecycleGuard created one actual Task Note with
+`type: task`, `status: pending` and `target_date: 2026-10-05`.
+The receipt `benchmarks/application_router/hybrid_tasks_v1/F22-last.json`
+is reused in a provider-free three-route hybrid dispatcher replay:
+**first two tasks stay pending**, third succeeds. No false Day fact,
+no claim of a fully completed F22, no deployment.
+
+Accumulated **estimated** API spend at this checkpoint:
+USD **0.3356791 of the 0.50 approved**. No new DEV/PROD routes, real
+personal Notes, schema, or Core model migration were made.

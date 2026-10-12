@@ -468,6 +468,24 @@ def render_luna_experimental_prompt(
                 "renders the reference. Never mention the cancelled "
                 "clock; if evidence is insufficient, ESCALATE."
             )
+        if (
+            candidate_context is not None
+            and candidate_context.verified_sensitive_temporal is not None
+        ):
+            semantic_dynamic += (
+                "\nSPECIAL verified grouped literal statement: this source has "
+                "a shared NEGATION or mutually exclusive CONDITIONS. Never "
+                "report a negated or conditional occurrence as an event that "
+                "happened. If you can record the source as ONE informational "
+                "statement, select ONLY the exact Temporal-certified "
+                "calendar_day Note, and write exactly the original source "
+                "wording, retaining all polarity/conditions and names as "
+                "literal text; NO identity references, new entities, "
+                "properties, or multiple facts. Carry the precise "
+                "Temporal date as that fact's date anchor. The independent "
+                "Core reviewer must map both source candidates to the SAME "
+                "single fact. Otherwise ESCALATE instead of guessing."
+            )
         # Opt-in hybrid groups may have ONE exact postposed clock phrase
         # shared by several distinct exact days. Never build a made-up
         # concatenation of nonadjacent date and clock words as a source part.

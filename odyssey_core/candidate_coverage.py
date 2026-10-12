@@ -235,13 +235,22 @@ def validate_candidate_coverage_manifest(
             and index == len(context.candidates) - 1
             and any(role.role == "replacement" for role in candidate.roles)
         )
+        sensitive_literal = (
+            context.hybrid_interpretation_mode
+            and context.verified_sensitive_temporal is not None
+            and len(context.candidates) == 2
+        )
         if (
-            candidate.kind in {"conditional", "negative"}
-            or any(
-                role.role in {"condition", "polarity", "replacement", "modality"}
-                for role in candidate.roles
+            (
+                candidate.kind in {"conditional", "negative"}
+                or any(
+                    role.role in {"condition", "polarity", "replacement", "modality"}
+                    for role in candidate.roles
+                )
             )
-        ) and not correction_final:
+            and not correction_final
+            and not sensitive_literal
+        ):
             raise ValueError("Sensitive scoped fact requires specialized semantic coverage proof")
         if graph_mode:
             if (
@@ -295,6 +304,10 @@ def validate_candidate_coverage_manifest(
         lexical = original
         for ref_index, ref in enumerate(unit.references):
             lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+        if context.verified_sensitive_temporal is not None:
+            from .candidate_sensitive_statement import validate_sensitive_group_statement
+
+            validate_sensitive_group_statement(source, context, plan, claims)
         if context.verified_correction_temporal is not None:
             from .candidate_corrected_plan import validate_corrected_plan_fact
 
@@ -347,7 +360,9 @@ def validate_candidate_coverage_manifest(
             from .candidate_group_participants import validate_group_participant_literal
 
             validate_group_participant_literal(source, context, index, unit, lexical)
-        if context.verified_group_temporal is not None:
+        if context.verified_sensitive_temporal is not None:
+            pass  # Whole-source literal has its own strict 1-fact/2-candidate validator.
+        elif context.verified_group_temporal is not None:
             from .candidate_grouped_temporal import validate_grouped_dated_occurrence
 
             # The weekday is carried by the independently selected Day Note,

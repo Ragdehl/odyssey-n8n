@@ -345,6 +345,21 @@ def execute_candidate_routed_message(
             and domain is not None
         ):
             route_context = replace(route_context, verified_correction_temporal=domain)
+        if (
+            route_context.hybrid_interpretation_mode
+            and len(route_context.candidates) == 2
+            and domain is not None
+            and (
+                all(
+                    c.kind == "negative" and any(r.role == "polarity" for r in c.roles)
+                    for c in route_context.candidates
+                )
+                or all(
+                    any(r.role == "condition" for r in c.roles) for c in route_context.candidates
+                )
+            )
+        ):
+            route_context = replace(route_context, verified_sensitive_temporal=domain)
         route_context.validate(unit_source)
         from odyssey_core.scoped_event_evidence import CoreInheritedEventWriteGuard
         from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard

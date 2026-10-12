@@ -35,6 +35,16 @@ MAX_ATTRIBUTION_INPUT_BYTES = 24_576
 MAX_ATTRIBUTION_OUTPUT_TOKENS = 3072
 
 
+def _reviewable_sensitive_literal(context: CoreCandidateContext) -> bool:
+    """Typed group source allows N:1 *review*, never a source-free write."""
+    return (
+        context.hybrid_interpretation_mode
+        and context.verified_sensitive_temporal is not None
+        and len(context.candidates) == 2
+        and all(c.state == "candidate" for c in context.candidates)
+    )
+
+
 def _reviewable_final_correction(context: CoreCandidateContext, position: int) -> bool:
     """Only the final candidate of a typed, exact-source two-part correction.
 
@@ -289,7 +299,10 @@ def validate_candidate_attribution(
                     role.role in {"condition", "polarity", "replacement", "modality"}
                     for role in candidate.roles
                 )
-            ) and not _reviewable_final_correction(context, position):
+            ) and not (
+                _reviewable_final_correction(context, position)
+                or _reviewable_sensitive_literal(context)
+            ):
                 raise CandidateAttributionError(
                     "Sensitive source requires dedicated semantic review"
                 )
@@ -692,6 +705,7 @@ def inspect_candidate_fact_graph(
                     )
                 )
                 and not _reviewable_final_correction(context, position)
+                and not _reviewable_sensitive_literal(context)
             ):
                 raise CandidateAttributionError(
                     "Sensitive or ambiguous meaning requires a separate Core semantic review"

@@ -245,6 +245,7 @@ class CoreCandidateContext:
     scoped_route_source: bool = False
     verified_group_temporal: DomainInterpretation | None = None
     verified_correction_temporal: DomainInterpretation | None = None
+    verified_sensitive_temporal: DomainInterpretation | None = None
     hybrid_interpretation_mode: bool = False
 
     def validate(self, requested_source: str) -> None:
@@ -327,6 +328,23 @@ class CoreCandidateContext:
             )
         ):
             raise ValueError("Corrected-plan Temporal proof is not bound to this source")
+        if self.verified_sensitive_temporal is not None and (
+            not self.hybrid_interpretation_mode
+            or len(self.candidates) != 2
+            or any(c.state != "candidate" for c in self.candidates)
+            or not isinstance(self.verified_sensitive_temporal, DomainInterpretation)
+            or self.verified_sensitive_temporal.capability_id != "temporal"
+            or self.verified_sensitive_temporal.intent != "TEMPORAL_RESOLUTION"
+            or self.verified_sensitive_temporal.source_text != self.source
+            or not (
+                all(
+                    c.kind == "negative" and any(r.role == "polarity" for r in c.roles)
+                    for c in self.candidates
+                )
+                or all(any(r.role == "condition" for r in c.roles) for c in self.candidates)
+            )
+        ):
+            raise ValueError("Sensitive grouped Temporal proof is not bound to original source")
         if len(self.prompt_payload_bytes()) > MAX_CORE_CANDIDATE_CONTEXT_BYTES:
             raise ValueError("Core candidate context is oversized")
 
