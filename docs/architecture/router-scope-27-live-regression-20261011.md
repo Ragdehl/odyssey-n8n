@@ -1,5 +1,18 @@
 # Odyssey — Router scope: 25 remaining real-model regressions (2026-10-11)
 
+**HISTORICAL EVIDENCE — policy updated 2026-10-12.** This document
+faithfully records an earlier **strict per-fragment** architecture and
+its then-correct contradiction with excessive whole-message grouping.
+The user subsequently approved the different
+[hybrid interpretation-group contract](router-hybrid-interpretation-contract.md)
+([ADR 0010](../decisions/0010-router-hybrid-interpretation-groups.md)):
+grouping linguistically interdependent candidates is now **desired**,
+while unrelated facts must remain independently executable. Do not apply
+the old "split every independently writable fact into a different Core
+request" requirement as a current invariant. Keep historical measured
+failures and provider receipts unchanged.
+
+
 **Status:** experimental branch-only evidence. **NOT** a DEV/PROD rollout,
 nor semantic correctness certification. No actual personal user Notes were
 accessed; every attempt used its own clone of the committed 13-note synthetic

@@ -1,5 +1,17 @@
 # Router bounded parallel interpretation — DEV phase (2026-10)
 
+**COMPATIBILITY NOTE — 2026-10-12:** The human-approved
+[hybrid interpretation target](router-hybrid-interpretation-contract.md)
+changes the future preparation *unit* from "one candidate/route per
+atomic fact" to a bounded **interpretation group**. Only **independent
+groups** may be prepared concurrently; linked candidates inside one
+group must share one interpretation. Existing v0 DEV parallel-route
+optimization and the milestones below describe **earlier actual code**
+and are NOT proof that hybrid grouping is implemented, race-free or
+deployed. Preserve serialized Core/Writer mutation and time/canonical
+freshness gates when the new grouping is introduced.
+
+
 ## Architecture challenge: PROCEED with a bounded first slice
 
 Observed example: `Hoy tengo que ir al cine y mañana ire al teatro` was correctly split into

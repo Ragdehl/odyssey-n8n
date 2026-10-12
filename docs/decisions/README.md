@@ -18,3 +18,4 @@ When an ADR adds real value, it should state the context, decision, alternatives
 - [0007: Phase 14 request planning boundary](0007-phase-14-request-planning.md)
 - [0008: Phase 14 v3 planner tag interpretation](0008-phase-14-v3-planner-tags.md)
 - [0009: Phase 15 semantic write-planning boundary](0009-phase-15-semantic-write-planning.md)
+- [0010: Router hybrid interpretation groups — accepted target](0010-router-hybrid-interpretation-groups.md)

@@ -1,5 +1,17 @@
 # Router dependent-route continuity — October 2026
 
+**TARGET PRECEDENCE — 2026-10-12:** The new
+[hybrid interpretation contract](router-hybrid-interpretation-contract.md)
+makes Core-verified dependent handoffs a **between-group** mechanism.
+Anaphora, shared source roles or common clocks may instead be resolved
+*inside one source-grounded interpretation group* without fabricating a
+preceding persisted fact. Existing v0 route-level dependency schema,
+DEV experiments and historical test outcomes below remain descriptions
+of their implementation, **not** a mandate to split every related
+assertion into a separate Core request. Canonical ambiguity and stale
+reference guards are unchanged.
+
+
 Status: **DEV implementation in progress. No activation until verified.**
 
 **Current-contract clarification (2026-10-11):** the early milestones below

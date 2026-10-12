@@ -1,5 +1,14 @@
 # Temporal Foundation v1 — shared date/time contract
 
+**Scope/precedence (2026-10-12):** This historical foundation specifies
+the reusable normalized Temporal shapes and early app-boundary ownership.
+Its original example of one application interpreting time inside its own
+planner is **not** a prohibition against the approved future
+[Router hybrid interpretation groups](router-hybrid-interpretation-contract.md),
+where dated groups invoke a bounded Temporal interpretation before the
+ordinary Core Planner. The hybrid design is approved but not yet active;
+all exact-date/timezone and fail-closed rules below remain applicable.
+
 Status: **approved and provider-free complete before Tasks; Calendar prompt/provider schema remain byte-identical, no live model gate is reopened, and no deployment is implied**.
 
 ## Objective

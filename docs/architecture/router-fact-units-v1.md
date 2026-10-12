@@ -1,5 +1,19 @@
 # Router fact-candidate units v1 — design contract (not active)
 
+**LATEST AUTHORITY — 2026-10-12:** [Hybrid interpretation
+contract](router-hybrid-interpretation-contract.md) and
+[ADR 0010](../decisions/0010-router-hybrid-interpretation-groups.md)
+supersede all earlier checkpoint commands to interpret every atomic
+candidate in its own Temporal/Core call. **Atomic candidate extraction
+remains required**, but semantically interdependent candidates may be
+interpreted together as one exact-original-source group, yielding
+separate fact/write decisions. This file is an **append-only history of
+research, older design decisions and regression receipts**, not an
+alternative current normative architecture. The older 2026-10-11
+"ARCHITECTURAL CORRECTION" immediately below is itself superseded.
+The inactive prototypes and DEV/PROD are not automatically migrated.
+
+
 
 > **ARCHITECTURAL CORRECTION — 2026-10-11:** The approved dispatch
 > contract is **Router splits into scoped units → Temporal (only when
@@ -14,7 +28,9 @@
 > Existing candidate→fact N:M safety, pending-state and canonical identity
 > guards must be preserved when replacing the experimental handoff.
 
-Status: **BLOCK 1 / PROPOSED SEMANTIC CONTRACT — awaiting human design review.** Block 2 checkpoint storage remains optional and inactive. Block 3 has a frontend-only diagnostic preparation: it can render already-validated v1 route evidence, an explicitly supplied source-free checkpoint snapshot, and a local test-only candidate preview. It adds no prompt, runtime, note schema, provider call, n8n/browser transport, deployment, or canonical data change. Historical Router v0 behavior and its frozen evidence are unchanged.
+Historical status (when written): **BLOCK 1 / PROPOSED SEMANTIC CONTRACT — awaiting the original design review.**
+This old status is not the current decision: ADR 0010 now accepts hybrid
+interpretation groups as the objective, with implementation still pending. Block 2 checkpoint storage remains optional and inactive. Block 3 has a frontend-only diagnostic preparation: it can render already-validated v1 route evidence, an explicitly supplied source-free checkpoint snapshot, and a local test-only candidate preview. It adds no prompt, runtime, note schema, provider call, n8n/browser transport, deployment, or canonical data change. Historical Router v0 behavior and its frozen evidence are unchanged.
 
 ## User outcome and objective
 

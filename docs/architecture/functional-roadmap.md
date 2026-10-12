@@ -24,26 +24,43 @@ Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATE
 
 Canonical/historical detail remains in the phase documents under this directory and in [Architecture Decisions](../decisions/README.md). The [Architecture Overview](overview.md) describes the current composed system without replaying this history.
 
-## Restored Router per-unit dispatch — user decision (2026-10-11)
+## ➡️ Next: Router hybrid interpretation groups — accepted target (2026-10-12)
 
-**Router splits the message and dispatches scoped units; Temporal and the
-ordinary Core Planner MUST NOT receive the complete current message as a
-replacement for those units.** Runtime may keep the original source in a
-read-only validation context. An explicit dependent reference waits until the
-preceding Core unit has produced uniquely verified, current canonical
-reference evidence. Source-role inheritance (a shared date, predicate, or
-subject) is distinct from this result dependency. Independent routes may
-complete despite an unresolved dependent unit. See
-[Router unit dispatch and dependency handoff](router-unit-dispatch-contract.md)
-and [dependent-route continuity](router-dependent-route-continuity.md).
+**Human-approved direction, NOT an active implementation.** See the
+[authoritative hybrid contract](router-hybrid-interpretation-contract.md) and
+[ADR 0010](../decisions/0010-router-hybrid-interpretation-groups.md).
+This explicitly supersedes the 2026-10-11 mandate that every atomic
+candidate be interpreted in a separate Core call. Router still extracts
+source-grounded **atomic candidates**; a compiler groups **semantically
+interdependent** candidates into exact-source interpretation groups.
+Temporal interprets relevant group dates/times; ordinary Core GPT-5.6
+plans zero or more **individually owned facts** from each group; a separate
+Core reviewer and the canonical Writer must validate each fact and
+account for all source candidates, including pending ones. Independent
+topics remain separate groups. Cross-group verified reference, temporal
+and event handoffs remain available as a safe fallback. A whole message
+containing unrelated topics must NOT become one new Core request.
 
-The experimental `odyssey_runtime/complete_source_handoff.py` and its 27
-real-model source-level results are **historical evidence for a different,
-incorrect integration**, not the approved per-unit implementation. The
-per-unit reconstruction must precede further live gates or DEV activation;
-keep existing Core GPT-5.6 model and canonical mutation guards. This section
-supersedes all later historical full-source integration claims in this
-roadmap without deleting their regression observations.
+**Evidence, not deployment:** five fresh grouped Temporal/Core tests with
+authentic stored Router outputs, performed on disposable Markdown Notes,
+yielded **F04/F16 fully completed**, **F03/F23 Core pending**, **F21 Temporal
+unresolved**. The pilot was therefore **2/5 complete** and demonstrates
+why F03 group identity, F23 grouped-reference coverage and F21 shared
+Monday/Wednesday clock ownership are concrete next implementation gaps.
+It does not authorize weakening canonical/negative/conditional checks or
+claiming all 27 source examples pass. Historical route-local experiments
+and the frozen real-model receipts remain regression evidence, not the
+current target's grouping instructions.
+
+**NEXT ORDER:** (1) audit/align documentation and ADR precedence (this
+stage); (2) implement a small bounded grouping compiler reusing the
+existing Router candidate/role contract, retain the strict atomic path
+as fallback and prove per-candidate coverage; (3) repair F03/F21/F23
+with tests plus F06/F13/F22 independent-group controls and F14/F27
+ambiguity; (4) run 27-case deterministic/full suite and focused genuine
+model checks; (5) explicitly review promotion to DEV, later PROD.
+No code or DEV/PROD activation follows automatically from this decision.
+Core remains GPT-5.6 until the separately approved model migration.
 
 ## Deferred model consolidation — user decision (2026-10-10)
 
@@ -71,7 +88,16 @@ to sequential, with the preparation enabled only in isolated DEV. Do not confuse
 concurrent Core *model planning* with parallel Core *execution*, and do not claim
 measured latency savings from deterministic concurrence tests alone.
 
-## Planned Router fact-candidate segmentation — design review
+## Historical Router fact-candidate development log (superseded grouping policy)
+
+**Precedence:** the 2026-10-12 [hybrid target](router-hybrid-interpretation-contract.md)
+in the NEXT section above supersedes any older "one Core interpretation per
+atomic candidate" instructions in the dated entries below. These entries
+remain valuable evidence of actual implementation progress, provider
+experiments and safety gates; they do **not** set the current target grouping
+algorithm or imply hybrid DEV/PROD activation.
+
+
 
 [Router fact-candidate units v1](router-fact-units-v1.md) records the user-reviewed direction for independent atomic candidate assertions, typed source-context inheritance, and separation from Core-owned persistence. Its 22 user-agreed plus four additional generic-subject future oracles are not a live Router contract, and the current `dev` Router v0 remains unchanged. Frontend Block 3 preparation now makes existing validated v1 route evidence legible, provides an optional read-only renderer for the inactive bounded checkpoint shape, and supplies a local test-only candidate preview; none crosses a product transport or grants write/identity authority. The approved partial-write direction retains validated independent facts while ambiguity remains pending with targeted clarification, not blanket abort. Diagnostic checkpoints/graph come before any v1 provider/runtime activation; product choices about partial writes and conditional/negative persistence remain open.
 

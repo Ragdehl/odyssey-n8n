@@ -1,5 +1,18 @@
 # Application Boundary + Router v0
 
+**TARGET VS CURRENT IMPLEMENTATION — 2026-10-12:** This document
+continues to describe existing Router **v0** and its historical exact
+route-partition/Calendar experiments. Its v0 capability contracts remain
+implemented evidence. The **approved future candidate Router** instead
+extracts atomic source candidates, then sends bounded
+[hybrid interpretation groups](router-hybrid-interpretation-contract.md)
+([ADR 0010](../decisions/0010-router-hybrid-interpretation-groups.md))
+to Temporal/Core. Historical rules requiring an exact partition into
+*self-contained v0 routes*, or treating `Hoy vi a Ana y compré pan` as
+one indivisible group, must NOT override the hybrid target. This does
+not enable the prototype or alter currently active DEV/PROD routing.
+
+
 Status: **approved architecture contract; current conversational flow is Router -> built-in Temporal when needed -> Core, with Calendar retained as presentation/query UI rather than a chat routing owner. Historical Calendar-planner sections below document superseded validation work.**
 
 ## Current simplification (supersedes Calendar chat routing)

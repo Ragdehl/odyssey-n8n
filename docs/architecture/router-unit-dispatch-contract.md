@@ -1,7 +1,22 @@
 # Router → route-local Temporal/Core dispatch and dependency handoff
 
-Status: **restored user-approved architecture contract, 2026-10-11**.
-This is architectural guidance, **not** a claim that the inactive fact-candidate
+**SUPERSEDED TARGET CONTRACT — 2026-10-12.** The human approved
+[hybrid interpretation groups](router-hybrid-interpretation-contract.md)
+([ADR 0010](../decisions/0010-router-hybrid-interpretation-groups.md)).
+This 2026-10-11 route-local/per-candidate design is preserved as
+**historical experimental evidence and a cross-group dependency fallback**,
+not the current grouping rule. Its repeated instructions to run one Core
+interpretation per independently writable candidate, and to group only
+one indivisible event, are **NOT NORMATIVE**. Keep exact source provenance,
+typed between-group evidence, independent Core authority and guarded
+Markdown writes. The historical benchmark outcomes and API spend below
+are immutable observations, not claims that the hybrid target is deployed.
+
+
+Historical status at 2026-10-11: **then approved, now superseded
+as the target grouping architecture by the 2026-10-12 hybrid decision**.
+The following is preserved as evidence and compatibility guidance, **not**
+a competing normative target. It is **not** a claim that the inactive fact-candidate
 prototype is correctly connected or that the active DEV route is changed.
 The older per-route behavior remains in `odyssey_apps/router.py`,
 `odyssey_runtime/routing.py`, and

@@ -2,6 +2,20 @@
 
 This document describes the **current system shape and authority boundaries**. Historical phase contracts, model-selection evidence, and implementation experiments live in phase documents, ADRs, and benchmarks; they are not repeated here.
 
+## Approved future Router target (not currently deployed)
+
+For work on the next Router/Temporal/Core route design, follow
+[hybrid interpretation groups](router-hybrid-interpretation-contract.md),
+accepted by the human on 2026-10-12 and recorded in
+[ADR 0010](../decisions/0010-router-hybrid-interpretation-groups.md).
+Router extracts atomic source candidates; semantically interdependent
+candidates share an interpretation group; Core validates and writes
+**distinct facts** from it. Independent activities stay in separate
+groups. The previous strict per-fragment experiments and the active
+v0 implementation are **not** to be confused with this approved target.
+Canonical Markdown, identity and Writer authority below are unchanged;
+the target is **not implemented or activated** by documentation changes.
+
 ## System shape
 
 ```text

@@ -13,6 +13,26 @@ Before implementing a significant functional phase, define at least:
 
 Then run `odyssey-architecture-challenge` against the contract and relevant repository context. This is a reasoning checkpoint, not a new state machine or project-management service.
 
+## Architecture supersession and documentation coherence gate
+
+When a user changes an approved architecture, **do not leave two competing
+normative instructions** in the repo. Before treating the new direction as
+an implementation task: (1) record the human decision in an ADR and one
+canonical target contract; (2) update `AGENTS.md`, the functional roadmap and
+the current overview; (3) search earlier contracts, phase logs, implementation
+runbooks and decisions for conflicting **current/approved/must** wording;
+(4) explicitly mark superseded contracts as historical while preserving their
+measured results and immutable regression evidence; and (5) validate relative
+links, target-versus-active DEV/PROD status and the named outstanding test
+failures. Keep a short cross-document conflict audit for the next chat or
+agent. A documentation target decision does **not** authorize changing
+runtime behavior, model versions, personal data or deployment state.
+
+For the Router change approved 2026-10-12, follow
+[hybrid interpretation groups](router-hybrid-interpretation-contract.md)
+and its [conflict audit](router-hybrid-documentation-audit-20261012.md),
+not the older one-Core-call-per-atomic-fragment instructions.
+
 ## Execution path
 
 ```text

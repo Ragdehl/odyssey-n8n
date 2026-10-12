@@ -72,71 +72,64 @@ participants, predicates or actions. Technical limits on provider bytes,
 source size and model context must be explicit budgets; they are not
 semantic rules and must not silently discard surplus information.
 
-Router may propose source-grounded grammatical roles and backward
-lexical dependencies. It never chooses canonical identities, fact counts,
-Note types, Core plans or mutation order. **Router is the owner of
-current-message segmentation and dispatch**: downstream Temporal, Core
-and specialized application interpreters MUST receive only their selected
-validated route or independently scoped work unit, plus the minimum
-source-grounded dependencies needed by that unit. Do NOT invoke Temporal
-or the ordinary Core planner with the entire current original message
-as a second planning request after Router has divided it. The full
-original message can remain separately as read-only provenance for
-offset/coverage/negative-scope checks; it is NOT the downstream
-model's request or permission to reinterpret siblings.
+### Approved Router hybrid interpretation target (2026-10-12)
 
-A unit requiring dates/times is processed by Temporal on that unit's
-bounded source and relevant inherited context. Independent units without
-temporal language skip Temporal. Core processes the selected unit and
-its verified Temporal/identity evidence, and retains authority over
-semantics, canonical identity selection, relationships, planning and
-persistence. On a backward **execution** dependency (e.g. "él"), the
-dependent unit waits for its predecessor's Core result; pass only
-freshness-checked, uniquely verified canonical reference evidence to
-the next unit. Never substitute a guessed entity, copy all predecessor
-text, or execute the dependent unit when the proof is missing. Other
-independent units may complete.
+**The target architecture is HYBRID and is not yet active in DEV/PROD.**
+Read the [single normative target contract](docs/architecture/router-hybrid-interpretation-contract.md)
+and [accepted ADR 0010](docs/decisions/0010-router-hybrid-interpretation-groups.md)
+before modifying Router/Temporal/Core/Writer. These supersede the previous
+2026-10-11 **mandatory per-atomic-fragment Core interpretation** guidance.
+The earlier [unit-dispatch experiment](docs/architecture/router-unit-dispatch-contract.md)
+and [fact-candidate development log](docs/architecture/router-fact-units-v1.md)
+retain historical evidence and working fallback implementations, but they are
+**not the normative target** where they disagree about grouping.
 
-Differentiate (a) source-context inheritance (shared date, predicate,
-subject or negation) from (b) dependency on a canonical identity
-resolved/persisted by an earlier Core operation. They are NOT interchangeable.
-Some candidate scopes share an original predicate, date or subject. **Do not
-merge independently writable facts merely because their source spans or roles
-overlap.** Preserve the exact partition and pass typed, original-offset-verified
-source-role provenance to the selected unit. Cohort only a genuinely atomic
-joint event or a correction that must not write its retracted alternative.
-Untrusted inherited date wording is not a Temporal-normalized Core-authorized
-date: keep the affected write pending until a separately verified temporal
-result has been transferred. Likewise, an inherited grammatical subject is
-not a canonical identity unless a predecessor Core WRITE and actual Markdown
-readback verify the unique same-target Note, whose identity/content are
-rechecked at write preflight. Inherited predicates for a **new** subject still
-need separate Core-verified predecessor-event proof; lexical Router hints alone
-MUST NOT authorize copying facts to another person. A narrow affirmative
-purchase ellipsis may reuse ONLY predicate/object/transaction from a single
-physically verified prior Core purchase fact, while independently resolving
-the explicitly new buyer. The previous buyer identity never transfers and
-the writer must recheck the source Note digest and new buyer canonical Note;
-other event types or conditional/negative uses stay pending. Never invent a source
-phrase, canonical identity, resolved date or write authority to make a split
-appear successful. Do not
-equate one candidate with one action, one Core fact or one model call. Validate
-complete original-source accounting without sending all original sibling text
-as a new downstream planning request.
+Router receives the complete current message ONCE and identifies source-anchored
+**atomic candidate facts/actions**, relevant grammatical roles, negation,
+conditional scope, dates/times and typed source dependencies. Candidates are
+untrusted linguistic hypotheses, never Core facts, canonical identities,
+Note types, mutation plans or execution authority. The compiler constructs
+**bounded exact-original-source interpretation groups**: keep semantically
+interdependent facts together when splitting would lose a common actor,
+predicate, shared/postposed time, correction, negative/conditional scope or
+ellipsis; keep independently meaningful actions in separate groups even if
+they share a date or person. Grouping is not one fact, one Note, one WRITE,
+or an instruction to join unrelated message topics. Do not branch on names,
+test IDs, punctuation or a fixed number of candidates.
 
-**Authoritative routing guidance:** see
-`docs/architecture/router-unit-dispatch-contract.md` for the restored
-source-slice and dependency handoff contract, and
-`docs/architecture/router-dependent-route-continuity.md` for
-Core-grounded canonical reference carriers. The isolated experimental
-`odyssey_runtime/complete_source_handoff.py` currently sends whole-source
-inputs to Temporal/Core: this conflicts with the approved routing contract.
-Treat it and its full-source provider gates as historical regression evidence,
-NOT a template, an approved replacement architecture or an activated path.
-Before activation, replace the experimental handoff with per-unit dispatch
-and prove route-local execution, canonical dependency handoff and physical
-Markdown readback. Retain existing GPT-5.6 Core model configuration for
-this work.
+Temporal interprets the selected group when it has date/time language and
+returns grounded date/time ownership **for its individual claims**. Core's
+ordinary Planner (remain on GPT-5.6 for this phase) interprets only its
+selected group plus bounded, validated relevant context. It may plan zero,
+one or several facts, identities and destinations for that group, subject
+to an independent Core-owned exhaustive candidate↔fact review (including
+N:M mappings and explicit pending candidates). Core/Writer verify **each**
+fact's actual target and safe mutation/readback; an uncertain claim cannot
+silently disappear or force an ungrounded write. Safe independent successes
+may persist only where ordinary Core boundaries prove partial-write
+isolation and idempotence. The full original source stays read-only
+provenance, NOT a new Core planning prompt for unrelated sibling groups.
+
+Source-level shared words/date/subject *within* one interpretation group
+do not require a previously persisted sibling fact as proof of syntax.
+Across groups, rely only on validated typed source/date context and, when
+the dependency is on canonical identity or an already written event,
+freshness-checked **Core-authored** identity/event evidence, including
+canonical Markdown readback guards. Lexical Router hints do not authorize
+canonical links or copying another actor's facts. Unknown, ambiguous,
+stale, contradictory, approximate or unsafe interpretations remain
+pending/fail closed, including negative and conditional occurrences and
+ambiguous pronouns. No automatic promotion of a repair need to a Task.
+
+The completed five-case **real-model grouped experiment** yielded **two
+complete (F04/F16), two Core pending (F03/F23), one Temporal blocked
+(F21)**; it establishes design viability, **not** production readiness.
+Fix these gaps and keep the frozen 27-message corpus, previous accepted
+semantic sentinels, independent coverage, physical Markdown readback and
+provider-freshness gates before activation. Existing v0 route behavior,
+inactive split-source experiments, model versions and active DEV/PROD must
+not be rewritten or described as already migrated. There is NO approval
+to merge or deploy the architecture merely because the docs now adopt it.
 
 **Never implement a linguistic failure by branching on a specific user
 phrase, name, pronoun, conjunction or benchmark ID.** Preserve such cases
