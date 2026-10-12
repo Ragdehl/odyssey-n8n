@@ -231,6 +231,11 @@ class OpenAITemporalInterpreter:
         self.last_provider_status = None
         self.last_error_category = None
 
+    @property
+    def timezone(self) -> str:
+        """The validated current IANA zone for opt-in shared-clock evidence."""
+        return self._current_context["timezone"]
+
     @classmethod
     def from_environment(cls, current_context: Mapping[str, str]) -> OpenAITemporalInterpreter:
         """Build the shared resolver with SDK retries disabled."""

@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "case_id": "F21",
+  "source_sha256": "5c97fbc2a8b2be6ddb166f547228cea234f0275a56bbd5ce7dad2ba64fd951e2",
+  "historical_first_grouped_pilot_status": "temporal_blocked",
+  "fresh_provider_capture_status": "completed",
+  "verified_markdown_facts": 2,
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"La semana que viene\",\"temporal\":{\"kind\":\"DATE_RANGE\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":\"2026-10-05\",\"range_end_exclusive\":\"2026-10-12\"}},{\"temporal_text\":\"el lunes\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"el miércoles\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-07\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 18h\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tengo clase \"},{\"kind\":\"temporal_reference\",\"text\":\"a las 18h\",\"value\":\"2026-10-05T18:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"2026-10-07\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tengo clase \"},{\"kind\":\"temporal_reference\",\"text\":\"a las 18h\",\"value\":\"2026-10-07T18:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"lunes\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"18:00 — Tengo clase\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"miércoles\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"18:00 — Tengo clase\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0035357,
+  "archive_note": "Frozen actual model output; no credentials, user vault, or personal notes"
+}

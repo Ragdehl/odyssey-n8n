@@ -41,16 +41,16 @@ topics remain separate groups. Cross-group verified reference, temporal
 and event handoffs remain available as a safe fallback. A whole message
 containing unrelated topics must NOT become one new Core request.
 
-**Evidence, not deployment:** five fresh grouped Temporal/Core tests with
-authentic stored Router outputs, performed on disposable Markdown Notes,
-yielded **F04/F16 fully completed**, **F03/F23 Core pending**, **F21 Temporal
-unresolved**. The pilot was therefore **2/5 complete** and demonstrates
-why F03 group identity, F23 grouped-reference coverage and F21 shared
-Monday/Wednesday clock ownership are concrete next implementation gaps.
-It does not authorize weakening canonical/negative/conditional checks or
-claiming all 27 source examples pass. Historical route-local experiments
-and the frozen real-model receipts remain regression evidence, not the
-current target's grouping instructions.
+**Historical first pilot (preserved, not the current status):** in the
+initial five-case real-model grouping experiment, F04/F16 completed,
+F03/F23 were Core pending and F21 was Temporal blocked (**2/5**).
+Those model outputs are preserved unchanged in `hybrid_grouped_v1/`.
+The later, opt-in feature-branch repairs have fresh real-model and Writer
+readback evidence for all three formerly pending **specific positive
+shapes** (F03/F21/F23), frozen under `hybrid_grouped_v2/`. The total five
+specific examples now have passing real evidence, not a general 27-case
+language or production-readiness claim. Historical route-local benchmarks
+remain evidence, not competing architecture rules.
 
 **Implementation checkpoint (branch only, opt-in):** The approved
 documentation/ADR audit is complete. A bounded
@@ -59,20 +59,25 @@ candidates without merging facts; the existing scoped executor accepts it
 **only via explicit `bundle_compiler` injection** and defaults to the
 unchanged atomic compiler. The 26 compilable source cases go from
 **53 atomic routes to 37 conservative interpretation groups**. F27
-continues to fail closed. Frozen genuine Temporal/Core outputs replay
-through the ordinary Writer: **F04/F16 complete**, while F03/F23
-remain Core pending and F21 remains Temporal unresolved. F06's
-independent second group can persist even if the first Core plan declines.
+continues to fail closed. The initial five-case replay retained F04/F16
+success and the earlier F03/F21/F23 failures as separate evidence.
+**Subsequent repairs** now separately validate F03 literal `mis hijos`
+participants, F21 two Temporal-verified weekday/clock destinations, and
+F23 two positive reference-free properties of the Odyssey project, with
+freshly captured GPT-6/5.6 calls, independent Core review and per-fact
+Markdown readback in copied Notes. F06's independent second group can
+persist even if its first Core plan declines.
 See the [hybrid target and implementation checkpoint](router-hybrid-interpretation-contract.md).
 This is **experimental code, not deployed behavior**, and is NOT an
 authorization to declare all cases semantically solved.
 
-**NEXT ORDER:** (1) fix F03, F21 and F23 with independent Core/Temporal
-evidence and safety tests; (2) extend 27-case semantic/partial-write
-coverage (including F06/F13/F22 independence and F14/F27 ambiguity);
-(3) run deterministic/full-suite and focused fresh real-model evidence;
-(4) seek separate approval to promote to DEV, then PROD.
-Do not change Core GPT-5.6 during this implementation.
+**NEXT ORDER:** (1) extend semantic coverage beyond the three narrow
+positive shapes to the remaining 27-case corpus (negation, condition,
+correction, tasks, partial writes and F14/F27 ambiguity), with F06/F13/F22
+independence controls; (2) run full deterministic and bounded genuine
+model/regression checks; (3) review opt-in hybrid integration and seek
+separate approval before DEV, and later PROD. Do not migrate Core GPT-5.6
+or confuse code committed to this experimental branch with deployment.
 
 ## Deferred model consolidation — user decision (2026-10-10)
 

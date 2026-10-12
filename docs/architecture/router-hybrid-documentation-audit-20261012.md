@@ -64,6 +64,22 @@ The **next** phase implements bounded source grouping, candidate↔fact
 coverage and safe partial outcomes, then targeted F03/F21/F23 repairs and
 the 27-case regression; DEV/PROD promotion remains separately gated.
 
+## Subsequent implementation checkpoint (2026-10-12; historical first pilot retained)
+
+The five-probe **2/5 result above is the original measured observation**,
+not the present feature-branch success count. After the opt-in hybrid
+compiler was implemented, targeted grouped Core/Temporal fixes produced
+**fresh real-model + independent reviewer + physical Markdown readback
+successes for F03, F21 and F23**, in addition to earlier F04/F16.
+Those narrowly scoped positive variants and their exact genuine responses
+are frozen in `benchmarks/application_router/hybrid_grouped_v2/`.
+F03 preserves an unverified complete-set participant group literally;
+F21 validates two weekday-owned exact instants sharing one source clock;
+F23 writes two independent positive reference-free project facts.
+No DEV/PROD activation or broad negation/task/conditional/ambiguity guarantee
+follows from these experiments. Estimated total experimental spend:
+**USD 0.2951979 of USD 0.50** at this checkpoint.
+
 ## Prevention rule
 
 Before any future architecture replacement, search active `AGENTS.md`,

@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "case_id": "F03",
+  "source_sha256": "cfe1642c88d826967071b2f1f8b530cdce0312cd1b4f3aa3f4debb38ddf7f3a2",
+  "historical_first_grouped_pilot_status": "needs_attention",
+  "fresh_provider_capture_status": "completed",
+  "verified_markdown_facts": 2,
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Mañana vamos con mis hijos de paseo al parque.\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Luego iremos con mis hijos al cine.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vamos\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Mañana vamos con mis hijos de paseo al parque.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"iremos\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Luego iremos con mis hijos al cine.\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0032984,
+  "archive_note": "Frozen actual model output; no credentials, user vault, or personal notes"
+}

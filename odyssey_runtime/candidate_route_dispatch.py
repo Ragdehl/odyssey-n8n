@@ -215,6 +215,7 @@ def execute_candidate_routed_message(
             )
         interpretation = None
         domain = None
+        composed_shared_clock = False
         if scoped.route.capability_id == "temporal":
             if temporal is None or not callable(getattr(temporal, "interpret", None)):
                 raise ValueError("Temporal resolution is unavailable for dated route")
@@ -224,13 +225,31 @@ def execute_candidate_routed_message(
                 interpretation = temporal.interpret(unit_source)
             if interpretation.source_text != unit_source:
                 raise ValueError("Temporal must interpret only its routed source")
-            domain = interpretation.core_domain_interpretation()
-            temporal_handoff.remember(
-                interpretation,
-                route_index=ordinal,
-                start=scoped.original_start,
-                end=scoped.original_end,
-            )
+            from odyssey_core.temporal_interpretation import TemporalInterpreterError
+
+            try:
+                domain = interpretation.core_domain_interpretation()
+            except TemporalInterpreterError:
+                if bundle_compiler is None or len(scoped.context.candidates) < 2:
+                    raise
+                from odyssey_core.temporal_group_composition import compose_shared_clock_group
+
+                domain = compose_shared_clock_group(
+                    interpretation,
+                    scoped.context,
+                    timezone=getattr(temporal, "timezone", None),
+                )
+                composed_shared_clock = True
+            if not composed_shared_clock:
+                temporal_handoff.remember(
+                    interpretation,
+                    route_index=ordinal,
+                    start=scoped.original_start,
+                    end=scoped.original_end,
+                )
+            # Two different instants sourced from one shared clock cannot be
+            # cached as one unique cross-group clock handoff. The group owns
+            # the two independently dated values; later groups fail closed.
         domain = with_scoped_inherited_temporal(domain, source=unit_source, inherited=inherited)
         guard = None
         if dependent_handoff is not None:
@@ -294,6 +313,8 @@ def execute_candidate_routed_message(
             route_context = replace(route_context, verified_inherited_subject=subject)
         if event is not None:
             route_context = replace(route_context, verified_inherited_event=event)
+        if composed_shared_clock:
+            route_context = replace(route_context, verified_group_temporal=domain)
         route_context.validate(unit_source)
         from odyssey_core.scoped_event_evidence import CoreInheritedEventWriteGuard
         from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard

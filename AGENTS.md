@@ -121,15 +121,25 @@ stale, contradictory, approximate or unsafe interpretations remain
 pending/fail closed, including negative and conditional occurrences and
 ambiguous pronouns. No automatic promotion of a repair need to a Task.
 
-The completed five-case **real-model grouped experiment** yielded **two
-complete (F04/F16), two Core pending (F03/F23), one Temporal blocked
-(F21)**; it establishes design viability, **not** production readiness.
-Fix these gaps and keep the frozen 27-message corpus, previous accepted
-semantic sentinels, independent coverage, physical Markdown readback and
-provider-freshness gates before activation. Existing v0 route behavior,
-inactive split-source experiments, model versions and active DEV/PROD must
-not be rewritten or described as already migrated. There is NO approval
-to merge or deploy the architecture merely because the docs now adopt it.
+**Latest hybrid feature-branch checkpoint (2026-10-12):** The ORIGINAL
+five-case grouped live pilot completed only F04/F16 (2/5), with F03/F23
+Core pending and F21 Temporal blocked. Subsequent narrow source-safe
+adapters, real-model tests and Markdown readback have now completed
+F03/F21/F23 too, on copied synthetic Notes only. Frozen success captures
+live in `benchmarks/application_router/hybrid_grouped_v2/`; the original
+failures in `hybrid_grouped_v1/` remain historically accurate. F03 may
+retain unverified complete-set wording such as `mis hijos` LITERALLY; it
+must never invent member identities. F21 uses independently verified
+Temporal exact weekdays plus one unambiguous shared source clock. F23
+writes reference-free literal component names to ONE canonical project
+Note when real component identity cannot be verified. These are narrowly
+bounded positive examples, NOT universal language or canonical-link proof.
+
+Continue the frozen 27-message corpus, semantic/negative/conditional,
+partial-write and prompt-gate testing before promotion. Existing v0 route
+behavior, deferred model-version migration and active DEV/PROD must not
+be rewritten or described as already migrated. The feature-branch code
+is opt-in only; documentation adoption grants no merge/deployment approval.
 
 **Never implement a linguistic failure by branching on a specific user
 phrase, name, pronoun, conjunction or benchmark ID.** Preserve such cases

@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "case_id": "F23",
+  "source_sha256": "755e70ca4d78ca30605872e66f5893c19eb538aa2508967699e6255070464ec0",
+  "historical_first_grouped_pilot_status": "needs_attention",
+  "fresh_provider_capture_status": "completed",
+  "verified_markdown_facts": 2,
+  "provider_outputs": [
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El proyecto Odyssey\",\"binding\":\"described\",\"direct_name\":\"Odyssey\",\"note_type\":\"project\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene un fallo en Router.\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene otro fallo en Temporal.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"un fallo\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Tiene un fallo en Router.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"Temporal\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Tiene otro fallo en Temporal.\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.002834,
+  "archive_note": "Frozen actual model output; no credentials, user vault, or personal notes"
+}

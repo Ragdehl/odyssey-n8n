@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .domain_interpretation import DomainInterpretation
 from .scoped_event_evidence import CoreVerifiedInheritedEvent
 from .scoped_subject_evidence import CoreVerifiedInheritedSubject
 
@@ -242,6 +243,7 @@ class CoreCandidateContext:
     verified_inherited_subject: CoreVerifiedInheritedSubject | None = None
     verified_inherited_event: CoreVerifiedInheritedEvent | None = None
     scoped_route_source: bool = False
+    verified_group_temporal: DomainInterpretation | None = None
 
     def validate(self, requested_source: str) -> None:
         """Prohibit stale, altered, oversized or ungrounded candidate hints."""
@@ -298,6 +300,15 @@ class CoreCandidateContext:
             expected = {(r.role, r.text, r.original_start, r.original_end) for r in proof.roles}
             if external != expected or len(self.candidates) != 1:
                 raise ValueError("Inherited Core event has no exact Router provenance")
+        if self.verified_group_temporal is not None and (
+            not isinstance(self.verified_group_temporal, DomainInterpretation)
+            or not self.scoped_route_source
+            or len(self.candidates) < 2
+            or self.verified_group_temporal.capability_id != "temporal"
+            or self.verified_group_temporal.intent != "TEMPORAL_RESOLUTION"
+            or self.verified_group_temporal.source_text != self.source
+        ):
+            raise ValueError("Grouped Temporal proof is not bound to this source")
         if len(self.prompt_payload_bytes()) > MAX_CORE_CANDIDATE_CONTEXT_BYTES:
             raise ValueError("Core candidate context is oversized")
 
@@ -351,6 +362,34 @@ class CoreCandidateContext:
                 "user's source language and event wording. Do not translate the "
                 "statement to another language unless explicitly requested."
                 if self.scoped_route_source
+                else ""
+            )
+            + (
+                "\nWithin this source group, multiple affirmative property facts may "
+                "share one explicit subject but must each carry its own distinct "
+                "grounded object or location. The group may plan several facts "
+                "on ONE independently resolved canonical Note. Capitalization "
+                "or mention of a named component does not prove that a matching "
+                "canonical Note exists; preserve the literal component name "
+                "when a distinct identity link cannot be independently proven. "
+                "Never invent helper Notes or links to satisfy a fact."
+                if self.scoped_route_source
+                and len(self.candidates) > 1
+                and all(c.kind == "property" for c in self.candidates)
+                else ""
+            )
+            + (
+                "\nA participant description of a group (e.g. the user\u0027s children) "
+                "is not permission to invent its individual members. Use "
+                "Core\u0027s canonical relationship resolution only if the complete "
+                "membership can be verified. Otherwise preserve the exact "
+                "group description literally in each independently stated "
+                "event where the source applies it, without unverified "
+                "identity references or new individual Notes. Escalate if "
+                "participant continuity across events is uncertain."
+                if self.scoped_route_source
+                and len(self.candidates) > 1
+                and any(role.role == "participants" for c in self.candidates for role in c.roles)
                 else ""
             )
             + (

@@ -192,10 +192,9 @@ def test_five_genuine_model_hybrid_outputs_replay_through_real_core_and_writer(
         assert result.status is not ApplicationStatus.COMPLETED
         assert all(repo.read_text(p) == v for p, v in before.items())
         assert not [path for path in repo.list_markdown_paths() if path not in before]
-        if case_id == "F21":
-            assert not core_sources
-        else:
-            assert core_sources == [case["source"]]
+        # F21 now composes both dates with their common clock and reaches
+        # Core; the original one-response capture contains no Core response.
+        assert core_sources == [case["source"]]
 
 
 @pytest.mark.parametrize("count", [1, 3, 5, 8])

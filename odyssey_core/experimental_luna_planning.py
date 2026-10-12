@@ -446,6 +446,33 @@ def render_luna_experimental_prompt(
             for item in domain_interpretation.evidence
             if item.kind == "canonical_reference"
         ]
+        # Opt-in hybrid groups may have ONE exact postposed clock phrase
+        # shared by several distinct exact days. Never build a made-up
+        # concatenation of nonadjacent date and clock words as a source part.
+        if candidate_context is not None and candidate_context.scoped_route_source:
+            from collections import defaultdict
+
+            times_by_text: dict[str, set[str]] = defaultdict(set)
+            for item in domain_interpretation.temporal_references():
+                anchor = item.temporal_anchor()
+                if anchor.time is not None:
+                    times_by_text[item.source_text].add(item.value)
+            shared = [text for text, values in times_by_text.items() if len(values) > 1]
+            if shared:
+                semantic_dynamic += (
+                    "\nIn this selected group, Temporal independently certified "
+                    "different exact instants for the SAME original clock source "
+                    "words. For each independently dated event, emit a temporal_reference "
+                    "part whose text is EXACTLY the corresponding supplied Temporal "
+                    "evidence.source_text (the common clock wording), and value "
+                    "is the matching exact date-time for that event\u0027s calendar day. "
+                    "Do NOT combine nonadjacent date and clock fragments into "
+                    "a fabricated temporal_reference text. Core validates each "
+                    "text/value pair against Temporal evidence; the date-only "
+                    "evidence is consumed by its corresponding calendar_day target. "
+                    "If event-to-clock assignment is not demonstrably clear, ESCALATE. "
+                    + json.dumps(shared, ensure_ascii=False)
+                )
         if canonical:
             semantic_dynamic += (
                 "\\n\\nCore predecessor reference context for THIS routed fragment only. "

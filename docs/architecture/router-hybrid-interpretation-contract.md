@@ -142,16 +142,50 @@ Este resumen documental es independiente de que esa ruta siga existiendo.
 - La suite de regresiones en el repositorio es obligatoria antes del
   merge. Ningún cambio de prompt ni modelo se ha producido en esta etapa.
 
-**SIGUIENTES BLOQUES, NO IMPLEMENTADOS:**
+**ACTUALIZACIÓN POSTERIOR (2026-10-12): F03/F21/F23 implementados y
+validados en la rama experimental, NO desplegados.** La descripción de los
+cinco resultados fallidos/parciales arriba es la PRIMERA prueba, y sigue
+siendo evidencia histórica. Después, nuevas llamadas reales al modelo,
+revisiones independientes de Core y readback físico en vault ficticio han
+confirmado las tres correcciones en sus formulaciones positivas:
 
-1. Adaptar con revisión semántica independiente F03 (referencias al grupo
-   `mis hijos`), F21 (la misma hora para dos días) y F23 (referencias de
-   componentes en dos propiedades), **sin** desactivar las restricciones
-   vigentes ni crear notas de componentes automáticamente.
-2. Cubrir N:M no triviales, negativos/condiciones/correcciones y tareas,
-   incluyendo estados parciales, pronombres ambiguos y más casos reales.
-3. Repetir gates reales de producción con el contrato final cuando cambien
-   prompts o validaciones. Después, revisión explícita antes de DEV y PROD.
+- **F03**: `odyssey_core/candidate_group_participants.py` conserva la
+  descripción colectiva literal `mis hijos` en AMBOS hechos, sin inventar
+  personas, identidades ni enlaces; exige que la participación y cada acción
+  estén justificadas en los roles originales. Si la pertenencia del grupo
+  completo se puede demostrar canónicamente en otro caso, la ruta normal de
+  Core seguirá siendo la autoridad para el enlace; este piloto no lo afirma.
+- **F21**: `odyssey_core/temporal_group_composition.py` compone un reloj
+  postpuesto explícito con dos fechas EXACT_DATE ya verificadas por Temporal,
+  tras comprobar roles compartidos, día de la semana, rango, zona y DST.
+  `candidate_grouped_temporal.py` verifica por separado que cada Core Note
+  de día coincida con su fecha/instante y que la frase no invente palabras.
+  El Planner emplea los segmentos originales de Temporal; nunca fabrica
+  `el lunes a las 18h` concatenando dos textos no adyacentes.
+- **F23**: `odyssey_core/candidate_grouped_property.py` atribuye dos
+  propiedades afirmativas distintas a UN sujeto explícito/verificado.
+  Cuando `Router` y `Temporal` sean nombres de componentes sin identidad
+  segura, Core guarda los textos LITERALES; no fuerza enlaces, ni crea notas.
+- Se conserva el **control antiguo** para contextos no híbridos;
+  `context.scoped_route_source` y la prueba tipada de Temporal restringen
+  las nuevas validaciones y no convierten las rutas atómicas en grupos.
+- Respuestas auténticas positivas, sin claves ni notas personales,
+  congeladas en `benchmarks/application_router/hybrid_grouped_v2/`.
+  Pruebas de ejecución/revisión/escritura reproducidas sin nuevas llamadas
+  de pago en `tests/runtime/test_hybrid_repaired_real_provider_replay.py`.
+  Coste total estimado de todos los experimentos hasta esta etapa:
+  **USD 0.2951979 de USD 0.50 autorizados**. No equivale a factura de API.
+
+**SIGUIENTES BLOQUES, TODAVÍA NO IMPLEMENTADOS:**
+
+1. Ampliar y contrastar semántica multihecho general (N:M, negaciones,
+   condiciones/correcciones, tareas, identidades singulares/plurales,
+   estados parciales y pronombres ambiguos F14/F27), con todos los mensajes
+   originales y pruebas adversariales ajenas a los casos del piloto.
+2. Repetir los gates de regresión y calidad con variaciones reales acotadas,
+   preservar la suite histórica y medir precisión, gasto y latencia.
+3. Pedir aprobación separada antes de activar la ruta híbrida en DEV y luego
+   en PROD. GPT-5.6 Core se conserva durante esta fase.
 
 ## Precedencia / documentación histórica
 

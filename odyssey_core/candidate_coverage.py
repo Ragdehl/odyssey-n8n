@@ -268,7 +268,17 @@ def validate_candidate_coverage_manifest(
                 lexical,
                 context.verified_inherited_event,
             )
-        if context.candidates[index].kind == "property":
+        if context.candidates[index].kind == "property" and len(unit.facts) > 1:
+            from .candidate_grouped_property import validate_shared_subject_property
+
+            lexical = validate_shared_subject_property(
+                source,
+                context,
+                index,
+                unit,
+                lexical,
+            )
+        elif context.candidates[index].kind == "property":
             other_subjects = tuple(
                 role.span.text
                 for other_index, other in enumerate(context.candidates)
@@ -284,9 +294,29 @@ def validate_candidate_coverage_manifest(
                 other_source_subjects=other_subjects,
                 inherited_subject=context.verified_inherited_subject,
             )
-        veto_unsafe_literal_match(
-            source, context, index, lexical, canonical_binding=canonical_binding
-        )
+        if (
+            context.scoped_route_source
+            and len(unit.facts) > 1
+            and any(
+                role.role == "participants"
+                for candidate in context.candidates
+                for role in candidate.roles
+            )
+        ):
+            from .candidate_group_participants import validate_group_participant_literal
+
+            validate_group_participant_literal(source, context, index, unit, lexical)
+        if context.verified_group_temporal is not None:
+            from .candidate_grouped_temporal import validate_grouped_dated_occurrence
+
+            # The weekday is carried by the independently selected Day Note,
+            # not duplicated in each fact text. The Temporal proof replaces
+            # ONLY the local-token overlap veto, never independent review.
+            validate_grouped_dated_occurrence(source, context, index, unit, lexical)
+        else:
+            veto_unsafe_literal_match(
+                source, context, index, lexical, canonical_binding=canonical_binding
+            )
         if unit.references:
             if len(unit.facts) == 1:
                 if context.candidates[index].kind == "relationship":
