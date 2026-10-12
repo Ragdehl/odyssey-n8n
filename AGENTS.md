@@ -182,6 +182,18 @@ two source tasks pending. This is **NOT** three-task F22 success,
 nor DEV/PROD app integration. Approx cumulative authorized-test spend
 USD **0.3356791 of USD 0.50** (estimate).
 
+**Current original corpus acceptance (2026-10-12, full genuine
+non-F22 retest):** 9/27 FULLY accepted, including newly verified genuine
+F11. The other 18 remain incomplete or require review; all 18 of the
+previously non-accepted non-F22 cases were executed again with real models.
+The batch's exact genuine provider outputs and changed Markdown samples
+are frozen in
+`benchmarks/application_router/hybrid_live_matrix_20261012/`;
+the normative status/root causes are in
+`docs/architecture/functional-roadmap.md`. Cumulative estimated approved
+model spend USD 0.4402191 / 0.50. No DEV/PROD, n8n or real Notes changes.
+Never infer model-quality acceptance solely from dispatcher COMPLETED.
+
 **Scoped Tasks interpreter checkpoint (2026-10-12):** The opt-in Tasks
 surface now has a separate `interpret_scoped` contract for a route holding
 trusted `TaskScopedEvidence`. It preserves the ordinary legacy

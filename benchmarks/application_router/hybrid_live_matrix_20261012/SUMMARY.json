@@ -1,0 +1,171 @@
+{
+  "version": "hybrid-live-18-20261012",
+  "results": [
+    {
+      "case": "F01",
+      "application_status": "partial",
+      "write_count": 1,
+      "provider_calls": 7,
+      "estimated_new_usd": 0.0070233,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F02",
+      "application_status": "partial",
+      "write_count": 2,
+      "provider_calls": 5,
+      "estimated_new_usd": 0.0046071,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F05",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0049976,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F06",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 6,
+      "estimated_new_usd": 0.0061677,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F07",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0041744,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F08",
+      "application_status": "completed",
+      "write_count": 4,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0043156,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F09",
+      "application_status": "completed",
+      "write_count": 3,
+      "provider_calls": 3,
+      "estimated_new_usd": 0.003052,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F10",
+      "application_status": "failed",
+      "write_count": 0,
+      "provider_calls": 2,
+      "estimated_new_usd": 0.0024636,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F11",
+      "application_status": "completed",
+      "write_count": 1,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0032601,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F12",
+      "application_status": "failed",
+      "write_count": 0,
+      "provider_calls": 2,
+      "estimated_new_usd": 0.0030058,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F13",
+      "application_status": "partial",
+      "write_count": 1,
+      "provider_calls": 7,
+      "estimated_new_usd": 0.0069231,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F14",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0034994,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F15",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 8,
+      "estimated_new_usd": 0.0100836,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F18",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 6,
+      "estimated_new_usd": 0.0065153,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F24",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0035733,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F25",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 3,
+      "estimated_new_usd": 0.0029253,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F26",
+      "application_status": "partial",
+      "write_count": 3,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0035418,
+      "error_type": null,
+      "error_message": null
+    },
+    {
+      "case": "F27",
+      "application_status": "needs_attention",
+      "write_count": 0,
+      "provider_calls": 4,
+      "estimated_new_usd": 0.0042624,
+      "error_type": null,
+      "error_message": null
+    }
+  ],
+  "finished_count": 18,
+  "requested_count": 18,
+  "estimated_cumulative_usd": 0.4402191,
+  "remaining_to_authorized_cap": 0.0597809
+}

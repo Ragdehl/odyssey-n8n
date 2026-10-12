@@ -1,0 +1,71 @@
+{
+  "case": "F15",
+  "status": "finished",
+  "source_sha256": "ae96ff2636edcc62c8364bf14f803d538f164fc8ef357d5ab1b98a7b1a851d1a",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"fueron\",\"occurrence\":0},{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"fueron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"se quedó\",\"occurrence\":0},{\"text\":\"en casa\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se quedó\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en casa\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"yo\",\"occurrence\":0},{\"text\":\"preparé\",\"occurrence\":0},{\"text\":\"la cena\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"preparé\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"la cena\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"identity\",\"text\":\"mis hijos\",\"identity\":{\"description\":\"mis hijos\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":{\"source\":{\"kind\":\"SELF\"},\"member_query\":\"mis hijos\",\"extent\":\"complete_set\"}}},{\"kind\":\"literal\",\"text\":\" fueron al parque.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"mis hijos\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"Ayer\",\"value\":\"2026-10-03\"},{\"kind\":\"literal\",\"text\":\" se quedó en casa.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Bea\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"needs_clarification\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Después yo preparé la cena.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"yo\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0100836,
+  "estimated_cumulative_usd": 0.419401,
+  "provider_calls": 8,
+  "application_status": "needs_attention",
+  "routes": [
+    {
+      "status": "needs_attention",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "needs_attention",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "needs_attention",
+      "reason": null,
+      "source": null
+    }
+  ],
+  "changed_note_paths": [],
+  "markdown_readback_samples": [],
+  "write_count": 0
+}

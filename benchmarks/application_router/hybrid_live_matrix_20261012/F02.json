@@ -1,0 +1,63 @@
+{
+  "case": "F02",
+  "status": "finished",
+  "source_sha256": "514e7ddc1d70a3e1ab95ef04c98b71656931f47e8cc2df4df70eefea49deebfb",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iremos a merendar\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a merendar\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"Esta tarde\",\"occurrence\":0}},{\"role\":\"time_approx\",\"anchor\":{\"text\":\"sobre las 16h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a un vide-grenier\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"el domingo\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 11h\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a un vide-grenier\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Esta tarde\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"sobre las 16h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-04T16:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Mis hijos, mi mujer y yo iremos a merendar \"},{\"kind\":\"temporal_reference\",\"text\":\"sobre las 16h\",\"value\":\"2026-10-04T16:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Iremos al parque.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"iremos a merendar\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"16:00 — Mis hijos, mi mujer y yo iremos a merendar\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"al parque\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Iremos al parque.\"],\"pending_reason\":null}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"el domingo\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 11h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-04T11:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0046071,
+  "estimated_cumulative_usd": 0.3674581,
+  "provider_calls": 5,
+  "application_status": "partial",
+  "routes": [
+    {
+      "status": "completed",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "failed",
+      "reason": null,
+      "source": null
+    }
+  ],
+  "changed_note_paths": [
+    "calendar/days/2026-10-04.md",
+    "calendar/days/2026-10-05.md"
+  ],
+  "markdown_readback_samples": [
+    {
+      "path": "calendar/days/2026-10-04.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- 16:00 — Mis hijos, mi mujer y yo iremos a merendar\n  <!-- odyssey:fact request=route-1-798457e544ae41529672155233e076487700bbd549db0ffc06589199cb681ab0 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-04;2026-10-04T16:00:00+02:00 -->"
+    },
+    {
+      "path": "calendar/days/2026-10-05.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-05\"\nid: \"date:2026-10-05\"\nname: \"2026-10-05\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Iremos al parque.\n  <!-- odyssey:fact request=route-1-798457e544ae41529672155233e076487700bbd549db0ffc06589199cb681ab0 ordinal=1 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-05 -->"
+    }
+  ],
+  "write_count": 2
+}

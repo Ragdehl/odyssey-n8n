@@ -219,6 +219,65 @@ full independent semantic coverage. The Core person-link proof gap remains.
 Estimated cumulative experiments USD 0.3558277 / approved USD 0.50;
 no DEV/PROD, real Note, credential, n8n, or model-setting changes.
 
+**Complete remaining-corpus genuine model batch (2026-10-12):**
+The already documented approved `systemd --user` EnvironmentFile and live
+budget were used to run **all 18 formerly unaccepted non-F22 original
+cases**, each with fresh GPT-6 Router, conditional GPT-6 Temporal, GPT-5.6
+Core Planner and independent Core graph reviewer, the CURRENT opt-in
+`compile_hybrid_candidate_bundle`, an isolated copy of canonical synthetic
+Markdown, and actual physical readback. Every provider response, source
+digest, route status and changed Markdown preview was saved under
+`benchmarks/application_router/hybrid_live_matrix_20261012/`.
+No new DEV/PROD routes, human Notes or model migration. Complete 18/18:
+3 technically COMPLETED, 4 PARTIAL, 9 NEEDS_ATTENTION, 2 FAILED. Cost
+estimated USD 0.0843914 this batch; cumulative USD 0.4402191 / 0.50.
+
+| Status | Original cases | Important readback outcome |
+|---|---|---|
+| COMPLETED | F08 F09 F11 | F08 wrote both appointments but doubled the date link in Marta's fact; F09 wrote `Viven en Lyon.` separately on Marta and Luis; **F11 precisely wrote `Hoy compré pan y leche.`** to one Day |
+| PARTIAL | F01 F02 F13 F26 | Independent writes persisted; F13 persisted only `Compré pan.`, F26 first report-arrival fact only; remaining claims not all accepted |
+| NEEDS_ATTENTION | F05 F06 F07 F14 F15 F18 F24 F25 F27 | Declined rather than inventing unsupported identity/provenance/facts; F14/F27 did not save their safe independent parts |
+| FAILED | F10 F12 | Core Planner emitted ESCALATE; no writes |
+
+**Independent acceptance accounting:** F11's entire original request has one
+correct Day fact with genuine-model replay, checked with a permanent
+zero-provider-call vertical regression test. Promote **F11** into the
+fully accepted original-message count: **9 / 27 genuinely accepted** (the
+eight already accepted F03 F04 F16 F17 F19 F20 F21 F23, plus F11).
+The other technically completed F08 and F09 require a semantic/Markdown
+review, NOT an automatic acceptance increase. **18 original messages
+still require complete acceptance** (including the separately partially
+accepted F22).
+
+**Two actively investigated blockers:**
+- F18's **historical** Core reviewer returned `ambiguous_identity` for
+  both source-fragment claims; the **fresh 2026-10-12 reviewer now returns
+  `unsupported_scope` for BOTH even though the GPT-5.6 Planner proposes
+  `No vi a Ana.` and `pero sí hablé con Luis.` correctly. The source
+  candidate anchors `vi a Ana` / `hablé con Luis` omit `no` /
+  `pero sí`, which must be reconciled with verified source polarity and
+  discourse roles. This is general candidate-to-Core fact attribution,
+  not merely a missing API credential or an absent date.
+- F22's fresh GPT-6 Tasks/Temporal + GPT-5.6 Core run now creates all
+  three correctly dated pending Task Notes, but GPT-5.6 Core Planner
+  preserves the explicit canonical person identity for `Ana` while
+  omitting the corresponding `Luis` wikilink. The middle Task's exact
+  source action gets represented by a Temporal role/property, not an
+  identity fact. Need **generic mandatory participant-source coverage in
+  Task note content**, verified by Core, not an `Ana`/`Luis` heuristic.
+  An empty `calendar_day` stub was also generated; it has no false
+  factual content but deserves separate cleanup.
+
+**Next execution order:** repair Core reviewer source polarity/discourse
+attribution and Task missing-participant content coverage generally;
+replay these genuine receipts, retest F18/F22 with bounded live gates,
+then address the grouped failure classes (unsafe/missing references,
+Planner ESCALATE, Temporal ordering, redundant Day references), always
+checking actual Markdown. Historical 10 unrelated full-suite failures
+remain and must be diagnosed before DEV. Do not mistake this new live
+batch for 18 new accepted cases or deploy before the full original
+27/27 gate.
+
 **NEXT ORDER:** (1) obtain a new Router prompt gate before relying on new
 standalone-negative proposals beyond deterministic source fixtures;
 (2) resolve F18 independent negative/positive semantics and the remaining

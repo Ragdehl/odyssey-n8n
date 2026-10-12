@@ -1,0 +1,63 @@
+{
+  "case": "F08",
+  "status": "finished",
+  "source_sha256": "49628bbe0432791a2a4cb429c1431ff4e06aa4a3919eeda8f3868eb7b579e38f",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"irá\",\"occurrence\":0},{\"text\":\"al médico\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"irá\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al médico\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"al dentista\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al dentista\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 10\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T10:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a la misma hora\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T10:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Irá al médico \"},{\"kind\":\"temporal_reference\",\"text\":\"Mañana\",\"value\":\"2026-10-05\"},{\"kind\":\"literal\",\"text\":\" a las 10.\"},{\"kind\":\"temporal_reference\",\"text\":\"a las 10\",\"value\":\"2026-10-05T10:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Irá al dentista \"},{\"kind\":\"temporal_reference\",\"text\":\"a la misma hora\",\"value\":\"2026-10-05T10:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Marta\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Irá al médico [[calendar/days/2026-10-05|05-10-2026]] a las 10.[[calendar/days/2026-10-05|05-10-2026]] 10:00\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"Luis\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Irá al dentista [[calendar/days/2026-10-05|05-10-2026]] 10:00\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0043156,
+  "estimated_cumulative_usd": 0.3871134,
+  "provider_calls": 4,
+  "application_status": "completed",
+  "routes": [
+    {
+      "status": "completed",
+      "reason": null,
+      "source": null
+    }
+  ],
+  "changed_note_paths": [
+    "Luis.md",
+    "Marta.md",
+    "calendar/days/2026-10-04.md",
+    "calendar/days/2026-10-05.md"
+  ],
+  "markdown_readback_samples": [
+    {
+      "path": "Luis.md",
+      "preview": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-person-luis\"\nname: \"Luis\"\nrevision: 2\nschema_version: 3\ntype: \"person\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\nPersona de prueba, conocida de [[Alex]].\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Irá al dentista [[calendar/days/2026-10-05|05-10-2026]] 10:00\n  <!-- odyssey:fact request=route-1-68fd17b06759e4b9180d58d87d098d9eca9937e2c928120344af0e57044c094f ordinal=1 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-05T10:00:00+02:00 -->"
+    },
+    {
+      "path": "Marta.md",
+      "preview": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-person-marta\"\nname: \"Marta\"\nrevision: 2\nschema_version: 3\ntype: \"person\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\nPersona de prueba, vive en Lyon.\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Irá al médico [[calendar/days/2026-10-05|05-10-2026]] a las 10.[[calendar/days/2026-10-05|05-10-2026]] 10:00\n  <!-- odyssey:fact request=route-1-68fd17b06759e4b9180d58d87d098d9eca9937e2c928120344af0e57044c094f ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-05;2026-10-05T10:00:00+02:00 -->"
+    },
+    {
+      "path": "calendar/days/2026-10-04.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n"
+    },
+    {
+      "path": "calendar/days/2026-10-05.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-05\"\nid: \"date:2026-10-05\"\nname: \"2026-10-05\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n"
+    }
+  ],
+  "write_count": 4
+}

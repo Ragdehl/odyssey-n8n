@@ -1,0 +1,31 @@
+{
+  "case": "F10",
+  "status": "finished",
+  "source_sha256": "31d9681685745e71c75b15965d93d87b1cd5c41dacd6b2ed580aee844da15b0f",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"relationship\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"se conocieron\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se conocieron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"ESCALATE\",\"actions\":null,\"limitations\":null,\"clarification_code\":null}}"
+    }
+  ],
+  "estimated_new_usd": 0.0024636,
+  "estimated_cumulative_usd": 0.392629,
+  "provider_calls": 2,
+  "application_status": "failed",
+  "routes": [
+    {
+      "status": "failed",
+      "reason": null,
+      "source": null
+    }
+  ],
+  "changed_note_paths": [],
+  "markdown_readback_samples": [],
+  "write_count": 0
+}

@@ -1,0 +1,63 @@
+{
+  "case": "F26",
+  "status": "finished",
+  "source_sha256": "1af4b497d9380cd4f99b4f5e098f703618a5686bcb42e3b1bd2a65263266bc2d",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"El informe\",\"occurrence\":0},{\"text\":\"llegó\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El informe\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"llegó\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"ayer\",\"occurrence\":0}}] ,\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"envié\",\"occurrence\":0},{\"text\":\"lo\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"envié\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El informe\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"document\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"llegó \"},{\"kind\":\"temporal_reference\",\"text\":\"ayer\",\"value\":\"2026-10-03\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"llegó\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"llegó [[calendar/days/2026-10-03|03-10-2026]]\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0035418,
+  "estimated_cumulative_usd": 0.4359567,
+  "provider_calls": 4,
+  "application_status": "partial",
+  "routes": [
+    {
+      "status": "completed",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "needs_attention",
+      "reason": "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE",
+      "source": null
+    }
+  ],
+  "changed_note_paths": [
+    "El informe.md",
+    "calendar/days/2026-10-03.md",
+    "calendar/days/2026-10-04.md"
+  ],
+  "markdown_readback_samples": [
+    {
+      "path": "El informe.md",
+      "preview": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-document-el-informe\"\nname: \"El informe\"\nrevision: 2\nschema_version: 3\ntype: \"document\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\nInforme ficticio compartido entre participantes de las pruebas.\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- llegó [[calendar/days/2026-10-03|03-10-2026]]\n  <!-- odyssey:fact request=route-1-ca00d811625f444b75ea5954b9a9e84267e0f10b8acff7f46826388ec3759999 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->"
+    },
+    {
+      "path": "calendar/days/2026-10-03.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-03\"\nid: \"date:2026-10-03\"\nname: \"2026-10-03\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n"
+    },
+    {
+      "path": "calendar/days/2026-10-04.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n"
+    }
+  ],
+  "write_count": 3
+}

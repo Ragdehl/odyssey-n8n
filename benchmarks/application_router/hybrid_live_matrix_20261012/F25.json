@@ -1,0 +1,41 @@
+{
+  "case": "F25",
+  "status": "finished",
+  "source_sha256": "cae3f2182e3f33c847b380c0023fb0c1963e4bbd8a70bfd45faa2e6055d2bdc9",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"humedad\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"humedad\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Toulouse\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en el sótano\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"task\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"reparar el tejado\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"modality\",\"anchor\":{\"text\":\"necesita\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"reparar\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el tejado\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"La casa de Toulouse\",\"binding\":\"described\",\"direct_name\":\"La casa de Toulouse\",\"note_type\":null,\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene humedad en el sótano.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"La casa de Toulouse\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Tiene humedad en el sótano.\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0029253,
+  "estimated_cumulative_usd": 0.4324149,
+  "provider_calls": 3,
+  "application_status": "needs_attention",
+  "routes": [
+    {
+      "status": "needs_attention",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "failed",
+      "reason": null,
+      "source": null
+    }
+  ],
+  "changed_note_paths": [],
+  "markdown_readback_samples": [],
+  "write_count": 0
+}
