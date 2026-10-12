@@ -274,6 +274,66 @@ canonical-evidence handoff would need a separate contract restricting it to
 source-matched, current repository selections and preserving ordinary Core
 binding as the sole write authority. It was not implemented in this follow-up.
 
+**Core semantic-source reviewer and exact Temporal text follow-up (2026-10-12,
+fresh model evidence):** Another old assumption has been rejected:
+`ambiguous_identity` from the read-only independent reviewer is NOT a
+canonical-Note lookup failure. The graph reviewer has no Note repository
+and may only compare the user's *source referent* with Core's planned fact,
+while ordinary Core retains identity lookup/create/write authority. The
+model-facing prompt now distinguishes an explicit, unambiguous source name
+from a genuinely unresolved pronoun and forbids using lack of repository
+access as a reason to label a named person ambiguous. It still rejects
+swapped identities, lost participants, wrong owners, negated/conditional
+mismatches and invented canonical bindings.
+
+Six **fresh GPT-6 Router/Temporal + GPT-5.6 Core/graph** trial requests,
+each on a clean copied canonical vault, are fully captured in
+`benchmarks/application_router/hybrid_source_review_v1/`:
+
+| Original case | New result | Exact factual readback |
+|---|---|---|
+| F06 | **COMPLETED** | One Day, two actual facts, including `Vi a [[Ana|Ana]]` and `y compré pan.`; independent reviewers both accepted. This is semantically complete despite optional punctuation/style polish. |
+| F13 | **COMPLETED** | Three actual Day Notes, 03/10 conversation with canonical `[[Eric]]`, 05/10 cinema `[[Eric]]` using Core-persisted predecessor proof for `él`, and 04/10 bread purchase. The bread fact begins `. Hoy`: factual coverage complete, Markdown punctuation needs repair before strict UI-quality acceptance. |
+| F14 | PARTIAL (correct fail-closed) | 03/10 conversation successfully linked to BOTH Eric and Luis. The subsequent `él` genuinely has two antecedents and no safe cinema write was made. |
+| F05 | NEEDS_ATTENTION | Elliptical second dinner still cannot be fully source-attested. |
+| F07 | FAILED | Fresh Planner supplied `temporal_reference.text='a las 15h'` / `'a las 17h'` although Temporal certified only `'15h'` / `'17h'`; Core correctly rejected these unauthorised longer source spans at prewrite validation. |
+| F15 | NEEDS_ATTENTION | Collective/self-reference identity source proof still missing; no unsafe writes. |
+
+The normal Core Planner prompt now explicitly requires the exact
+`temporal_reference.source_text` and value, not a source-word superset,
+and keeps the deterministic validator unchanged. One additional fresh F07
+attempt in `benchmarks/application_router/hybrid_temporal_reference_v1/`
+finished FAILED **before a Planner model response** (only Router and
+Temporal were called): the experiment's conservative per-request maximum
+cost reservation exceeded its temporary USD 0.485 cap. This is a
+budget-preflight refusal, **not evidence that the revised Temporal prompt
+does or does not work**. A zero-paid-call SDK-shaped replay test freezes
+all six calls/outcomes; the three cases with physical writes have full
+Markdown readback assertions.
+
+**Latest strict source-and-readback acceptance = 10/27**: F06 now joins
+the earlier nine cases. F13's three facts are semantically correct and
+source-verified but one stored fact has an extraneous leading period;
+hold its strict UI-quality acceptance until general source-fragment
+punctuation treatment is verified. F07's historical grouped real
+responses now replay into two person-linked facts under the general
+participant guard but contain orphaned clock preposition/double spaces;
+its subsequent fresh model attempts did not establish fully clean
+writing. No other promotion is claimed. Total estimated experimental
+spend: USD **0.471058 / 0.50 approved**, including the bounded fresh
+reviewer batch and budget-preflight trial. No new paid gates are needed
+to preserve or replay these receipts.
+
+**Audit of the 13 seeded Notes:** Alex, Bea, Nina and Pablo already
+contain mutual family links. These Notes are **not proof that a particular
+incoming speaker is Alex**. Thus mapping `mi mujer` to Bea or `mis
+hijos` to Nina/Pablo without an authenticated self-binding would be
+an invented identity, even if the vault makes the relationship plausible.
+Do not change the expected case outputs to pretend that this self-binding
+is guaranteed. `person`, `project`, `concept`, `document`,
+`calendar_day` and legacy `journal_entry` are BASE NoteSchema types;
+`task` belongs only to the Tasks app extension.
+
 **Two actively investigated blockers:**
 - F18's **historical** Core reviewer returned `ambiguous_identity` for
   both source-fragment claims; the **fresh 2026-10-12 reviewer now returns

@@ -449,6 +449,29 @@ def render_luna_experimental_prompt(
         if (
             candidate_context is not None
             and candidate_context.hybrid_interpretation_mode
+            and domain_interpretation.temporal_references()
+        ):
+            semantic_dynamic += (
+                "\nVerified Temporal evidence is a CLOSED exact source-text/value "
+                "contract, not permission to normalize or extend clock words. "
+                "For EVERY temporal_reference part, COPY its text and value "
+                "EXACTLY from one supplied temporal_reference evidence item. "
+                "Do not prepend or append adjacent source words, prepositions, "
+                "punctuation, or calendar phrases to temporal_reference.text "
+                "even when that longer phrase exists in the routed message. "
+                "For example, an evidence source_text '15h' MUST be encoded "
+                "as temporal_reference.text '15h', NOT the broader phrase "
+                "around those characters. Never propose a date, datetime or "
+                "clock that is absent from the exact typed evidence. "
+                "When the Writer already renders the verified clock in a "
+                "fact, keep other literal parts semantically complete and "
+                "avoid redundant orphan time prepositions or double spaces. "
+                "All Temporal evidence still must be consumed according to "
+                "its true event ownership; when uncertain, ESCALATE. "
+            )
+        if (
+            candidate_context is not None
+            and candidate_context.hybrid_interpretation_mode
             and len(candidate_context.candidates) == 2
             and any(r.role == "replacement" for c in candidate_context.candidates for r in c.roles)
         ):

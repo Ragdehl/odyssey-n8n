@@ -182,17 +182,29 @@ two source tasks pending. This is **NOT** three-task F22 success,
 nor DEV/PROD app integration. Approx cumulative authorized-test spend
 USD **0.3356791 of USD 0.50** (estimate).
 
-**Current original corpus acceptance (2026-10-12, full genuine
-non-F22 retest):** 9/27 FULLY accepted, including newly verified genuine
-F11. The other 18 remain incomplete or require review; all 18 of the
-previously non-accepted non-F22 cases were executed again with real models.
-The batch's exact genuine provider outputs and changed Markdown samples
-are frozen in
-`benchmarks/application_router/hybrid_live_matrix_20261012/`;
-the normative status/root causes are in
-`docs/architecture/functional-roadmap.md`. Cumulative estimated approved
-model spend USD 0.4402191 / 0.50. No DEV/PROD, n8n or real Notes changes.
-Never infer model-quality acceptance solely from dispatcher COMPLETED.
+**Current original corpus acceptance (2026-10-12; fresh grouped
+source-review live gates):** **10/27** strictly accepted: F03 F04 F06
+F11 F16 F17 F19 F20 F21 F23. All 18 previously unaccepted non-F22
+cases were run with real models, and six have fresh source-review
+model trials. The original six-case genuine receipts are frozen in
+`benchmarks/application_router/hybrid_source_review_v1/` alongside
+the all-18 batch
+`benchmarks/application_router/hybrid_live_matrix_20261012/`; the
+small controlled budget-refusal F07 retest is frozen in
+`benchmarks/application_router/hybrid_temporal_reference_v1/`.
+The normative per-case readback and accepted-vs-functional distinction
+are documented in `docs/architecture/functional-roadmap.md`.
+Estimated cumulative approved model spend USD **0.471058 / 0.50**.
+F13 now writes all correct facts but leaves a stray leading period in
+one Markdown fact; its strict UI-quality gate is pending. F14 correctly
+writes the safe Eric/Luis conversation but leaves the later genuinely
+ambiguous pronoun pending. F07 has a provenance-safe grouped-note replay,
+but the latest fresh Planner supplied a Temporal text superset and was
+rejected; the next experimental attempt hit a *local conservative
+budget gate* before Planner, not an OpenAI outage. No DEV/PROD, n8n or
+real Notes changes. Never infer semantic or product acceptance solely
+from dispatcher COMPLETED. Do not infer authenticated `yo=Alex`
+from the seeded fixture's family links.
 
 **Scoped Tasks interpreter checkpoint (2026-10-12):** The opt-in Tasks
 surface now has a separate `interpret_scoped` contract for a route holding

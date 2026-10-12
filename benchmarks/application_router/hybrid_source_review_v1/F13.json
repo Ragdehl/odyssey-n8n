@@ -1,0 +1,98 @@
+{
+  "case": "F13",
+  "status": "finished",
+  "source_sha256": "00410077eac8b397f9c251bcbe4071a70bc6fbae5e5a19ca3935e37815652af0",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Eric\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"cine\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"purchase_item\",\"anchors\":[{\"text\":\"compré\",\"occurrence\":0},{\"text\":\"pan\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"compré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"pan\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ayer hablé con \"},{\"kind\":\"identity\",\"text\":\"Eric\",\"identity\":{\"description\":\"Eric\",\"binding\":\"described\",\"direct_name\":\"Eric\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"hablé\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ayer hablé con {{ref:0}}.\"],\"pending_reason\":null}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Iré al cine con \"},{\"kind\":\"identity\",\"text\":\"él\",\"identity\":{\"description\":\"Eric\",\"binding\":\"described\",\"direct_name\":\"Eric\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"iré\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Iré al cine con {{ref:0}}.\"],\"pending_reason\":null}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\". Hoy compré pan.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"compré\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\". Hoy compré pan.\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "estimated_new_usd": 0.0095615,
+  "estimated_cumulative_usd": 0.4592314,
+  "provider_calls": 10,
+  "application_status": "completed",
+  "routes": [
+    {
+      "status": "completed",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "completed",
+      "reason": null,
+      "source": null
+    },
+    {
+      "status": "completed",
+      "reason": null,
+      "source": null
+    }
+  ],
+  "changed_note_paths": [
+    "calendar/days/2026-10-03.md",
+    "calendar/days/2026-10-04.md",
+    "calendar/days/2026-10-05.md"
+  ],
+  "markdown_readback_samples": [
+    {
+      "path": "calendar/days/2026-10-03.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-03\"\nid: \"date:2026-10-03\"\nname: \"2026-10-03\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Ayer hablé con [[Eric|Eric]].\n  <!-- odyssey:fact request=route-1-976909203c1ca0db0e6986cc88f5b4c20e29c084e52391cb6d14b489b76000bc ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->"
+    },
+    {
+      "path": "calendar/days/2026-10-04.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 2\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- . Hoy compré pan.\n  <!-- odyssey:fact request=route-3-976909203c1ca0db0e6986cc88f5b4c20e29c084e52391cb6d14b489b76000bc ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-04 -->"
+    },
+    {
+      "path": "calendar/days/2026-10-05.md",
+      "preview": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\ndate: \"2026-10-05\"\nid: \"date:2026-10-05\"\nname: \"2026-10-05\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-hybrid-18-model-gate\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Iré al cine con [[Eric|Eric]].\n  <!-- odyssey:fact request=route-2-976909203c1ca0db0e6986cc88f5b4c20e29c084e52391cb6d14b489b76000bc ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-05 -->"
+    }
+  ],
+  "write_count": 3
+}

@@ -71,6 +71,16 @@ def test_genuine_f11_models_write_exact_joint_purchase_to_canonical_day(tmp_path
     )
     assert result.status is ApplicationStatus.COMPLETED
     assert len(sdk.calls) == len(saved["real_model_outputs"]) == 4
+    planner_instructions = " ".join(item["text"] for item in sdk.calls[-2]["input"][0]["content"])
+    assert "Verified Temporal evidence is a CLOSED exact source-text/value" in planner_instructions
+    assert "Do not prepend or append adjacent source words" in planner_instructions
+    reviewer_instructions = sdk.calls[-1]["input"][0]["content"]
+    assert (
+        "SEPARATE source-reference semantics from canonical Note binding" in reviewer_instructions
+    )
+    assert "ambiguous_identity only for genuine ambiguity of the SOURCE" in reviewer_instructions
+    assert "leaving actual reuse or safe creation" in reviewer_instructions
+    assert "If a participant, event, polarity or temporal owner is lost" in reviewer_instructions
     assert set(repo.list_markdown_paths()) - before == {"calendar/days/2026-10-04.md"}
     day = repo.read_text("calendar/days/2026-10-04.md")
     assert day.count("- Hoy compré pan y leche.") == 1

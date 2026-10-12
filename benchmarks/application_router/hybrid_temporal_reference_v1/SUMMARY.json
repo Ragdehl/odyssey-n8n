@@ -1,0 +1,18 @@
+{
+  "version": "hybrid-temporal-reference-live-20261012-v1",
+  "results": [
+    {
+      "case": "F07",
+      "application_status": "failed",
+      "write_count": 0,
+      "provider_calls": 2,
+      "estimated_new_usd": 0.0005333,
+      "error_type": null,
+      "error_message": null
+    }
+  ],
+  "finished_count": 1,
+  "requested_count": 1,
+  "estimated_cumulative_usd": 0.471058,
+  "remaining_to_authorized_cap": 0.028942
+}
