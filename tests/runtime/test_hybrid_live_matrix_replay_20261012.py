@@ -76,3 +76,40 @@ def test_genuine_f11_models_write_exact_joint_purchase_to_canonical_day(tmp_path
     assert day.count("- Hoy compré pan y leche.") == 1
     assert "calendar/days/2026-10-05" not in day
     assert len(result.execution_flow["routes"]) == 1
+
+
+def test_genuine_f07_grouped_named_events_keep_distinct_people_and_hours(tmp_path: Path) -> None:
+    """Replay linked grouped events through ordinary canonical reference binding."""
+    case = next(c for c in CASES if c["id"] == "F07")
+    saved = json.loads((EVIDENCE / "F07.json").read_text())
+    sdk = FrozenProvider(saved["real_model_outputs"])
+    repo, context, semantic, embedder = fresh_corpus_vault(tmp_path)
+    result = execute_candidate_routed_message(
+        case["source"],
+        router=OpenAIFactCandidateRouter(sdk, prompt_revision="v4"),
+        temporal=OpenAITemporalInterpreter(
+            sdk, CLOCK, max_output_tokens=1536, scoped_date_time_context=True
+        ),
+        core_planner_factory=lambda c, d: OpenAILunaExperimentalPlanner(
+            sdk, SCHEMA, CLOCK, candidate_context=c, domain_interpretation=d
+        ),
+        core_candidate_attributor=OpenAICoreCandidateAttributor(sdk),
+        repository=repo,
+        schema=SCHEMA,
+        context_index=context,
+        semantic_index=semantic,
+        embedder=embedder,
+        contextual_reasoner=object(),
+        actor="f07-frozen-linked-events",
+        now=NOW,
+        context_limit=5,
+        request_id_factory=lambda: "f07-frozen-linked-events",
+        bundle_compiler=compile_hybrid_candidate_bundle,
+    )
+    assert result.status is ApplicationStatus.COMPLETED, result.execution_flow
+    assert len(sdk.calls) == len(saved["real_model_outputs"]) == 4
+    day = repo.read_text("calendar/days/2026-10-04.md")
+    assert "15:00 — A las  veo a [[Bea|Bea]]." in day
+    assert "17:00 — A las  veo a [[Luis|Luis]]." in day
+    assert "15:00" not in day[day.index("[[Luis|Luis]]") - 30 : day.index("[[Luis|Luis]]")]
+    assert "17:00" not in day[day.index("[[Bea|Bea]]") - 30 : day.index("[[Bea|Bea]]")]

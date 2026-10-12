@@ -20,6 +20,7 @@ from odyssey_core.candidate_coverage import (
     build_candidate_coverage_manifest,
 )
 from odyssey_core.request_planning import (
+    KnowledgeReference,
     KnowledgeUnit,
     RequestPlan,
     SelectionCriteria,
@@ -195,3 +196,122 @@ def test_lost_actor_wrong_participant_or_swapped_event_stays_unwritten(tmp_path,
     result, repo, before = run(tmp_path, facts=changed)
     assert result.status is not ApplicationStatus.COMPLETED
     assert all(repo.read_text(path) == data for path, data in before.items())
+
+
+def _linked_event_context(count: int = 2, *, ambiguous_last: bool = False):
+    """Build variable source-owned events without relying on a corpus phrase."""
+    people = ("Bea", "Luis", "Marta", "Eric", "Nina", "Pablo", "Ana", "Alex", "Iris")[:count]
+    objects = tuple(f"object{index}" for index in range(count))
+    source = "; ".join(
+        f"see {person} {object_}" for person, object_ in zip(people, objects, strict=True)
+    )
+    if ambiguous_last:
+        source += " it"
+
+    def span(text: str, start: int = 0) -> CoreSourceSpan:
+        offset = source.index(text, start)
+        return CoreSourceSpan(text, offset, offset + len(text))
+
+    candidates = tuple(
+        CoreCandidate(
+            f"candidate-{index + 1}",
+            "occurrence",
+            "ambiguous_identity" if ambiguous_last and index == count - 1 else "candidate",
+            (span(person),),
+            (
+                CoreCandidateRole(
+                    "predicate", span("see", source.rfind("see ", 0, source.index(object_)))
+                ),
+                CoreCandidateRole("participants", span(person)),
+                CoreCandidateRole("object", span(object_)),
+                *(
+                    (CoreCandidateRole("reference", span("it", source.index(object_))),)
+                    if ambiguous_last and index == count - 1
+                    else ()
+                ),
+            ),
+            (),
+        )
+        for index, (person, object_) in enumerate(zip(people, objects, strict=True))
+    )
+    unit = KnowledgeUnit(
+        SelectionCriteria(None, "2031-07-14", "calendar_day", (), None),
+        "record",
+        (),
+        (),
+        tuple(f"see {object_} {{{{ref:{index}}}}}." for index, object_ in enumerate(objects)),
+        tuple(
+            KnowledgeReference(index + 1, "person", person) for index, person in enumerate(people)
+        ),
+    )
+    helpers = tuple(
+        KnowledgeUnit(
+            SelectionCriteria(person, person, "person", (), None),
+            "record",
+            (),
+            (),
+            (),
+            (),
+            reference_lookup_only=True,
+        )
+        for person in people
+    )
+    context = CoreCandidateContext(source, candidates, scoped_route_source=True)
+    plan = RequestPlan((WriteAction((unit, *helpers)),), ())
+    claims = tuple(
+        CoreCandidateCoverageClaim(candidate.candidate_id, "planned_fact", fact_ordinal=index)
+        for index, candidate in enumerate(candidates)
+    )
+    return context, plan, claims
+
+
+@pytest.mark.parametrize("count", (1, 3, 5, 9))
+def test_linked_group_participants_accept_variable_source_fact_counts(count):
+    """Candidate/fact cardinality is bounded by Core budgets, never a fixed template."""
+    context, plan, claims = _linked_event_context(count)
+    manifest = build_candidate_coverage_manifest(context.source, context, plan, claims)
+    assert len(manifest.claims) == count
+
+
+@pytest.mark.parametrize("mutation", ("swap_actor", "lose_object", "fabricate_reference"))
+def test_linked_group_participant_mismatches_fail_before_canonical_write(mutation):
+    """Exact source ownership rejects swapped actors, lost objects, and fake helpers."""
+    context, plan, claims = _linked_event_context()
+    unit, first, second = plan.actions[0].units
+    if mutation == "swap_actor":
+        unit = KnowledgeUnit(
+            unit.target,
+            unit.intent,
+            unit.properties,
+            unit.tag_changes,
+            ("see object0 {{ref:1}}.", "see object1 {{ref:0}}."),
+            unit.references,
+        )
+    elif mutation == "lose_object":
+        unit = KnowledgeUnit(
+            unit.target,
+            unit.intent,
+            unit.properties,
+            unit.tag_changes,
+            ("see {{ref:0}}.", unit.facts[1]),
+            unit.references,
+        )
+    else:
+        unit = KnowledgeUnit(
+            unit.target,
+            unit.intent,
+            unit.properties,
+            unit.tag_changes,
+            ("see object0 {{ref:2}}.", unit.facts[1]),
+            unit.references,
+        )
+    bad = RequestPlan((WriteAction((unit, first, second)),), ())
+    with pytest.raises(ValueError):
+        build_candidate_coverage_manifest(context.source, context, bad, claims)
+
+
+def test_ambiguous_pronoun_cannot_be_promoted_by_a_linked_group_plan():
+    """A reference role remains pending even when a helper names a real person."""
+    context, plan, claims = _linked_event_context(ambiguous_last=True)
+    with pytest.raises(ValueError, match="Ambiguous identity"):
+        build_candidate_coverage_manifest(context.source, context, plan, claims)

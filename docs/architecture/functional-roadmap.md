@@ -249,6 +249,31 @@ review, NOT an automatic acceptance increase. **18 original messages
 still require complete acceptance** (including the separately partially
 accepted F22).
 
+**Participant/source-coverage follow-up (2026-10-12, deterministic replay
+only):** The opt-in Core participant gate no longer assumes one collective
+phrase, one Calendar-Day unit, or a 1:1 candidate/fact mapping. For each
+affirmative grouped event it now proves the exact direct or immediate
+source-inherited participant spans, that candidate's own predicate/object or
+location evidence, and each fact-local reference helper before ordinary Core
+canonical binding and Markdown readback. This deliberately does not resolve a
+collective description into people, create identities, or make Router evidence
+canonical. Frozen genuine F07 Router/Temporal/Planner/reviewer outputs now
+replay with two isolated-Day facts at 15:00/17:00 and independently bound Bea
+and Luis links. Deterministic 1/3/5/9 candidate/fact shapes plus swapped actor,
+lost event object, fabricated helper, and ambiguous-pronoun refusals protect
+the contract. This is replay evidence, not a fresh model-quality acceptance or
+an increase to the 9/27 count. F01 remains partial because its cinema candidate
+has no source-proven participant inheritance; F27 remains pending because its
+ambiguous future pronoun and existing provenance failure are outside this gate.
+
+**Deferred reviewer evidence proposal:** The independent graph reviewer sees
+only the selected source, proposed targets and typed predecessor evidence; it
+does not receive a canonical-note list. Existing fixture names for F05/F06/F13/
+F14 therefore cannot be used as identity proof. A future bounded Core-owned
+canonical-evidence handoff would need a separate contract restricting it to
+source-matched, current repository selections and preserving ordinary Core
+binding as the sole write authority. It was not implemented in this follow-up.
+
 **Two actively investigated blockers:**
 - F18's **historical** Core reviewer returned `ambiguous_identity` for
   both source-fragment claims; the **fresh 2026-10-12 reviewer now returns

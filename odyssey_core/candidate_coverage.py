@@ -280,14 +280,18 @@ def validate_candidate_coverage_manifest(
             claimed_ordinals.add(ordinal)
     if claimed_ordinals != fact_ordinals:
         raise ValueError("Every planned atomic fact needs original source evidence")
-    # Canonical referents require separately certified identity evidence across
-    # shared/expanded graph edges. Preserve existing narrow reference guards
-    # rather than treating lexical overlap as proof of a link.
-    if graph_mode and any(
-        unit.references or unit.reference_lookup_only
-        for action in plan.actions
-        if isinstance(action, WriteAction)
-        for unit in action.units
+    # N:M reference-bearing plans need source-group evidence. Outside an exact
+    # scoped group, retain the established refusal rather than treating a graph
+    # edge as canonical identity proof.
+    if (
+        graph_mode
+        and any(
+            unit.references or unit.reference_lookup_only
+            for action in plan.actions
+            if isinstance(action, WriteAction)
+            for unit in action.units
+        )
+        and not context.scoped_route_source
     ):
         raise ValueError("Shared/expanded referenced Core facts need reviewed identity provenance")
     # Check typed dispositions, negative/sensitive scopes and complete coverage
@@ -348,6 +352,7 @@ def validate_candidate_coverage_manifest(
                 other_source_subjects=other_subjects,
                 inherited_subject=context.verified_inherited_subject,
             )
+        grouped_participant_helpers: tuple[int, ...] | None = None
         if (
             context.scoped_route_source
             and len(unit.facts) > 1
@@ -357,9 +362,18 @@ def validate_candidate_coverage_manifest(
                 for role in candidate.roles
             )
         ):
-            from .candidate_group_participants import validate_group_participant_literal
+            from .candidate_group_participants import validate_group_participant_fact
 
-            validate_group_participant_literal(source, context, index, unit, lexical)
+            grouped_participant_helpers = validate_group_participant_fact(
+                source,
+                context,
+                index,
+                action,
+                unit_index,
+                unit,
+                original,
+                lexical,
+            )
         if context.verified_sensitive_temporal is not None:
             pass  # Whole-source literal has its own strict N:1 validator.
         elif context.verified_group_temporal is not None:
@@ -373,7 +387,7 @@ def validate_candidate_coverage_manifest(
             veto_unsafe_literal_match(
                 source, context, index, lexical, canonical_binding=canonical_binding
             )
-        if unit.references:
+        if unit.references and grouped_participant_helpers is None:
             if len(unit.facts) == 1:
                 if context.candidates[index].kind == "relationship":
                     validate_one_mutual_relationship_fact(
@@ -404,6 +418,12 @@ def validate_candidate_coverage_manifest(
                 helper_key = action_index, reference.target_index
                 if len(unit.facts) == 2 and fact_index != 0:
                     continue  # These helpers were already claimed by first fact.
+                if helper_key in claimed_helpers:
+                    raise ValueError("Core participant helper is used by multiple source facts")
+                claimed_helpers.add(helper_key)
+        elif grouped_participant_helpers is not None:
+            for helper_index in grouped_participant_helpers:
+                helper_key = action_index, helper_index
                 if helper_key in claimed_helpers:
                     raise ValueError("Core participant helper is used by multiple source facts")
                 claimed_helpers.add(helper_key)
