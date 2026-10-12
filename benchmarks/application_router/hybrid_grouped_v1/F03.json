@@ -1,0 +1,26 @@
+{
+  "case": "F03",
+  "source_sha256": "cfe1642c88d826967071b2f1f8b530cdce0312cd1b4f3aa3f4debb38ddf7f3a2",
+  "pilot_observed_status": "needs_attention",
+  "pilot_error_category": null,
+  "pilot_error_message": null,
+  "pilot_changed_notes": [],
+  "saved_genuine_provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vamos con \"},{\"kind\":\"identity\",\"text\":\"mis hijos\",\"identity\":{\"description\":\"mis hijos\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":{\"source\":{\"kind\":\"SELF\"},\"member_query\":\"mis hijos\",\"extent\":\"complete_set\"}}},{\"kind\":\"literal\",\"text\":\" de paseo al parque.\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Luego iremos al cine.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vamos\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"iremos\",\"fact_ordinals\":[],\"planned_fact_texts\":[],\"pending_reason\":\"ambiguous_identity\"}]}"
+    }
+  ],
+  "provenance": "five-case approved hybrid model probe; saved Router GPT-6 result is separate"
+}

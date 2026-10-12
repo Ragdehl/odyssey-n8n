@@ -1,0 +1,21 @@
+{
+  "case": "F23",
+  "source_sha256": "755e70ca4d78ca30605872e66f5893c19eb538aa2508967699e6255070464ec0",
+  "pilot_observed_status": "needs_attention",
+  "pilot_error_category": null,
+  "pilot_error_message": null,
+  "pilot_changed_notes": [],
+  "saved_genuine_provider_outputs": [
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El proyecto Odyssey\",\"binding\":\"described\",\"direct_name\":\"Odyssey\",\"note_type\":\"project\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene un fallo en \"},{\"kind\":\"identity\",\"text\":\"Router\",\"identity\":{\"description\":\"Router\",\"binding\":\"described\",\"direct_name\":\"Router\",\"note_type\":null,\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene otro fallo en \"},{\"kind\":\"identity\",\"text\":\"Temporal\",\"identity\":{\"description\":\"Temporal\",\"binding\":\"described\",\"direct_name\":\"Temporal\",\"note_type\":null,\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Router\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Tiene un fallo en {{ref:0}}.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"Temporal\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Tiene otro fallo en {{ref:1}}.\"],\"pending_reason\":null}]}"
+    }
+  ],
+  "provenance": "five-case approved hybrid model probe; saved Router GPT-6 result is separate"
+}

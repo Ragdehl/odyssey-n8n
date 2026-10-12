@@ -101,6 +101,7 @@ def execute_candidate_routed_message(
     context_limit: int,
     request_id_factory: Callable[[], str],
     candidate_pending_recorder: Callable[[object], str] | None = None,
+    bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
 ) -> object:
     """Execute scoped candidates through existing sequential Core and route guards.
 
@@ -157,7 +158,12 @@ def execute_candidate_routed_message(
     proposal = router.propose(source)
     if not isinstance(proposal, FactCandidateProposal) or proposal.source != source:
         raise RouterError("Router did not preserve the original message")
-    bundle = compile_candidate_route_bundle(proposal)
+    # The default strict atomic route compiler is unchanged. The explicit
+    # opt-in hybrid compiler may group multiple candidates into one *source*
+    # request, never into one forced mutation or canonical identity.
+    # Resolve the default at call time: historical frozen-reply tests can
+    # inject their exact previous compiler without changing new hybrid logic.
+    bundle = (bundle_compiler or compile_candidate_route_bundle)(proposal)
     validate_bundle_original_provenance(bundle)
     outer_id = request_id_factory()
     if not isinstance(outer_id, str) or not outer_id.strip():

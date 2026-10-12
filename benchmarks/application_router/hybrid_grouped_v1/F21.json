@@ -1,0 +1,16 @@
+{
+  "case": "F21",
+  "source_sha256": "5c97fbc2a8b2be6ddb166f547228cea234f0275a56bbd5ce7dad2ba64fd951e2",
+  "pilot_observed_status": "temporal_blocked",
+  "pilot_error_category": "TemporalInterpreterError",
+  "pilot_error_message": "Temporal resolution is not an exact Core anchor",
+  "pilot_changed_notes": [],
+  "saved_genuine_provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"La semana que viene\",\"temporal\":{\"kind\":\"DATE_RANGE\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":\"2026-10-05\",\"range_end_exclusive\":\"2026-10-12\"}},{\"temporal_text\":\"el lunes\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"el miércoles\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-07\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 18h\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    }
+  ],
+  "provenance": "five-case approved hybrid model probe; saved Router GPT-6 result is separate"
+}

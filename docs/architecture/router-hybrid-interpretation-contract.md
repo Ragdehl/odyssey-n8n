@@ -110,18 +110,48 @@ Pruebas aisladas históricas: ruta local externa
 /home/ragdehl/projects/odyssey-experimental-receipts/hybrid-probe050/
 Este resumen documental es independiente de que esa ruta siga existiendo.
 
-## Siguiente etapa, aún NO ejecutada
+## Implementación: compilador híbrido opt-in (primer bloque aislado)
 
-1. Compilador híbrido que agrupe con procedencia exacta, sin fusionar hechos.
-2. Adaptar atribución temporal multiacontecimiento y cobertura N:M de Core;
-   resolver F03 (identidades), F21 (hora compartida), F23 (referencias).
-3. Probar F03/F04/F16/F21/F23 y controles F06/F13/F22, F14/F27 y todos
-   los 27 casos originales en vault ficticio con readback real de Writer.
-   Pruebas de regresión deterministas y evidencia real acotada cuando se
-   modifiquen prompts. No relajar controles para obtener resultados verdes.
-4. Mantener dispatch atómico aislado como referencia/fallback entre grupos.
-   Auditar compatibilidad de contrato, estados pendientes e idempotencia
-   antes de activar en DEV y después de autorización promover a PROD.
+**CÓDIGO IMPLEMENTADO en esta rama de experimento, NO desplegado en DEV/PROD:**
+
+- `odyssey_runtime/hybrid_group_compiler.py`: reutiliza Router v1,
+  las posiciones y roles existentes, la validación de fuente original y
+  los contratos `CandidateRouteBundle`. Agrupa dependencias semánticas
+  explícitas, preservando todos los candidatos independientes por ID.
+- `execute_candidate_routed_message(..., bundle_compiler=...)`: habilita
+  exclusivamente por selección explícita el agrupador híbrido, con el
+  **mismo** Temporal/Core/revisor/Writer existente. Sin esta opción, el
+  compilador atómico anterior sigue siendo el predeterminado. No se ha
+  activado ninguna ruta nueva en DEV/PROD.
+- Se reforzó el validador compartido de procedencia: los límites exactos
+  de cada ruta/grupo deben reproducir la partición original; no basta con
+  que el texto de una ruta aislada coincida. Los resultados históricos
+  mantienen su propio compilador y se revalidan sin reinterpretarlos.
+- Con los 26 resultados antiguos estructuralmente compilables de Router:
+  **53 rutas atómicas → 37 grupos conservadores** (reducción del 30,2 %
+  en unidades de interpretación potenciales; NO medición de ahorro real).
+  F27 sigue rechazado por dependencia incoherente; no se repara a ciegas.
+- Se han reproducido sin nuevas llamadas de pago las cinco respuestas
+  **auténticas** anteriores de Temporal/Core, ahora entrando por el nuevo
+  agrupador: **F04 y F16 completan** con notas ficticias verificadas;
+  F03/F23 siguen pendientes por validadores canónicos y F21 mantiene el
+  bloqueo Temporal. Las salidas originales se han congelado como fixtures
+  bajo `benchmarks/application_router/hybrid_grouped_v1/`.
+  F06 demuestra además que si el primer hecho independiente queda pendiente,
+  la segunda compra puede persistir sin copiar al actor anterior.
+- La suite de regresiones en el repositorio es obligatoria antes del
+  merge. Ningún cambio de prompt ni modelo se ha producido en esta etapa.
+
+**SIGUIENTES BLOQUES, NO IMPLEMENTADOS:**
+
+1. Adaptar con revisión semántica independiente F03 (referencias al grupo
+   `mis hijos`), F21 (la misma hora para dos días) y F23 (referencias de
+   componentes en dos propiedades), **sin** desactivar las restricciones
+   vigentes ni crear notas de componentes automáticamente.
+2. Cubrir N:M no triviales, negativos/condiciones/correcciones y tareas,
+   incluyendo estados parciales, pronombres ambiguos y más casos reales.
+3. Repetir gates reales de producción con el contrato final cuando cambien
+   prompts o validaciones. Después, revisión explícita antes de DEV y PROD.
 
 ## Precedencia / documentación histórica
 

@@ -293,7 +293,22 @@ def validate_bundle_original_provenance(bundle: CandidateRouteBundle) -> None:
     source = bundle.original_source
     digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
     validate_route_plan(bundle.plan, source, ApplicationCatalog.empty())
-    for scoped in bundle.units:
+    if len(bundle.units) != len(bundle.plan.routes):
+        raise RouterError("Compiled route count disagrees with exact-source plan")
+    previous_end = 0
+    for scoped, route in zip(bundle.units, bundle.plan.routes, strict=True):
+        if (
+            not isinstance(scoped.original_start, int)
+            or not isinstance(scoped.original_end, int)
+            or scoped.original_start != previous_end
+            or not scoped.original_start < scoped.original_end <= len(source)
+            or scoped.route != route
+            or scoped.route.source_text != source[scoped.original_start : scoped.original_end]
+            or scoped.context.source != scoped.route.source_text
+            or len(scoped.context.candidates) != len(scoped.original_candidate_ids)
+        ):
+            raise RouterError("Compiled group lost exact original-source partition")
+        previous_end = scoped.original_end
         scoped.context.validate(scoped.route.source_text)
         for role in scoped.context.source_provenance:
             if (
@@ -301,3 +316,5 @@ def validate_bundle_original_provenance(bundle: CandidateRouteBundle) -> None:
                 or source[role.original_start : role.original_end] != role.text
             ):
                 raise RouterError("Shared context does not match original source")
+    if previous_end != len(source):
+        raise RouterError("Compiled groups did not cover the complete original message")

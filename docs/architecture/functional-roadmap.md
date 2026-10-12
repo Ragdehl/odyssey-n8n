@@ -52,15 +52,27 @@ claiming all 27 source examples pass. Historical route-local experiments
 and the frozen real-model receipts remain regression evidence, not the
 current target's grouping instructions.
 
-**NEXT ORDER:** (1) audit/align documentation and ADR precedence (this
-stage); (2) implement a small bounded grouping compiler reusing the
-existing Router candidate/role contract, retain the strict atomic path
-as fallback and prove per-candidate coverage; (3) repair F03/F21/F23
-with tests plus F06/F13/F22 independent-group controls and F14/F27
-ambiguity; (4) run 27-case deterministic/full suite and focused genuine
-model checks; (5) explicitly review promotion to DEV, later PROD.
-No code or DEV/PROD activation follows automatically from this decision.
-Core remains GPT-5.6 until the separately approved model migration.
+**Implementation checkpoint (branch only, opt-in):** The approved
+documentation/ADR audit is complete. A bounded
+`odyssey_runtime/hybrid_group_compiler.py` now groups real source
+candidates without merging facts; the existing scoped executor accepts it
+**only via explicit `bundle_compiler` injection** and defaults to the
+unchanged atomic compiler. The 26 compilable source cases go from
+**53 atomic routes to 37 conservative interpretation groups**. F27
+continues to fail closed. Frozen genuine Temporal/Core outputs replay
+through the ordinary Writer: **F04/F16 complete**, while F03/F23
+remain Core pending and F21 remains Temporal unresolved. F06's
+independent second group can persist even if the first Core plan declines.
+See the [hybrid target and implementation checkpoint](router-hybrid-interpretation-contract.md).
+This is **experimental code, not deployed behavior**, and is NOT an
+authorization to declare all cases semantically solved.
+
+**NEXT ORDER:** (1) fix F03, F21 and F23 with independent Core/Temporal
+evidence and safety tests; (2) extend 27-case semantic/partial-write
+coverage (including F06/F13/F22 independence and F14/F27 ambiguity);
+(3) run deterministic/full-suite and focused fresh real-model evidence;
+(4) seek separate approval to promote to DEV, then PROD.
+Do not change Core GPT-5.6 during this implementation.
 
 ## Deferred model consolidation — user decision (2026-10-10)
 
