@@ -12,6 +12,39 @@ from .candidate_context import CoreCandidateContext
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 
+def supports_sensitive_literal_candidates(candidates) -> bool:
+    """Return whether source roles describe one safe literal-sensitive shape.
+
+    This establishes only that every negative or conditional candidate has
+    source-owned semantic roles.  Temporal proof, whole-source preservation,
+    target selection, coverage, and Markdown readback remain separate gates.
+    """
+    if not candidates or any(candidate.state != "candidate" for candidate in candidates):
+        return False
+    negative = all(candidate.kind == "negative" for candidate in candidates)
+    conditional = all(candidate.kind == "occurrence" for candidate in candidates)
+    if negative:
+        for candidate in candidates:
+            roles = {role.role for role in candidate.roles}
+            scoped_people_or_objects = [
+                role for role in candidate.roles if role.role in {"object", "participants"}
+            ]
+            if (
+                not {"polarity", "predicate"} <= roles
+                or "condition" in roles
+                or len(scoped_people_or_objects) != 1
+            ):
+                return False
+        return True
+    if conditional:
+        return all(
+            {"condition", "predicate"} <= {role.role for role in candidate.roles}
+            and not any(role.role == "polarity" for role in candidate.roles)
+            for candidate in candidates
+        )
+    return False
+
+
 def validate_sensitive_group_statement(
     source, context: CoreCandidateContext, plan: RequestPlan, claims
 ):
@@ -32,24 +65,11 @@ def validate_sensitive_group_statement(
         or len(plan.actions[0].units) != 1
         or plan_fact_ordinals(plan) != ((0,),)
     ):
-        raise ValueError("Sensitive joint meaning requires reviewed two-to-one coverage")
+        raise ValueError("Sensitive meaning requires reviewed N-to-one coverage")
 
-    negative = all(
-        c.kind == "negative"
-        and all(
-            any(r.role == role for r in c.roles) for role in ("polarity", "predicate", "object")
-        )
-        and not any(r.role == "condition" for r in c.roles)
-        for c in candidates
-    )
-    conditional = all(
-        c.kind == "occurrence"
-        and all(any(r.role == role for r in c.roles) for role in ("condition", "predicate"))
-        and not any(r.role == "polarity" for r in c.roles)
-        for c in candidates
-    )
-    if not (negative or conditional):
+    if not supports_sensitive_literal_candidates(candidates):
         raise ValueError("Mixed polarity and invented condition scope are not certified")
+    negative = all(c.kind == "negative" for c in candidates)
 
     if negative:
         polarity = {
@@ -58,18 +78,20 @@ def validate_sensitive_group_statement(
         predicates = {
             (r.span.start, r.span.end) for c in candidates for r in c.roles if r.role == "predicate"
         }
-        objects = [
-            tuple((r.span.start, r.span.end) for r in c.roles if r.role == "object")
+        scopes = [
+            tuple(
+                (r.span.start, r.span.end) for r in c.roles if r.role in {"object", "participants"}
+            )
             for c in candidates
         ]
         if (
             len(polarity) != 1
             or len(predicates) != 1
-            or any(len(scopes) != 1 for scopes in objects)
-            or len({scope[0] for scope in objects}) != len(objects)
+            or any(len(candidate_scopes) != 1 for candidate_scopes in scopes)
+            or len({candidate_scopes[0] for candidate_scopes in scopes}) != len(scopes)
         ):
             raise ValueError(
-                "Negative group does not prove common negated predicate and each object scope"
+                "Negative group does not prove common negated predicate and each source scope"
             )
     else:
         conditions = [

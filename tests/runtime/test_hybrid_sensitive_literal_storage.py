@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from odyssey_apps.fact_candidates import validate_fact_candidate_proposal
 from odyssey_core.application import ApplicationStatus
 from odyssey_core.candidate_attribution import CandidateFactLinks, inspect_candidate_fact_graph
 from odyssey_core.candidate_context import (
@@ -148,6 +149,174 @@ def _synthetic_sensitive_context(count, *, conditional=False):
             verified_sensitive_temporal=domain,
         ),
     )
+
+
+def _standalone_participant_context():
+    """Build a one-candidate negative with a participant, not an object, role."""
+    source = "2031-07-14: not contacted the review group."
+    date = "2031-07-14"
+    candidate = CoreCandidate(
+        "candidate-1",
+        "negative",
+        "candidate",
+        (_span(source, "not contacted"),),
+        (
+            CoreCandidateRole("date", _span(source, date)),
+            CoreCandidateRole("polarity", _span(source, "not")),
+            CoreCandidateRole("predicate", _span(source, "contacted")),
+            CoreCandidateRole("participants", _span(source, "the review group")),
+        ),
+        (),
+    )
+    domain = parse_temporal_interpretation(
+        {
+            "mentions": [
+                {
+                    "temporal_text": date,
+                    "temporal": {
+                        "kind": "EXACT_DATE",
+                        "exact_date": date,
+                        "exact_datetime": None,
+                        "range_start": None,
+                        "range_end_exclusive": None,
+                    },
+                }
+            ]
+        },
+        source,
+        timezone="Europe/Paris",
+    ).core_domain_interpretation()
+    return (
+        source,
+        date,
+        CoreCandidateContext(
+            source,
+            (candidate,),
+            scoped_route_source=True,
+            hybrid_interpretation_mode=True,
+            verified_sensitive_temporal=domain,
+        ),
+    )
+
+
+def test_standalone_negative_participant_is_exact_literal_only():
+    source, day, context = _standalone_participant_context()
+    plan = full_literal_plan(source, day)
+    manifest = build_candidate_coverage_manifest(
+        source,
+        context,
+        plan,
+        (CoreCandidateCoverageClaim("candidate-1", "planned_fact", fact_ordinals=(0,)),),
+    )
+    assert manifest.claims[0].fact_ordinals == (0,)
+
+
+def test_standalone_negative_participant_writes_only_the_literal_day_fact(tmp_path):
+    source, day, _context = _standalone_participant_context()
+
+    class Router:
+        def propose(self, request):
+            assert request == source
+            return validate_fact_candidate_proposal(
+                request,
+                {
+                    "version": 1,
+                    "units": [
+                        {
+                            "kind": "negative",
+                            "anchors": [{"text": "not contacted", "occurrence": 0}],
+                            "scoped_source": [
+                                {"role": "date", "anchor": {"text": day, "occurrence": 0}},
+                                {"role": "polarity", "anchor": {"text": "not", "occurrence": 0}},
+                                {
+                                    "role": "predicate",
+                                    "anchor": {"text": "contacted", "occurrence": 0},
+                                },
+                                {
+                                    "role": "participants",
+                                    "anchor": {"text": "the review group", "occurrence": 0},
+                                },
+                            ],
+                            "inheritance": [],
+                            "state": "candidate",
+                        }
+                    ],
+                },
+            )
+
+    class Temporal:
+        def interpret(self, request):
+            assert request == source
+            return parse_temporal_interpretation(
+                {
+                    "mentions": [
+                        {
+                            "temporal_text": day,
+                            "temporal": {
+                                "kind": "EXACT_DATE",
+                                "exact_date": day,
+                                "exact_datetime": None,
+                                "range_start": None,
+                                "range_end_exclusive": None,
+                            },
+                        }
+                    ]
+                },
+                request,
+                timezone="Europe/Paris",
+            )
+
+    repo, index, semantic, embedder = fresh_corpus_vault(tmp_path)
+    result = execute_candidate_routed_message(
+        source,
+        router=Router(),
+        temporal=Temporal(),
+        core_planner_factory=lambda _context, _domain: SimpleNamespace(
+            plan=lambda request: full_literal_plan(request, day)
+        ),
+        candidate_coverage_factory=lambda request, context, plan: build_candidate_coverage_manifest(
+            request,
+            context,
+            plan,
+            (CoreCandidateCoverageClaim("candidate-1", "planned_fact", fact_ordinals=(0,)),),
+        ),
+        repository=repo,
+        schema=SCHEMA,
+        context_index=index,
+        semantic_index=semantic,
+        embedder=embedder,
+        contextual_reasoner=object(),
+        actor="standalone-negative-literal",
+        now=NOW,
+        context_limit=5,
+        request_id_factory=lambda: "standalone-negative-literal",
+        bundle_compiler=compile_hybrid_candidate_bundle,
+    )
+    assert result.status is ApplicationStatus.COMPLETED, result.execution_flow
+    stored = repo.read_text("calendar/days/" + day + ".md")
+    assert stored.count(source) == 1
+    assert "{{ref:" not in stored
+
+
+@pytest.mark.parametrize("mutation", ("missing_participant", "invented_object", "missing_date"))
+def test_standalone_negative_participant_requires_its_own_source_proof(mutation):
+    source, day, context = _standalone_participant_context()
+    candidate = context.candidates[0]
+    roles = candidate.roles
+    if mutation == "missing_participant":
+        roles = tuple(role for role in roles if role.role != "participants")
+    elif mutation == "invented_object":
+        roles = (*roles, CoreCandidateRole("object", _span(source, "review group")))
+    else:
+        roles = tuple(role for role in roles if role.role != "date")
+    context = replace(context, candidates=(replace(candidate, roles=roles),))
+    with pytest.raises(ValueError):
+        build_candidate_coverage_manifest(
+            source,
+            context,
+            full_literal_plan(source, day),
+            (CoreCandidateCoverageClaim("candidate-1", "planned_fact", fact_ordinals=(0,)),),
+        )
 
 
 @pytest.mark.parametrize("count", (1, 3, 5, 9))

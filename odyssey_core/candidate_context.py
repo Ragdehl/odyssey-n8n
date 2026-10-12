@@ -333,24 +333,13 @@ class CoreCandidateContext:
             or self.verified_sensitive_temporal.capability_id != "temporal"
             or self.verified_sensitive_temporal.intent != "TEMPORAL_RESOLUTION"
             or self.verified_sensitive_temporal.source_text != self.source
-            or not all(
-                (
-                    c.kind == "negative"
-                    and all(
-                        any(r.role == role for r in c.roles)
-                        for role in ("polarity", "predicate", "object")
-                    )
-                )
-                or (
-                    c.kind == "occurrence"
-                    and all(
-                        any(r.role == role for r in c.roles) for role in ("condition", "predicate")
-                    )
-                )
-                for c in self.candidates
-            )
         ):
             raise ValueError("Sensitive grouped Temporal proof is not bound to original source")
+        if self.verified_sensitive_temporal is not None:
+            from .candidate_sensitive_statement import supports_sensitive_literal_candidates
+
+            if not supports_sensitive_literal_candidates(self.candidates):
+                raise ValueError("Sensitive grouped source roles are not literal-safe")
         if len(self.prompt_payload_bytes()) > MAX_CORE_CANDIDATE_CONTEXT_BYTES:
             raise ValueError("Core candidate context is oversized")
 

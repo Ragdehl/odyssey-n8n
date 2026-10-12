@@ -15,6 +15,7 @@ from odyssey_apps.fact_candidates import FactCandidateProposal
 from odyssey_apps.router import RouterError
 from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
+from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
@@ -343,17 +344,8 @@ def execute_candidate_routed_message(
             route_context = replace(route_context, verified_correction_temporal=domain)
         if (
             route_context.hybrid_interpretation_mode
-            and len(route_context.candidates) == 2
             and domain is not None
-            and (
-                all(
-                    c.kind == "negative" and any(r.role == "polarity" for r in c.roles)
-                    for c in route_context.candidates
-                )
-                or all(
-                    any(r.role == "condition" for r in c.roles) for c in route_context.candidates
-                )
-            )
+            and supports_sensitive_literal_candidates(route_context.candidates)
         ):
             route_context = replace(route_context, verified_sensitive_temporal=domain)
         route_context.validate(unit_source)

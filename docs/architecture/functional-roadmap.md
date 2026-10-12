@@ -125,6 +125,30 @@ pending; the whole original F22 case has **NOT** been completed.
 No change to app deployment, task schema or human Notes.
 Estimated cumulative model experiment spend: USD 0.3356791 / 0.50.
 
+**Standalone negative-literal continuation (2026-10-12, opt-in branch
+only):** the same exact-source gate now handles a one-candidate negative and
+variable bounded negative candidate counts, including a source-owned
+`participants` role instead of `object`. Every candidate needs its own exact
+polarity, predicate, and one participant/object scope; the only authorized
+write remains the complete routed source as one literal Day fact on an exact
+Temporal-proven Day, without references or event semantics. Provider-free
+tests cover 1/3/5/9 candidates and missing/swapped/extra scope, target, date,
+polarity, mixed-kind, partial-source, and canonical-reference rejection. No
+Router prompt, model, schema, DEV/PROD route, workflow, or provider evidence
+changed. The immutable historical real-model F18 replay remains
+non-completed, but a subsequent source-provenance audit corrected the earlier
+diagnosis: its original Router proposal ALREADY cites `Ayer` as a DATE role
+for the independent affirmative candidate. The hybrid compiler carries that
+out-of-fragment source role and ScopedTemporalHandoff verifies its exact
+date-only transfer; no polarity or identity is inherited. A provider-free
+end-to-end replay of that ORIGINAL Router proposal with independently scripted
+Core plans and coverage now writes a safe literal negative Day fact AND a
+distinct affirmative Day fact linked to the seeded canonical Luis, with
+physical Markdown readback. Deleting the affirmative DATE source role removes
+the date proof. This validates structural feasibility, NOT the actual GPT-5.6
+Planner/reviewer quality; F18 remains outside the fully live-accepted count
+until fresh model-based semantic review succeeds.
+
 **Scoped continuation (opt-in branch only):** corrected future plans now
 accept a source-proven linear replacement chain rather than assuming exactly
 two candidates. The first candidate supplies date/predicate/polarity; each
@@ -137,8 +161,8 @@ three-step synthetic Markdown readback supplement the unchanged genuine F19
 replay. This is not general correction-language support, a fresh model gate,
 or authorization to activate DEV/PROD.
 
-**NEXT ORDER:** (1) extend the validated literal-statement scopes beyond
-the narrow two-candidate F17/F20 shapes without inventing events or links;
+**NEXT ORDER:** (1) obtain a new Router prompt gate before relying on new
+standalone-negative proposals beyond deterministic source fixtures;
 (2) resolve F18 independent negative/positive semantics and the remaining
 F22 task intents with verified cross-group modality/date ownership;
 (3) expand mixed-polarity F18 and ambiguous F14/F27 with canonical proof,

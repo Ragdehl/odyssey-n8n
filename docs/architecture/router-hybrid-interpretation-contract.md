@@ -370,10 +370,10 @@ Presupuesto estimado acumulado: USD 0.3263055 de USD 0.50 autorizados.
 
 **Feature branch only, still not DEV/PROD.** Following the earlier original
 F17/F20 fail-closed model attempts, an opt-in `verified_sensitive_temporal`
-context was added for exactly two source-grounded candidates sharing one
-negative predicate (F17) or two complementary explicit conditions (F20).
+context was added for source-grounded candidates sharing one negative
+predicate (F17) or explicit conditions (F20).
 The bounded `candidate_sensitive_statement.py` checks the ENTIRE exact
-original sentence, original role spans, complete one-fact/two-candidate
+original sentence, original role spans, complete N:1 candidate
 coverage, a single canonical Day destination proven by Temporal, and no
 canonical references, new entities, changes of polarity, dropped clauses,
 extra event claims or hidden mutations. The group reviewer must attribute
@@ -391,6 +391,32 @@ The old `hybrid_sensitive_v1/` NEEDS_ATTENTION receipts remain valid
 historical observations. F18's separated affirmative/negative person
 claims and ambiguous canonical links remain unresolved; do not promote
 them by the literal group exception.
+
+**Standalone negative literal extension (2026-10-12, provider-free):** the
+same opt-in contract now accepts one or more negative candidates within the
+ordinary bounded Core candidate budget. Each candidate must carry its own
+exact polarity, predicate, and exactly one `object` or `participants` source
+scope; the whole routed source must still be the only persisted fact, and
+Temporal must prove the one Day. This covers a standalone negative participant
+scope without creating a person link or an occurrence. Deterministic coverage
+uses 1/3/5/9 candidates plus malformed scope/target/date/reference cases.
+No Router prompt or provider output changed. An independent audit of the
+ORIGINAL frozen F18 GPT-6 Router proposal established that its second
+affirmative candidate already carries an exact source-anchored DATE role
+pointing to `Ayer`, despite having no explicit inheritance edge.
+The existing hybrid source compiler correctly retains that external role as
+read-only original provenance, and ScopedTemporalHandoff authorizes its
+date-only reuse after the first route's Temporal proof. No negation is
+inherited. A new provider-free test using that UNMODIFIED frozen F18 proposal
+shows two separately reviewed synthetic Core plans writing exact-source
+`Ayer no vi a Ana` to the canonical Day as non-occurred informational
+text and `Hablé con [[Luis|Luis]].` as an affirmative Day fact after
+canonical person lookup, with real isolated Markdown readback. Removing
+the original affirmative DATE role makes the cross-route date proof
+unavailable. This is deterministic architectural acceptance, NOT fresh
+GPT-5.6 Core Planner/independent reviewer model acceptance for F18.
+The immutable historical real-provider F18 replay still remains pending;
+new model validation is required before counting F18 as complete.
 
 **Real Tasks model gate (F22 third route only):** an opt-in GPT-6 Tasks
 interpreter selected `CREATE`, GPT-6 Temporal resolved `mañana` to
