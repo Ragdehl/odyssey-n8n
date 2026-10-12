@@ -7,6 +7,7 @@ request. The active DEV/PROD chat route is not modified.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import replace
 
@@ -104,7 +105,7 @@ def execute_candidate_routed_message(
     request_id_factory: Callable[[], str],
     candidate_pending_recorder: Callable[[object], str] | None = None,
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
-    task_route_executor: Callable[..., object] | None = None,
+    task_route_executor: object | None = None,
 ) -> object:
     """Execute scoped candidates through existing sequential Core and route guards.
 
@@ -184,7 +185,10 @@ def execute_candidate_routed_message(
     else:
         catalog = ApplicationCatalog.empty()
     validate_bundle_original_provenance(bundle, catalog=catalog)
-    if task_route_executor is not None and not callable(task_route_executor):
+    if task_route_executor is not None and not (
+        callable(task_route_executor)
+        or callable(getattr(task_route_executor, "execute_scoped", None))
+    ):
         raise ValueError("Tasks execution must be a trusted application executor")
     outer_id = request_id_factory()
     if not isinstance(outer_id, str) or not outer_id.strip():
@@ -197,6 +201,92 @@ def execute_candidate_routed_message(
     temporal_handoff = ScopedTemporalHandoff(source)
     subject_handoff = ScopedCoreSubjectHandoff(source)
     event_handoff = ScopedCoreEventHandoff(source)
+
+    def run_task_route(
+        unit_source: str,
+        locator: str,
+        authenticated_actor: object = None,
+        prior_turns: object = (),
+    ):
+        """Invoke an optional Tasks scoped hook without changing ordinary executors."""
+        from odyssey_apps.tasks import TaskScopedEvidence, TaskScopedExecution
+        from odyssey_core.temporal_interpretation import TemporalInterpretation
+
+        ordinal, scoped = route_scopes[locator]
+        if scoped.route.capability_id != "tasks" or scoped.route.source_text != unit_source:
+            raise ValueError("Task route source changed before application interpretation")
+        inherited = temporal_handoff.inherited(
+            scoped.context,
+            current_route_index=ordinal,
+            start=scoped.original_start,
+            end=scoped.original_end,
+        )
+        scoped_execute = getattr(task_route_executor, "execute_scoped", None)
+        required_temporal_origins = {
+            (role.original_start, role.original_end)
+            for role in scoped.context.source_provenance
+            if role.role in {"date", "date_scope", "time", "time_approx"}
+        }
+        if required_temporal_origins - {
+            (proof.original_start, proof.original_end) for proof in inherited
+        }:
+            if not callable(scoped_execute):
+                from odyssey_core.application import ApplicationResult, ApplicationStatus
+
+                return ApplicationResult(
+                    locator,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="TASK_SCOPED_TEMPORAL_EVIDENCE_UNSUPPORTED",
+                )
+            raise ValueError("Inherited Task date has no verified earlier Temporal result")
+        evidence = TaskScopedEvidence(
+            unit_source,
+            hashlib.sha256(source.encode("utf-8")).hexdigest(),
+            ordinal,
+            inherited,
+            tuple(role for role in scoped.context.source_provenance if role.role == "modality"),
+        )
+        evidence.validate(source)
+        if callable(scoped_execute):
+            receipt = scoped_execute(
+                unit_source, locator, authenticated_actor, prior_turns, scoped_evidence=evidence
+            )
+            if not isinstance(receipt, TaskScopedExecution):
+                raise ValueError("Scoped Tasks executor returned an invalid receipt")
+            interpretation = receipt.temporal_interpretation
+            local_temporal = any(
+                role.role in {"date", "date_scope", "time", "time_approx"}
+                for candidate in scoped.context.candidates
+                for role in candidate.roles
+            )
+            if local_temporal and not isinstance(interpretation, TemporalInterpretation):
+                raise ValueError("Task route omitted its actual local Temporal interpretation")
+            if interpretation is not None:
+                temporal_handoff.remember(
+                    interpretation,
+                    route_index=ordinal,
+                    start=scoped.original_start,
+                    end=scoped.original_end,
+                )
+            return receipt.result
+        if inherited:
+            # Retain the ordinary four-argument executor contract, but do not
+            # let an executor that cannot receive typed proof act on a date it
+            # cannot distinguish from lexical Router context.
+            from odyssey_core.application import ApplicationResult, ApplicationStatus
+
+            return ApplicationResult(
+                locator,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="TASK_SCOPED_TEMPORAL_EVIDENCE_UNSUPPORTED",
+            )
+        if not callable(task_route_executor):
+            raise ValueError("Tasks executor lacks its ordinary execution callback")
+        return task_route_executor(unit_source, locator, authenticated_actor, prior_turns)
 
     def run_unit(
         unit_source: str,
@@ -456,6 +546,6 @@ def execute_candidate_routed_message(
         core_execute=run_unit,
         temporal_execute=run_unit,
         application_executors=(
-            {"tasks": task_route_executor} if task_route_executor is not None else {}
+            {"tasks": run_task_route} if task_route_executor is not None else {}
         ),
     )

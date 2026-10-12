@@ -428,6 +428,24 @@ is reused in a provider-free three-route hybrid dispatcher replay:
 **first two tasks stay pending**, third succeeds. No false Day fact,
 no claim of a fully completed F22, no deployment.
 
+**Scoped Tasks evidence bridge (2026-10-12, deterministic only):** the
+experimental dispatcher now offers a closed `execute_scoped` hook for an
+explicitly injected Tasks executor. It transfers only an original-source
+digest, route order, exact predecessor `TemporalInterpretation` results and
+source-checked modality wording. A four-argument existing executor remains
+compatible for local routes, but a route requiring inherited Temporal proof
+stays `NEEDS_ATTENTION`; Router wording cannot supply a date. The hook's
+receipt must return the actual local Temporal interpretation before a later
+route can reuse it, even if the predecessor Task itself did not persist.
+Modality remains read-only wording and never selects `CREATE`, Task type, or
+write authority. Deterministic synthetic-vault coverage creates three
+independent pending Task Notes with two verified inherited/local dates and no
+Day facts, while checking forged hash/role provenance. The current
+`TaskInterpretation` provider contract has no field by which a live model
+selects an inherited temporal role, so this is not fresh three-route provider
+acceptance. That model-facing contract and a bounded live gate remain open;
+the immutable third-route receipt is unchanged.
+
 Accumulated **estimated** API spend at this checkpoint:
 USD **0.3356791 of the 0.50 approved**. No new DEV/PROD routes, real
 personal Notes, schema, or Core model migration were made.

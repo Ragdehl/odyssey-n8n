@@ -161,6 +161,30 @@ three-step synthetic Markdown readback supplement the unchanged genuine F19
 replay. This is not general correction-language support, a fresh model gate,
 or authorization to activate DEV/PROD.
 
+**Tasks cross-route evidence continuation (2026-10-12; opt-in branch only):**
+The F22 original GPT-6 Router proposal already carries exact-source
+`date=Hoy` and `modality=tengo que` provenance on its independent second
+Task route. A closed Tasks-owned `TaskScopedEvidence` and opt-in
+`execute_scoped` executor hook now carry only hash-checked lexical modality
+and independently verified predecessor Temporal references; neither is
+permission to select `CREATE`, pick a Task identity, or write. Tasks retains
+its own interpreter, one-task-per-operation `TaskCorePlanner`, lifecycle
+guard, and canonical Markdown writer. A deterministic full-request replay
+using the original Router proposal and independently scripted Task/Core
+semantic decisions writes **three separate actual pending Task Notes**, with
+fixture dates 2026-10-04 / 2026-10-04 / 2026-10-05 and zero Day fallback facts.
+The first route's actual Temporal proof may be reused even when no first
+Task mutation succeeds. Legacy four-argument Tasks executors retain their
+local-route behavior; when they cannot receive a necessary verified inherited
+date, the independent route stays `NEEDS_ATTENTION` instead of guessing it.
+Frozen third-route real GPT-6/GPT-5.6 reply/readback remains unchanged.
+**F22 stays PARTIAL**, because no real model-based Tasks interpretation and
+Core planner/reviewer acceptance exists for its first two intents. The
+existing TaskInterpretation provider schema does not yet represent choosing
+a nonlocal inherited temporal role. That requires a separately reviewed
+model-facing contract, adversarial evidence and focused live gate before
+activation. DEV/PROD, n8n, personal vaults, and model settings remain untouched.
+
 **NEXT ORDER:** (1) obtain a new Router prompt gate before relying on new
 standalone-negative proposals beyond deterministic source fixtures;
 (2) resolve F18 independent negative/positive semantics and the remaining

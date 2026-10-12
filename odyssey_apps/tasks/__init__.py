@@ -28,6 +28,7 @@ from .mutations import (
 from .planning import TaskCorePlanner
 from .query import TaskQueryError, TaskQueryService
 from .schema import TASK_SCHEMA_EXTENSION, TASK_STATUS_VALUES, TASK_TYPE, WORK_SESSION_TYPE
+from .scoped_evidence import TaskScopedEvidence, TaskScopedExecution
 from .work_sessions import (
     TaskWorkSessionService,
     WorkSessionActivity,
@@ -46,6 +47,8 @@ __all__ = [
     "TaskDirectMutationService",
     "TaskSubtaskCreateResult",
     "TaskCorePlanner",
+    "TaskScopedEvidence",
+    "TaskScopedExecution",
     "TaskLifecycleGuard",
     "TaskQueryError",
     "TaskQueryService",
