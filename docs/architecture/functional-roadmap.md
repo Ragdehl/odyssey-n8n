@@ -196,6 +196,29 @@ selection. This is **not fresh provider evidence** and does not alter the
 still required before any activation. DEV/PROD, n8n, personal vaults, and
 model settings remain untouched.
 
+**Fresh F22 model execution (2026-10-12; no deployment):**
+An earlier claim that OpenAI API access was blocked was WRONG. The ordinary
+shell lacks `OPENAI_API_KEY` by design, but the already approved
+`/home/ragdehl/.config/odyssey/secrets.env` loaded securely through
+ephemeral `systemd --user EnvironmentFile`; authenticated GET /v1/models
+returned HTTP 200. The first GPT-6 Tasks live trial omitted F22's second
+inherited date; a GENERAL scoped prompt revision then selected the
+correct verified earlier `TARGET_DATE` in a new genuine model response.
+The ensuing eight-call GPT-6 Tasks/Temporal + GPT-5.6 Core isolated
+full-ORIGINAL-F22 replay produced three `COMPLETED` route statuses and
+three actual pending Task Markdown Notes with target dates
+2026-10-04 / 2026-10-04 / 2026-10-05. All eight genuine provider outputs
+are preserved in `benchmarks/application_router/hybrid_tasks_v1/F22-full-v2.json`
+and the trial's detailed receipts remain in the separately protected
+experimental receipts folder. One generated creation-day `calendar_day`
+Note is empty (frontmatter-only), not an invented Day event.
+**F22 STILL PARTIAL:** the first Task correctly linked [[Ana]], but
+the second Task left a known Luis as literal wording, with NO [[Luis]]
+canonical reference. Do not equate technically `COMPLETED` writes with
+full independent semantic coverage. The Core person-link proof gap remains.
+Estimated cumulative experiments USD 0.3558277 / approved USD 0.50;
+no DEV/PROD, real Note, credential, n8n, or model-setting changes.
+
 **NEXT ORDER:** (1) obtain a new Router prompt gate before relying on new
 standalone-negative proposals beyond deterministic source fixtures;
 (2) resolve F18 independent negative/positive semantics and the remaining

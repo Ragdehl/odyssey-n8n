@@ -1,0 +1,90 @@
+{
+  "version": "hybrid-tasks-full-real-20261012-v2",
+  "source_sha256": "baa948e048d314ae510ae8f616273fd9d99b67f91a7a4c39fb52ff8b35241c73",
+  "case_id": "F22",
+  "provider_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"operation\":\"CREATE\",\"temporal_mentions\":[{\"text\":\"Hoy\",\"role\":\"TARGET_DATE\"}],\"relationship_mentions\":[],\"clear_fields\":[],\"query_scope\":null,\"task_reference\":\"\",\"activity_text\":\"\",\"activity_target\":\"NONE\",\"inherited_temporal_roles\":[]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"llamar a Ana\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"task\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Llamar a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[{\"field\":\"status\",\"op\":\"set\",\"value\":\"pending\"},{\"field\":\"target_date\",\"op\":\"set\",\"value\":\"2026-10-04\"}],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"operation\":\"CREATE\",\"temporal_mentions\":[],\"relationship_mentions\":[],\"clear_fields\":[],\"query_scope\":null,\"task_reference\":\"\",\"activity_text\":\"\",\"activity_target\":\"NONE\",\"inherited_temporal_roles\":[{\"reference_index\":0,\"role\":\"TARGET_DATE\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"escribir a Luis\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"task\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[],\"properties\":[{\"field\":\"status\",\"op\":\"set\",\"value\":\"pending\"},{\"field\":\"target_date\",\"op\":\"set\",\"value\":\"2026-10-04\"}],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"operation\":\"CREATE\",\"temporal_mentions\":[{\"text\":\"mañana\",\"role\":\"TARGET_DATE\"}],\"relationship_mentions\":[],\"clear_fields\":[],\"query_scope\":null,\"task_reference\":\"\",\"activity_text\":\"\",\"activity_target\":\"NONE\",\"inherited_temporal_roles\":[]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"preparar la factura\",\"binding\":\"described\",\"direct_name\":\"preparar la factura\",\"note_type\":\"task\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[],\"properties\":[{\"field\":\"status\",\"op\":\"set\",\"value\":\"pending\"},{\"field\":\"target_date\",\"op\":\"set\",\"value\":\"2026-10-05\"}],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    }
+  ],
+  "provider_calls": 8,
+  "estimated_new_usd": 0.0095457,
+  "application_status": "completed",
+  "route_statuses": [
+    "completed",
+    "completed",
+    "completed"
+  ],
+  "created_task_notes": [
+    {
+      "path": "escribir a Luis - f22-genuine-task-2.md",
+      "status": "pending",
+      "date": "2026-10-04",
+      "content_has_wikilink": true,
+      "content_length": 219
+    },
+    {
+      "path": "llamar a Ana - f22-genuine-task-1.md",
+      "status": "pending",
+      "date": "2026-10-04",
+      "content_has_wikilink": true,
+      "content_length": 393
+    },
+    {
+      "path": "preparar la factura - f22-genuine-task-3.md",
+      "status": "pending",
+      "date": "2026-10-05",
+      "content_has_wikilink": true,
+      "content_length": 223
+    }
+  ],
+  "day_stub_paths": [
+    "calendar/days/2026-10-04.md"
+  ],
+  "full_f22_acceptance": false,
+  "known_semantic_gap": "Core recorded the second Task action escribir a Luis without canonical [[Luis]] reference.",
+  "day_stub_analysis": "calendar_day 2026-10-04 Note is frontmatter-only; zero invented Day facts.",
+  "evidence_type": "genuine_gpt6_tasks_temporal_gpt5_6_core_disposable_markdown",
+  "models": [
+    "gpt-6-luna",
+    "gpt-5.6-luna"
+  ],
+  "no_deployment": true
+}

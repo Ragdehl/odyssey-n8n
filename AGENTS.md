@@ -289,6 +289,13 @@ and the complete-set literal fallback.
 - Never silently change the ontology/schema. Material schema changes require an explicit proposal, compatibility/migration review, deterministic validation, and normally human approval.
 - Never expose, print, commit, or persist credentials/secrets in project files or documentation.
 - For an explicitly authorized one-shot live gate that needs `/home/ragdehl/.config/odyssey/secrets.env`, prefer a transient `systemd --user` unit with `EnvironmentFile=` and `--wait --collect --pipe`. Pass only the gate authorization flag explicitly; never source or print the secret in the remote shell, copy it into tmux, or persist it in the repo. If the user service manager or fixed environment file is unavailable, stop before provider access and ask the human operator rather than inventing another credential path.
+- A plain Remote Desktop terminal deliberately has no `OPENAI_API_KEY`.
+  **Do not infer a provider outage or ask for a new key from that fact.**
+  First check the EXISTING fixed secrets EnvironmentFile and user systemd
+  manager. On this Pi the manager may need `XDG_RUNTIME_DIR=/run/user/1000`
+  and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus`.
+  Authenticate using only an ephemeral unit, never printing credentials,
+  and honor approved budget flags for all billable provider calls.
 - Explain material architecture/security/data trade-offs before changing those boundaries.
 - Do not delete or overwrite real personal knowledge as part of development evidence.
 

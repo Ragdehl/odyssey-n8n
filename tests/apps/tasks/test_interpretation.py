@@ -132,6 +132,10 @@ def test_scoped_interpreter_selects_only_verified_reference_and_sends_bounded_wi
     assert wire["input"][1]["content"] == source
     assert "Hoy" in wire["input"][0]["content"]
     assert "llamar" not in wire["input"][0]["content"]
+    assert (
+        "Do not leave inherited_temporal_roles empty merely because" in wire["input"][0]["content"]
+    )
+    assert "Do not select unrelated, superseded, denied" in wire["input"][0]["content"]
     schema = wire["text"]["format"]["schema"]
     assert wire["text"]["format"]["name"] == "odyssey_scoped_task_interpretation"
     assert schema["additionalProperties"] is False
