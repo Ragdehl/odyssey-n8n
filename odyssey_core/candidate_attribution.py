@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .candidate_context import CoreCandidateContext
+from .candidate_correction_chain import correction_chain
 from .candidate_coverage import MAX_COVERAGE_CLAIMS, MAX_COVERAGE_FACTS
 from .candidate_multi_participant import (
     MultiParticipantEvidenceError,
@@ -45,7 +46,7 @@ def _reviewable_sensitive_literal(context: CoreCandidateContext) -> bool:
 
 
 def _reviewable_final_correction(context: CoreCandidateContext, position: int) -> bool:
-    """Only the final candidate of a typed, exact-source two-part correction.
+    """Only the final candidate of a typed, exact-source linear correction.
 
     This is *not* write authority: the Core coverage preflight separately
     verifies cancelled scope, exact changed object, date, clock, target and fact.
@@ -53,8 +54,8 @@ def _reviewable_final_correction(context: CoreCandidateContext, position: int) -
     return (
         context.hybrid_interpretation_mode
         and context.verified_correction_temporal is not None
-        and len(context.candidates) == 2
-        and position == 1
+        and correction_chain(context.candidates) is not None
+        and position == len(context.candidates) - 1
         and context.candidates[position].state == "candidate"
         and any(r.role == "replacement" for r in context.candidates[position].roles)
     )
@@ -887,7 +888,7 @@ def review_model_candidate_fact_coverage(
         len(link.fact_ordinals) <= 1 for link in graph.links
     )
     # The independent reviewer still calls the abandoned source candidate
-    # unsupported. Only when the *second* fact is explicitly reviewed and
+    # unsupported. Only when the final fact is explicitly reviewed and
     # the typed Temporal correction proof is present can Core reclassify
     # that first non-write as a proven supersession. The later coverage
     # gate must independently check original polarity/replacement/target/
@@ -895,13 +896,15 @@ def review_model_candidate_fact_coverage(
     marked_supersession = (
         context.verified_correction_temporal is not None
         and context.hybrid_interpretation_mode
-        and len(graph.links) == 2
-        and graph.links[0].pending_reason == "unsupported_scope"
-        and not graph.links[0].fact_ordinals
-        and graph.links[1].fact_ordinals == (0,)
-        and graph.links[1].pending_reason is None
+        and correction_chain(context.candidates) is not None
+        and all(
+            link.pending_reason == "unsupported_scope" and not link.fact_ordinals
+            for link in graph.links[:-1]
+        )
+        and graph.links[-1].fact_ordinals == (0,)
+        and graph.links[-1].pending_reason is None
         and any(r.role == "polarity" for r in context.candidates[0].roles)
-        and any(r.role == "replacement" for r in context.candidates[1].roles)
+        and any(r.role == "replacement" for r in context.candidates[-1].roles)
     )
     claims = tuple(
         CoreCandidateCoverageClaim(
@@ -911,7 +914,7 @@ def review_model_candidate_fact_coverage(
             fact_ordinals=link.fact_ordinals if link.fact_ordinals and not one_to_one else None,
             pending_reason=(
                 "superseded_by_correction"
-                if marked_supersession and position == 0
+                if marked_supersession and position < len(graph.links) - 1
                 else link.pending_reason
             ),
         )

@@ -14,6 +14,7 @@ from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidates import FactCandidateProposal
 from odyssey_apps.router import RouterError
 from odyssey_core.candidate_context import CoreCandidateContext
+from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
@@ -336,12 +337,7 @@ def execute_candidate_routed_message(
             route_context = replace(route_context, verified_group_temporal=domain)
         if (
             route_context.hybrid_interpretation_mode
-            and len(route_context.candidates) == 2
-            and any(
-                r.role == "replacement"
-                for candidate in route_context.candidates
-                for r in candidate.roles
-            )
+            and correction_chain(route_context.candidates) is not None
             and domain is not None
         ):
             route_context = replace(route_context, verified_correction_temporal=domain)

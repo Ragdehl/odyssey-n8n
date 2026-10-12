@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .candidate_context import CoreCandidateContext
+from .candidate_correction_chain import correction_chain
 from .candidate_fact_readback import CandidateFactReadback
 from .candidate_multi_participant import (
     validate_one_named_participant_fact,
@@ -211,14 +212,15 @@ def validate_candidate_coverage_manifest(
                     and (
                         context.verified_correction_temporal is None
                         or not context.hybrid_interpretation_mode
-                        or index != 0
-                        or len(context.candidates) != 2
-                        or not any(role.role == "polarity" for role in candidate.roles)
-                        or not any(
-                            role.role == "replacement" for role in context.candidates[1].roles
+                        or correction_chain(context.candidates) is None
+                        or index >= len(context.candidates) - 1
+                        or any(
+                            (other.disposition, other.pending_reason)
+                            != ("pending", "superseded_by_correction")
+                            for other in claims[:-1]
                         )
-                        or claims[1].disposition != "planned_fact"
-                        or claims[1].fact_ordinal != 0
+                        or claims[-1].disposition != "planned_fact"
+                        or claims[-1].fact_ordinal != 0
                         or plan_fact_ordinals(plan) != ((0,),)
                     )
                 )
@@ -232,8 +234,8 @@ def validate_candidate_coverage_manifest(
         correction_final = (
             context.verified_correction_temporal is not None
             and context.hybrid_interpretation_mode
+            and correction_chain(context.candidates) is not None
             and index == len(context.candidates) - 1
-            and any(role.role == "replacement" for role in candidate.roles)
         )
         sensitive_literal = (
             context.hybrid_interpretation_mode and context.verified_sensitive_temporal is not None

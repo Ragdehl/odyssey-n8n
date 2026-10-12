@@ -125,6 +125,18 @@ pending; the whole original F22 case has **NOT** been completed.
 No change to app deployment, task schema or human Notes.
 Estimated cumulative model experiment spend: USD 0.3356791 / 0.50.
 
+**Scoped continuation (opt-in branch only):** corrected future plans now
+accept a source-proven linear replacement chain rather than assuming exactly
+two candidates. The first candidate supplies date/predicate/polarity; each
+successor must exactly replace its immediate predecessor's object and carry
+its own time plus immediate predicate/date inheritance. Only the final
+candidate may map to the sole fact; all predecessors require complete
+independent `unsupported_scope` review before their non-write status becomes
+`superseded_by_correction`. Deterministic 2/3/5/9-chain coverage and a
+three-step synthetic Markdown readback supplement the unchanged genuine F19
+replay. This is not general correction-language support, a fresh model gate,
+or authorization to activate DEV/PROD.
+
 **NEXT ORDER:** (1) extend the validated literal-statement scopes beyond
 the narrow two-candidate F17/F20 shapes without inventing events or links;
 (2) resolve F18 independent negative/positive semantics and the remaining

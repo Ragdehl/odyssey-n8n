@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .candidate_correction_chain import correction_chain
 from .domain_interpretation import DomainInterpretation
 from .scoped_event_evidence import CoreVerifiedInheritedEvent
 from .scoped_subject_evidence import CoreVerifiedInheritedSubject
@@ -318,14 +319,11 @@ class CoreCandidateContext:
             raise ValueError("Grouped Temporal proof is not bound to this source")
         if self.verified_correction_temporal is not None and (
             not self.hybrid_interpretation_mode
-            or len(self.candidates) != 2
+            or correction_chain(self.candidates) is None
             or not isinstance(self.verified_correction_temporal, DomainInterpretation)
             or self.verified_correction_temporal.capability_id != "temporal"
             or self.verified_correction_temporal.intent != "TEMPORAL_RESOLUTION"
             or self.verified_correction_temporal.source_text != self.source
-            or not any(
-                r.role == "replacement" for candidate in self.candidates for r in candidate.roles
-            )
         ):
             raise ValueError("Corrected-plan Temporal proof is not bound to this source")
         if self.verified_sensitive_temporal is not None and (

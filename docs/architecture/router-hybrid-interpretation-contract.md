@@ -263,20 +263,32 @@ status for the new code path, while preserving that earlier genuine model
 observation as history. DEV and PROD remain unmodified.
 
 **F19 - Source-grounded rectification.** The narrow Core validator in
-odyssey_core/candidate_corrected_plan.py requires two candidates, exact
-original role provenance for the discarded action and its explicit
-replacement, a grounded inherited predicate, and the exact date/clock
-verified by Temporal for the FINAL intended action. The independent
+odyssey_core/candidate_corrected_plan.py requires an arbitrary-length,
+source-grounded **linear** sequence: the first candidate owns explicit date,
+predicate and polarity; every successor has its own object/time, an exact
+`replacement` span for the immediately preceding object, and immediate typed
+predicate/date inheritance. It rejects skips, forks, cycles, reused exact source spans for objects/clocks,
+conditions, modalities and mixed polarity rather
+than guessing a chain. Temporal must certify the final exact date/clock; the
+final fact excludes every discarded unique object/clock. The independent
 GPT-5.6 Core attribution reviewer must mark the old action unsupported
-and map the final action to one factual write. Only after the full
+and map **only** the final action to one factual write; every ancestor becomes
+`superseded_by_correction` only after that complete graph is independently
+validated. Only after the full
 source, actor, target and temporal checks pass may Core classify the
-original as "superseded_by_correction", which is an accounted-for
-non-write rather than outstanding work. The Writer writes one future
-intention to its canonical Day, never the cancelled park or its old
-clock. A fake "superseded" claim without the reviewed final fact fails
-closed. Historical model attempts and the now-successful authentic
+ancestors as "superseded_by_correction", which is an accounted-for non-write
+rather than outstanding work. The Writer writes one future intention to its
+canonical Day, never a cancelled object or clock. A fake "superseded" claim
+without the reviewed final fact and physical readback fails closed. The
+stored historical model attempts and the now-successful authentic
 GPT-6/GPT-5.6 replay are frozen in
 benchmarks/application_router/hybrid_correction_v1/F19.json.
+
+This generalizes only structural source evidence, tested deterministically at
+2/3/5/9 candidates and with a synthetic three-step Markdown readback. It is
+not a claim that Router can recognize arbitrary correction grammar, that a
+new model prompt was evaluated, or that negation/conditional semantics beyond
+this exact linear final-intention shape are supported.
 
 **F22 - Tasks app reuse.** An explicit enable_tasks=True switch on the
 existing hybrid compiler routes only PURE Task groups to the registered
