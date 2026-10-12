@@ -28,7 +28,13 @@ from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 MAX_COVERAGE_CLAIMS = 26
 MAX_COVERAGE_FACTS = 128
 PENDING_REASONS = frozenset(
-    {"ambiguous_identity", "needs_clarification", "needs_capability", "unsupported_scope"}
+    {
+        "ambiguous_identity",
+        "needs_clarification",
+        "needs_capability",
+        "unsupported_scope",
+        "superseded_by_correction",
+    }
 )
 
 
@@ -63,7 +69,7 @@ class CoreCandidateCoverageItem:
     """State structural mapping and independently observed persistence only."""
 
     candidate_id: str
-    status: Literal["physically_written_claim", "planned_unverified", "pending"]
+    status: Literal["physically_written_claim", "planned_unverified", "pending", "superseded"]
     fact_ordinal: int | None
     pending_reason: str | None
     fact_ordinals: tuple[int, ...] | None = None
@@ -200,6 +206,22 @@ def validate_candidate_coverage_manifest(
                 or claim.pending_reason not in PENDING_REASONS
                 or (candidate.state == "ambiguous_identity")
                 != (claim.pending_reason == "ambiguous_identity")
+                or (
+                    claim.pending_reason == "superseded_by_correction"
+                    and (
+                        context.verified_correction_temporal is None
+                        or not context.hybrid_interpretation_mode
+                        or index != 0
+                        or len(context.candidates) != 2
+                        or not any(role.role == "polarity" for role in candidate.roles)
+                        or not any(
+                            role.role == "replacement" for role in context.candidates[1].roles
+                        )
+                        or claims[1].disposition != "planned_fact"
+                        or claims[1].fact_ordinal != 0
+                        or plan_fact_ordinals(plan) != ((0,),)
+                    )
+                )
             ):
                 raise ValueError("Pending candidate requires a compatible unresolved reason")
             continue
@@ -207,10 +229,19 @@ def validate_candidate_coverage_manifest(
             raise ValueError("Unknown coverage disposition")
         if candidate.state == "ambiguous_identity":
             raise ValueError("Ambiguous identity cannot be claimed as a planned write")
-        if candidate.kind in {"conditional", "negative"} or any(
-            role.role in {"condition", "polarity", "replacement", "modality"}
-            for role in candidate.roles
-        ):
+        correction_final = (
+            context.verified_correction_temporal is not None
+            and context.hybrid_interpretation_mode
+            and index == len(context.candidates) - 1
+            and any(role.role == "replacement" for role in candidate.roles)
+        )
+        if (
+            candidate.kind in {"conditional", "negative"}
+            or any(
+                role.role in {"condition", "polarity", "replacement", "modality"}
+                for role in candidate.roles
+            )
+        ) and not correction_final:
             raise ValueError("Sensitive scoped fact requires specialized semantic coverage proof")
         if graph_mode:
             if (
@@ -264,6 +295,10 @@ def validate_candidate_coverage_manifest(
         lexical = original
         for ref_index, ref in enumerate(unit.references):
             lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+        if context.verified_correction_temporal is not None:
+            from .candidate_corrected_plan import validate_corrected_plan_fact
+
+            validate_corrected_plan_fact(source, context, index, unit, lexical, claims)
         if context.verified_inherited_event is not None:
             from .scoped_event_evidence import validate_event_target_fact
 
@@ -399,9 +434,16 @@ def review_candidate_coverage(
     pending: list[str] = []
     for claim in manifest.claims:
         if claim.disposition == "pending":
-            pending.append(claim.candidate_id)
+            superseded = claim.pending_reason == "superseded_by_correction"
+            if not superseded:
+                pending.append(claim.candidate_id)
             items.append(
-                CoreCandidateCoverageItem(claim.candidate_id, "pending", None, claim.pending_reason)
+                CoreCandidateCoverageItem(
+                    claim.candidate_id,
+                    "superseded" if superseded else "pending",
+                    None,
+                    claim.pending_reason,
+                )
             )
         else:
             mapped = (

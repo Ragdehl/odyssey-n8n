@@ -543,7 +543,10 @@ def execute_request(
                 ),
             )
             pending_candidate_ids = tuple(
-                claim.candidate_id for claim in manifest.claims if claim.disposition == "pending"
+                claim.candidate_id
+                for claim in manifest.claims
+                if claim.disposition == "pending"
+                and claim.pending_reason != "superseded_by_correction"
             )
         except Exception:
             stages.append(

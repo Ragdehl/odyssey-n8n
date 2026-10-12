@@ -446,6 +446,28 @@ def render_luna_experimental_prompt(
             for item in domain_interpretation.evidence
             if item.kind == "canonical_reference"
         ]
+        if (
+            candidate_context is not None
+            and candidate_context.hybrid_interpretation_mode
+            and len(candidate_context.candidates) == 2
+            and any(r.role == "replacement" for c in candidate_context.candidates for r in c.roles)
+        ):
+            semantic_dynamic += (
+                "\nCorrection source-scope: the earlier plan is explicitly "
+                "superseded and MUST NOT be saved as an actual event. "
+                "Only the final replacement may be represented as a FUTURE "
+                "INTENTION, never an accomplished occurrence. Carry the "
+                "original predicate/verb into the final literal fact if the "
+                "correction elides that verb; use the replacement object "
+                "instead of the discarded object. Do NOT simply record "
+                "the fragment beginning with 'mejor' as the final fact. "
+                "When using a temporal_reference part, its text must match "
+                "Temporal evidence.source_text EXACTLY, and its time must "
+                "be the final corrected clock. Keep that clock phrase OUT "
+                "of all literal parts so it appears only once after Core "
+                "renders the reference. Never mention the cancelled "
+                "clock; if evidence is insufficient, ESCALATE."
+            )
         # Opt-in hybrid groups may have ONE exact postposed clock phrase
         # shared by several distinct exact days. Never build a made-up
         # concatenation of nonadjacent date and clock words as a source part.

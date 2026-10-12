@@ -288,11 +288,13 @@ def compile_candidate_route_bundle(proposal: FactCandidateProposal) -> Candidate
     return CandidateRouteBundle(source, plan, tuple(units))
 
 
-def validate_bundle_original_provenance(bundle: CandidateRouteBundle) -> None:
+def validate_bundle_original_provenance(
+    bundle: CandidateRouteBundle, *, catalog: ApplicationCatalog | None = None
+) -> None:
     """Recheck every external lexical witness against the immutable original."""
     source = bundle.original_source
     digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
-    validate_route_plan(bundle.plan, source, ApplicationCatalog.empty())
+    validate_route_plan(bundle.plan, source, catalog or ApplicationCatalog.empty())
     if len(bundle.units) != len(bundle.plan.routes):
         raise RouterError("Compiled route count disagrees with exact-source plan")
     previous_end = 0

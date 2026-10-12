@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from odyssey_apps.catalog import ApplicationCatalog
+from odyssey_apps.catalog import ApplicationCatalog, ApplicationDescriptor, ApplicationRegistry
 from odyssey_apps.fact_candidate_core import to_core_candidate_context
 from odyssey_apps.fact_candidates import FactCandidateProposal
 from odyssey_apps.router import Route, RouteOutcome, RoutePlan, RouterError, validate_route_plan
@@ -95,7 +95,17 @@ def _needs_joint_interpretation(left: CoreCandidate, right: CoreCandidate) -> bo
     return False
 
 
-def compile_hybrid_candidate_bundle(proposal: FactCandidateProposal) -> CandidateRouteBundle:
+def hybrid_tasks_catalog() -> ApplicationCatalog:
+    """Explicitly registered Tasks app, never an inferred Core write."""
+    descriptor = ApplicationDescriptor(
+        "tasks", "Task lifecycle interpretation and canonical Task mutation", ("core",)
+    )
+    return ApplicationRegistry((descriptor,)).catalog(enabled_ids=("tasks",))
+
+
+def compile_hybrid_candidate_bundle(
+    proposal: FactCandidateProposal, *, enable_tasks: bool = False
+) -> CandidateRouteBundle:
     """Build exact-source groups while retaining every candidate independently.
 
     Raises RouterError/CandidateDependencyError for invalid overlaps, missing
@@ -144,8 +154,9 @@ def compile_hybrid_candidate_bundle(proposal: FactCandidateProposal) -> Candidat
             for candidate in context.candidates
             for role in candidate.roles
         )
+        all_tasks = all(candidate.kind == "task" for candidate in context.candidates)
         route = Route(
-            "temporal" if temporal else "core",
+            "tasks" if enable_tasks and all_tasks else ("temporal" if temporal else "core"),
             context.source,
             depends_on=dependency,
             dependent_mention=mention,
@@ -163,6 +174,7 @@ def compile_hybrid_candidate_bundle(proposal: FactCandidateProposal) -> Candidat
     result = CandidateRouteBundle(
         source, RoutePlan(RouteOutcome.ROUTE, tuple(routes)), tuple(units)
     )
-    validate_route_plan(result.plan, source, ApplicationCatalog.empty())
-    validate_bundle_original_provenance(result)
+    catalog = hybrid_tasks_catalog() if enable_tasks else ApplicationCatalog.empty()
+    validate_route_plan(result.plan, source, catalog)
+    validate_bundle_original_provenance(result, catalog=catalog)
     return result

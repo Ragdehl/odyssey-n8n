@@ -35,6 +35,22 @@ MAX_ATTRIBUTION_INPUT_BYTES = 24_576
 MAX_ATTRIBUTION_OUTPUT_TOKENS = 3072
 
 
+def _reviewable_final_correction(context: CoreCandidateContext, position: int) -> bool:
+    """Only the final candidate of a typed, exact-source two-part correction.
+
+    This is *not* write authority: the Core coverage preflight separately
+    verifies cancelled scope, exact changed object, date, clock, target and fact.
+    """
+    return (
+        context.hybrid_interpretation_mode
+        and context.verified_correction_temporal is not None
+        and len(context.candidates) == 2
+        and position == 1
+        and context.candidates[position].state == "candidate"
+        and any(r.role == "replacement" for r in context.candidates[position].roles)
+    )
+
+
 class CandidateAttributionError(ValueError):
     """Reject incomplete or ungrounded candidate attribution without effects."""
 
@@ -267,10 +283,13 @@ def validate_candidate_attribution(
         elif disposition == "proposed_fact":
             if candidate.state == "ambiguous_identity":
                 raise CandidateAttributionError("Ambiguous identity cannot be attributed to a fact")
-            if candidate.kind in {"conditional", "negative"} or any(
-                role.role in {"condition", "polarity", "replacement", "modality"}
-                for role in candidate.roles
-            ):
+            if (
+                candidate.kind in {"conditional", "negative"}
+                or any(
+                    role.role in {"condition", "polarity", "replacement", "modality"}
+                    for role in candidate.roles
+                )
+            ) and not _reviewable_final_correction(context, position):
                 raise CandidateAttributionError(
                     "Sensitive source requires dedicated semantic review"
                 )
@@ -644,7 +663,7 @@ def inspect_candidate_fact_graph(
     if len(actual) > MAX_COVERAGE_FACTS:
         raise CandidateAttributionError("Atomic fact graph exceeds the technical budget")
     accounted: set[int] = set()
-    for candidate, link in zip(context.candidates, links, strict=True):
+    for position, (candidate, link) in enumerate(zip(context.candidates, links, strict=True)):
         if link.candidate_id != candidate.candidate_id:
             raise CandidateAttributionError("Graph source candidate ID or ordering mismatch")
         if link.source_quote not in {anchor.text for anchor in candidate.anchors}:
@@ -665,11 +684,14 @@ def inspect_candidate_fact_graph(
                 raise CandidateAttributionError("Planned candidate cannot also claim to be pending")
             if (
                 candidate.state == "ambiguous_identity"
-                or candidate.kind in {"conditional", "negative"}
-                or any(
-                    role.role in {"condition", "polarity", "replacement", "modality"}
-                    for role in candidate.roles
+                or (
+                    candidate.kind in {"conditional", "negative"}
+                    or any(
+                        role.role in {"condition", "polarity", "replacement", "modality"}
+                        for role in candidate.roles
+                    )
                 )
+                and not _reviewable_final_correction(context, position)
             ):
                 raise CandidateAttributionError(
                     "Sensitive or ambiguous meaning requires a separate Core semantic review"
@@ -851,15 +873,36 @@ def review_model_candidate_fact_coverage(
     one_to_one = len(occupied) == len(set(occupied)) and all(
         len(link.fact_ordinals) <= 1 for link in graph.links
     )
+    # The independent reviewer still calls the abandoned source candidate
+    # unsupported. Only when the *second* fact is explicitly reviewed and
+    # the typed Temporal correction proof is present can Core reclassify
+    # that first non-write as a proven supersession. The later coverage
+    # gate must independently check original polarity/replacement/target/
+    # clock and will refuse invented or incorrectly dated final facts.
+    marked_supersession = (
+        context.verified_correction_temporal is not None
+        and context.hybrid_interpretation_mode
+        and len(graph.links) == 2
+        and graph.links[0].pending_reason == "unsupported_scope"
+        and not graph.links[0].fact_ordinals
+        and graph.links[1].fact_ordinals == (0,)
+        and graph.links[1].pending_reason is None
+        and any(r.role == "polarity" for r in context.candidates[0].roles)
+        and any(r.role == "replacement" for r in context.candidates[1].roles)
+    )
     claims = tuple(
         CoreCandidateCoverageClaim(
             link.candidate_id,
             "planned_fact" if link.fact_ordinals else "pending",
             fact_ordinal=link.fact_ordinals[0] if link.fact_ordinals and one_to_one else None,
             fact_ordinals=link.fact_ordinals if link.fact_ordinals and not one_to_one else None,
-            pending_reason=link.pending_reason,
+            pending_reason=(
+                "superseded_by_correction"
+                if marked_supersession and position == 0
+                else link.pending_reason
+            ),
         )
-        for link in graph.links
+        for position, link in enumerate(graph.links)
     )
     return build_candidate_coverage_manifest(
         source, context, plan, claims, canonical_binding=canonical_binding

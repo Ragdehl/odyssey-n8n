@@ -1,7 +1,7 @@
 # Contrato de interpretación híbrida Router → Temporal → Core → Writer
 
 **DECISIÓN DEL USUARIO: arquitectura objetivo APROBADA el 12-10-2026.**
-**ESTADO DE IMPLEMENTACIÓN: pendiente; NO está activada en DEV ni PROD.**
+**ESTADO DE IMPLEMENTACIÓN: componentes opt-in en rama experimental; NO activada en DEV ni PROD.**
 Este es el ÚNICO contrato normativo objetivo para este flujo. Sustituye la
 obligación del 11-10-2026 de enviar a Core cada candidato atómico por separado.
 Los documentos antiguos describen implementaciones o pruebas históricas,
@@ -254,3 +254,82 @@ An unsafe broad exception in the ordinary fact coverage validator is
 not an acceptable way to make these tests green. Continue F14/F27
 source/identity gates and test an independent negative-plus-positive
 case before considering DEV/PROD promotion.
+
+
+## 2026-10-12: Corrected future plan and Tasks app delegation (opt-in only)
+
+A **later implementation checkpoint** supersedes the earlier F19 "failed"
+status for the new code path, while preserving that earlier genuine model
+observation as history. DEV and PROD remain unmodified.
+
+**F19 - Source-grounded rectification.** The narrow Core validator in
+odyssey_core/candidate_corrected_plan.py requires two candidates, exact
+original role provenance for the discarded action and its explicit
+replacement, a grounded inherited predicate, and the exact date/clock
+verified by Temporal for the FINAL intended action. The independent
+GPT-5.6 Core attribution reviewer must mark the old action unsupported
+and map the final action to one factual write. Only after the full
+source, actor, target and temporal checks pass may Core classify the
+original as "superseded_by_correction", which is an accounted-for
+non-write rather than outstanding work. The Writer writes one future
+intention to its canonical Day, never the cancelled park or its old
+clock. A fake "superseded" claim without the reviewed final fact fails
+closed. Historical model attempts and the now-successful authentic
+GPT-6/GPT-5.6 replay are frozen in
+benchmarks/application_router/hybrid_correction_v1/F19.json.
+
+**F22 - Tasks app reuse.** An explicit enable_tasks=True switch on the
+existing hybrid compiler routes only PURE Task groups to the registered
+Tasks application, not to generic Core. The scoped route executor needs
+a separately injected trusted Tasks executor; absent registration there
+is no fallback to ordinary Calendar-Day writes. The existing Tasks-owned
+TaskCorePlanner, TaskLifecycleGuard(CREATE), Tasks schema and ordinary
+Core Writer created a real canonical Task Note with state pending and a
+target date in a disposable deterministic end-to-end test. Its other
+two F22 routes remained pending; a real live Tasks interpreter was NOT
+tested in that path. Mixed property/repair descriptions such as F25
+are not automatic Task creations. The old default source compiler is
+unchanged and all previous authentic outputs remain frozen.
+
+Estimated cumulative experimental provider spend:
+**USD 0.3263055 / USD 0.50** (estimate, not an official invoice).
+No personal Notes, n8n, DEV, PROD or model versions were changed.
+
+**Open work:** F17/F18 negative statements and canonical singular
+identity links, F20 conditional branches, more complete F22 shared
+date/modal semantics through live Tasks interpretation, F14/F27
+ambiguities and broad 27-case N:M regression quality. These must not be
+described as functional successes merely because unsafe writes are
+blocked. Promotion to DEV and PROD remains separately gated.
+
+## Actualizacion posterior 2026-10-12: correcciones y Tasks (solo rama experimental)
+
+F19 ya tiene un contrato de Core delimitado: ante una rectificacion
+explicita del plan futuro, Temporal demuestra la fecha y la hora de la
+alternativa final, y el revisor independiente vincula solo esa alternativa
+a un hecho. El antecedente descartado se marca internamente como
+`superseded_by_correction`, nunca como un acontecimiento ocurrido ni
+como una solicitud pendiente. La clasificacion solo es valida si existe
+el hecho final, con actividad, destino y horario demostrados; si no,
+la escritura se bloquea. La prueba de extremo a extremo con respuestas
+autenticas congeladas de GPT-6 y GPT-5.6 concluye COMPLETED con una
+unica escritura y readback fisico en un vault sintetico. Los tres intentos
+reales historicos estan en
+`benchmarks/application_router/hybrid_correction_v1/F19.json`.
+
+En F22, `compile_hybrid_candidate_bundle(..., enable_tasks=True)`
+puede enviar exclusivamente grupos puros de tareas a la capacidad
+`tasks` ya registrada. El ejecutor de Tasks se inyecta de forma explicita;
+si falta, no hay alternativa que guarde el contenido como fact de Day.
+La integracion determinista con `TaskCorePlanner`, `TaskLifecycleGuard`
+y el Writer crea una nota real de tipo task con estado pending y fecha
+objetivo en el vault de prueba. Las demas rutas F22 siguen pendientes.
+NO se ha ejecutado una prueba completa con modelos reales para Tasks.
+F25 (propiedad de la casa y necesidad de reparacion) no se convierte
+automaticamente en tarea. Por defecto, el compilador sigue desactivando
+esa delegacion; DEV y PROD no cambian.
+
+Siguen abiertos los contratos de negaciones F17/F18, condiciones F20,
+el extremo a extremo real del interprete Tasks con fechas/modalidades
+heredadas, y la ambiguedad F14/F27. La evidencia de F19 no los autoriza.
+Presupuesto estimado acumulado: USD 0.3263055 de USD 0.50 autorizados.

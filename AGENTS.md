@@ -151,6 +151,29 @@ retains its historical behaviour. F25 repair-need must not silently
 become a Task. **No broad task, negation, correction or conditional
 write capability is claimed by these safety tests.**
 
+**Further opt-in implementation checkpoint (2026-10-12):** F19 now has
+`odyssey_core/candidate_corrected_plan.py`: the first occurrence is
+source-proven superseded, and only the replacement FUTURE INTENTION may
+be written with an exact Temporal date/clock and independent Core reviewer.
+Core records `superseded_by_correction` as resolved (not an outstanding
+user request) **only** when the corrected fact is actually independently
+reviewed and planned; unsafe/missing final evidence still fails closed.
+Three immutable genuine model captures in
+`benchmarks/application_router/hybrid_correction_v1/F19.json` reproduce
+2 historical pre-fix blocks and 1 now-completed final plan with real
+Writer/Markdown readback. This is a bounded corrected-plan shape, NOT
+universal negation/conditional handling.
+
+For Tasks, the hybrid source compiler optionally routes only pure task
+groups to registered `tasks` using explicit `enable_tasks=True`; the
+scoped executor requires an injected trusted Tasks executor, with NO
+Core/Day fallback on unavailable Tasks. `TaskCorePlanner` plus
+`TaskLifecycleGuard(CREATE)` have been exercised with a real canonical
+Task Note and status `pending` in a disposable test vault. This was a
+**deterministic** application integration, not a fresh live Tasks model
+end-to-end success. The legacy default compiler/DEV/PROD remain unchanged;
+mixed property+repair requests do not automatically create Tasks.
+
 Continue the frozen 27-message corpus, semantic/negative/conditional,
 partial-write and prompt-gate testing before promotion. Existing v0 route
 behavior, deferred model-version migration and active DEV/PROD must not

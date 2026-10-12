@@ -102,6 +102,7 @@ def execute_candidate_routed_message(
     request_id_factory: Callable[[], str],
     candidate_pending_recorder: Callable[[object], str] | None = None,
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
+    task_route_executor: Callable[..., object] | None = None,
 ) -> object:
     """Execute scoped candidates through existing sequential Core and route guards.
 
@@ -164,7 +165,25 @@ def execute_candidate_routed_message(
     # Resolve the default at call time: historical frozen-reply tests can
     # inject their exact previous compiler without changing new hybrid logic.
     bundle = (bundle_compiler or compile_candidate_route_bundle)(proposal)
-    validate_bundle_original_provenance(bundle)
+    uses_tasks = any(route.capability_id == "tasks" for route in bundle.plan.routes)
+    if uses_tasks:
+        from odyssey_runtime.hybrid_group_compiler import hybrid_tasks_catalog
+
+        if bundle_compiler is None or any(
+            not scoped.context.hybrid_interpretation_mode
+            or not all(
+                c.kind == "task" and c.state == "candidate" for c in scoped.context.candidates
+            )
+            for scoped in bundle.units
+            if scoped.route.capability_id == "tasks"
+        ):
+            raise RouterError("Task routing requires explicitly validated hybrid task groups")
+        catalog = hybrid_tasks_catalog()
+    else:
+        catalog = ApplicationCatalog.empty()
+    validate_bundle_original_provenance(bundle, catalog=catalog)
+    if task_route_executor is not None and not callable(task_route_executor):
+        raise ValueError("Tasks execution must be a trusted application executor")
     outer_id = request_id_factory()
     if not isinstance(outer_id, str) or not outer_id.strip():
         raise ValueError("Outer request id must be non-empty")
@@ -315,6 +334,17 @@ def execute_candidate_routed_message(
             route_context = replace(route_context, verified_inherited_event=event)
         if composed_shared_clock:
             route_context = replace(route_context, verified_group_temporal=domain)
+        if (
+            route_context.hybrid_interpretation_mode
+            and len(route_context.candidates) == 2
+            and any(
+                r.role == "replacement"
+                for candidate in route_context.candidates
+                for r in candidate.roles
+            )
+            and domain is not None
+        ):
+            route_context = replace(route_context, verified_correction_temporal=domain)
         route_context.validate(unit_source)
         from odyssey_core.scoped_event_evidence import CoreInheritedEventWriteGuard
         from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard
@@ -419,8 +449,10 @@ def execute_candidate_routed_message(
         user_request=source,
         outer_request_id=outer_id,
         router=selected_router,
-        catalog=ApplicationCatalog.empty(),
+        catalog=catalog,
         core_execute=run_unit,
         temporal_execute=run_unit,
-        application_executors={},
+        application_executors=(
+            {"tasks": task_route_executor} if task_route_executor is not None else {}
+        ),
     )

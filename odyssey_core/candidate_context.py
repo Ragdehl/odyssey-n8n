@@ -244,6 +244,7 @@ class CoreCandidateContext:
     verified_inherited_event: CoreVerifiedInheritedEvent | None = None
     scoped_route_source: bool = False
     verified_group_temporal: DomainInterpretation | None = None
+    verified_correction_temporal: DomainInterpretation | None = None
     hybrid_interpretation_mode: bool = False
 
     def validate(self, requested_source: str) -> None:
@@ -314,6 +315,18 @@ class CoreCandidateContext:
             or self.verified_group_temporal.source_text != self.source
         ):
             raise ValueError("Grouped Temporal proof is not bound to this source")
+        if self.verified_correction_temporal is not None and (
+            not self.hybrid_interpretation_mode
+            or len(self.candidates) != 2
+            or not isinstance(self.verified_correction_temporal, DomainInterpretation)
+            or self.verified_correction_temporal.capability_id != "temporal"
+            or self.verified_correction_temporal.intent != "TEMPORAL_RESOLUTION"
+            or self.verified_correction_temporal.source_text != self.source
+            or not any(
+                r.role == "replacement" for candidate in self.candidates for r in candidate.roles
+            )
+        ):
+            raise ValueError("Corrected-plan Temporal proof is not bound to this source")
         if len(self.prompt_payload_bytes()) > MAX_CORE_CANDIDATE_CONTEXT_BYTES:
             raise ValueError("Core candidate context is oversized")
 

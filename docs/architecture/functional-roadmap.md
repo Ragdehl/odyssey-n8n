@@ -86,15 +86,32 @@ remains unwritten and F27 fails provenance validation. These are safe
 negative/partial results, **not** a claim that negations, corrections,
 conditionals or the Tasks lifecycle are fully supported.
 
-**NEXT ORDER:** (1) design and independently validate specialized Core
-coverage for safely *representing* negative facts, cancelled/corrected
-plans and mutually exclusive conditionals without treating them as
-completed occurrences; (2) connect a real Tasks capability/lifecycle
-for independent tasks and shared-date/modality dependencies;
-(3) resolve remaining ambiguous or under-proven references only with
-canonical evidence, preserve full 27-case and adversarial regressions;
-(4) assess live model quality and explicitly request approval before
-DEV/PROD activation. Do not migrate Core GPT-5.6 during this phase.
+**Subsequent code/test checkpoint (2026-10-12; opt-in branch only):**
+F19 now permits an independently reviewed, source-grounded FUTURE
+INTENTION for the final replacement, with exact Temporal clock/date.
+The discarded plan is marked `superseded_by_correction` only if a
+validated replacement fact is reviewed and written; the resulting
+request **COMPLETED** in physical synthetic Markdown replay with an
+authentic saved GPT-6/5.6 reply. Three real-provider historical attempt
+outputs are frozen in `hybrid_correction_v1/F19.json` and reproducible
+with no new provider calls. This does not enable F17 negations or F20
+conditional claims. The pure task groups in F22 can now be dispatched
+**only with explicit enable_tasks=True** to the existing registered Tasks
+capability, which owns its independent TaskCorePlanner/lifecycle and
+canonical task schema. A deterministic end-to-end test creates a genuine
+`task` Note with `status=pending` and a target date; a missing Tasks
+executor fails closed. No real-model hybrid Tasks integration was claimed.
+Mixed F25 property+repair descriptions are not automatically Task creates.
+The source compiler defaults to the previous route contract.
+
+**NEXT ORDER:** (1) design specialized negative-statement/conditional
+semantic storage without inventing completed occurrences or violating
+singular canonical identity rules; (2) validate live GPT-6 Tasks route
+interpretation and bounded shared-modality/date evidence for F22;
+(3) expand mixed-polarity F18 and ambiguous F14/F27 with canonical proof,
+regression across all 27 original cases, and adversarial readback;
+(4) review quality/cost and request separate approval before DEV/PROD.
+Keep Core GPT-5.6 for now.
 
 ## Deferred model consolidation — user decision (2026-10-10)
 
