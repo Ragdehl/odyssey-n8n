@@ -165,6 +165,9 @@ class LocalConversationStore:
             turn["request_detail"] = detail
         if snapshot is not None:
             turn["note_result_snapshot"] = snapshot.to_payload()
+        if len(self._encoded_record({"turns": [*chunk["turns"], turn]})) > _MAX_RECORD_BYTES:
+            target = self._chunk_path(f"{len(chunks) + 1:06d}.json")
+            chunk = {"turns": []}
         chunk["turns"].append(turn)
         self._write(target, chunk)
         self._write_request_entry(
@@ -420,8 +423,13 @@ class LocalConversationStore:
         return value
 
     @staticmethod
-    def _write(path: Path, record: dict[str, Any]) -> None:
-        encoded = json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+    def _encoded_record(record: dict[str, Any]) -> bytes:
+        """Serialize one bounded conversation record for size validation and atomic writes."""
+        return json.dumps(record, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
+
+    @classmethod
+    def _write(cls, path: Path, record: dict[str, Any]) -> None:
+        encoded = cls._encoded_record(record)
         if len(encoded) > _MAX_RECORD_BYTES:
             raise ConversationError("conversation record is too large")
         path.parent.mkdir(parents=True, exist_ok=True)

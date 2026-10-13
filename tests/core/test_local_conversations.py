@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from odyssey_core.conversations import ConversationError
-from odyssey_core.local_conversations import ConversationRootResolver, LocalConversationStore
+from odyssey_core.local_conversations import (
+    _MAX_RECORD_BYTES,
+    ConversationRootResolver,
+    LocalConversationStore,
+)
 
 NOW = "2026-09-16T10:00:00+00:00"
 
@@ -83,6 +87,45 @@ def test_pages_context_and_append_read_only_required_chunks(tmp_path: Path, monk
     ]
     assert len(set(reads)) == 2
     assert store.load_main_page(limit=50)["turns"][-1]["text"] == "turn 1000"
+
+
+def test_append_rotates_when_an_existing_chunk_would_exceed_byte_limit(tmp_path: Path) -> None:
+    """A large historical chunk never prevents a later request from being recorded."""
+    store = _store(tmp_path)
+    store.load_or_create_main(now=NOW)
+    historical_turns = [
+        {
+            "request_id": f"historical-{index}",
+            "role": "user",
+            "text": "x" * 60_000,
+            "created_at": NOW,
+            "status": None,
+        }
+        for index in range(4)
+    ]
+    chunk_path = store._main_directory() / "chunks" / "000001.json"
+    store._write(chunk_path, {"turns": historical_turns})
+    store._write(
+        store._main_directory() / "manifest.json",
+        {
+            "conversation_id": "main",
+            "created_at": NOW,
+            "updated_at": NOW,
+            "turn_count": len(historical_turns),
+            "chunks": [{"name": "000001.json", "count": len(historical_turns)}],
+        },
+    )
+    assert chunk_path.stat().st_size < _MAX_RECORD_BYTES
+    store.append_turn(
+        request_id="large-second",
+        role="user",
+        text="y" * 30_000,
+        created_at=NOW,
+    )
+
+    manifest = store._manifest()
+    assert [chunk["count"] for chunk in manifest["chunks"]] == [4, 1]
+    assert store.load_main_page()["turns"][-1]["text"] == "y" * 30_000
 
 
 def test_page_contract_rejects_cross_root_or_malformed_cursor(tmp_path: Path) -> None:
