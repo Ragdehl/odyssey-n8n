@@ -1,0 +1,126 @@
+{
+  "case": "F09",
+  "source_sha256": "d9f44a49cd5cee063fb32cbd5c945004e5d6645c0d9cb4e7cfffb9bc0410e5cd",
+  "model_provenance": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"property\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "input_tokens": 1468,
+      "output_tokens": 243
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vive en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Vive en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11545,
+      "output_tokens": 298
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Marta\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Vive en Lyon.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"Luis\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Vive en Lyon.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1529,
+      "output_tokens": 130
+    }
+  ],
+  "real_new_model_outputs": [
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"results\":[{\"ordinal\":0,\"decision\":\"already_known\",\"exact_quote\":\"vive en Lyon.\"},{\"ordinal\":1,\"decision\":\"new\",\"exact_quote\":\"\"}]}",
+      "input_tokens": 298,
+      "output_tokens": 115
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"results\":[{\"ordinal\":0,\"decision\":\"already_known\",\"exact_quote\":\"vive en Lyon.\"},{\"ordinal\":1,\"decision\":\"new\",\"exact_quote\":\"\"}]}",
+      "input_tokens": 298,
+      "output_tokens": 88
+    }
+  ],
+  "status": "completed",
+  "routes": [
+    {
+      "capability": "core",
+      "text": "Marta y Luis viven en Lyon.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Marta",
+          "fact": "Vive en Lyon."
+        },
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Luis",
+          "fact": "Vive en Lyon."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "Marta",
+          "name": "Marta",
+          "status": "resolved",
+          "type": "person"
+        },
+        {
+          "mention": "Luis",
+          "name": "Luis",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "ALREADY_KNOWN",
+          "target": "Marta"
+        },
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "Luis"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Marta y Luis viven en Lyon.",
+          "output": "record · person → Marta · Vive en Lyon.\nrecord · person → Luis · Vive en Lyon."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Marta y Luis viven en Lyon.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · person → Marta · Vive en Lyon.\nrecord · person → Luis · Vive en Lyon.",
+          "output": "succeeded: ALREADY_KNOWN · Marta\nsucceeded: UPDATED · Luis\nMarta → Marta\nLuis → Luis"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "Luis.md": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-person-luis\"\nname: \"Luis\"\nrevision: 2\nschema_version: 3\ntype: \"person\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-independent-known-fact\", \"human\": null}\n---\n\nPersona de prueba, conocida de [[Alex]].\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Vive en Lyon.\n  <!-- odyssey:fact request=route-1-a5a6848620b262ff0cfbf1c574fb0b5fcac200d62e8bfa1a20eded3f42bed316 ordinal=1 recorded_at=2026-10-04T17:35:00+02:00 -->",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-independent-known-fact\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-independent-known-fact\", \"human\": null}\n---\n\n"
+  },
+  "marta_unchanged": true,
+  "luis_written": true,
+  "operations": [
+    "succeeded: ALREADY_KNOWN · Marta\nsucceeded: UPDATED · Luis\nMarta → Marta\nLuis → Luis"
+  ],
+  "estimated_new_usd": 0.00039908,
+  "estimated_cumulative_usd": 0.66285541
+}

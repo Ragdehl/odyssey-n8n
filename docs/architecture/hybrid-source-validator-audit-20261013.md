@@ -75,3 +75,17 @@ No introducir casos codificados para Marta, Lyon o conjugaciones.
 Estado global: 24/27 aceptados en notas de prueba, F14 y F27
 parciales por ambiguedad real, F09 duplicado aun sin resolver.
 Ni DEV ni PROD han sido modificados.
+
+
+## 2026-10-13 — Later completion addendum
+
+The former 24/27 result is historical. F09 now has two genuine
+independent semantic-no-op reviews, backed by full canonical content
+and stable revision evidence: Marta unchanged, Luis updated.
+
+F14/F27 are now durable source-pending instead of bare route blocks;
+the earlier real Core writes remain intact and their exact cinema
+clauses are preserved in v2 Pending with original timestamp and
+freshly Core-verified identity options. A guarded explicit selection
+can resume only the dependent fact; the result correctly stays PARTIAL
+until the user clarifies. Active DEV/PROD is unchanged.

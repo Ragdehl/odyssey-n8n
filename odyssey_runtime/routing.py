@@ -264,6 +264,19 @@ def _route_stage_io(source: str, result: ApplicationResult) -> list[dict[str, st
         elif name == "pending":
             incoming = "Resultado de Core"
             outgoing = stage.outcome.value
+        elif name == "candidate.pending_identity":
+            incoming = str(evidence.get("pending_source", source))[:512]
+            names = evidence.get("pending_option_labels", ())
+            outgoing = (
+                (
+                    "Referencia "
+                    + str(evidence.get("pending_reference", "sin resolver"))[:80]
+                    + " pendiente entre opciones canónicas verificadas: "
+                    + ", ".join(str(label)[:80] for label in names[:4])
+                )
+                if names
+                else "Referencia pendiente sin lista completa de candidatos; requiere aclaración"
+            )[:768]
         else:
             # Preserve verified stage status without inventing semantic output.
             incoming = source[:512]
@@ -285,6 +298,8 @@ def execute_routed_request(
     progress_callback: Callable[[str, Mapping[str, object]], None] | None = None,
     route_preparers: Mapping[str, RoutePreparer] | None = None,
     max_parallel_preparations: int = 2,
+    dependent_pending_executor: Callable[[Route, str, ApplicationResult], ApplicationResult | None]
+    | None = None,
 ) -> ApplicationResult:
     """Interpret independent spans concurrently and execute Core writes in original order.
 
@@ -334,8 +349,11 @@ def execute_routed_request(
             if route.depends_on is not None:
                 handoff = _dependent_handoff(route, subresults[route.depends_on])
                 subresults.append(
-                    _dependency_blocked_result(
-                        route_execution_id(outer_request_id, ordinal), subresults[route.depends_on]
+                    _dependency_or_pending_result(
+                        route,
+                        route_execution_id(outer_request_id, ordinal),
+                        subresults[route.depends_on],
+                        dependent_pending_executor,
                     )
                     if handoff is None
                     else _execute_route(
@@ -402,7 +420,12 @@ def execute_routed_request(
                 if route.depends_on is not None:
                     handoff = _dependent_handoff(route, subresults[route.depends_on])
                     subresults.append(
-                        _dependency_blocked_result(locator, subresults[route.depends_on])
+                        _dependency_or_pending_result(
+                            route,
+                            locator,
+                            subresults[route.depends_on],
+                            dependent_pending_executor,
+                        )
                         if handoff is None
                         else _execute_route(
                             route,
@@ -436,6 +459,40 @@ def execute_routed_request(
     return _routed_result(
         outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
     )
+
+
+def _dependency_or_pending_result(
+    route: Route,
+    locator: str,
+    predecessor: ApplicationResult,
+    executor: Callable[[Route, str, ApplicationResult], ApplicationResult | None] | None,
+) -> ApplicationResult:
+    """Allow only opt-in source-pending evidence, never guess a dependent identity.
+
+    An independent predecessor can legitimately write multiple canonical
+    participants. This does not identify a later singular pronoun. A trusted,
+    scoped source-pending adapter may preserve that unresolved user intent;
+    without one, retain the historical fail-closed blocked result.
+    """
+    if executor is None or predecessor.status is not ApplicationStatus.COMPLETED:
+        return _dependency_blocked_result(locator, predecessor)
+    try:
+        proposed = executor(route, locator, predecessor)
+        if proposed is None:
+            return _dependency_blocked_result(locator, predecessor)
+        if (
+            not isinstance(proposed, ApplicationResult)
+            or proposed.request_id != locator
+            or proposed.status is not ApplicationStatus.NEEDS_ATTENTION
+            or proposed.action_results
+            or proposed.affected_stable_note_ids
+            or not proposed.pending_work.required
+        ):
+            return _dependency_blocked_result(locator, predecessor)
+        return proposed
+    except Exception:
+        # Never reinterpret a failed pending record as permission to write.
+        return _dependency_blocked_result(locator, predecessor)
 
 
 def _dependency_blocked_result(locator: str, predecessor: ApplicationResult) -> ApplicationResult:

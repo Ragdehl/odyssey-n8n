@@ -22,6 +22,11 @@ from .context import ContextPackage, get_context
 from .fact_selection import AtomicFactSelector
 from .git_history import GitHistoryResult, GitHistorySnapshot, HistoryRecorder, HistoryStatus
 from .identity_boundary import AuthenticatedActorContext, SelfBindingError, SelfBindingRepository
+from .known_fact_equivalence import (
+    KnownFactProof,
+    KnownFactReviewError,
+    validate_current_known_fact,
+)
 from .materialization import (
     BoundedNoteWriter,
     materialize_calendar_day_record,
@@ -298,6 +303,8 @@ class ActionResult:
     canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
     # Read-only evidence for a set mention expanded into multiple proven member links.
     observed_set_members: tuple[tuple[str, str], ...] = ()
+    # Internal only: each skipped mutation needs exact canonical existing support.
+    known_fact_evidence: tuple[KnownFactProof, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,6 +366,7 @@ def execute_request(
     candidate_coverage_factory: Callable[[str, CoreCandidateContext, RequestPlan], Any]
     | None = None,
     candidate_pending_recorder: Callable[[Any], str] | None = None,
+    known_fact_verifier: Any | None = None,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -783,6 +791,7 @@ def execute_request(
                 action_spans,
                 clarification_choice,
                 write_preflight_guard,
+                known_fact_verifier,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -1470,6 +1479,7 @@ def _execute_write(
     spans: SpanRecorder,
     clarification_choice: ClarificationChoice | None = None,
     write_preflight_guard: WritePreflightGuard | None = None,
+    known_fact_verifier: Any | None = None,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     complete_set_references = tuple(
@@ -1686,6 +1696,64 @@ def _execute_write(
         evidence_action = executable
         executable = bind_canonical_reference_mentions(executable, preflight)
         rendering = spans.invoke("reference_render", render_reference_facts, executable, preflight)
+        known_proofs: tuple[KnownFactProof, ...] = ()
+        if known_fact_verifier is not None:
+            if complete_set_references or has_relational_target or cardinalities != {"one"}:
+                raise KnownFactReviewError(
+                    "Known-fact no-op does not support relational or bulk writes"
+                )
+            if not callable(getattr(known_fact_verifier, "verify", None)):
+                raise KnownFactReviewError("Known-fact verifier lacks independent review")
+            known_proofs = spans.invoke(
+                "known_fact_review",
+                known_fact_verifier.verify,
+                executable,
+                preflight,
+                rendering.rendered_facts,
+                executable_ordinals,
+                repository,
+                schema,
+            )
+            if not isinstance(known_proofs, tuple) or any(
+                not isinstance(item, KnownFactProof) for item in known_proofs
+            ):
+                raise KnownFactReviewError("Known-fact reviewer returned invalid evidence")
+            # Do not create a stale proof by writing to the SAME canonical
+            # Note elsewhere in this action before it is read back.
+            protected = {proof.stable_id for proof in known_proofs}
+            for i, selected in enumerate(preflight):
+                if (
+                    selected.stable_id in protected
+                    and not selected.reference_only
+                    and any(
+                        ordinal not in {p.ordinal for p in known_proofs}
+                        for ordinal in executable_ordinals[i]
+                    )
+                ):
+                    raise KnownFactReviewError(
+                        "Mixed known/new facts on one target require a newer contract"
+                    )
+            for item in known_proofs:
+                if not 0 <= item.unit_index < len(executable.units):
+                    raise KnownFactReviewError("Known fact unit index is out of range")
+                index = item.unit_index
+                if (
+                    item.ordinal not in executable_ordinals[index]
+                    or item.stable_id != preflight[index].stable_id
+                    or preflight[index].outcome is not WriteTargetOutcome.UPDATE
+                ):
+                    raise KnownFactReviewError("Known-fact proof points outside current Core plan")
+                planned_index = executable_ordinals[index].index(item.ordinal)
+                validate_current_known_fact(
+                    item, rendering.rendered_facts[index][planned_index], repository, schema
+                )
+    except KnownFactReviewError:
+        return ActionResult(
+            action_index,
+            action.kind,
+            ActionStatus.DEFERRED,
+            reason="KNOWN_FACT_INDEPENDENT_REVIEW_REQUIRED",
+        )
     except WritePreflightGuardError as error:
         return ActionResult(action_index, action.kind, ActionStatus.DEFERRED, reason=error.code)
     except RelationalResolutionError as error:
@@ -1718,6 +1786,7 @@ def _execute_write(
         executable_ordinals,
         fact_selector,
         spans,
+        known_proofs,
     )
     reference_evidence = _collect_persisted_reference_evidence(
         action_index,
@@ -1778,6 +1847,7 @@ def _execute_write(
         _action_status(results),
         unit_results=tuple(results),
         canonical_reference_evidence=reference_evidence,
+        known_fact_evidence=known_proofs,
         observed_set_members=tuple(
             (
                 action.units[binding.source_unit_index]
@@ -2286,6 +2356,7 @@ def _execute_single_units(
     unit_ordinals: tuple[tuple[int, ...], ...],
     fact_selector: AtomicFactSelector | None,
     spans: SpanRecorder,
+    known_proofs: tuple[KnownFactProof, ...] = (),
 ) -> list[UnitResult]:
     """Run safe units in deterministic dependency order while preserving independent outcomes."""
     dependencies = _create_dependencies(action, preflight)
@@ -2328,6 +2399,64 @@ def _execute_single_units(
             continue
         unit = action.units[index]
         target = preflight[index]
+        known_at_index = {p.ordinal: p for p in known_proofs if p.unit_index == index}
+        original_ordinals = unit_ordinals[index]
+        if known_at_index:
+            if (
+                target.outcome is not WriteTargetOutcome.UPDATE
+                or unit.intent != "record"
+                or unit.properties
+                or unit.tag_changes
+                or unit.destination_type is not None
+                or unit.force_create
+                or not set(known_at_index).issubset(original_ordinals)
+            ):
+                results[index] = UnitResult(
+                    index, UnitStatus.DEFERRED, reason="KNOWN_FACT_NOOP_SHAPE_UNSUPPORTED"
+                )
+                continue
+            try:
+                for proof in known_at_index.values():
+                    plan_index = original_ordinals.index(proof.ordinal)
+                    validate_current_known_fact(
+                        proof, rendered_facts[index][plan_index], repository, schema
+                    )
+            except KnownFactReviewError:
+                results[index] = UnitResult(
+                    index, UnitStatus.DEFERRED, reason="KNOWN_FACT_EVIDENCE_STALE"
+                )
+                continue
+            if len(known_at_index) == len(unit.facts):
+                results[index] = UnitResult(
+                    index,
+                    UnitStatus.SUCCEEDED,
+                    operation="ALREADY_KNOWN",
+                    stable_note_id=target.stable_id,
+                    materially_affected=False,
+                )
+                continue
+            if unit.references:
+                results[index] = UnitResult(
+                    index, UnitStatus.DEFERRED, reason="KNOWN_FACT_MIXED_REFERENCE_UNSUPPORTED"
+                )
+                continue
+            keep = tuple(
+                k for k, ordinal in enumerate(original_ordinals) if ordinal not in known_at_index
+            )
+            unit = replace(
+                unit,
+                facts=tuple(unit.facts[k] for k in keep),
+                fact_temporal_anchors=(
+                    tuple(unit.fact_temporal_anchors[k] for k in keep)
+                    if unit.fact_temporal_anchors
+                    else ()
+                ),
+            )
+            facts_to_write = tuple(rendered_facts[index][k] for k in keep)
+            ordinals_to_write = tuple(original_ordinals[k] for k in keep)
+        else:
+            facts_to_write = rendered_facts[index]
+            ordinals_to_write = unit_ordinals[index]
         if target.reference_only:
             results[index] = UnitResult(
                 index,
@@ -2349,9 +2478,9 @@ def _execute_single_units(
                     schema=schema,
                     actor=actor,
                     now=now,
-                    rendered_facts=rendered_facts[index],
+                    rendered_facts=facts_to_write,
                     request_id=request_id,
-                    fact_ordinals=unit_ordinals[index],
+                    fact_ordinals=ordinals_to_write,
                 )
             elif target.outcome is WriteTargetOutcome.CREATE:
                 persisted = spans.invoke(
@@ -2364,9 +2493,9 @@ def _execute_single_units(
                     schema=schema,
                     actor=actor,
                     now=now,
-                    rendered_facts=rendered_facts[index],
+                    rendered_facts=facts_to_write,
                     request_id=request_id,
-                    fact_ordinals=unit_ordinals[index],
+                    fact_ordinals=ordinals_to_write,
                 )
             elif unit.intent == "delete":
                 persisted = spans.invoke(
@@ -2401,9 +2530,9 @@ def _execute_single_units(
                     actor=actor,
                     now=now,
                     writer=writer,
-                    rendered_facts=rendered_facts[index],
+                    rendered_facts=facts_to_write,
                     request_id=request_id,
-                    fact_ordinals=unit_ordinals[index],
+                    fact_ordinals=ordinals_to_write,
                     fact_selector=fact_selector,
                 )
         except Exception as error:

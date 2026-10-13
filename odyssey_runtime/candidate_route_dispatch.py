@@ -93,6 +93,7 @@ def execute_candidate_routed_message(
     core_planner_factory: Callable[[CoreCandidateContext, object | None], object],
     candidate_coverage_factory: Callable[[str, CoreCandidateContext, object], object] | None = None,
     core_candidate_attributor: object | None = None,
+    known_fact_verifier: object | None = None,
     repository: object,
     schema: dict,
     context_index: object,
@@ -104,6 +105,7 @@ def execute_candidate_routed_message(
     context_limit: int,
     request_id_factory: Callable[[], str],
     candidate_pending_recorder: Callable[[object], str] | None = None,
+    route_ambiguity_recorder: Callable[[object, tuple[object, ...]], str] | None = None,
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
     task_route_executor: object | None = None,
 ) -> object:
@@ -536,6 +538,7 @@ def execute_candidate_routed_message(
             ),
             candidate_pending_recorder=candidate_pending_recorder,
             write_preflight_guard=subject_guard or event_guard or guard,
+            known_fact_verifier=known_fact_verifier,
         )
         if result.status is ApplicationStatus.COMPLETED and "plan" in captured:
             plan = captured["plan"]
@@ -550,7 +553,8 @@ def execute_candidate_routed_message(
                     incoming_reference=guard,
                 )
                 if not evidence.persisted_facts or any(
-                    item.status != "verified_in_markdown" for item in evidence.persisted_facts
+                    item.status not in {"verified_in_markdown", "verified_existing_knowledge"}
+                    for item in evidence.persisted_facts
                 ):
                     raise ValueError("Core's routed physical Markdown readback failed")
                 # Rebuild only derived indexes, after the authoritative writer.
@@ -618,6 +622,36 @@ def execute_candidate_routed_message(
                             )
         return result
 
+    def preserve_route_ambiguity(route, locator, predecessor):
+        if route_ambiguity_recorder is None or not callable(route_ambiguity_recorder):
+            return None
+        original = route_scopes.get(locator)
+        if original is None:
+            return None
+        ordinal, scoped = original
+        if (
+            route != scoped.route
+            or route.depends_on is None
+            or route.depends_on != ordinal - 1
+            or not 0 <= route.depends_on < len(bundle.units)
+        ):
+            return None
+        from odyssey_runtime.ambiguous_route_pending import (
+            preserve_unresolved_dependent_reference,
+        )
+
+        return preserve_unresolved_dependent_reference(
+            original_source=source,
+            route=route,
+            scoped=scoped,
+            predecessor_source=bundle.units[route.depends_on].route.source_text,
+            predecessor=predecessor,
+            locator=locator,
+            repository=repository,
+            schema=schema,
+            recorder=route_ambiguity_recorder,
+        )
+
     selected_router = SimpleNamespace(route=lambda current, _prior=(): bundle.plan)
     return execute_routed_request(
         user_request=source,
@@ -628,5 +662,8 @@ def execute_candidate_routed_message(
         temporal_execute=run_unit,
         application_executors=(
             {"tasks": run_task_route} if task_route_executor is not None else {}
+        ),
+        dependent_pending_executor=(
+            preserve_route_ambiguity if route_ambiguity_recorder is not None else None
         ),
     )

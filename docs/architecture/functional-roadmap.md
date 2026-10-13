@@ -1449,3 +1449,25 @@ activos/historicos esta en hybrid-source-validator-audit-20261013.md.
 Eliminadas restricciones arbitrarias 4 referencias / 6 eventos y
 conjunciones espanolas como garantia. No DEV/PROD. Clean Architecture
 sigue diferida e incremental.
+
+
+## 2026-10-13 — Later checkpoint: 25/27 completed and two safe pending
+
+The earlier 24/27 count is now historical. F09 writes only the new
+property in Luis; two genuinely independent GPT-5.6 verifier calls
+recognize Marta as ALREADY_KNOWN without modifying her Note. Proof
+is current-note-guarded, can be invalidated by changes and is checked
+again on readback. No rule for particular person, city or verb.
+
+F14 and F27 have true ambiguous pronouns and therefore cannot safely
+be reported as 27/27 *resolved*. Core keeps the previously written
+conversation facts and now stores the exact dependent cinema clause
+as durable v2 source pending, with original captured time and unique
+Core-verified Eric/Luis options. A later explicit reply like "Con Luis"
+records the selected identity and uses the existing freshness-checked
+Core continuation guard to write only the cinema event; both genuine
+provider-replay and deterministic continuation tests are present.
+No automatic person guessing and no old-fact re-execution.
+
+These feature-branch hooks still require wiring into the authenticated
+DEV application. No DEV or PROD activation has happened.

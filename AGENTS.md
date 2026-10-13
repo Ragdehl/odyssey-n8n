@@ -58,6 +58,45 @@ Mantener como contrato funcional el híbrido ya aprobado.
 
 ## Development principles
 
+### 2026-10-13 — LATEST hybrid status: 25 completed + 2 safe pending
+
+Older 23/27 and 24/27 counts below are historical. F09 now passes:
+two independent genuine GPT-5.6 semantic equivalence reviews confirm
+Marta already has the complete Lyon fact, so her canonical Note is
+unchanged. Luis receives the new fact. Current-note identity, content
+hash and exact supporting quote are checked before a skip and again
+during readback. Semantic review is optional, read-only, provider store
+disabled, and bounded: long Notes remain writable, no truncated
+existing context is allowed to certify an already-known fact.
+
+F14/F27 already persist their independently proven prior conversation
+facts. The new opt-in hybrid pending boundary now also stores their exact
+original cinema source clause with captured date, reference and options
+Eric/Luis proven by the previous Core-linked persisted fact. It does
+NOT resolve "él" itself: it requires a user choice. The actual pending
+v2 workflow and guarded subsequent Core continuation ("Con Luis") are
+covered by deterministic replay of genuine Router/Temporal/Planner and
+independent reviewer outputs. No second invented Person or Day fact.
+If the callback is unavailable, source cannot be scoped, options change
+or proof goes stale, never promote a candidate identity.
+More than four plausible people may be kept as source-only pending,
+not a misleading truncated choice list.
+
+The strict score is therefore 25/27 fully completed; the other two
+are correctly handled as durable pending clarification, NOT magically
+fully resolved. This capability is not yet deployed in DEV or PROD.
+When activating hybrid in DEV, wire the route ambiguity recorder to
+authenticated per-conversation v2 Pending state and display choices in
+the chat; do not claim live app support before then.
+
+Evidence: benchmarks/application_router/hybrid_known_fact_v1/F09.json;
+tests/runtime/test_hybrid_known_fact_real_review_20261013.py;
+tests/runtime/test_hybrid_ambiguous_real_pending_20261013.py.
+Last full-suite results on 2026-10-13: 3039 passed, 80 skipped,
+the same 10 historical dated/version-hash failures; no new regressions.
+Continue incremental Clean Architecture only when touching modules
+for functional work, never a wholesale rewrite during DEV preparation.
+
 ### Regression memory for real chat failures
 
 When a real Odyssey chat interaction reveals a new semantic failure mode, preserve that exact case as

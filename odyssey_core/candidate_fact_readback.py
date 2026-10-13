@@ -13,11 +13,13 @@ from typing import Any
 from .application import (
     ApplicationResult,
     DependentReferenceGuard,
+    UnitStatus,
     _dependent_evidence_is_current,
 )
 from .atomic_facts import AtomicFactError, normalize_atomic_fact, parse_atomic_facts
 from .candidate_context import CoreCandidateContext
 from .candidate_write_observation import observe_candidate_write_outcomes
+from .known_fact_equivalence import KnownFactReviewError, validate_current_known_fact
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .reference_binding import ReferenceBindingError, _wikilink_target
 from .reference_preflight import ReferencePreflightError, _find_existing_identity
@@ -254,6 +256,26 @@ def readback_core_facts(
                     )
                 )
     receipts = []
+    known_by_ordinal = {}
+    for action in result.action_results:
+        for proof in action.known_fact_evidence:
+            if proof.ordinal in known_by_ordinal or proof.ordinal not in expected:
+                raise ValueError("Duplicate or extraneous known-fact proof in readback")
+            text, stable_id, ai, ui = expected[proof.ordinal]
+            if (
+                proof.stable_id != stable_id
+                or proof.unit_index != ui
+                or action.action_index != ai
+                or result.action_results[ai].unit_results[ui].status is not UnitStatus.SUCCEEDED
+                or result.action_results[ai].unit_results[ui].operation
+                not in {"ALREADY_KNOWN", "NO_CHANGE", "UPDATED", "CREATED"}
+            ):
+                raise ValueError("Known-fact no-op does not match the saved Core result")
+            try:
+                validate_current_known_fact(proof, text, repository, schema)
+            except KnownFactReviewError as error:
+                raise ValueError("Known-fact canonical readback is stale") from error
+            known_by_ordinal[proof.ordinal] = proof
     for ordinal, (_, stable_id, action_index, unit_index) in sorted(expected.items()):
         candidates = matched[ordinal]
         unique = (
@@ -261,16 +283,30 @@ def readback_core_facts(
             and duplicate_id_counts.get(stable_id) == 1
             and len(candidates) == 1
         )
-        receipts.append(
-            PersistedFactEvidence(
-                ordinal,
-                action_index,
-                unit_index,
-                "verified_in_markdown" if unique else "not_verified",
-                stable_id if unique else None,
-                candidates[0][2] if unique else None,
+        if ordinal in known_by_ordinal:
+            if candidates:
+                raise ValueError("Existing semantic fact cannot also be newly recorded")
+            receipts.append(
+                PersistedFactEvidence(
+                    ordinal,
+                    action_index,
+                    unit_index,
+                    "verified_existing_knowledge",
+                    stable_id,
+                    known_by_ordinal[ordinal].fact_sha256,
+                )
             )
-        )
+        else:
+            receipts.append(
+                PersistedFactEvidence(
+                    ordinal,
+                    action_index,
+                    unit_index,
+                    "verified_in_markdown" if unique else "not_verified",
+                    stable_id if unique else None,
+                    candidates[0][2] if unique else None,
+                )
+            )
     return CandidateFactReadback(
         request_id=result.request_id,
         core_request_status=observed.core_request_status,
