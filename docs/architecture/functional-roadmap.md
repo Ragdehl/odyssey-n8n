@@ -4,6 +4,34 @@ This is Odyssey's canonical source for **functional implementation status, inten
 
 Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATER / CONDITIONAL**
 
+## ➡️ Seguimiento activo — DEV híbrido y extensibilidad (13-10-2026)
+
+**Fuente canónica para la etapa activa y el siguiente paso; esta sección prevalece sobre checkpoints históricos fechados más abajo.** El objetivo, el diseño propuesto y los criterios de aceptación están en [Plan de continuidad: arquitectura híbrida y aplicaciones reutilizables](application-extensibility-plan.md). Continuar siempre desde este bloque y verificar el repo/DEV en lugar de suponer estados.
+
+- **Rama/worktree de partida:** `/home/ragdehl/projects/odyssey-fact-candidates-v1`, rama `feat/router-fact-candidate-contract-v1`, commit base auditado `13d713f` (puede cambiar: comprobar con Git).
+- **Realidad verificada:** híbrido experimental en rama, **no desplegado en DEV/PROD**. Última evidencia registrada: 25/27 completamente terminados y F14/F27 correctamente pendientes por pronombre ambiguo; 3039 passed, 80 skipped, 10 fallos históricos. No hay validación del usuario en DEV de este híbrido.
+- **Decisión del usuario:** probar primero la aplicación en DEV y **después** generalizar contrato de datos, puerta común de mutaciones, limpieza de excepciones y Events; Clean Architecture de forma incremental, nunca una reescritura previa al primer ciclo DEV.
+
+| Paso | Estado | Resultado necesario / nota de continuidad |
+| --- | --- | --- |
+| E0 — Auditoría de arquitectura (13-10) | ✅ Revisada | Diferencias entre materialización de Task, Work Sessions y Core; `TaskCorePlanner` transforma planes; `TaskScopedEvidence` especial; guard F14/F27 de frase fija es piloto. Auditoría de lectura, no prueba DEV. |
+| **E1 — Activación segura y pruebas del usuario en DEV** | **➡️ SIGUIENTE, NO INICIADO** | Comprobar PR/branch, cableado seguro y pending de usuario, gates y versión efectiva DEV; después dar casos concretos al usuario para que pruebe. Requiere autorización humana para desplegar. |
+| E2 — Contrato común de contexto | ⬜ Pendiente | Inventario de carriers y diseño mínimo tipo/versión, tests con Apps existentes y nueva App ficticia. |
+| E3 — Puerta común de mutaciones | ⬜ Pendiente | Garantías transversales para chat, UI Task y Work Sessions; propiedad de planes genéricos en Core. |
+| E4 — Excepciones y legado | ⬜ Pendiente | Sustituir pilotos de frase fija y validar retirar legacy sin romper centinelas. |
+| E5 — Events como prueba de extensibilidad | ⬜ Pendiente | App Events aprovecha Core/Temporal/Calendar sin duplicar mecanismos. |
+| E6 — Clean Architecture incremental | 💡 Dirección continua aprobada | Refactorizaciones acotadas al tocar módulos; checkpoint de mantenibilidad después de Tasks/Events. |
+
+**Próxima acción concreta:** inspeccionar el estado Git/PR y la composición efectiva DEV; preparar una propuesta de conexión segura del híbrido con la UX de pending F14/F27, identificar gates y obtener autorización del usuario **antes** de cualquier deploy. No activar el guard de frase fija como continuidad conversacional general.
+
+**Bitácora de hitos (añadir solo cambios reales, con evidencia y estado operativo):**
+
+| Fecha | Hito / evidencia | Git / runtime | Siguiente paso |
+| --- | --- | --- | --- |
+| 2026-10-13 | Auditoría solo lectura; se acordó plan de reutilización y seguimiento persistente. | Rama experimental, base `13d713f`; **sin modificaciones funcionales ni deploy**. | Preparar E1 y revisar la integración DEV, no iniciar refactor masivo. |
+
+**Protocolo de cierre por paso:** dejar aquí estado, hechos observados, commit/PR, pruebas ejecutadas (o no), estado DEV/PROD, bloqueador y próximo paso. Los contratos de diseño se detallan en el plan enlazado. Un chat nuevo debe poder empezar aquí sin recuperar conversación anterior.
+
 ## 💡 Futuro: Clean Architecture incremental
 
 Dirección aprobada el 13-10-2026: aplicar mejoras de separación

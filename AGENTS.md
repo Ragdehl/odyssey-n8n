@@ -56,6 +56,10 @@ de forma gradual. NO hacer ahora una refactorización global ni frenar DEV.
 Consultar docs/architecture/clean-architecture-incremental-direction.md.
 Mantener como contrato funcional el híbrido ya aprobado.
 
+## Continuidad obligatoria entre chats/agentes (13-10-2026)
+
+Para trabajo sobre la arquitectura híbrida y nuevas aplicaciones, **antes de implementar o proponer el siguiente paso**, leer [seguimiento activo del Functional Roadmap](docs/architecture/functional-roadmap.md) y [plan de continuidad y extensibilidad](docs/architecture/application-extensibility-plan.md). El roadmap tiene el **único estado actualizado** de etapa, siguiente acción, evidencia, rama y DEV/PROD. El plan detalla objetivos, secuencia, contratos y criterios de aceptación. Comprobar el worktree y la realidad del runtime con Git/inspección; no confundir commits, pruebas aisladas y despliegue. Al terminar cada paso sustancial, actualizar en el mismo cambio el roadmap con qué se hizo, qué falta, pruebas, commit/PR, estado operativo y próximo paso, antes de cerrar el chat. No depender de la memoria de ChatGPT ni pedir al usuario reconstruir lo ya documentado. Esta regla complementa la propiedad documental y los gates de seguridad de abajo; no autoriza deploy, merge ni cambio de datos.
+
 ## Development principles
 
 ### 2026-10-13 — LATEST hybrid status: 25 completed + 2 safe pending
