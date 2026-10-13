@@ -676,8 +676,14 @@ def _execute_route(
         if result.request_id != locator:
             return _route_failure(locator, "APPLICATION_CORRELATION_INVALID")
         return result
-    except Exception:
-        return _route_failure(locator, "APPLICATION_EXECUTION_FAILED")
+    except Exception as error:
+        # Exception text can contain source or provider content. Preserve only
+        # its class as bounded diagnostic evidence; public reasons are fixed.
+        return _route_failure(
+            locator,
+            "APPLICATION_EXECUTION_FAILED",
+            error_category=type(error).__name__,
+        )
 
 
 def _invoke_core(
@@ -747,7 +753,9 @@ def _router_failure(outer_request_id: str, code: str, error: Exception) -> Appli
     )
 
 
-def _route_failure(locator: str, reason: str) -> ApplicationResult:
+def _route_failure(
+    locator: str, reason: str, *, error_category: str | None = None
+) -> ApplicationResult:
     """Create bounded failed evidence for one route that did not yield a Core result."""
     return ApplicationResult(
         locator,
@@ -755,6 +763,16 @@ def _route_failure(locator: str, reason: str) -> ApplicationResult:
         (ActionResult(0, "route", ActionStatus.FAILED, reason=reason),),
         (),
         planning_error=reason,
+        operational=OperationalEvidence(
+            0.0,
+            (
+                OperationalStage(
+                    "application.execution",
+                    OperationalOutcome.FAILED,
+                    error_category=error_category or reason,
+                ),
+            ),
+        ),
     )
 
 

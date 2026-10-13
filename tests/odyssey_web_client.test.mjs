@@ -392,6 +392,23 @@ test("request detail retains only validated bounded operational evidence", () =>
   assert.equal(result.request_detail.estimated_cost.amount_usd, null);
 });
 
+test("browser preserves validated stages when optional input telemetry is unknown", () => {
+  const value = {
+    request_id: "web-candidate-context", status: "completed", kind: "acknowledgement", message: "Hecho.",
+    request_detail: {request_id: "web-candidate-context", operational: {total_duration_ms: 9, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 1, model: null, reasoning_effort: null, error_category: null, provider_calls: []},
+      {name: "planner", outcome: "completed", duration_ms: 8, model: "gpt-5.6", reasoning_effort: null, error_category: null, provider_calls: [{
+        name: "planner", outcome: "completed", duration_ms: 8, model: "gpt-5.6", reasoning_effort: null, error_category: null,
+        provider_calls: [], input_sizes: {candidate_context_bytes: 64, untrusted_metric: "no"},
+      }]},
+    ]}},
+  };
+  const result = validateProductResponse(value);
+  assert.equal(result.request_detail.operational.stages.length, 2);
+  assert.deepEqual(result.request_detail.operational.stages[1].provider_calls[0].input_sizes,
+    {candidate_context_bytes: 64});
+});
+
 test("transport sends only request and request_id through same-origin JSON", async () => {
   const submission = {request: "Hola", requestId: "web-test"};
   let captured;

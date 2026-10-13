@@ -137,6 +137,29 @@ test("workflow carries only validated route provenance and stage cost projection
   assert.equal(result.request_detail.operational.stages[1].estimated_cost.status, "unavailable");
 });
 
+test("candidate context telemetry cannot erase an authentic routed graph", () => {
+  const stages = [
+    {name: "application.router", outcome: "completed", duration_ms: 1, model: "gpt-6", provider_calls: []},
+    {name: "temporal.interpretation", outcome: "completed", duration_ms: 2, model: "gpt-6", provider_calls: []},
+    {name: "planner", outcome: "completed", duration_ms: 3, model: "gpt-5.6", provider_calls: [{
+      name: "planner", outcome: "completed", duration_ms: 3, model: "gpt-5.6", provider_calls: [],
+      input_sizes: {fixed_instructions_bytes: 1, candidate_context_bytes: 42, future_metric_bytes: 99},
+    }]},
+    ...Array.from({length: 5}, (_, index) => ({name: `action-${index}`, outcome: "completed", duration_ms: 1, model: null, provider_calls: []})),
+  ];
+  const flow = {version: 1, input: "Hoy llevé un paraguas amarillo de prueba.", parallel_preparation: false,
+    routes: [{capability: "temporal", text: "Hoy llevé un paraguas amarillo de prueba.", stage_count: 7,
+      status: "completed", temporal: [], steps: stages.slice(1).map(stage => ({name: stage.name, input: "", output: ""}))}]};
+  const result = execute({request_id: "synthetic-partial", status: "completed", product_outcome: "ANSWER",
+    affected_stable_note_ids: [], actions: [], execution_flow: flow,
+    operational: {total_duration_ms: 10, stages}});
+
+  assert.equal(result.request_detail.operational.stages.length, 8);
+  assert.equal(result.request_detail.flow.routes[0].stage_count, 7);
+  assert.deepEqual(result.request_detail.operational.stages[2].provider_calls[0].input_sizes,
+    {fixed_instructions_bytes: 1, candidate_context_bytes: 42});
+});
+
 test("workflow preserves a bounded dependent route for the browser contract", () => {
   const flow = {
     version: 1, input: "Ayer hablé con Eric. Mañana iré con él. Hoy compré pan.",

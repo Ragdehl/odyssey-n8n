@@ -112,10 +112,16 @@ function safeSpans(value) {
   return result.some(item => item === undefined) ? undefined : result;
 }
 function safeInputSizes(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length > 12) return undefined;
-  const allowed = new Set(['fixed_instructions_bytes', 'retrieval_capabilities_bytes', 'write_capabilities_bytes', 'recent_context_bytes', 'luna_rules_examples_bytes', 'user_request_bytes', 'structured_output_schema_bytes']);
-  if (Object.entries(value).some(([key, number]) => !allowed.has(key) || !Number.isInteger(number) || number < 0)) return undefined;
-  return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  // Telemetry is non-authoritative. Keep only bounded, recognised measurements:
+  // a newly emitted metric must never erase otherwise valid operational stages.
+  const allowed = new Set(['fixed_instructions_bytes', 'retrieval_capabilities_bytes', 'write_capabilities_bytes', 'recent_context_bytes', 'luna_rules_examples_bytes', 'user_request_bytes', 'structured_output_schema_bytes', 'candidate_context_bytes']);
+  const result = {};
+  for (const [key, number] of Object.entries(value)) {
+    if (!allowed.has(key) || !Number.isInteger(number) || number < 0) continue;
+    result[key] = number;
+  }
+  return Object.keys(result).length <= 12 ? result : undefined;
 }
 function safeDetailStage(value, nested = false) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.name !== 'string' || typeof value.outcome !== 'string') return undefined;
@@ -131,7 +137,7 @@ function safeDetailStage(value, nested = false) {
   const spans = value.substeps === undefined ? undefined : safeSpans(value.substeps);
   const coverage = value.coverage === undefined || value.coverage === null ? undefined : safeCoverage(value.coverage);
   const sizes = value.input_sizes === undefined || value.input_sizes === null ? undefined : safeInputSizes(value.input_sizes);
-  if ((value.start_offset_ms != null && start === undefined) || (value.substeps !== undefined && spans === undefined) || (value.coverage != null && coverage === undefined) || (value.input_sizes != null && sizes === undefined)) return undefined;
+  if ((value.start_offset_ms != null && start === undefined) || (value.substeps !== undefined && spans === undefined) || (value.coverage != null && coverage === undefined)) return undefined;
   const result = { name: value.name, outcome: value.outcome, duration_ms: duration, model, reasoning_effort: reasoning, error_category: error, ...(usage ? { usage } : {}), provider_calls: calls };
   if (start !== undefined) result.start_offset_ms = start;
   if (spans !== undefined) result.substeps = spans;

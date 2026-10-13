@@ -492,6 +492,11 @@ def test_route_failures_are_bounded_and_later_independent_routes_continue() -> N
         "APPLICATION_EXECUTION_FAILED",
         "APPLICATION_EXECUTOR_UNAVAILABLE",
     ]
+    failed_route = result.execution_flow["routes"][0]
+    assert failed_route["stage_count"] == 1
+    assert result.operational.stages[1].name == "application.execution"
+    assert result.operational.stages[1].error_category == "RuntimeError"
+    assert "contained" not in str(result.execution_flow)
 
 
 def test_invalid_route_correlation_and_all_failures_stay_outer_bounded() -> None:

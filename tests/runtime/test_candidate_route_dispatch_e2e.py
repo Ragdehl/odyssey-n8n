@@ -126,6 +126,7 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
     temporal_inputs = []
     core_domains = []
     history = FakeHistoryRecorder()
+    progress: list[str] = []
 
     class Temporal:
         def interpret(self, scoped):
@@ -178,7 +179,13 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
         context_limit=5,
         request_id_factory=lambda: "three-route-eric-v1",
         history_recorder=history,
+        progress_callback=lambda stage, _payload: progress.append(stage),
     )
+    assert progress[:2] == ["routing.started", "routing.ready"]
+    assert "temporal.started" in progress
+    assert "temporal.ready" in progress
+    assert "planner.started" in progress
+    assert "planner.ready" in progress
     assert history.begin_calls >= 2
     assert history.record_calls >= 2
     if dependent_target != "Eric":

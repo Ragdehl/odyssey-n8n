@@ -110,6 +110,7 @@ def execute_candidate_routed_message(
     route_ambiguity_recorder: Callable[[object, tuple[object, ...]], str] | None = None,
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
     task_route_executor: object | None = None,
+    progress_callback: Callable[[str, dict[str, object]], None] | None = None,
 ) -> object:
     """Execute scoped candidates through existing sequential Core and route guards.
 
@@ -167,6 +168,17 @@ def execute_candidate_routed_message(
         raise ValueError("Core planner and coverage callbacks are required")
     if not callable(getattr(router, "propose", None)):
         raise ValueError("Original source requires a validated Router candidate adapter")
+
+    def report_progress(stage: str, payload: dict[str, object] | None = None) -> None:
+        """Publish an observed lifecycle boundary without changing route execution."""
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(stage, payload or {})
+        except Exception:
+            return
+
+    report_progress("routing.started")
     proposal = router.propose(source)
     if not isinstance(proposal, FactCandidateProposal) or proposal.source != source:
         raise RouterError("Router did not preserve the original message")
@@ -176,6 +188,7 @@ def execute_candidate_routed_message(
     # Resolve the default at call time: historical frozen-reply tests can
     # inject their exact previous compiler without changing new hybrid logic.
     bundle = (bundle_compiler or compile_candidate_route_bundle)(proposal)
+    report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
     uses_tasks = any(route.capability_id == "tasks" for route in bundle.plan.routes)
     if uses_tasks:
         from odyssey_runtime.hybrid_group_compiler import hybrid_tasks_catalog
@@ -258,9 +271,11 @@ def execute_candidate_routed_message(
         )
         evidence.validate(source)
         if callable(scoped_execute):
+            report_progress("planner.started")
             receipt = scoped_execute(
                 unit_source, locator, authenticated_actor, prior_turns, scoped_evidence=evidence
             )
+            report_progress("planner.ready")
             if not isinstance(receipt, TaskScopedExecution):
                 raise ValueError("Scoped Tasks executor returned an invalid receipt")
             interpretation = receipt.temporal_interpretation
@@ -294,7 +309,10 @@ def execute_candidate_routed_message(
             )
         if not callable(task_route_executor):
             raise ValueError("Tasks executor lacks its ordinary execution callback")
-        return task_route_executor(unit_source, locator, authenticated_actor, prior_turns)
+        report_progress("planner.started")
+        result = task_route_executor(unit_source, locator, authenticated_actor, prior_turns)
+        report_progress("planner.ready")
+        return result
 
     def run_unit(
         unit_source: str,
@@ -338,10 +356,12 @@ def execute_candidate_routed_message(
         if scoped.route.capability_id == "temporal":
             if temporal is None or not callable(getattr(temporal, "interpret", None)):
                 raise ValueError("Temporal resolution is unavailable for dated route")
+            report_progress("temporal.started")
             if inherited:
                 interpretation = temporal.interpret(unit_source, inherited_temporal=inherited)
             else:
                 interpretation = temporal.interpret(unit_source)
+            report_progress("temporal.ready")
             if interpretation.source_text != unit_source:
                 raise ValueError("Temporal must interpret only its routed source")
             from odyssey_core.temporal_interpretation import TemporalInterpreterError
@@ -543,6 +563,7 @@ def execute_candidate_routed_message(
             ),
             candidate_pending_recorder=candidate_pending_recorder,
             history_recorder=history_recorder,
+            progress_callback=progress_callback,
             write_preflight_guard=subject_guard or event_guard or guard,
             known_fact_verifier=known_fact_verifier,
         )

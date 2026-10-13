@@ -455,12 +455,15 @@ function validateSpans(value) {
 
 function validateInputSizes(value) {
   const allowed = new Set(["fixed_instructions_bytes", "retrieval_capabilities_bytes", "write_capabilities_bytes",
-    "recent_context_bytes", "luna_rules_examples_bytes", "user_request_bytes", "structured_output_schema_bytes"]);
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length > 12 ||
-      Object.entries(value).some(([key, size]) => !allowed.has(key) || !Number.isInteger(size) || size < 0)) {
-    throw new ProductRequestError("Odyssey returned invalid input-size evidence.");
+    "recent_context_bytes", "luna_rules_examples_bytes", "user_request_bytes", "structured_output_schema_bytes",
+    "candidate_context_bytes"]);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const result = {};
+  for (const [key, size] of Object.entries(value)) {
+    // Input sizing is optional diagnostics, never semantic result evidence.
+    if (allowed.has(key) && Number.isInteger(size) && size >= 0) result[key] = size;
   }
-  return {...value};
+  return Object.keys(result).length <= 12 ? result : undefined;
 }
 
 function validateEstimatedCost(value) {

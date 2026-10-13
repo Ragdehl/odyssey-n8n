@@ -2670,6 +2670,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     proposal, enable_tasks=True
                 ),
                 task_route_executor=_ScopedTaskRouteExecutor(execute_scoped_tasks),
+                progress_callback=_emit_progress,
             ),
         )
 

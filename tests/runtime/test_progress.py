@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.identity_boundary import AuthenticatedActorContext
-from odyssey_runtime.composition import RuntimeComposition
+from odyssey_runtime.composition import ConversationRootResolver, RuntimeComposition
 from odyssey_runtime.progress import ProductProgressStore
 
 
@@ -72,6 +73,41 @@ def test_runtime_progress_reports_temporal_values_without_internal_reasoning() -
         "mañana: 2026-10-08",
         "20h: 2026-10-08T20:00:00+02:00",
     ]
+
+
+def test_hybrid_product_path_publishes_dispatcher_lifecycle_to_product_progress(tmp_path) -> None:
+    """The authenticated hybrid composition path feeds the same pollable progress channel."""
+    store = ProductProgressStore()
+    actor_id = "123e4567-e89b-42d3-a456-426614174000"
+
+    def hybrid(_source, request_id, _actor, _conversation):
+        from odyssey_runtime import composition
+
+        composition._emit_progress("routing.started")
+        composition._emit_progress("routing.ready", {"route_count": 2})
+        composition._emit_progress("temporal.started")
+        composition._emit_progress("temporal.ready", {"values": ("tomorrow: 2026-10-14",)})
+        composition._emit_progress("planner.started")
+        composition._emit_progress("planner.ready")
+        return ApplicationResult(request_id, ApplicationStatus.NEEDS_ATTENTION, (), ())
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: None,
+        refresh_indexes=lambda: None,
+        product_progress_store=store,
+        hybrid_candidate_execute=hybrid,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    runtime.execute_product(
+        "Synthetic hybrid route.",
+        "progress-hybrid",
+        "main",
+        AuthenticatedActorContext(actor_id),
+    )
+    response = runtime.product_progress("progress-hybrid", AuthenticatedActorContext(actor_id))
+    assert response["stage"] == "finalizing"
+    assert response["progress"] == 94
+    assert response["details"] == []
 
 
 def test_progress_http_projection_is_readable_while_product_request_is_in_flight() -> None:

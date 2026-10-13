@@ -103,6 +103,7 @@ def test_hybrid_task_app_can_create_real_pending_task_via_existing_core_lifecycl
     ctx.rebuild(repo, task_schema, embedder)
     semantic.rebuild(repo, task_schema, embedder)
     visited = []
+    progress: list[str] = []
 
     def tasks_execute(fragment, locator, _actor, _prior):
         visited.append(fragment)
@@ -181,11 +182,15 @@ def test_hybrid_task_app_can_create_real_pending_task_via_existing_core_lifecycl
         request_id_factory=lambda: "hybrid-tasks-v1",
         bundle_compiler=_enabled_compiler(),
         task_route_executor=tasks_execute,
+        progress_callback=lambda stage, _payload: progress.append(stage),
     )
     # The ordinary four-argument executor remains callable for local routes,
     # but cannot receive the typed predecessor date required by route two.
     assert visited == ["Hoy tengo que llamar a Ana", "; mañana preparar la factura."]
     assert result.status is ApplicationStatus.PARTIAL, result.execution_flow
+    assert progress[:2] == ["routing.started", "routing.ready"]
+    assert progress.count("planner.started") == 2
+    assert progress.count("planner.ready") == 2
     assert [r["status"] for r in result.execution_flow["routes"]] == [
         "needs_attention",
         "needs_attention",
