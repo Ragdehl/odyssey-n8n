@@ -1,0 +1,90 @@
+{
+  "case": "F18",
+  "source_sha256": "7c1535b90daba02d56af56310a2be835e880a2f762c6bd30e60e1dc2e80ef0e0",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"negative\",\"anchors\":[{\"text\":\"vi\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"polarity\",\"anchor\":{\"text\":\"no\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"polarity\",\"anchor\":{\"text\":\"sí\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1474,
+      "output_tokens": 460
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 699,
+      "output_tokens": 100
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ayer no vi a Ana, pero sí hablé con Luis.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 12111,
+      "output_tokens": 248
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vi\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ayer no vi a Ana, pero sí hablé con Luis.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"hablé\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ayer no vi a Ana, pero sí hablé con Luis.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1491,
+      "output_tokens": 285
+    }
+  ],
+  "fresh_model_calls": 3,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Ayer no vi a Ana, pero sí hablé con Luis.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "calendar_day",
+          "target": "2026-10-03",
+          "fact": "Ayer no vi a Ana, pero sí hablé con Luis."
+        }
+      ],
+      "entities": [],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "CREATED",
+          "target": "2026-10-03"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Ayer no vi a Ana, pero sí hablé con Luis.",
+          "output": "record · calendar_day → 2026-10-03 · Ayer no vi a Ana, pero sí hablé con Luis."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Ayer no vi a Ana, pero sí hablé con Luis.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · calendar_day → 2026-10-03 · Ayer no vi a Ana, pero sí hablé con Luis.",
+          "output": "succeeded: CREATED · 2026-10-03"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "calendar/days/2026-10-03.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\ndate: \"2026-10-03\"\nid: \"date:2026-10-03\"\nname: \"2026-10-03\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Ayer no vi a Ana, pero sí hablé con Luis.\n  <!-- odyssey:fact request=route-1-5caa5e337f3f294815d8ee22f6fcb1abef92b4f9acce1fb94b11de58dcbb2675 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\n---\n\n"
+  },
+  "estimated_new_usd": 0.00382789,
+  "estimated_cumulative_usd": 0.61554914
+}

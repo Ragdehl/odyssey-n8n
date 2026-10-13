@@ -79,6 +79,12 @@ def _needs_joint_interpretation(left: CoreCandidate, right: CoreCandidate) -> bo
         return True
     if left.kind == right.kind == "negative" and "polarity" in common:
         return True
+    if (
+        {left.kind, right.kind} == {"negative", "occurrence"}
+        and all(any(role.role == "polarity" for role in c.roles) for c in (left, right))
+        and any(edge.role in {"date", "date_scope"} for edge in right.inherits)
+    ):
+        return True
     if any(r.role == "condition" for r in left.roles) and any(
         r.role == "condition" for r in right.roles
     ):

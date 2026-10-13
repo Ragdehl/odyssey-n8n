@@ -15,6 +15,7 @@ from odyssey_core.application import (
     ActionStatus,
     ApplicationResult,
     ApplicationStatus,
+    CanonicalReferenceEvidence,
     UnitStatus,
     _current_canonical_reference,
 )
@@ -181,3 +182,70 @@ class ScopedCoreSubjectHandoff:
         ):
             raise ValueError("Inherited subject Core identity is stale")
         return proof
+
+    def reference_from_verified_direct_target(
+        self,
+        *,
+        context: CoreCandidateContext,
+        route_index: int,
+        start: int,
+        end: int,
+        repository: VaultRepository,
+        schema: dict,
+    ) -> CanonicalReferenceEvidence | None:
+        """Expose one verified source subject written to its OWN canonical Note.
+
+        Unlike a reference-helper link, this is proven by the ordinary Core
+        single-target WRITE and its exact Markdown readback. It can be used
+        only as a tentative antecedent of one immediately dependent later
+        route; the later Core plan/reviewer and write-time guard still decide
+        whether a source pronoun actually refers to it.
+        """
+        if (
+            not isinstance(context, CoreCandidateContext)
+            or not context.hybrid_interpretation_mode
+            or context.source != self.original[start:end]
+            or len(context.candidates) != 1
+            or context.candidates[0].state != "candidate"
+            or type(route_index) is not int
+            or route_index < 0
+        ):
+            return None
+        candidate = context.candidates[0]
+        # A person/object alongside the grammatical subject is a competing
+        # possible antecedent. Never select a source target by recency alone.
+        if any(role.role in {"object", "participants", "reference"} for role in candidate.roles):
+            return None
+        subjects = [role.span for role in candidate.roles if role.role == "subject"]
+        if len(subjects) != 1 or subjects[0] not in candidate.anchors:
+            return None
+        subject = subjects[0]
+        proof = self._proved.get((start + subject.start, start + subject.end))
+        if (
+            proof is None
+            or proof.source_text != subject.text
+            or proof.predecessor_route_index != route_index
+            or proof.original_sha256 != original_digest(self.original)
+            or proof.original_end != start + subject.end
+        ):
+            return None
+        proof.validate()
+        canonical = _current_canonical_reference(repository, schema, proof.canonical_note_id)
+        if canonical != (
+            proof.canonical_type,
+            proof.canonical_name,
+            proof.canonical_content_guard,
+        ):
+            return None
+        return CanonicalReferenceEvidence(
+            action_index=0,
+            source_unit_index=0,
+            source_reference_index=-1,  # Core-validated DIRECT TARGET, not link helper.
+            source_mention=proof.source_text,
+            stable_note_id=proof.canonical_note_id,
+            note_type=proof.canonical_type,
+            canonical_name=proof.canonical_name,
+            source_note_id=proof.canonical_note_id,
+            source_content_guard=proof.canonical_content_guard,
+            canonical_content_guard=proof.canonical_content_guard,
+        )

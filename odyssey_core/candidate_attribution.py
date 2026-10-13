@@ -480,6 +480,11 @@ class OpenAICoreCandidateAttributor:
                 "source_mention": canonical_binding.mention,
                 "canonical_type": canonical_binding.evidence.note_type,
                 "canonical_name": canonical_binding.evidence.canonical_name,
+                "source_proof_kind": (
+                    "verified_written_direct_target"
+                    if canonical_binding.evidence.source_reference_index == -1
+                    else "verified_written_identity_link"
+                ),
             }
         target_context = []
         ordinal_groups = iter(plan_fact_ordinals(plan))
@@ -580,6 +585,17 @@ class OpenAICoreCandidateAttributor:
                             "Core-proposed target and whose predicate/object are grounded, "
                             "do not mark it pending solely because the fact sentence lacks "
                             "a repeated subject. Reject targets not justified by source. "
+                            "When trusted_core_predecessor_reference explicitly carries "
+                            "source_proof_kind=verified_written_direct_target, an OBJECT "
+                            "pronoun in the CURRENT source may refer to that proven Note "
+                            "as the target whose history the proposed fact updates. "
+                            "This is not a grammatical-subject substitution: independently "
+                            "verify the real sender/agent, predicate, object referent, "
+                            "other named recipients and Temporal date. Do not reject a "
+                            "genuine document/entity life event solely because the "
+                            "proven referenced object is the proposed Note target rather "
+                            "than the grammatical subject, but do reject unrelated "
+                            "or invented targets and unsupported pronoun swaps. "
                             "SEPARATE source-reference semantics from canonical Note binding: "
                             "you have NO access to the note repository and MUST NOT judge "
                             "whether a mentioned person's Note exists or invent a canonical ID. "
@@ -739,10 +755,29 @@ def inspect_candidate_fact_graph(
     for position, (candidate, link) in enumerate(zip(context.candidates, links, strict=True)):
         if link.candidate_id != candidate.candidate_id:
             raise CandidateAttributionError("Graph source candidate ID or ordering mismatch")
-        if link.source_quote not in {anchor.text for anchor in candidate.anchors}:
-            raise CandidateAttributionError(
-                "Graph source quote is not an original candidate anchor"
-            )
+        quote = link.source_quote
+        exact = quote in {anchor.text for anchor in candidate.anchors}
+        if not exact:
+            # Accept a reviewer quote extending one exact Router anchor with
+            # original adjacent source words, never an invented or cross-clause
+            # quotation. The whole-plan Core review still runs separately.
+            grounded = False
+            if isinstance(quote, str) and 0 < len(quote) <= 256:
+                pos = source.find(quote)
+                while pos >= 0:
+                    if not any(ch in quote for ch in ".;!?") and any(
+                        pos <= a.start
+                        and a.end <= pos + len(quote)
+                        and source[a.start : a.end] == a.text
+                        for a in candidate.anchors
+                    ):
+                        grounded = True
+                        break
+                    pos = source.find(quote, pos + 1)
+            if not grounded:
+                raise CandidateAttributionError(
+                    "Graph source quote is not grounded around an original candidate anchor"
+                )
         ordinals = link.fact_ordinals
         if (
             not isinstance(ordinals, tuple)

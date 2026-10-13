@@ -1,0 +1,110 @@
+{
+  "results": [
+    {
+      "case": "F25",
+      "status": "completed",
+      "candidate_kinds": [
+        "property",
+        "property"
+      ],
+      "dependency": [
+        null
+      ],
+      "error": null
+    },
+    {
+      "case": "F26",
+      "status": "completed",
+      "candidate_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "dependency": [
+        null,
+        "lo"
+      ],
+      "error": null
+    },
+    {
+      "case": "F18",
+      "status": "completed",
+      "candidate_kinds": [
+        "negative",
+        "occurrence"
+      ],
+      "dependency": [
+        null,
+        null
+      ],
+      "error": null
+    },
+    {
+      "case": "F09",
+      "status": "completed",
+      "candidate_kinds": [
+        "property",
+        "property"
+      ],
+      "dependency": [
+        null
+      ],
+      "error": null
+    },
+    {
+      "case": "F01",
+      "status": "completed",
+      "candidate_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "dependency": [
+        null,
+        null
+      ],
+      "error": null
+    },
+    {
+      "case": "F02",
+      "status": "completed",
+      "candidate_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "dependency": [
+        null
+      ],
+      "error": null
+    },
+    {
+      "case": "F14",
+      "status": "completed",
+      "candidate_kinds": [
+        "occurrence",
+        "occurrence"
+      ],
+      "dependency": [
+        null,
+        "él"
+      ],
+      "error": null
+    },
+    {
+      "case": "F27",
+      "status": "completed",
+      "candidate_kinds": [
+        "occurrence",
+        "occurrence",
+        "occurrence"
+      ],
+      "dependency": [
+        null,
+        "él"
+      ],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.00357863,
+  "estimated_cumulative_usd": 0.60127301
+}

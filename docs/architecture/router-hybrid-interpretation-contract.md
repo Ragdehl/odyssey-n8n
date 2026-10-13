@@ -466,3 +466,19 @@ evidence, the nine still-unaccepted cases, API budget, and files
 are in `docs/architecture/functional-roadmap.md`.
 All code remains on the experimental feature branch; DEV/PROD and n8n
 are untouched, and any activation still requires a separate gated rollout.
+
+
+## 2026-10-13 — Subsequent generic-validator and approximate-time proof
+
+The **latest measured strict corpus is 23/27** in an isolated synthetic
+vault. The older counts above are historical, not competing architecture
+instructions. Hybrid Core MUST NOT call the legacy two-contact literal
+template; use independently reviewed source/actor/fact ownership.
+Temporal may carry an unresolved time phrase only as read-only literal
+evidence, source-matched to a time_approx role, and may still provide
+independent exact date/time anchors. No approximate time ever becomes
+an exact timestamp, and no unsupported identity is linked.
+
+Evidence, pending four cases, technical budget, no deployment and the
+incremental Clean Architecture future direction are recorded in the
+canonical functional roadmap.

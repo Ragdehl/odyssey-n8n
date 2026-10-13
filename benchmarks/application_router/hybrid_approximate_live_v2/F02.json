@@ -1,0 +1,51 @@
+{
+  "case": "F02",
+  "status": "failed",
+  "source_sha256": "514e7ddc1d70a3e1ab95ef04c98b71656931f47e8cc2df4df70eefea49deebfb",
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"merendar\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"Esta tarde\",\"occurrence\":0}},{\"role\":\"time_approx\",\"anchor\":{\"text\":\"sobre las 16h\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iremos\",\"occurrence\":1}},{\"role\":\"object\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"mañana\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a un vide-grenier\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"object\",\"anchor\":{\"text\":\"a un vide-grenier\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"el domingo\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 11h\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":2}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1498,
+      "output_tokens": 827
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Esta tarde\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"sobre las 16h\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"el domingo\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-11\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 11h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-11T11:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 723,
+      "output_tokens": 510
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"mis hijos, mi mujer y yo iremos a merendar sobre las 16h.\"},{\"kind\":\"temporal_reference\",\"text\":\"Esta tarde\",\"value\":\"2026-10-04\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"mis hijos, mi mujer y yo iremos al parque.\"},{\"kind\":\"temporal_reference\",\"text\":\"mañana\",\"value\":\"2026-10-05\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"2026-10-11\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"mis hijos, mi mujer y yo iremos a un vide-grenier.\"},{\"kind\":\"temporal_reference\",\"text\":\"el domingo\",\"value\":\"2026-10-11\"},{\"kind\":\"temporal_reference\",\"text\":\"a las 11h\",\"value\":\"2026-10-11T11:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 12405,
+      "output_tokens": 661
+    }
+  ],
+  "fresh_model_calls": 1,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Esta tarde mis hijos, mi mujer y yo iremos a merendar sobre las 16h, mañana iremos al parque y el domingo a las 11h a un vide-grenier.",
+      "stage_count": 1,
+      "status": "failed",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Esta tarde mis hijos, mi mujer y yo iremos a merendar sobre las 16h, mañana iremos al parque y el domingo a las 11h a un vide-grenier.",
+          "output": ""
+        }
+      ]
+    }
+  ],
+  "changed_notes": {},
+  "estimated_new_usd": 0.00360162,
+  "estimated_cumulative_usd": 0.64713245
+}

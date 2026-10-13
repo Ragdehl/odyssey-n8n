@@ -1,0 +1,90 @@
+{
+  "case": "F14",
+  "source_sha256": "7ff4783439fc5a8fddc988f83b57c4482740bc10c0c35a28aed98580d233e33e",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"}]}",
+      "input_tokens": 1479,
+      "output_tokens": 399
+    }
+  ],
+  "candidates": [
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "hablé"
+      ],
+      "roles": [
+        {
+          "role": "predicate",
+          "text": "hablé"
+        },
+        {
+          "role": "date",
+          "text": "Ayer"
+        },
+        {
+          "role": "participants",
+          "text": "Eric"
+        },
+        {
+          "role": "participants",
+          "text": "Luis"
+        }
+      ],
+      "inheritance": []
+    },
+    {
+      "kind": "occurrence",
+      "state": "ambiguous_identity",
+      "anchors": [
+        "iré",
+        "al cine"
+      ],
+      "roles": [
+        {
+          "role": "predicate",
+          "text": "iré"
+        },
+        {
+          "role": "object",
+          "text": "al cine"
+        },
+        {
+          "role": "date",
+          "text": "Mañana"
+        },
+        {
+          "role": "participants",
+          "text": "él"
+        },
+        {
+          "role": "reference",
+          "text": "él"
+        }
+      ],
+      "inheritance": []
+    }
+  ],
+  "routes": [
+    {
+      "capability": "temporal",
+      "source": "Ayer hablé con Eric y Luis",
+      "depends_on": null,
+      "dependent_mention": null
+    },
+    {
+      "capability": "temporal",
+      "source": ". Mañana iré al cine con él.",
+      "depends_on": 0,
+      "dependent_mention": "él"
+    }
+  ],
+  "estimated_new_usd": 0.00309892,
+  "estimated_cumulative_usd": 0.6007933
+}

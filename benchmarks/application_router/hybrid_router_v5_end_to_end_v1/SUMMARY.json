@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "case": "F25",
+      "status": "needs_attention",
+      "calls": 3,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F18",
+      "status": "needs_attention",
+      "calls": 6,
+      "notes": [],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.01044824,
+  "estimated_cumulative_usd": 0.61172125
+}

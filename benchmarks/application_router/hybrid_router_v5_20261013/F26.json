@@ -1,0 +1,88 @@
+{
+  "case": "F26",
+  "source_sha256": "1af4b497d9380cd4f99b4f5e098f703618a5686bcb42e3b1bd2a65263266bc2d",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"El informe\",\"occurrence\":0},{\"text\":\"llegó\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El informe\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"llegó\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"envié\",\"occurrence\":0},{\"text\":\"lo\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"envié\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "input_tokens": 1472,
+      "output_tokens": 401
+    }
+  ],
+  "candidates": [
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "El informe",
+        "llegó"
+      ],
+      "roles": [
+        {
+          "role": "subject",
+          "text": "El informe"
+        },
+        {
+          "role": "predicate",
+          "text": "llegó"
+        },
+        {
+          "role": "date",
+          "text": "ayer"
+        }
+      ],
+      "inheritance": []
+    },
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "envié",
+        "lo",
+        "Ana"
+      ],
+      "roles": [
+        {
+          "role": "predicate",
+          "text": "envié"
+        },
+        {
+          "role": "object",
+          "text": "lo"
+        },
+        {
+          "role": "reference",
+          "text": "lo"
+        },
+        {
+          "role": "participants",
+          "text": "Ana"
+        },
+        {
+          "role": "date",
+          "text": "hoy"
+        }
+      ],
+      "inheritance": []
+    }
+  ],
+  "routes": [
+    {
+      "capability": "temporal",
+      "source": "El informe llegó ayer",
+      "depends_on": null,
+      "dependent_mention": null
+    },
+    {
+      "capability": "temporal",
+      "source": " y hoy lo envié a Ana.",
+      "depends_on": 0,
+      "dependent_mention": "lo"
+    }
+  ],
+  "estimated_new_usd": 0.0008118,
+  "estimated_cumulative_usd": 0.59850618
+}

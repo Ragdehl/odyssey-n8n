@@ -1,0 +1,113 @@
+{
+  "case": "F01",
+  "source": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine y hoy vamos a ir a un concierto.",
+  "frozen_capture": "hybrid_live_matrix_20261012",
+  "frozen_available": 7,
+  "provider_requests_consumed": 7,
+  "replay_status": "partial",
+  "error": null,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine",
+      "stage_count": 2,
+      "status": "needs_attention",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine",
+          "output": ""
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine",
+          "output": ""
+        }
+      ]
+    },
+    {
+      "capability": "temporal",
+      "text": " y hoy vamos a ir a un concierto.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "calendar_day",
+          "target": "2026-10-04",
+          "fact": "y hoy vamos a ir a un concierto."
+        }
+      ],
+      "entities": [],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "CREATED",
+          "target": "2026-10-04"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": " y hoy vamos a ir a un concierto.",
+          "output": "record · calendar_day → 2026-10-04 · y hoy vamos a ir a un concierto."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": " y hoy vamos a ir a un concierto.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · calendar_day → 2026-10-04 · y hoy vamos a ir a un concierto.",
+          "output": "succeeded: CREATED · 2026-10-04"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "calendar/days/2026-10-04.md": [
+      "- y hoy vamos a ir a un concierto."
+    ]
+  },
+  "source_stage_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"fuimos\",\"occurrence\":0},{\"text\":\"al parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"fuimos\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las tres\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"por la tarde\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"fuimos\",\"occurrence\":1},{\"text\":\"al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"fuimos\",\"occurrence\":1}},{\"role\":\"location\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vamos a ir\",\"occurrence\":0},{\"text\":\"a un concierto\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"vamos a ir\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a un concierto\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las tres por la tarde\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-03T15:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ayer fuimos con mi mujer y mis hijos \"},{\"kind\":\"temporal_reference\",\"text\":\"a las tres por la tarde\",\"value\":\"2026-10-03T15:00:00+02:00\"},{\"kind\":\"literal\",\"text\":\" al parque.\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Después fuimos al cine.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"al parque\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"15:00 — Ayer fuimos con mi mujer y mis hijos  al parque.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"al cine\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Después fuimos al cine.\"],\"pending_reason\":null}]}"
+    },
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"y hoy vamos a ir a un concierto.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vamos a ir\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"y hoy vamos a ir a un concierto.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}

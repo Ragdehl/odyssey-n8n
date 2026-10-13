@@ -1,8 +1,9 @@
-"""Narrow, source-grounded Core check for two explicitly successive contacts.
+"""Legacy compatibility validator for a historical two-contact pilot.
 
-Never builds notes, resolves identities, or establishes semantic equivalence.
-Only two exact names and a source-explicit 'y después con' connector are
-eligible for this opt-in pilot; uncertain forms remain pending for Core review.
+**Not used by the hybrid route.** The hybrid Core contract instead uses
+candidate_group_participants.validate_group_participant_fact for source-owned
+actor references independently for each fact and any number of candidates.
+Preserved only for older non-hybrid fixtures; do not add new language templates.
 """
 
 from __future__ import annotations

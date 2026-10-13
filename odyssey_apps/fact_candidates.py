@@ -481,6 +481,42 @@ FACT_CANDIDATE_PROMPT_V4_EXTENSION = (
 )
 
 
+# Experimental semantic classification improvement. V4 remains byte-for-byte
+# unchanged so prior model receipts and all historical gates are comparable.
+# Router still cannot select Note types or authorize a Core write.
+FACT_CANDIDATE_PROMPT_V5_EXTENSION = (
+    " General source-meaning safeguards for the CURRENT message: "
+    "A source-level TASK is an intended user-owned action to track, perform, "
+    "schedule or remember, including terse infinitive TODOs and imperatives. "
+    "A descriptive state of an existing thing requiring maintenance, repair, "
+    "painting or another intervention is a PROPERTY/need of that thing, "
+    "NOT automatically an instruction to create a task, unless the speaker "
+    "is actually asking for that action to be tracked or performed. "
+    "Never infer an app command from the mere presence of an infinitive "
+    "or a need/requirement verb. Keep the explicit source modality separately "
+    "without converting it into a to-do lifecycle. "
+    "Object pronouns can refer to preceding named entities just as subject "
+    "pronouns do: preserve the exact source span as both its grammatical "
+    "object role and a 'reference' role whenever the word actually refers "
+    "back to an entity (in any language). Keep the source role and literal "
+    "offset; never substitute a guessed canonical name. If more than one "
+    "plausible referent remains, mark that candidate ambiguous_identity. "
+    "If the original source has one unambiguous explicit antecedent, mark "
+    "the candidate 'candidate', not ambiguous_identity, but leave Core to "
+    "prove canonical binding before writing. Never inherit the OLD subject "
+    "as the NEW grammatical subject when a reference changes its role. "
+    "For explicit denial of an event, classify negative meaning as kind "
+    "'negative' rather than a positive occurrence with a decorative "
+    "polarity. A coordinated positive counterstatement after a denial is "
+    "an independent affirmative candidate; keep its positive predicate, "
+    "actor/object and any inherited day separately, and preserve the "
+    "source contrast in exact scope roles when warranted. "
+    "Always anchor actual predicate/object or subject words independently. "
+    "Do not let task names, clause grouping or canonical identity decisions "
+    "leak into the Router candidate classification."
+)
+
+
 class OpenAIFactCandidateRouter:
     """Opt-in, non-executing Router v1 proposal adapter with an injected provider.
 
@@ -490,7 +526,7 @@ class OpenAIFactCandidateRouter:
 
     def __init__(self, client: Any, *, prompt_revision: str = "v1") -> None:
         """Select a reviewed source-only teaching revision without changing Router v0."""
-        if prompt_revision not in {"v1", "v2", "v3", "v4"}:
+        if prompt_revision not in {"v1", "v2", "v3", "v4", "v5"}:
             raise ValueError("Unknown fact-candidate prompt revision")
         self._client = client
         self._prompt_revision = prompt_revision
@@ -548,17 +584,22 @@ class OpenAIFactCandidateRouter:
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V2_EXTENSION
-                            if self._prompt_revision in {"v2", "v3", "v4"}
+                            if self._prompt_revision in {"v2", "v3", "v4", "v5"}
                             else ""
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V3_EXTENSION
-                            if self._prompt_revision in {"v3", "v4"}
+                            if self._prompt_revision in {"v3", "v4", "v5"}
                             else ""
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V4_EXTENSION
-                            if self._prompt_revision == "v4"
+                            if self._prompt_revision in {"v4", "v5"}
+                            else ""
+                        )
+                        + (
+                            FACT_CANDIDATE_PROMPT_V5_EXTENSION
+                            if self._prompt_revision == "v5"
                             else ""
                         ),
                     },

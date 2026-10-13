@@ -1,0 +1,114 @@
+{
+  "case": "F27",
+  "source_sha256": "c49ba37d4cf0463364d17bbbaa5d0872351b976962412aa2f3dc9f61ac93edc9",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Eric\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"con Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"}]}",
+      "input_tokens": 1481,
+      "output_tokens": 576
+    }
+  ],
+  "candidates": [
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "hablé",
+        "Eric"
+      ],
+      "roles": [
+        {
+          "role": "predicate",
+          "text": "hablé"
+        },
+        {
+          "role": "participants",
+          "text": "Eric"
+        },
+        {
+          "role": "date",
+          "text": "Ayer"
+        }
+      ],
+      "inheritance": []
+    },
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "con Luis"
+      ],
+      "roles": [
+        {
+          "role": "participants",
+          "text": "Luis"
+        },
+        {
+          "role": "order",
+          "text": "después"
+        }
+      ],
+      "inheritance": [
+        {
+          "role": "predicate",
+          "from": 1
+        },
+        {
+          "role": "date",
+          "from": 1
+        }
+      ]
+    },
+    {
+      "kind": "occurrence",
+      "state": "ambiguous_identity",
+      "anchors": [
+        "iré",
+        "cine"
+      ],
+      "roles": [
+        {
+          "role": "predicate",
+          "text": "iré"
+        },
+        {
+          "role": "object",
+          "text": "cine"
+        },
+        {
+          "role": "date",
+          "text": "Mañana"
+        },
+        {
+          "role": "participants",
+          "text": "él"
+        },
+        {
+          "role": "reference",
+          "text": "él"
+        }
+      ],
+      "inheritance": []
+    }
+  ],
+  "routes": [
+    {
+      "capability": "temporal",
+      "source": "Ayer hablé con Eric y después con Luis",
+      "depends_on": null,
+      "dependent_mention": null
+    },
+    {
+      "capability": "temporal",
+      "source": ". Mañana iré al cine con él.",
+      "depends_on": 0,
+      "dependent_mention": "él"
+    }
+  ],
+  "estimated_new_usd": 0.00357863,
+  "estimated_cumulative_usd": 0.60127301
+}

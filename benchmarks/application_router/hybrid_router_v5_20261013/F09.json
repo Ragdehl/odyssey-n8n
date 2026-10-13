@@ -1,0 +1,71 @@
+{
+  "case": "F09",
+  "source_sha256": "d9f44a49cd5cee063fb32cbd5c945004e5d6645c0d9cb4e7cfffb9bc0410e5cd",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"property\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "input_tokens": 1468,
+      "output_tokens": 243
+    }
+  ],
+  "candidates": [
+    {
+      "kind": "property",
+      "state": "candidate",
+      "anchors": [
+        "Marta"
+      ],
+      "roles": [
+        {
+          "role": "subject",
+          "text": "Marta"
+        },
+        {
+          "role": "predicate",
+          "text": "viven"
+        },
+        {
+          "role": "location",
+          "text": "en Lyon"
+        }
+      ],
+      "inheritance": []
+    },
+    {
+      "kind": "property",
+      "state": "candidate",
+      "anchors": [
+        "Luis"
+      ],
+      "roles": [
+        {
+          "role": "subject",
+          "text": "Luis"
+        },
+        {
+          "role": "predicate",
+          "text": "viven"
+        },
+        {
+          "role": "location",
+          "text": "en Lyon"
+        }
+      ],
+      "inheritance": []
+    }
+  ],
+  "routes": [
+    {
+      "capability": "core",
+      "source": "Marta y Luis viven en Lyon.",
+      "depends_on": null,
+      "dependent_mention": null
+    }
+  ],
+  "estimated_new_usd": 0.00152207,
+  "estimated_cumulative_usd": 0.59921645
+}

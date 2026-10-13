@@ -235,6 +235,26 @@ class DependentReferenceGuard:
         """Recheck predecessor guards and require a fact-bearing marker bound to its exact ID."""
         if not _dependent_evidence_is_current(self.evidence, repository, schema):
             raise WritePreflightGuardError("ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_STALE")
+        # A predecessor's verified DIRECT Note target is a legitimate
+        # antecedent distinct from its separately verified linked helpers.
+        # An object pronoun may refer to the selected target itself, so the
+        # new fact belongs on that Note without inserting a self-wikilink.
+        # Only Core-authored -1 sentinel evidence can take this branch;
+        # every target is freshly matched to its unchanged canonical ID.
+        if (
+            self.evidence.source_reference_index == -1
+            and self.evidence.source_note_id == self.evidence.stable_note_id
+            and self.evidence.source_content_guard == self.evidence.canonical_content_guard
+        ):
+            for unit, selected in zip(action.units, preflight, strict=True):
+                if (
+                    not unit.reference_lookup_only
+                    and unit.intent == "record"
+                    and unit.facts
+                    and selected.stable_id == self.evidence.stable_note_id
+                    and selected.canonical_name == self.evidence.canonical_name
+                ):
+                    return
         for unit in action.units:
             if unit.reference_lookup_only:
                 continue

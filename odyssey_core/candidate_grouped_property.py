@@ -70,12 +70,34 @@ def validate_shared_subject_property(
     ):
         raise ValueError("Grouped property target changed the common source subject")
     if candidate_index != origin:
-        if len(candidate.inherits) != 2 or {
-            (item.role, item.from_unit) for item in candidate.inherits
-        } != {("subject", origin + 1), ("predicate", origin + 1)}:
+        inherited = {(item.role, item.from_unit) for item in candidate.inherits}
+        own_predicates = [role.span for role in candidate.roles if role.role == "predicate"]
+        # Two independent properties may share the SAME owner but have
+        # DIFFERENT predicates. Requiring inheritance of the first predicate
+        # would turn a valid second "needs repair" into the wrong "has ..." fact.
+        # Conversely, if the second predicate is truly elliptical, require
+        # source-proven inheritance from the original predicate as before.
+        required = {("subject", origin + 1)}
+        if not own_predicates:
+            required.add(("predicate", origin + 1))
+        if inherited != required:
             raise ValueError("Grouped property has no source-verified subject/predicate dependence")
         if any(role.role == "subject" for role in candidate.roles):
             raise ValueError("Grouped property repeated an unrelated subject")
+        if own_predicates:
+            if len(own_predicates) != 1:
+                raise ValueError("Independent property must have one unambiguous own predicate")
+            predicate = own_predicates[0]
+            if (
+                not normalized_words(predicate.text) <= normalized_words(fact)
+                or not candidate.anchors
+                or predicate.end > min(anchor.start for anchor in candidate.anchors)
+                or any(
+                    ch in source[predicate.end : min(anchor.start for anchor in candidate.anchors)]
+                    for ch in ".;!?\n\r"
+                )
+            ):
+                raise ValueError("Independent property has no same-clause predicate evidence")
     elif candidate.inherits:
         raise ValueError("Initial grouped source property cannot itself inherit the subject")
     current_tokens = normalized_words(fact)

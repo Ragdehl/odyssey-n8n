@@ -1,0 +1,111 @@
+{
+  "case": "F01",
+  "source_sha256": "0221d32e67da49a0b9b8f5a9a26d6b4409cfc62649bf65fbe22d5807d6f6f2c2",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"fuimos\",\"occurrence\":0},{\"text\":\"parque\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mi mujer\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las tres por la tarde\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"fuimos\",\"occurrence\":1},{\"text\":\"al cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al cine\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"vamos a ir\",\"occurrence\":0},{\"text\":\"un concierto\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"un concierto\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "input_tokens": 1493,
+      "output_tokens": 747
+    }
+  ],
+  "candidates": [
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "fuimos",
+        "parque"
+      ],
+      "roles": [
+        {
+          "role": "date",
+          "text": "Ayer"
+        },
+        {
+          "role": "participants",
+          "text": "mi mujer"
+        },
+        {
+          "role": "participants",
+          "text": "mis hijos"
+        },
+        {
+          "role": "time",
+          "text": "a las tres por la tarde"
+        },
+        {
+          "role": "location",
+          "text": "al parque"
+        }
+      ],
+      "inheritance": []
+    },
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "fuimos",
+        "al cine"
+      ],
+      "roles": [
+        {
+          "role": "order",
+          "text": "después"
+        },
+        {
+          "role": "location",
+          "text": "al cine"
+        }
+      ],
+      "inheritance": [
+        {
+          "role": "date",
+          "from": 1
+        },
+        {
+          "role": "participants",
+          "from": 1
+        }
+      ]
+    },
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "vamos a ir",
+        "un concierto"
+      ],
+      "roles": [
+        {
+          "role": "date",
+          "text": "hoy"
+        },
+        {
+          "role": "object",
+          "text": "un concierto"
+        }
+      ],
+      "inheritance": []
+    }
+  ],
+  "routes": [
+    {
+      "capability": "temporal",
+      "source": "Ayer fuimos con mi mujer y mis hijos a las tres por la tarde al parque y después fuimos al cine",
+      "depends_on": null,
+      "dependent_mention": null
+    },
+    {
+      "capability": "temporal",
+      "source": " y hoy vamos a ir a un concierto.",
+      "depends_on": null,
+      "dependent_mention": null
+    }
+  ],
+  "estimated_new_usd": 0.00209715,
+  "estimated_cumulative_usd": 0.59979153
+}

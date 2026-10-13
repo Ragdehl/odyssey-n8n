@@ -1,0 +1,103 @@
+{
+  "case": "F09",
+  "source": "Marta y Luis viven en Lyon.",
+  "frozen_capture": "hybrid_live_matrix_20261012",
+  "frozen_available": 3,
+  "provider_requests_consumed": 3,
+  "replay_status": "completed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "core",
+      "text": "Marta y Luis viven en Lyon.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Marta",
+          "fact": "Viven en Lyon."
+        },
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Luis",
+          "fact": "Viven en Lyon."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "Marta",
+          "name": "Marta",
+          "status": "resolved",
+          "type": "person"
+        },
+        {
+          "mention": "Luis",
+          "name": "Luis",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "Marta"
+        },
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "Luis"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Marta y Luis viven en Lyon.",
+          "output": "record · person → Marta · Viven en Lyon.\nrecord · person → Luis · Viven en Lyon."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Marta y Luis viven en Lyon.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · person → Marta · Viven en Lyon.\nrecord · person → Luis · Viven en Lyon.",
+          "output": "succeeded: UPDATED · Marta\nsucceeded: UPDATED · Luis\nMarta → Marta\nLuis → Luis"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "Luis.md": [
+      "- Viven en Lyon."
+    ],
+    "Marta.md": [
+      "- Viven en Lyon."
+    ],
+    "calendar/days/2026-10-04.md": []
+  },
+  "source_stage_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"property\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"viven\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Viven en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Viven en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Marta\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Viven en Lyon.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"Luis\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Viven en Lyon.\"],\"pending_reason\":null}]}"
+    }
+  ]
+}

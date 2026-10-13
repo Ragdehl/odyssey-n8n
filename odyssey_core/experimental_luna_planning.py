@@ -454,6 +454,15 @@ def render_luna_experimental_prompt(
                 "by subsequent coordinated or elliptical clauses in the SAME "
                 "group; express the inherited action explicitly in EACH proposed "
                 "fact, with its own participant, destination and clock. Never "
+                "When a later event inherits an explicit participant-group "
+                "role from an earlier candidate in THIS same selected source, "
+                "repeat the original group wording in that later event's "
+                "STANDALONE fact as long as the grammar confirms the same "
+                "participants. Otherwise the later fact silently loses its "
+                "actor context even when a reader could guess from the prior "
+                "bullet. Keep unverified groups as LITERAL descriptions, never "
+                "expand them into speculative canonical persons; never copy "
+                "participants across a genuine subject or polarity change. "
                 "record an incomplete 'with X at Y' phrase as a complete event "
                 "when the actual predicate is recoverable from the selected source. "
                 "If the inherited action is not unambiguous, ESCALATE instead "
@@ -530,6 +539,29 @@ def render_luna_experimental_prompt(
     # Core-verified predecessor carrier. It cannot authorize a write: the
     # ordinary source/coverage and freshness-bound dependent guard still decide.
     if domain_interpretation is not None:
+        if candidate_context is not None and candidate_context.hybrid_interpretation_mode:
+            approximation = [
+                item.source_text
+                for item in domain_interpretation.evidence
+                if item.kind == "temporal_approximate_literal"
+            ]
+            if approximation:
+                semantic_dynamic += (
+                    "\nHYBRID UNRESOLVED APPROXIMATE TIME: The independently "
+                    "validated Temporal model explicitly could NOT resolve "
+                    "these exact original source phrases to an ISO time: "
+                    + json.dumps(approximation, ensure_ascii=False)
+                    + ". These are source-proven approximate expressions, "
+                    "NEVER exact calendar instants or permitted time labels. "
+                    "Each source phrase must remain VERBATIM in the literal "
+                    "fact that owns it, rather than being omitted or promoted "
+                    "to an exact clock. Other independently exact Temporal "
+                    "dates may still be used as calendar_day targets, and "
+                    "other independent exact event clocks remain exact. "
+                    "Use the full group grammar to preserve subjects, verbs "
+                    "and all separately dated activities. ESCALATE rather "
+                    "than invent a precise instant."
+                )
         canonical = [
             item.to_payload()
             for item in domain_interpretation.evidence
@@ -590,7 +622,8 @@ def render_luna_experimental_prompt(
         ):
             semantic_dynamic += (
                 "\nSPECIAL verified grouped literal statement: this source has "
-                "a shared NEGATION or mutually exclusive CONDITIONS. Never "
+                "a shared NEGATION, mutually exclusive CONDITIONS or a "
+                "source-scoped contrast between a DENIAL and an AFFIRMATION. Never "
                 "report a negated or conditional occurrence as an event that "
                 "happened. If you can record the source as ONE informational "
                 "statement, select ONLY the exact Temporal-certified "
@@ -599,7 +632,7 @@ def render_luna_experimental_prompt(
                 "literal text; NO identity references, new entities, "
                 "properties, or multiple facts. Carry the precise "
                 "Temporal date as that fact's date anchor. The independent "
-                "Core reviewer must map both source candidates to the SAME "
+                "Core reviewer must map ALL source candidates to the SAME "
                 "single fact. Otherwise ESCALATE instead of guessing."
             )
         # Opt-in hybrid groups may have ONE exact postposed clock phrase
@@ -629,6 +662,22 @@ def render_luna_experimental_prompt(
                     "If event-to-clock assignment is not demonstrably clear, ESCALATE. "
                     + json.dumps(shared, ensure_ascii=False)
                 )
+        # A pronoun can refer to the NOTE whose history is being updated,
+        # not only to a wikilink within a different Note. This is determined
+        # by source-owned object/reference roles plus a Core-verified carrier;
+        # Router's proposed target alone never authorizes the selection.
+        canonical_object = (
+            candidate_context is not None
+            and candidate_context.hybrid_interpretation_mode
+            and len(canonical) == 1
+            and any(
+                ref.role == "reference"
+                and ref.span.text == canonical[0]["source_text"]
+                and any(item.role == "object" and item.span == ref.span for item in candidate.roles)
+                for candidate in candidate_context.candidates
+                for ref in candidate.roles
+            )
+        )
         if canonical:
             semantic_dynamic += (
                 "\\n\\nCore predecessor reference context for THIS routed fragment only. "
@@ -646,6 +695,28 @@ def render_luna_experimental_prompt(
                 "The subsequent Core prewrite guard independently checks the "
                 "canonical ID and fresh Markdown before any persistence.\\n"
             )
+            if canonical_object:
+                semantic_dynamic += (
+                    "\\nCORE VERIFIED OBJECT REFERENCE: the exact grammatical "
+                    "object pronoun in THIS fragment is Core-bound to the "
+                    "canonical Note named in the binding. Unlike a separately "
+                    "linked participant, the REFERENCED OBJECT may itself be "
+                    "the semantic WRITE TARGET if the fact describes a change "
+                    "or event in that entity's history. In that case, keep "
+                    "the actual source predicate, any named recipients as "
+                    "independently verified identity links, and every date "
+                    "as its exact Temporal reference on that canonical Note. "
+                    "Do NOT insert a pointless wikilink from a Note to itself "
+                    "and do NOT leave the object reference unresolved as "
+                    "plain 'it/lo/la' wording. The earlier blanket instruction "
+                    "to retain a pronoun in an identity part applies when "
+                    "the canonical referent is a LINK in another Note, not "
+                    "when it is the selected Note target itself. Do not "
+                    "select this target solely because of a Router role or "
+                    "drop any other person, predicate, or temporal meaning. "
+                    "When source semantics or target binding is uncertain, "
+                    "ESCALATE rather than inventing a target."
+                )
     luna_static = f"""{semantic_static}
 
 Choose the outcome before drafting fields:

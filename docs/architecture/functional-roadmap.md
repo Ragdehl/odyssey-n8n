@@ -4,6 +4,13 @@ This is Odyssey's canonical source for **functional implementation status, inten
 
 Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATER / CONDITIONAL**
 
+## 💡 Futuro: Clean Architecture incremental
+
+Dirección aprobada el 13-10-2026: aplicar mejoras de separación
+dominio/puertos/adaptadores cuando un cambio funcional futuro toque el módulo.
+Sin reescritura transversal ahora ni bloqueo del despliegue DEV.
+Ver clean-architecture-incremental-direction.md y AGENTS.md.
+
 ## Completed foundation
 
 | Phase | Result |
@@ -1370,3 +1377,61 @@ were explicitly capped; cumulative estimate **USD 0.59769438 / 1.00**
 approved (NOT a billing receipt). All local tests use fake, fresh
 canonical Markdown; frozen outputs remain intact. Compare against
 ten historical suite failures without relaxing their snapshots.
+
+
+## 2026-10-13 — Generality/approximation validation checkpoint (later than 18/27)
+
+**23/27 accepted on isolated genuine-model outputs and physical Markdown**
+after F01 and F02 reached all four model/reviewer gates and Canonical Writer.
+This supersedes the earlier 18/27 count, without altering earlier receipts.
+F01 uses genuine v5 Router/Temporal/Planner responses and a fresh genuine
+GPT-5.6 independent reviewer, frozen under hybrid_core_review_v3; its
+three events now retain all originally inherited family-participant text
+and source-verified time/date, without guessed family-member Notes. F02
+uses original genuine Router/Temporal/Planner replies, with a fresh genuine
+independent review, frozen under hybrid_core_review_v4, yielding three
+separate Day facts. The approximate phrase 'sobre las 16h' remains LITERAL
+and is NOT recorded as a 16:00 exact instant; unrelated Sunday 11:00
+remains a certified exact clock.
+
+The fixed-form Spanish two-contact checker was removed from the **hybrid**
+execution path (its source file survives only as historical non-hybrid
+compatibility). Hybrid coverage relies on source-owned participant spans,
+inherited source roles, unique Core helper mappings, independent reviewer
+and canonical readback, regardless of how many participants or source
+facts share an interpretation group. The reviewer source_quote is now
+checked against an exact original source slice enclosing a real Router
+anchor instead of comparing only literal equal strings. A same-Day
+date-only typed reference is redundant with the selected Day target;
+only that redundant fragment is discarded before the normal compiler,
+preserving the real clock and all event wording.
+
+The independent approximate-time adapter requires a unique exact-match
+Router time_approx span and a genuine Temporal UNSPECIFIED result for the
+same source. It allows other exact Temporal mentions to be transferred
+and reused without converting the approximate mention into an exact
+calendar coordinate. Core's deterministic coverage requires that
+approximate wording appear literally in its owning fact. Prompt
+instructions explain the distinction, but no prompt can bypass these
+validators. The new no-provider tests replay genuine F01/F02 Markdown
+and attempt adversarial missing/wrong approximate evidence.
+
+**Still not accepted**: F09 (redundant existing information; a technically
+COMPLETED duplicate cannot count as product-quality success), F14/F27
+(genuinely ambiguous 'él' after mentioning two people; the safe partial
+behavior MUST remain), F22 (three Task Notes exist but the middle Task
+does not link to the known canonical Luis Note). Avoid per-example
+code, falsely reporting safe partials as full understanding, or special
+caps on number of Notes. The old read-only canonical hint scanner has a
+5000-Note performance cap; replace it with indexed bounded retrieval
+before relying on this feature for large vaults. This is explicitly NOT
+a limit on user knowledge storage.
+
+**Cumulative estimated provider experiment cost: USD 0.64794381/1.00**
+authorized. Not a billing ledger. No DEV, PROD, Notes or infrastructure
+deployment in this checkpoint. Source repo only.
+
+Future opportunistic Clean Architecture direction is documented in
+clean-architecture-incremental-direction.md and AGENTS.md; no rewrite
+is planned now. Working precedence: complete general hybrid gates and
+give the user a testable DEV build before refactoring architecture.

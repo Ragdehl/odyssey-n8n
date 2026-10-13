@@ -1,0 +1,178 @@
+{
+  "case": "F26",
+  "source_sha256": "1af4b497d9380cd4f99b4f5e098f703618a5686bcb42e3b1bd2a65263266bc2d",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"El informe\",\"occurrence\":0},{\"text\":\"llegó\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"El informe\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"llegó\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"envié\",\"occurrence\":0},{\"text\":\"lo\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"envié\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"lo\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "input_tokens": 1472,
+      "output_tokens": 401
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 689,
+      "output_tokens": 91
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El informe\",\"binding\":\"described\",\"direct_name\":\"El informe\",\"note_type\":\"document\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Llegó \"},{\"kind\":\"temporal_reference\",\"text\":\"ayer\",\"value\":\"2026-10-03\"},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11754,
+      "output_tokens": 309
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"llegó\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Llegó [[calendar/days/2026-10-03|03-10-2026]].\"],\"pending_reason\":null}]}",
+      "input_tokens": 1461,
+      "output_tokens": 114
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 693,
+      "output_tokens": 110
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"El informe\",\"binding\":\"described\",\"direct_name\":\"El informe\",\"note_type\":\"document\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"y \"},{\"kind\":\"temporal_reference\",\"text\":\"hoy\",\"value\":\"2026-10-04\"},{\"kind\":\"literal\",\"text\":\" lo envié a \"},{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 12192,
+      "output_tokens": 438
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"envié\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Lo envié a {{ref:0}} [[calendar/days/2026-10-04|04-10-2026]].\"],\"pending_reason\":null}]}",
+      "input_tokens": 1564,
+      "output_tokens": 360
+    }
+  ],
+  "fresh_reviewer_calls": 1,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "El informe llegó ayer",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "document",
+          "target": "El informe",
+          "fact": "Llegó [[calendar/days/2026-10-03|03-10-2026]]."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "El informe",
+          "name": "El informe",
+          "status": "resolved",
+          "type": "document"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "El informe"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "El informe llegó ayer",
+          "output": "record · document → El informe · Llegó [[calendar/days/2026-10-03|03-10-2026]]."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "El informe llegó ayer",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · document → El informe · Llegó [[calendar/days/2026-10-03|03-10-2026]].",
+          "output": "succeeded: UPDATED · El informe\nEl informe → El informe"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    },
+    {
+      "capability": "temporal",
+      "text": " y hoy lo envié a Ana.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "document",
+          "target": "El informe",
+          "fact": "Lo envié a {{ref:0}} [[calendar/days/2026-10-04|04-10-2026]]."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "El informe",
+          "name": "El informe",
+          "status": "resolved",
+          "type": "document"
+        },
+        {
+          "mention": "Ana",
+          "name": "Ana",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "El informe"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": " y hoy lo envié a Ana.",
+          "output": "record · document → El informe · Lo envié a {{ref:0}} [[calendar/days/2026-10-04|04-10-2026]]."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": " y hoy lo envié a Ana.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · document → El informe · Lo envié a {{ref:0}} [[calendar/days/2026-10-04|04-10-2026]].",
+          "output": "succeeded: UPDATED · El informe\nEl informe → El informe\nAna → Ana"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ],
+      "depends_on": 0,
+      "reason": null
+    }
+  ],
+  "changed_notes": {
+    "El informe.md": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-document-el-informe\"\nname: \"El informe\"\nrevision: 3\nschema_version: 3\ntype: \"document\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"synthetic-reviewer-only-corpus\", \"human\": null}\n---\n\nInforme ficticio compartido entre participantes de las pruebas.\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Llegó [[calendar/days/2026-10-03|03-10-2026]].\n  <!-- odyssey:fact request=route-1-a3c87ef3137873e43423d8afd1d84d14ab8a97721bd22ac3e61cb3d1bcc6f724 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->\n- Lo envié a [[Ana|Ana]] [[calendar/days/2026-10-04|04-10-2026]].\n  <!-- odyssey:fact request=route-2-a3c87ef3137873e43423d8afd1d84d14ab8a97721bd22ac3e61cb3d1bcc6f724 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-04 -->",
+    "calendar/days/2026-10-03.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"synthetic-reviewer-only-corpus\", \"human\": null}\ndate: \"2026-10-03\"\nid: \"date:2026-10-03\"\nname: \"2026-10-03\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"synthetic-reviewer-only-corpus\", \"human\": null}\n---\n\n",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"synthetic-reviewer-only-corpus\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"synthetic-reviewer-only-corpus\", \"human\": null}\n---\n\n"
+  },
+  "estimated_total_usd": 0.62397745
+}

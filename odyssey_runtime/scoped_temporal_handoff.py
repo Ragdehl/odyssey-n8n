@@ -47,8 +47,9 @@ class ScopedTemporalHandoff:
         route_index: int,
         start: int,
         end: int,
+        verified_domain: DomainInterpretation | None = None,
     ) -> None:
-        """Record only completed, locally checked exact Temporal resolutions."""
+        """Record only independently verified exact Temporal source spans."""
         if (
             not isinstance(interpretation, TemporalInterpretation)
             or type(route_index) is not int
@@ -59,15 +60,52 @@ class ScopedTemporalHandoff:
             or self.original[start:end] != interpretation.source_text
         ):
             raise ValueError("Temporal result is not bound to the original route")
-        # Converts only EXACT_DATE and EXACT_DATETIME. UNKNOWN, approximate,
-        # and conflicting alternatives fail without carrying fake dates.
-        domain = interpretation.core_domain_interpretation()
+        # Exact mention transfer is independent of an unresolved approximate
+        # mention in another clause. Only the validated Core projection may
+        # choose which source spans are precise enough to cache.
+        if verified_domain is None:
+            domain = interpretation.core_domain_interpretation()
+        else:
+            domain = verified_domain
+            if (
+                domain.source_text != interpretation.source_text
+                or domain.capability_id != "temporal"
+                or domain.intent != "TEMPORAL_RESOLUTION"
+                or len(domain.evidence) != len(interpretation.mentions)
+            ):
+                raise ValueError("Verified Temporal projection differs from source")
         cursor = 0
         for mention, evidence in zip(interpretation.mentions, domain.evidence, strict=True):
             position = interpretation.source_text.find(mention.temporal_text, cursor)
             if position < 0 or mention.temporal_text != evidence.source_text:
                 raise ValueError("Temporal mention is not grounded in its source route")
             cursor = position + len(mention.temporal_text)
+            if evidence.kind == "temporal_approximate_literal":
+                from odyssey_core.temporal_resolution import TemporalResolutionKind
+
+                if (
+                    mention.resolution.kind is not TemporalResolutionKind.UNSPECIFIED
+                    or evidence.value != "APPROXIMATE_UNRESOLVED"
+                ):
+                    raise ValueError("Approximate Temporal cannot be cached as an exact instant")
+                continue
+            from odyssey_core.domain_interpretation import TEMPORAL_REFERENCE_EVIDENCE
+            from odyssey_core.temporal_resolution import TemporalResolutionKind
+
+            if (
+                evidence.kind != TEMPORAL_REFERENCE_EVIDENCE
+                or mention.resolution.kind
+                not in {
+                    TemporalResolutionKind.EXACT_DATE,
+                    TemporalResolutionKind.EXACT_DATETIME,
+                }
+                or evidence.value
+                not in {
+                    mention.resolution.exact_date,
+                    mention.resolution.exact_datetime,
+                }
+            ):
+                raise ValueError("Temporal cache needs the exact original provider resolution")
             absolute = (start + position, start + cursor)
             existing = self._resolved.get(absolute)
             if existing is not None and existing.value != evidence.value:

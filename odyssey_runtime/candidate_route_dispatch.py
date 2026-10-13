@@ -346,18 +346,29 @@ def execute_candidate_routed_message(
                     raise
                 from odyssey_core.temporal_group_composition import compose_shared_clock_group
 
-                domain = compose_shared_clock_group(
-                    interpretation,
-                    scoped.context,
-                    timezone=getattr(temporal, "timezone", None),
-                )
-                composed_shared_clock = True
+                try:
+                    domain = compose_shared_clock_group(
+                        interpretation,
+                        scoped.context,
+                        timezone=getattr(temporal, "timezone", None),
+                    )
+                    composed_shared_clock = True
+                except TemporalInterpreterError:
+                    # Keep genuinely approximate source wording literal;
+                    # only exact independently validated dates/clocks may
+                    # be used as calendar targets or time coordinates.
+                    from odyssey_core.temporal_approximation_handoff import (
+                        compose_safe_approximate_group,
+                    )
+
+                    domain = compose_safe_approximate_group(interpretation, scoped.context)
             if not composed_shared_clock:
                 temporal_handoff.remember(
                     interpretation,
                     route_index=ordinal,
                     start=scoped.original_start,
                     end=scoped.original_end,
+                    verified_domain=domain,
                 )
             # Two different instants sourced from one shared clock cannot be
             # cached as one unique cross-group clock handoff. The group owns
@@ -568,6 +579,43 @@ def execute_candidate_routed_message(
                     end=scoped.original_end,
                     route_index=ordinal,
                 )
+                # A verified canonical WRITE target may itself be the sole
+                # antecedent of the immediately next source reference.
+                # This is distinct from a helper wikilink in the source fact.
+                # Never use Router's lexical role as identity proof, and
+                # never choose among multiple possible antecedents.
+                if ordinal + 1 < len(bundle.units) and not result.canonical_reference_evidence:
+                    next_route = bundle.units[ordinal + 1]
+                    candidate_roles = [
+                        role
+                        for candidate in next_route.context.candidates
+                        for role in candidate.roles
+                    ]
+                    pronoun_roles = [role for role in candidate_roles if role.role == "reference"]
+                    if (
+                        next_route.route.depends_on == ordinal
+                        and len(next_route.context.candidates) == 1
+                        and len(pronoun_roles) == 1
+                        and pronoun_roles[0].span.text == next_route.route.dependent_mention
+                        and any(
+                            role.role in {"subject", "object", "participants"}
+                            and role.span == pronoun_roles[0].span
+                            for role in candidate_roles
+                        )
+                    ):
+                        antecedent = subject_handoff.reference_from_verified_direct_target(
+                            context=route_context,
+                            route_index=ordinal,
+                            start=scoped.original_start,
+                            end=scoped.original_end,
+                            repository=repository,
+                            schema=schema,
+                        )
+                        if antecedent is not None:
+                            result = replace(
+                                result,
+                                canonical_reference_evidence=(antecedent,),
+                            )
         return result
 
     selected_router = SimpleNamespace(route=lambda current, _prior=(): bundle.plan)

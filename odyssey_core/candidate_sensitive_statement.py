@@ -9,6 +9,7 @@ context and coverage budgets, never by a semantic scenario count.
 from __future__ import annotations
 
 from .candidate_context import CoreCandidateContext
+from .candidate_semantic_veto import _NEGATION, normalized_words
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 
@@ -23,6 +24,31 @@ def supports_sensitive_literal_candidates(candidates) -> bool:
         return False
     negative = all(candidate.kind == "negative" for candidate in candidates)
     conditional = all(candidate.kind == "occurrence" for candidate in candidates)
+    mixed = len(candidates) >= 2 and {candidate.kind for candidate in candidates} == {
+        "negative",
+        "occurrence",
+    }
+    if mixed:
+        for candidate in candidates:
+            roles = {role.role for role in candidate.roles}
+            signed = [role.span for role in candidate.roles if role.role == "polarity"]
+            predicates = [role.span for role in candidate.roles if role.role == "predicate"]
+            objects = [
+                role.span for role in candidate.roles if role.role in {"object", "participants"}
+            ]
+            if (
+                "condition" in roles
+                or len(signed) != 1
+                or len(predicates) != 1
+                or len(objects) != 1
+                or signed[0].start >= predicates[0].start
+                or (
+                    bool(normalized_words(signed[0].text) & _NEGATION)
+                    != (candidate.kind == "negative")
+                )
+            ):
+                return False
+        return True
     if negative:
         for candidate in candidates:
             roles = {role.role for role in candidate.roles}
@@ -70,8 +96,31 @@ def validate_sensitive_group_statement(
     if not supports_sensitive_literal_candidates(candidates):
         raise ValueError("Mixed polarity and invented condition scope are not certified")
     negative = all(c.kind == "negative" for c in candidates)
+    mixed = {c.kind for c in candidates} == {"negative", "occurrence"}
 
-    if negative:
+    if mixed:
+        # Only exact source wording, containing every opposite-signed
+        # clause unchanged, may pass; never transform denial into a visit.
+        for role_name in ("polarity", "predicate"):
+            all_scopes = [
+                tuple((r.span.start, r.span.end) for r in c.roles if r.role == role_name)
+                for c in candidates
+            ]
+            if any(len(items) != 1 for items in all_scopes) or len(
+                {scopes[0] for scopes in all_scopes}
+            ) != len(all_scopes):
+                raise ValueError("Signed source clauses need distinct scoped evidence")
+        objects = [
+            tuple(
+                (r.span.start, r.span.end) for r in c.roles if r.role in {"object", "participants"}
+            )
+            for c in candidates
+        ]
+        if any(len(items) != 1 for items in objects) or len(
+            {scopes[0] for scopes in objects}
+        ) != len(objects):
+            raise ValueError("Signed source clauses need distinct actor/object evidence")
+    elif negative:
         polarity = {
             (r.span.start, r.span.end) for c in candidates for r in c.roles if r.role == "polarity"
         }

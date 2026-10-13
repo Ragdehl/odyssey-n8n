@@ -308,6 +308,27 @@ def validate_candidate_coverage_manifest(
         lexical = original
         for ref_index, ref in enumerate(unit.references):
             lexical = lexical.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+        # Approximate source time must remain literal in its own fact.
+        # The approximate evidence cannot become an exact instant or be
+        # discarded because an independently dated sibling has a clock.
+        approximate_roles = [
+            role.span for role in context.candidates[index].roles if role.role == "time_approx"
+        ]
+        if approximate_roles:
+            from .temporal_approximation_handoff import TEMPORAL_APPROXIMATE_LITERAL
+
+            temporal = context.verified_route_temporal
+            if temporal is None or any(
+                span.text not in lexical
+                or not any(
+                    item.kind == TEMPORAL_APPROXIMATE_LITERAL and item.source_text == span.text
+                    for item in temporal.evidence
+                )
+                for span in approximate_roles
+            ):
+                raise ValueError(
+                    "Approximate time must be represented literally with Core Temporal provenance"
+                )
         if context.verified_sensitive_temporal is not None:
             from .candidate_sensitive_statement import validate_sensitive_group_statement
 
@@ -412,6 +433,10 @@ def validate_candidate_coverage_manifest(
                 for role in candidate.roles
             )
         ):
+            # General Core source-ownership proof: check each reviewed
+            # candidate/fact independently, for any number of participants,
+            # facts or independent named links. Never branch on a phrase,
+            # name, two candidates or three total lookup/write units.
             from .candidate_group_participants import validate_group_participant_fact
 
             grouped_participant_helpers = validate_group_participant_fact(
@@ -464,7 +489,16 @@ def validate_candidate_coverage_manifest(
                     )
                 if fact_index != 0:
                     raise ValueError("Grouped source claim has wrong Core fact")
+            elif context.hybrid_interpretation_mode:
+                # A language-specific two-contact pilot is NOT a normative
+                # hybrid validation rule. Refuse links without appropriate
+                # source-group ownership evidence rather than interpreting
+                # a model-generated pair through fixed Spanish phrases.
+                raise ValueError(
+                    "Referenced Core facts require general per-fact source-owned participants"
+                )
             elif len(unit.facts) == 2:
+                # Legacy atomic-mode compatibility, not hybrid architecture.
                 validate_two_sequential_contacts(context, plan, action_index, unit_index)
                 if index != fact_index:
                     raise ValueError("Sequential Core facts are swapped across source candidates")

@@ -1,0 +1,17 @@
+{
+  "results": [
+    {
+      "case": "F26",
+      "status": "completed",
+      "reviewer_calls": 1,
+      "note_paths": [
+        "El informe.md",
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    }
+  ],
+  "new_estimated_usd": 0.00081928,
+  "estimated_cumulative_usd": 0.62397745
+}

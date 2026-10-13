@@ -1,0 +1,88 @@
+{
+  "case": "F18",
+  "source_sha256": "7c1535b90daba02d56af56310a2be835e880a2f762c6bd30e60e1dc2e80ef0e0",
+  "status": "completed",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"negative\",\"anchors\":[{\"text\":\"vi\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}},{\"role\":\"polarity\",\"anchor\":{\"text\":\"no\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vi\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"a Ana\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"polarity\",\"anchor\":{\"text\":\"sí\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1474,
+      "output_tokens": 460
+    }
+  ],
+  "candidates": [
+    {
+      "kind": "negative",
+      "state": "candidate",
+      "anchors": [
+        "vi",
+        "Ana"
+      ],
+      "roles": [
+        {
+          "role": "date",
+          "text": "Ayer"
+        },
+        {
+          "role": "polarity",
+          "text": "no"
+        },
+        {
+          "role": "predicate",
+          "text": "vi"
+        },
+        {
+          "role": "object",
+          "text": "a Ana"
+        }
+      ],
+      "inheritance": []
+    },
+    {
+      "kind": "occurrence",
+      "state": "candidate",
+      "anchors": [
+        "hablé",
+        "Luis"
+      ],
+      "roles": [
+        {
+          "role": "polarity",
+          "text": "sí"
+        },
+        {
+          "role": "predicate",
+          "text": "hablé"
+        },
+        {
+          "role": "participants",
+          "text": "Luis"
+        }
+      ],
+      "inheritance": [
+        {
+          "role": "date",
+          "from": 1
+        }
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "capability": "temporal",
+      "source": "Ayer no vi a Ana",
+      "depends_on": null,
+      "dependent_mention": null
+    },
+    {
+      "capability": "core",
+      "source": ", pero sí hablé con Luis.",
+      "depends_on": null,
+      "dependent_mention": null
+    }
+  ],
+  "estimated_new_usd": 0.00122694,
+  "estimated_cumulative_usd": 0.59892132
+}

@@ -1,0 +1,33 @@
+{
+  "cases": [
+    {
+      "case": "F01",
+      "status": "partial",
+      "calls": 7,
+      "notes": [
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F02",
+      "status": "failed",
+      "calls": 2,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F09",
+      "status": "completed",
+      "calls": 3,
+      "notes": [
+        "Luis.md",
+        "Marta.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.01108261,
+  "estimated_cumulative_usd": 0.63506006
+}

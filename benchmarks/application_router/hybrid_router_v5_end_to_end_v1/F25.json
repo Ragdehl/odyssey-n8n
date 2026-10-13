@@ -1,0 +1,57 @@
+{
+  "case": "F25",
+  "source_sha256": "cae3f2182e3f33c847b380c0023fb0c1963e4bbd8a70bfd45faa2e6055d2bdc9",
+  "status": "needs_attention",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"property\",\"anchors\":[{\"text\":\"La casa de Toulouse\",\"occurrence\":0},{\"text\":\"humedad\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"La casa de Toulouse\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"tiene\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"humedad\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en el sótano\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"property\",\"anchors\":[{\"text\":\"reparar\",\"occurrence\":0},{\"text\":\"el tejado\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"necesita\",\"occurrence\":0}},{\"role\":\"predicate_relation\",\"anchor\":{\"text\":\"reparar\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el tejado\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"subject\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1478,
+      "output_tokens": 485
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"La casa de Toulouse\",\"binding\":\"described\",\"direct_name\":\"La casa de Toulouse\",\"note_type\":\"concept\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Tiene humedad en el sótano.\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Necesita reparar el tejado.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11429,
+      "output_tokens": 192
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"La casa de Toulouse\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Tiene humedad en el sótano.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"el tejado\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Necesita reparar el tejado.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1513,
+      "output_tokens": 183
+    }
+  ],
+  "fresh_model_calls": 2,
+  "routes": [
+    {
+      "capability": "core",
+      "text": "La casa de Toulouse tiene humedad en el sótano y necesita reparar el tejado.",
+      "stage_count": 2,
+      "status": "needs_attention",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "La casa de Toulouse tiene humedad en el sótano y necesita reparar el tejado.",
+          "output": ""
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "La casa de Toulouse tiene humedad en el sótano y necesita reparar el tejado.",
+          "output": ""
+        }
+      ]
+    }
+  ],
+  "changed_notes": {},
+  "estimated_new_usd": 0.00334224,
+  "estimated_cumulative_usd": 0.60461525
+}

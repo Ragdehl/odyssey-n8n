@@ -48,6 +48,14 @@ Future local/mobile clients should be able to reuse the same local storage seman
 
 Current DEV/server actor isolation must remain enforced at the outer authentication/root-selection boundary; local-first storage is not permission to weaken current isolation. See [Odyssey Platform Direction](docs/architecture/odyssey-platform-direction.md) and [Multi-user Collaboration Direction](docs/architecture/multi-user-collaboration-direction.md) for the durable product direction.
 
+### Clean Architecture incremental, diferida (13-10-2026)
+
+Decisión del usuario: al modificar módulos en el futuro, aprovechar para
+introducir límites claros entre dominio, casos de uso, puertos y adaptadores
+de forma gradual. NO hacer ahora una refactorización global ni frenar DEV.
+Consultar docs/architecture/clean-architecture-incremental-direction.md.
+Mantener como contrato funcional el híbrido ya aprobado.
+
 ## Development principles
 
 ### Regression memory for real chat failures
@@ -59,6 +67,50 @@ change when credentials are available; keep deterministic tests as the CI author
 variance never weakens the gate. Generalize the regression with additional note types or equivalent
 shapes when the product invariant is type-generic. Do not remove or relax an accepted real-chat
 sentinel merely to make a later prompt or architecture change pass.
+
+### 2026-10-13 — Hybrid validator generalization (implemented, feature branch)
+
+The previous Spanish phrase-template pilot in
+odyssey_core/candidate_sequential_contacts.py is **LEGACY ONLY**. Hybrid
+Core may NEVER dispatch through it: multi-fact participant coverage now
+checks each independently reviewed candidate/fact using explicit source
+participants, independently proven inheritance, unique canonical reference
+helpers and the ordinary Writer. No fixed name, two-contact phrase, or
+three-unit Action topology may be introduced as a hybrid rule.
+
+The independent graph reviewer now permits a slightly longer ORIGINAL
+source quote around a verified Router anchor (e.g. one preposition), but
+NEVER a fabricated quote, and all other Core prewrite checks remain.
+F01 now completes three dated group events in two Day Notes with real
+model/reviewer and physical readback.
+
+F02 mixed exact/approximate Temporal interpretation is supported only
+when Temporal's UNSPECIFIED wording exactly matches an original Router
+time_approx span. It stays a literal approximate phrase, never a clock;
+exact independent days/clocks still pass with per-fact coverage. Same-Day
+redundant date-reference parts are removed before the normal compiler
+and Writer, never guessed or emitted as self-links.
+
+Current **strict isolated-genuine-model corpus checkpoint: 23/27**:
+F01 F02 F03 F04 F05 F06 F07 F08 F10 F11 F12 F13 F15 F16 F17
+F18 F19 F20 F21 F23 F24 F25 F26. Remaining F09 (redundant/canonical
+semantic delta), F14/F27 (truly ambiguous subject pronouns: safe partial),
+and F22 (Task body omits known person link). F02 results captured in
+benchmarks/application_router/hybrid_approximate_live_v2 and
+hybrid_core_review_v4, final F01 in hybrid_core_review_v3.
+**Estimated cumulative experiment spend USD 0.64794381 of 1.00 authorized,
+not billing reconciliation.** No activation in DEV/PROD and no user-vault
+writes. Frozen original captures remain immutable. This checkpoint
+supersedes older counts but not their historical test records.
+
+One limitation remains separate: the read-only experimental known-Note
+hint lookup currently refuses to scan vaults larger than 5000 Notes and
+only returns 16 prompt hints. This is a performance guard, **not** a
+permitted semantic limit on Odyssey's Note or fact count. Replace with an
+indexed, bounded-retrieval implementation before broad DEV adoption;
+never silently treat a too-large vault as evidence that a named Note
+does not exist. Similarly audit historical narrow validators instead
+of copying their grammar templates.
 
 ### Generality invariant for Router and Core
 
