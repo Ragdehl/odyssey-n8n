@@ -195,8 +195,40 @@ small controlled budget-refusal F07 retest is frozen in
 The normative per-case readback and accepted-vs-functional distinction
 are documented in `docs/architecture/functional-roadmap.md`.
 Estimated cumulative approved model spend USD **0.471058 / 0.50**.
+**Newer 2026-10-13 all-real-model checkpoint supersedes the above
+10/27 acceptance COUNT, not its frozen historical evidence:** strict
+**18/27** accepted on isolated versioned synthetic Markdown:
+F03 F04 F05 F06 F07 F08 F10 F11 F12 F13 F15 F16 F17 F19 F20 F21
+F23 F24. Earlier 10/27 results remain immutable snapshots.
+Seven new authentic all-component receipts plus one frozen genuine
+Planner/Temporal/Router + fresh genuine reviewer gate are preserved under
+`benchmarks/application_router/hybrid_semantic_live_v2/` through `v7/`
+and `hybrid_core_review_v1/`. The final F05/F08 pair uses authentic,
+source-matched frozen Router/Temporal/Planner outputs with newly paid
+GPT-5.6 independent reviews of the ACTUAL final fact text. The NoteSchema
+v3 types were reviewed directly: concept, project, document, person,
+calendar_day and non-writable legacy journal_entry; Tasks is an app
+extension, not a core note type. All outputs are from a disposable
+13-note versioned vault, never /data/odyssey. Estimated cumulative cost
+USD **0.59769438 / 1.00** authorized, estimate only. No DEV/PROD
+activation or migration. Remaining F01 F02 F09 F14 F18 F22 F25 F26 F27
+require further honest semantic/provenance review; F14's pronoun is
+genuinely ambiguous and must stay pending, not forced into an acceptance.
+
+What changed in general: hybrid-only Core prompts for source-group
+ellipsis, correct sentence composition and exact Temporal pairs; Core
+read-only exact named-note hints (no speaker/group identity inference);
+read-only typed Temporal evidence reaching the independent fact reviewer;
+source-proven time co-reference no longer masquerades as a canonical
+person reference; source-verified independent linked Day events,
+separate named linked write units, mixed-type property+event facts, and
+canonical Markdown fact readback. Retain all historical prompt/snapshot
+contracts in non-hybrid mode. New changes need the full pytest baseline
+and the versioned real-model replay before activation.
+
 F13 now writes all correct facts but leaves a stray leading period in
-one Markdown fact; its strict UI-quality gate is pending. F14 correctly
+one Markdown fact IN THE EARLIER ORIGINAL CAPTURE; its newest genuine
+model result no longer has that punctuation error. F14 correctly
 writes the safe Eric/Luis conversation but leaves the later genuinely
 ambiguous pronoun pending. F07 has a provenance-safe grouped-note replay,
 but the latest fresh Planner supplied a Temporal text superset and was

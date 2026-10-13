@@ -1,0 +1,89 @@
+{
+  "case": "F12",
+  "source_sha256": "8a8bddf2be35cef1b5c5d1540e1653f9612d5c8367427195cff141813f09af0b",
+  "status": "completed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "core",
+      "text": "Bea y mis hijos limpiaron el garaje y después montaron los muebles.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Bea",
+          "fact": "Bea y mis hijos limpiaron el garaje."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "Bea",
+          "name": "Bea",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "Bea"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Bea y mis hijos limpiaron el garaje y después montaron los muebles.",
+          "output": "record · person → Bea · Bea y mis hijos limpiaron el garaje."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Bea y mis hijos limpiaron el garaje y después montaron los muebles.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · person → Bea · Bea y mis hijos limpiaron el garaje.",
+          "output": "succeeded: UPDATED · Bea\nBea → Bea"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "Bea.md": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-person-bea\"\nname: \"Bea\"\nrevision: 2\nschema_version: 3\ntype: \"person\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\nPersona de prueba, pareja de [[Alex]] y madre de [[Nina]] y [[Pablo]].\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Bea y mis hijos limpiaron el garaje.\n  <!-- odyssey:fact request=route-1-2e92c26c5f0d6ca9e3b5fbea0b68cf20dcaf12f7d90aa8ee93c6cc16f32b2d62 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 -->\n- Bea y mis hijos montaron los muebles después.\n  <!-- odyssey:fact request=route-1-2e92c26c5f0d6ca9e3b5fbea0b68cf20dcaf12f7d90aa8ee93c6cc16f32b2d62 ordinal=1 recorded_at=2026-10-04T17:35:00+02:00 -->",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\n"
+  },
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"limpiaron\",\"occurrence\":0},{\"text\":\"el garaje\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"limpiaron\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"el garaje\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"montaron\",\"occurrence\":0},{\"text\":\"los muebles\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"montaron\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"los muebles\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"participants\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1133,
+      "output_tokens": 418
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Bea y mis hijos limpiaron el garaje.\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Bea y mis hijos montaron los muebles después.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11437,
+      "output_tokens": 572
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"limpiaron\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Bea y mis hijos limpiaron el garaje.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"montaron\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Bea y mis hijos montaron los muebles después.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1406,
+      "output_tokens": 403
+    }
+  ],
+  "estimated_new_usd": 0.0132972,
+  "estimated_cumulative_usd": 0.5831676
+}

@@ -1,0 +1,41 @@
+{
+  "cases": [
+    {
+      "case": "F05",
+      "status": "failed",
+      "calls": 2,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F07",
+      "status": "failed",
+      "calls": 3,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F13",
+      "status": "completed",
+      "calls": 10,
+      "notes": [
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md",
+        "calendar/days/2026-10-05.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F15",
+      "status": "partial",
+      "calls": 8,
+      "notes": [
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.0275402,
+  "estimated_cumulative_usd": 0.4985981
+}

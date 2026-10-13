@@ -1,0 +1,95 @@
+{
+  "case": "F10",
+  "source_sha256": "31d9681685745e71c75b15965d93d87b1cd5c41dacd6b2ed580aee844da15b0f",
+  "status": "completed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "core",
+      "text": "Marta y Luis se conocieron en Lyon.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Marta",
+          "fact": "Marta y {{ref:0}} se conocieron en Lyon."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "Marta",
+          "name": "Marta",
+          "status": "resolved",
+          "type": "person"
+        },
+        {
+          "mention": "Luis",
+          "name": "Luis",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "Marta"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Marta y Luis se conocieron en Lyon.",
+          "output": "record · person → Marta · Marta y {{ref:0}} se conocieron en Lyon."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Marta y Luis se conocieron en Lyon.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · person → Marta · Marta y {{ref:0}} se conocieron en Lyon.",
+          "output": "succeeded: UPDATED · Marta\nMarta → Marta\nLuis → Luis"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "Marta.md": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-person-marta\"\nname: \"Marta\"\nrevision: 2\nschema_version: 3\ntype: \"person\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\nPersona de prueba, vive en Lyon.\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Marta y [[Luis|Luis]] se conocieron en Lyon.\n  <!-- odyssey:fact request=route-1-29a0859e91b364d1905ff30d9797b132d16bc2ba155aea493bfb65f835951e97 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 -->",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\n"
+  },
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"relationship\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"se conocieron\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se conocieron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Lyon\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}]}",
+      "input_tokens": 1126,
+      "output_tokens": 198
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Marta y \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" se conocieron en Lyon.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11232,
+      "output_tokens": 328
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"se conocieron\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Marta y {{ref:0}} se conocieron en Lyon.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1215,
+      "output_tokens": 125
+    }
+  ],
+  "estimated_new_usd": 0.0088303,
+  "estimated_cumulative_usd": 0.5787007
+}

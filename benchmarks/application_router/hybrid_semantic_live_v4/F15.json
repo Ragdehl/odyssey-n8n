@@ -1,0 +1,215 @@
+{
+  "case": "F15",
+  "source_sha256": "ae96ff2636edcc62c8364bf14f803d538f164fc8ef357d5ab1b98a7b1a851d1a",
+  "status": "completed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Ayer mis hijos fueron al parque",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "calendar_day",
+          "target": "2026-10-03",
+          "fact": "Mis hijos fueron al parque."
+        }
+      ],
+      "entities": [],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "CREATED",
+          "target": "2026-10-03"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Ayer mis hijos fueron al parque",
+          "output": "record · calendar_day → 2026-10-03 · Mis hijos fueron al parque."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Ayer mis hijos fueron al parque",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · calendar_day → 2026-10-03 · Mis hijos fueron al parque.",
+          "output": "succeeded: CREATED · 2026-10-03"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    },
+    {
+      "capability": "core",
+      "text": " y Bea se quedó en casa",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "person",
+          "target": "Bea",
+          "fact": "[[calendar/days/2026-10-03|03-10-2026]]Se quedó en casa."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "Bea",
+          "name": "Bea",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "Bea"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": " y Bea se quedó en casa",
+          "output": "record · person → Bea · [[calendar/days/2026-10-03|03-10-2026]]Se quedó en casa."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": " y Bea se quedó en casa",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · person → Bea · [[calendar/days/2026-10-03|03-10-2026]]Se quedó en casa.",
+          "output": "succeeded: UPDATED · Bea\nBea → Bea"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    },
+    {
+      "capability": "core",
+      "text": "; después yo preparé la cena.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "calendar_day",
+          "target": "2026-10-03",
+          "fact": "Después yo preparé la cena."
+        }
+      ],
+      "entities": [],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "UPDATED",
+          "target": "2026-10-03"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "; después yo preparé la cena.",
+          "output": "record · calendar_day → 2026-10-03 · Después yo preparé la cena."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "; después yo preparé la cena.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · calendar_day → 2026-10-03 · Después yo preparé la cena.",
+          "output": "succeeded: UPDATED · 2026-10-03"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "Bea.md": "---\naliases: []\ncreated_at: \"2026-10-03T10:00:00Z\"\ncreated_by: {\"app\": \"test-fixture\", \"human\": null}\nid: \"fixture-person-bea\"\nname: \"Bea\"\nrevision: 2\nschema_version: 3\ntype: \"person\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\nPersona de prueba, pareja de [[Alex]] y madre de [[Nina]] y [[Pablo]].\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- [[calendar/days/2026-10-03|03-10-2026]]Se quedó en casa.\n  <!-- odyssey:fact request=route-2-60bde2524402f01db0e64818ee0621337b42b4e55143aa8c91a47f5cc33a4dd2 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->",
+    "calendar/days/2026-10-03.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\ndate: \"2026-10-03\"\nid: \"date:2026-10-03\"\nname: \"2026-10-03\"\nrevision: 2\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Mis hijos fueron al parque.\n  <!-- odyssey:fact request=route-1-60bde2524402f01db0e64818ee0621337b42b4e55143aa8c91a47f5cc33a4dd2 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->\n- Después yo preparé la cena.\n  <!-- odyssey:fact request=route-3-60bde2524402f01db0e64818ee0621337b42b4e55143aa8c91a47f5cc33a4dd2 ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\n"
+  },
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"mis hijos\",\"occurrence\":0},{\"text\":\"fueron\",\"occurrence\":0},{\"text\":\"al parque\",\"occurrence\":0},{\"text\":\"Ayer\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"mis hijos\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"fueron\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"al parque\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"se quedó\",\"occurrence\":0},{\"text\":\"en casa\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"se quedó\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"en casa\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"yo\",\"occurrence\":0},{\"text\":\"preparé\",\"occurrence\":0},{\"text\":\"la cena\",\"occurrence\":0},{\"text\":\"después\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"yo\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"preparé\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"la cena\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1137,
+      "output_tokens": 646
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 608,
+      "output_tokens": 94
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Mis hijos fueron al parque.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11520,
+      "output_tokens": 240
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"mis hijos\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Mis hijos fueron al parque.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1048,
+      "output_tokens": 144
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"Ayer\",\"value\":\"2026-10-03\"},{\"kind\":\"literal\",\"text\":\"Se quedó en casa.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11876,
+      "output_tokens": 380
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"se quedó\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"[[calendar/days/2026-10-03|03-10-2026]]Se quedó en casa.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1104,
+      "output_tokens": 286
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Después yo preparé la cena.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11751,
+      "output_tokens": 271
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"preparé\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Después yo preparé la cena.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1126,
+      "output_tokens": 227
+    }
+  ],
+  "estimated_new_usd": 0.0191885,
+  "estimated_cumulative_usd": 0.5414017
+}

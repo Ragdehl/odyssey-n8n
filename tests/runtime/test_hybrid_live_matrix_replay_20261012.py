@@ -72,8 +72,11 @@ def test_genuine_f11_models_write_exact_joint_purchase_to_canonical_day(tmp_path
     assert result.status is ApplicationStatus.COMPLETED
     assert len(sdk.calls) == len(saved["real_model_outputs"]) == 4
     planner_instructions = " ".join(item["text"] for item in sdk.calls[-2]["input"][0]["content"])
-    assert "Verified Temporal evidence is a CLOSED exact source-text/value" in planner_instructions
-    assert "Do not prepend or append adjacent source words" in planner_instructions
+    assert "Verified Temporal evidence is a CLOSED list of EXACT" in planner_instructions
+    assert "source-text/value pairs" in planner_instructions
+    assert "COPY BOTH the text" in planner_instructions
+    assert "NOT interchangeable in this contract" in planner_instructions
+    assert "HYBRID SOURCE-GROUP COMPOSITION" in planner_instructions
     reviewer_instructions = sdk.calls[-1]["input"][0]["content"]
     assert (
         "SEPARATE source-reference semantics from canonical Note binding" in reviewer_instructions

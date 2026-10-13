@@ -449,3 +449,20 @@ the immutable third-route receipt is unchanged.
 Accumulated **estimated** API spend at this checkpoint:
 USD **0.3356791 of the 0.50 approved**. No new DEV/PROD routes, real
 personal Notes, schema, or Core model migration were made.
+
+
+## Verification update — 2026-10-13 (not a DEV deployment)
+
+The normative HYBRID architecture above is unchanged: atomic candidate
+source hints grouped into whole grammatical interpretation units, typed
+Temporal per owned event, ordinary Core Planner, independent read-only
+Core graph review and unchanged canonical Writer guards.
+
+The latest strict accepted artificial-corpus count is **18/27**.
+New Core-only bounded verified-source context and multi-event coverage
+fixes have genuine GPT-6 Router/Temporal, GPT-5.6 Planner and reviewer
+receipts with actual Markdown readback. Exact individual case/source
+evidence, the nine still-unaccepted cases, API budget, and files
+are in `docs/architecture/functional-roadmap.md`.
+All code remains on the experimental feature branch; DEV/PROD and n8n
+are untouched, and any activation still requires a separate gated rollout.

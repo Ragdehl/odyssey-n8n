@@ -10,7 +10,7 @@ copied directly from Router. Structural checks are not semantic attestation.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from .candidate_context import CoreCandidateContext
@@ -326,7 +326,37 @@ def validate_candidate_coverage_manifest(
                 lexical,
                 context.verified_inherited_event,
             )
-        if context.candidates[index].kind == "property" and len(unit.facts) > 1:
+        property_of_mixed_group = (
+            context.hybrid_interpretation_mode
+            and context.candidates[index].kind == "property"
+            and len(unit.facts) > 1
+            and any(other.kind != "property" for other in context.candidates)
+            and not unit.references
+            and not unit.reference_lookup_only
+            and len(claimed_pairs) == len(fact_ordinals)
+            and len({claim_ordinal for _, claim_ordinal in claimed_pairs}) == len(fact_ordinals)
+        )
+        # Independent properties and occurrences can be stored in the SAME
+        # canonical Note using separate Core facts. The property proof must
+        # inspect only its OWN fact/anchor, not an unrelated second event.
+        # The original plan, graph, targets and readback remain unmodified.
+        property_unit = unit
+        if property_of_mixed_group:
+            own_anchors = (
+                unit.fact_temporal_anchors[fact_index] if unit.fact_temporal_anchors else ()
+            )
+            if own_anchors:
+                raise ValueError("Property claim includes another event's time")
+            property_unit = replace(
+                unit,
+                facts=(unit.facts[fact_index],),
+                fact_temporal_anchors=(),
+            )
+        if (
+            context.candidates[index].kind == "property"
+            and len(unit.facts) > 1
+            and not property_of_mixed_group
+        ):
             from .candidate_grouped_property import validate_shared_subject_property
 
             lexical = validate_shared_subject_property(
@@ -347,10 +377,30 @@ def validate_candidate_coverage_manifest(
             lexical = validate_subject_property_fact(
                 source,
                 context.candidates[index],
-                unit,
+                property_unit,
                 lexical,
                 other_source_subjects=other_subjects,
                 inherited_subject=context.verified_inherited_subject,
+            )
+        independent_actor_helper: int | None = None
+        if (
+            context.hybrid_interpretation_mode
+            and context.verified_route_temporal is not None
+            and len(unit.facts) > 1
+            and unit.references
+            and all(candidate.kind == "occurrence" for candidate in context.candidates)
+            and not any(
+                role.role == "participants"
+                for candidate in context.candidates
+                for role in candidate.roles
+            )
+        ):
+            from .candidate_independent_linked_events import (
+                validate_independent_linked_event_fact,
+            )
+
+            independent_actor_helper = validate_independent_linked_event_fact(
+                source, context, plan, action_index, unit_index, fact_index, index
             )
         grouped_participant_helpers: tuple[int, ...] | None = None
         if (
@@ -387,7 +437,12 @@ def validate_candidate_coverage_manifest(
             veto_unsafe_literal_match(
                 source, context, index, lexical, canonical_binding=canonical_binding
             )
-        if unit.references and grouped_participant_helpers is None:
+        if independent_actor_helper is not None:
+            helper_key = action_index, independent_actor_helper
+            if helper_key in claimed_helpers:
+                raise ValueError("The same linked actor helper owns two independent events")
+            claimed_helpers.add(helper_key)
+        elif unit.references and grouped_participant_helpers is None:
             if len(unit.facts) == 1:
                 if context.candidates[index].kind == "relationship":
                     validate_one_mutual_relationship_fact(
@@ -401,6 +456,7 @@ def validate_candidate_coverage_manifest(
                         action_index,
                         unit_index,
                         canonical_binding=canonical_binding,
+                        allow_independent_sibling_units=context.hybrid_interpretation_mode,
                     )
                 else:
                     validate_two_named_participant_fact(

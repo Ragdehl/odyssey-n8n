@@ -159,6 +159,7 @@ def validate_one_named_participant_fact(
     unit_index: int,
     *,
     canonical_binding: object | None = None,
+    allow_independent_sibling_units: bool = False,
 ) -> None:
     """Certify one Core link: an explicit name or a guarded prior-result reference.
 
@@ -170,6 +171,31 @@ def validate_one_named_participant_fact(
     if not isinstance(action, WriteAction) or not 0 <= unit_index < len(action.units):
         raise MultiParticipantEvidenceError("Single linked fact requires a Core write")
     unit = action.units[unit_index]
+    if allow_independent_sibling_units:
+        # A Core action may contain several independent, separately named
+        # facts and one non-mutating reference helper per fact. Do not confuse
+        # that general action shape with the old exactly-one-fact pilot.
+        writers = [u for u in action.units if not u.reference_lookup_only]
+        helpers = [u for u in action.units if u.reference_lookup_only]
+        if (
+            not writers
+            or len(writers) != len(helpers)
+            or any(
+                u.intent != "record"
+                or u.force_create
+                or len(u.facts) != 1
+                or len(u.references) != 1
+                or u.properties
+                or u.tag_changes
+                or u.destination_type is not None
+                for u in writers
+            )
+            or any(h.facts or h.references or h.properties or h.tag_changes for h in helpers)
+            or len({u.references[0].target_index for u in writers}) != len(writers)
+        ):
+            raise MultiParticipantEvidenceError(
+                "Sibling linked facts are not independently sourced Core writes"
+            )
     if (
         unit.intent != "record"
         or unit.reference_lookup_only
@@ -179,7 +205,7 @@ def validate_one_named_participant_fact(
         or unit.destination_type is not None
         or len(unit.facts) != 1
         or len(unit.references) != 1
-        or len(action.units) != 2
+        or (len(action.units) != 2 and not allow_independent_sibling_units)
         or unit.facts[0].count("{{ref:0}}") != 1
         or "{{ref:" in unit.facts[0].replace("{{ref:0}}", "")
     ):

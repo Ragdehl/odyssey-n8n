@@ -145,13 +145,14 @@ def execute_candidate_routed_message(
         if not isinstance(core_candidate_attributor, OpenAICoreCandidateAttributor):
             raise ValueError("Use the existing Core fact graph reviewer")
 
-        def coverage(text, context, plan, *, canonical_binding=None):
+        def coverage(text, context, plan, *, canonical_binding=None, verified_temporal=None):
             return review_model_candidate_fact_coverage(
                 text,
                 context,
                 plan,
                 core_candidate_attributor,
                 canonical_binding=canonical_binding,
+                verified_temporal=verified_temporal,
             )
     else:
         coverage = candidate_coverage_factory
@@ -424,6 +425,13 @@ def execute_candidate_routed_message(
             route_context = replace(route_context, verified_inherited_subject=subject)
         if event is not None:
             route_context = replace(route_context, verified_inherited_event=event)
+        if (
+            route_context.hybrid_interpretation_mode
+            and len(route_context.candidates) >= 2
+            and domain is not None
+            and domain.capability_id == "temporal"
+        ):
+            route_context = replace(route_context, verified_route_temporal=domain)
         if composed_shared_clock:
             route_context = replace(route_context, verified_group_temporal=domain)
         if (
@@ -449,6 +457,14 @@ def execute_candidate_routed_message(
             else None
         )
         planner = core_planner_factory(route_context, domain)
+        if route_context.hybrid_interpretation_mode:
+            from odyssey_core.canonical_source_context import matching_canonical_source_names
+            from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
+
+            if isinstance(planner, OpenAILunaExperimentalPlanner):
+                names = matching_canonical_source_names(route_context, repository, schema)
+                if names:
+                    planner.bind_verified_source_note_names(names)
         if not callable(getattr(planner, "plan", None)):
             raise ValueError("Only the ordinary Core planner may interpret a scoped route")
         captured: dict[str, RequestPlan] = {}
@@ -482,7 +498,24 @@ def execute_candidate_routed_message(
             request_id_factory=lambda: locator,
             candidate_context=route_context,
             candidate_coverage_factory=(
-                (lambda text, ctx, plan: coverage(text, ctx, plan, canonical_binding=guard))
+                (
+                    lambda text, ctx, plan: coverage(
+                        text,
+                        ctx,
+                        plan,
+                        canonical_binding=guard,
+                        verified_temporal=(
+                            domain
+                            if (
+                                route_context.hybrid_interpretation_mode
+                                and domain is not None
+                                and domain.capability_id == "temporal"
+                                and domain.intent == "TEMPORAL_RESOLUTION"
+                            )
+                            else None
+                        ),
+                    )
+                )
                 if core_candidate_attributor is not None
                 else (
                     (lambda text, ctx, plan: coverage(text, ctx, plan, canonical_binding=guard))

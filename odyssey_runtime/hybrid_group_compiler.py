@@ -140,6 +140,14 @@ def compile_hybrid_candidate_bundle(
             for candidate in context.candidates
             for role in candidate.roles
             if role.role == "reference"
+            # A reference to the same clock is not a reference to a
+            # canonical Person/Note identity. The temporal interpreter
+            # handles that semantic dependency within this source group,
+            # and Core still checks every actual clock and write target.
+            and not any(
+                clock.role == "time_relation" and clock.span == role.span
+                for clock in candidate.roles
+            )
         ]
         if len(references) > 1:
             raise RouterError("A grouped reference must be reviewed without guessed antecedents")

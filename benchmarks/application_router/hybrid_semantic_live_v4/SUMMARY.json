@@ -1,0 +1,40 @@
+{
+  "cases": [
+    {
+      "case": "F05",
+      "status": "failed",
+      "calls": 3,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F07",
+      "status": "completed",
+      "calls": 4,
+      "notes": [
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F15",
+      "status": "completed",
+      "calls": 8,
+      "notes": [
+        "Bea.md",
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F08",
+      "status": "exception",
+      "calls": 1,
+      "notes": [],
+      "error": "RouterError: First group reference lacks verified prior identity"
+    }
+  ],
+  "estimated_new_usd": 0.0195693,
+  "estimated_cumulative_usd": 0.5417825
+}

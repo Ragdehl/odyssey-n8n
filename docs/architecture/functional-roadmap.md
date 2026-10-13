@@ -1280,3 +1280,93 @@ DEV, require comprehensive candidate/plan/readback correctness on
 novel 1/3/5+ fact messages, explicit ambiguous/pending accounting,
 focused live GPT-5.6 Core regression evidence, and independent
 architecture/PR review. No PROD changes, no Core model switch.
+
+
+## 2026-10-13 — Hybrid Core source/context/renderer verification (feature branch only)
+
+**Latest measured strict physical acceptance: 18/27**, independently grounded
+against the same versioned 13-note fake vault. Set:
+F03 F04 F05 F06 F07 F08 F10 F11 F12 F13 F15 F16 F17 F19 F20 F21
+F23 F24. This is an increase of eight accepted cases over the previous
+10/27 2026-10-12 checkpoint; it does **not** rewrite or relabel historical
+live receipts. F13 now has a clean genuine-model Markdown capture (no
+orphan leading punctuation).
+
+- General Core hybrid Planner interpretation: keep every event in its
+  own fact, inherit only unambiguous source-shared verbs and dates; copy
+  typed Temporal source_text/value pairs exactly, with a conservative
+  data-preserving renderer for duplicated time phrases and extra
+  source-fragment punctuation.
+- Core's independent source/fact reviewer now sees read-only validated
+  Temporal interpretations for each source group, separate from candidate
+  hints and proposed targets. Passing reviewer suggestions never grants
+  mutation authority; existing Core source, canonical-identity, writer and
+  readback checks continue to run independently.
+- Bounded **canonical name hints**: Core supplies only existing, valid
+  NoteSchema-v3 note names with exact source-role matches and unique
+  canonical identities. It never invents a self-Person, family members,
+  or resolves ambiguous pronouns from a name hint. Current experimental
+  implementation scans at most 5000 canonical Notes and returns at most
+  16 names; indexing this read-only lookup is a **performance follow-up**.
+- Source-proven clock co-reference such as a second event 'at the same
+  time' is Temporal evidence, not a person-identity pronoun. Core validates
+  the original exact source spans, Temporal day/clock owners, individual
+  participant roles, unique non-mutating canonical reference helpers and
+  exact final per-fact clock/date readback. It also recognizes one
+  Core action with multiple independent single-reference units rather
+  than requiring precisely two total units.
+- Mixed property and occurrence facts targeted at the same canonical
+  Note (for example, a present state followed by a future event) are
+  reviewed per source/fact edge without loosening whole-plan checks.
+- The NoteSchema v3 canonical types were checked against fixture Notes:
+  `concept`, `project`, `document`, `person`, `calendar_day`,
+  and legacy non-writable `journal_entry`; Tasks is provided by a
+  separately registered app-specific schema extension. No fictitious
+  core `relationship` Note type was introduced.
+
+**Genuine full-model outputs captured:** F07 in
+`hybrid_semantic_live_v4`; F10/F12 in `v6`; F13 in `v2`;
+F15 in `v5`. For the final F05 and F08 facts, the authentic
+previous Router, Temporal and Core Planner responses from `v7` were
+replayed with **two fresh actual GPT-5.6 independent reviewer calls**;
+the final four authentic results and exact canonical Markdown appear in
+`hybrid_core_review_v1/`. They were not synthesized and the reviewer
+saw the finalized fact wording. F24 uses the genuine original `v6`
+four-model replies, now successfully replayed through the corrected
+general mixed-fact coverage gate. The F08 *synthetic-reviewer* negative
+tests are explicitly labeled artificial and are NOT counted as a live
+provider acceptance.
+
+Exact final examples:
+- F05: two separate canonical Day facts:
+  'Cenaremos con [[Ana|Ana]] en Toulouse.' on 2026-10-09 and
+  '10:00 — Cenaremos con [[Luis|Luis]] en Albi.' on 2026-10-10.
+- F08: one Day containing '10:00 — [[Marta|Marta]] irá al médico.'
+  and '10:00 — [[Luis|Luis]] irá al dentista.' on 2026-10-05.
+- F10: 'Marta y [[Luis|Luis]] se conocieron en Lyon.' in Marta.md.
+- F12: Bea and literal collective 'mis hijos' both cleaned the garage
+  and then assembled furniture, in two independent facts in Bea.md.
+- F15: all three independent actions written, no unproved family links;
+  Bea's canonical Note gets a verified Day link; Day stores literal
+  'mis hijos' and 'yo' actions.
+- F24: present car-at-workshop state and future service on the canonical
+  concept Note, with a valid Day link and two physical fact receipts.
+- F13: conversation with Eric, future cinema with Core-proven antecedent,
+  and independent clean bread fact in three correct Day Notes.
+
+**Still not accepted**: F01 family-group event ownership, F02
+approximate/shared time and ellipsis, F09 semantic duplicate, F14 true
+ambiguous pronoun after two people (safe partial, not erroneous guessing),
+F18 negative/positive scope, F22 three-Task lifecycle coverage, F25
+house repair-need vs mandatory Task confusion, F26 cross-route document
+object pronoun, F27 Router source dependency and ambiguous pronoun.
+These are not marked passed just because the writer returned COMPLETED
+or the graph produced a plausible result. A strict count is not the
+sole product acceptance gate.
+
+**Safety and budget:** No DEV/PROD/n8n deployment or real user Note
+mutation. No migration of Core GPT-5.6 to GPT-6. Provider calls
+were explicitly capped; cumulative estimate **USD 0.59769438 / 1.00**
+approved (NOT a billing receipt). All local tests use fake, fresh
+canonical Markdown; frozen outputs remain intact. Compare against
+ten historical suite failures without relaxing their snapshots.

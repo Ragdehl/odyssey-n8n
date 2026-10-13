@@ -1,0 +1,47 @@
+{
+  "cases": [
+    {
+      "case": "F05",
+      "status": "exception",
+      "calls": 1,
+      "notes": [],
+      "error": "RouterError: A candidate has no independently located source anchor"
+    },
+    {
+      "case": "F08",
+      "status": "needs_attention",
+      "calls": 4,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F10",
+      "status": "completed",
+      "calls": 3,
+      "notes": [
+        "Marta.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F12",
+      "status": "completed",
+      "calls": 3,
+      "notes": [
+        "Bea.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F24",
+      "status": "needs_attention",
+      "calls": 4,
+      "notes": [],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.0174984,
+  "estimated_cumulative_usd": 0.5873688
+}

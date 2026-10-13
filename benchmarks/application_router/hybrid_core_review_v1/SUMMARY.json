@@ -1,0 +1,27 @@
+{
+  "results": [
+    {
+      "case": "F05",
+      "status": "completed",
+      "reviewer_calls": 1,
+      "note_paths": [
+        "calendar/days/2026-10-04.md",
+        "calendar/days/2026-10-09.md",
+        "calendar/days/2026-10-10.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F08",
+      "status": "completed",
+      "reviewer_calls": 1,
+      "note_paths": [
+        "calendar/days/2026-10-04.md",
+        "calendar/days/2026-10-05.md"
+      ],
+      "error": null
+    }
+  ],
+  "new_estimated_usd": 0.00120208,
+  "estimated_cumulative_usd": 0.59769438
+}

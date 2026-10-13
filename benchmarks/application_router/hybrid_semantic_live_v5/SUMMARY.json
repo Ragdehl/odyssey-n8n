@@ -1,0 +1,42 @@
+{
+  "cases": [
+    {
+      "case": "F05",
+      "status": "needs_attention",
+      "calls": 4,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F08",
+      "status": "failed",
+      "calls": 3,
+      "notes": [],
+      "error": null
+    },
+    {
+      "case": "F15",
+      "status": "completed",
+      "calls": 8,
+      "notes": [
+        "Bea.md",
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F26",
+      "status": "partial",
+      "calls": 7,
+      "notes": [
+        "El informe.md",
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.028088,
+  "estimated_cumulative_usd": 0.5698704
+}

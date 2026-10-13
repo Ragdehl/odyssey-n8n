@@ -1,0 +1,51 @@
+{
+  "case": "F08",
+  "source_sha256": "49628bbe0432791a2a4cb429c1431ff4e06aa4a3919eeda8f3868eb7b579e38f",
+  "status": "failed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+      "stage_count": 1,
+      "status": "failed",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+          "output": ""
+        }
+      ]
+    }
+  ],
+  "changed_notes": {},
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"irá\",\"occurrence\":0},{\"text\":\"al médico\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"irá\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al médico\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"al dentista\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al dentista\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1137,
+      "output_tokens": 479
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 10\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T10:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a la misma hora\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T10:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 706,
+      "output_tokens": 275
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Irá al médico \"},{\"kind\":\"temporal_reference\",\"text\":\"Mañana\",\"value\":\"2026-10-05\"},{\"kind\":\"literal\",\"text\":\" \"},{\"kind\":\"temporal_reference\",\"text\":\"a las 10\",\"value\":\"2026-10-05T10:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null},{\"target\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Irá al dentista \"},{\"kind\":\"temporal_reference\",\"text\":\"Mañana\",\"value\":\"2026-10-05\"},{\"kind\":\"literal\",\"text\":\" \"},{\"kind\":\"temporal_reference\",\"text\":\"a la misma hora\",\"value\":\"2026-10-05T10:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11974,
+      "output_tokens": 561
+    }
+  ],
+  "estimated_new_usd": 0.0088376,
+  "estimated_cumulative_usd": 0.5506201
+}

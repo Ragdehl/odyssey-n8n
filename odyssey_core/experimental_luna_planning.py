@@ -225,6 +225,10 @@ def _validate_luna_plan(
                         domain_interpretation and domain_interpretation.temporal_references()
                     ),
                 )
+                if candidate_context is not None and candidate_context.hybrid_interpretation_mode:
+                    from .hybrid_fact_presentation import normalize_hybrid_day_clock_prefix
+
+                    intent = normalize_hybrid_day_clock_prefix(intent, candidate_context.source)
                 semantic_write_intents.append(intent)
                 actions.append(
                     compile_semantic_write(
@@ -386,6 +390,7 @@ def render_luna_experimental_prompt(
     domain_interpretation: DomainInterpretation | None = None,
     candidate_context: CoreCandidateContext | None = None,
     partial_candidate_guidance: bool = False,
+    known_source_notes: Sequence[object] = (),
 ) -> str:
     """Render the Luna-specific first-pass prompt against current Core capabilities.
 
@@ -435,8 +440,92 @@ def render_luna_experimental_prompt(
             raise RequestPlanningError("Core candidate context must be Core-owned")
         candidate_section = candidate_context.prompt_suffix()
         semantic_dynamic += candidate_section
+        if candidate_context.hybrid_interpretation_mode:
+            # All rules below are about faithfully interpreting the CURRENT
+            # source group; none confer identity or persistence authority.
+            # They must not alter historical Core prompts outside hybrid mode.
+            semantic_dynamic += (
+                "\nHYBRID SOURCE-GROUP COMPOSITION (read-only Router evidence): "
+                "Interpret the complete selected source fragment as ordinary "
+                "language, not as isolated Router candidates. One source group "
+                "may describe several independent facts. Preserve EVERY explicit "
+                "actor, action, participant, object, tense, polarity, condition "
+                "and time owner. A verb stated once may be grammatically shared "
+                "by subsequent coordinated or elliptical clauses in the SAME "
+                "group; express the inherited action explicitly in EACH proposed "
+                "fact, with its own participant, destination and clock. Never "
+                "record an incomplete 'with X at Y' phrase as a complete event "
+                "when the actual predicate is recoverable from the selected source. "
+                "If the inherited action is not unambiguous, ESCALATE instead "
+                "of inventing one. For several INDEPENDENT dated events "
+                "whose original source gives one COMMON exact calendar date, "
+                "prefer one calendar_day destination and distinct complete "
+                "facts (each with its own named participant as a checked "
+                "identity part when appropriate). The calendar_day destination "
+                "consumes that single shared date proof once, while every "
+                "independently specified clock evidence item belongs to the "
+                "proper event and must be represented exactly once. Do not "
+                "duplicate a date-only temporal_reference across two different "
+                "person Note targets when Temporal supplied that date once; "
+                "do not collapse two different events into one fact merely "
+                "because they share a date or clock. The Core reviewer "
+                "still independently checks every source-candidate/fact "
+                "correspondence. Source fragments can start or end with sentence "
+                "boundary separators inherited from the original message. "
+                "Do NOT copy a leading standalone '.', ',', ';', ':', or other "
+                "separator into a new fact's literal text. Render grammatical "
+                "standalone fact sentences with exactly one normal punctuation "
+                "ending, avoiding empty prepositions, double spaces and orphan "
+                "punctuation. Source-only collective mentions (such as a family "
+                "group or an unbound 'we') are not proof of the members' canonical "
+                "Person Notes or the speaker's identity. When safe to state as "
+                "information without resolving that identity, keep the group's "
+                "original description LITERAL; never invent members, bind the "
+                "self Person Note, or manufacture relationships. "
+                "For ordinary dated autobiographical recollections with no "
+                "verified canonical self-Person identity, prefer an exact "
+                "calendar_day fact with first-person wording over fabricating "
+                "a named self-Person target. Likewise, a collective participant "
+                "that is not a verified Note may remain a literal phrase in a "
+                "dated calendar_day fact; never turn an unverified membership "
+                "set into a new Person Note. "
+                "When a fact has a verified Temporal clock, the displayed clock "
+                "is rendered separately. Supply its temporal_reference with "
+                "the EXACT text/value of Temporal evidence and keep the remaining "
+                "fact a complete, readable description of what happened or will "
+                "happen. In particular, do NOT leave an orphan 'a las', 'at', "
+                "or clock-related separator in literal parts. When unsure, ESCALATE."
+            )
         if size_components is not None:
             size_components["candidate_context_bytes"] = len(candidate_section.encode("utf-8"))
+    if known_source_notes:
+        from .canonical_source_context import CanonicalSourceNameHint
+
+        if candidate_context is None or not candidate_context.hybrid_interpretation_mode:
+            raise RequestPlanningError("Canonical hints require verified hybrid Core source")
+        if len(known_source_notes) > 16 or any(
+            not isinstance(item, CanonicalSourceNameHint) for item in known_source_notes
+        ):
+            raise RequestPlanningError("Invalid bounded canonical note hints")
+        semantic_dynamic += (
+            "\nCORE VERIFIED EXISTING NOTE NAMES for exact mentions in this "
+            "source fragment (read-only lookup hints, NOT propositions that "
+            "the described events happened, not identity of 'yo' or members "
+            "of a collective group): "
+            + json.dumps(
+                [item.to_prompt_payload() for item in known_source_notes],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            + ". For a clear, explicitly named participant with a matching "
+            "existing Note, preserve that participant as a semantic identity "
+            "part instead of plain text when the source grammar warrants a "
+            "canonical link. Use the Note type and name from that exact match, "
+            "then allow Core's independent link resolver to prove the actual "
+            "stable Note. Never use these hints to resolve ambiguous pronouns, "
+            "infer relatives, bind the speaker or invent facts. If a person "
+            "name is merely an unlinked incidental word, do not fabricate a link."
+        )
     # This opt-in route-local suffix is present ONLY when runtime supplies a
     # Core-verified predecessor carrier. It cannot authorize a write: the
     # ordinary source/coverage and freshness-bound dependent guard still decide.
@@ -451,23 +540,27 @@ def render_luna_experimental_prompt(
             and candidate_context.hybrid_interpretation_mode
             and domain_interpretation.temporal_references()
         ):
+            approved_pairs = [
+                {"text": item.source_text, "value": item.value}
+                for item in domain_interpretation.temporal_references()
+            ]
             semantic_dynamic += (
-                "\nVerified Temporal evidence is a CLOSED exact source-text/value "
-                "contract, not permission to normalize or extend clock words. "
-                "For EVERY temporal_reference part, COPY its text and value "
-                "EXACTLY from one supplied temporal_reference evidence item. "
-                "Do not prepend or append adjacent source words, prepositions, "
-                "punctuation, or calendar phrases to temporal_reference.text "
-                "even when that longer phrase exists in the routed message. "
-                "For example, an evidence source_text '15h' MUST be encoded "
-                "as temporal_reference.text '15h', NOT the broader phrase "
-                "around those characters. Never propose a date, datetime or "
-                "clock that is absent from the exact typed evidence. "
-                "When the Writer already renders the verified clock in a "
-                "fact, keep other literal parts semantically complete and "
-                "avoid redundant orphan time prepositions or double spaces. "
-                "All Temporal evidence still must be consumed according to "
-                "its true event ownership; when uncertain, ESCALATE. "
+                "\nVerified Temporal evidence is a CLOSED list of EXACT "
+                "source-text/value pairs. The pairs for THIS source are: "
+                + json.dumps(approved_pairs, ensure_ascii=False, separators=(",", ":"))
+                + ". For EVERY temporal_reference part, COPY BOTH the text "
+                "and value byte-for-byte from exactly ONE pair in that list. "
+                "Never shorten, lengthen, normalize, or reconstruct text based "
+                "on its apparent time meaning; '15h' and 'a las 15h' are "
+                "NOT interchangeable in this contract, and either may be the "
+                "actual approved value. Do not copy any extra neighboring "
+                "prepositions or punctuation into surrounding literal parts. "
+                "Calendar Day targets consume matching date-only evidence, "
+                "but an exact clock still needs its own matching pair. "
+                "Writer renders clock labels separately; the remainder of "
+                "each fact must read naturally without orphan time phrases. "
+                "All pairs must be used with their correct event owners; "
+                "when uncertain, ESCALATE rather than guessing."
             )
         if (
             candidate_context is not None
@@ -700,6 +793,7 @@ class OpenAILunaExperimentalPlanner:
         )
         self._domain_interpretation = domain_interpretation
         self._candidate_context = candidate_context
+        self._known_source_notes: tuple[object, ...] = ()
         self._partial_candidate_guidance = partial_candidate_guidance
         self._planning_schema = planning_schema_for_capability(
             schema,
@@ -732,6 +826,24 @@ class OpenAILunaExperimentalPlanner:
         self.last_validation_stage: str | None = None
         self.last_validation_code: str | None = None
         self.last_result_kind: str | None = None
+
+    def bind_verified_source_note_names(self, names: Sequence[object]) -> None:
+        """Accept only once, before plan(), Core-vault-derived source hints."""
+        from .canonical_source_context import CanonicalSourceNameHint
+
+        if (
+            self._candidate_context is None
+            or not self._candidate_context.hybrid_interpretation_mode
+        ):
+            raise RequestPlanningError("Canonical hints are hybrid-only")
+        if (
+            self._known_source_notes
+            or not names
+            or len(names) > 16
+            or any(not isinstance(item, CanonicalSourceNameHint) for item in names)
+        ):
+            raise RequestPlanningError("Invalid or repeated known source Note names")
+        self._known_source_notes = tuple(names)
 
     @classmethod
     def from_environment(
@@ -808,6 +920,7 @@ class OpenAILunaExperimentalPlanner:
                 domain_interpretation=self._domain_interpretation,
                 candidate_context=self._candidate_context,
                 partial_candidate_guidance=self._partial_candidate_guidance,
+                known_source_notes=self._known_source_notes,
             )
             authorized_calendar_dates = planner_authorized_calendar_dates(
                 self._current_context, self._domain_interpretation

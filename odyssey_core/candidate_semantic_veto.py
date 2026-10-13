@@ -65,12 +65,20 @@ def veto_unsafe_literal_match(
     Core-verified identity attestation not provided by this first-pass pilot.
     """
     candidate = context.candidates[candidate_index]
-    if any(role.role == "reference" for role in candidate.roles) or any(
-        edge.role == "reference" for edge in candidate.inherits
-    ):
+    # Core-person references and Temporal "same time" references are different
+    # semantic types, even when Router reuses the surface role "reference".
+    person_references = [
+        role
+        for role in candidate.roles
+        if role.role == "reference"
+        and not any(
+            clock.role == "time_relation" and clock.span == role.span for clock in candidate.roles
+        )
+    ]
+    if person_references or any(edge.role == "reference" for edge in candidate.inherits):
         from .application import CanonicalReferenceEvidence, DependentReferenceGuard
 
-        mentions = [role.span.text for role in candidate.roles if role.role == "reference"]
+        mentions = [role.span.text for role in person_references]
         if (
             len(mentions) != 1
             or any(edge.role == "reference" for edge in candidate.inherits)

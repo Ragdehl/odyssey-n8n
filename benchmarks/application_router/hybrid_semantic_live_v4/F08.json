@@ -1,0 +1,19 @@
+{
+  "case": "F08",
+  "source_sha256": "49628bbe0432791a2a4cb429c1431ff4e06aa4a3919eeda8f3868eb7b579e38f",
+  "status": "exception",
+  "error": "RouterError: First group reference lacks verified prior identity",
+  "routes": [],
+  "changed_notes": {},
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"al médico\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"irá\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al médico\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"al dentista\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al dentista\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"time\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1137,
+      "output_tokens": 465
+    }
+  ],
+  "estimated_new_usd": 0.0195693,
+  "estimated_cumulative_usd": 0.5417825
+}

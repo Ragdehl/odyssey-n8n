@@ -1,0 +1,63 @@
+{
+  "case": "F08",
+  "source_sha256": "49628bbe0432791a2a4cb429c1431ff4e06aa4a3919eeda8f3868eb7b579e38f",
+  "status": "needs_attention",
+  "error": null,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+      "stage_count": 2,
+      "status": "needs_attention",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+          "output": ""
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Mañana Marta irá al médico a las 10 y Luis al dentista a la misma hora.",
+          "output": ""
+        }
+      ]
+    }
+  ],
+  "changed_notes": {},
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"irá\",\"occurrence\":0},{\"text\":\"al médico\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"irá\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al médico\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Luis\",\"occurrence\":0},{\"text\":\"al dentista\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"al dentista\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}},{\"role\":\"time_relation\",\"anchor\":{\"text\":\"a la misma hora\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1137,
+      "output_tokens": 519
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-05\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 10\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T10:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a la misma hora\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-05T10:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 706,
+      "output_tokens": 276
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-05\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"identity\",\"text\":\"Marta\",\"identity\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" irá al médico a las 10\"},{\"kind\":\"temporal_reference\",\"text\":\"a las 10\",\"value\":\"2026-10-05T10:00:00+02:00\"}]},{\"parts\":[{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" irá al dentista a la misma hora\"},{\"kind\":\"temporal_reference\",\"text\":\"a la misma hora\",\"value\":\"2026-10-05T10:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 12121,
+      "output_tokens": 444
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"Marta\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"10:00 — {{ref:0}} irá al médico a las 10\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"Luis\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"10:00 — {{ref:1}} irá al dentista a la misma hora\"],\"pending_reason\":null}]}",
+      "input_tokens": 1698,
+      "output_tokens": 215
+    }
+  ],
+  "estimated_new_usd": 0.00455,
+  "estimated_cumulative_usd": 0.5919188
+}

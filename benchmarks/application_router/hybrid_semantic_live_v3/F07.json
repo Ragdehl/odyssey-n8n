@@ -1,0 +1,88 @@
+{
+  "case": "F07",
+  "source_sha256": "8f4f37a843a75a6baa8a2e2b9b05131f0d13ffa1cff857fcae4184ee5706c279",
+  "status": "completed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Hoy a las 15h veo a Bea y a las 17h a Luis.",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "calendar_day",
+          "target": "2026-10-04",
+          "fact": "15:00 — Veo a Bea."
+        }
+      ],
+      "entities": [],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "CREATED",
+          "target": "2026-10-04"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Hoy a las 15h veo a Bea y a las 17h a Luis.",
+          "output": "record · calendar_day → 2026-10-04 · 15:00 — Veo a Bea."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Hoy a las 15h veo a Bea y a las 17h a Luis.",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · calendar_day → 2026-10-04 · 15:00 — Veo a Bea.",
+          "output": "succeeded: CREATED · 2026-10-04"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    }
+  ],
+  "changed_notes": {
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-real-model-corpus\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- 15:00 — Veo a Bea.\n  <!-- odyssey:fact request=route-1-665efc158d830860cce7658e4667a5cf5727fb6a25b5769de67c588954b5d26b ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-04;2026-10-04T15:00:00+02:00 -->\n- 17:00 — Veo a Luis.\n  <!-- odyssey:fact request=route-1-665efc158d830860cce7658e4667a5cf5727fb6a25b5769de67c588954b5d26b ordinal=1 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-04;2026-10-04T17:00:00+02:00 -->"
+  },
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"veo a Bea\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"Hoy\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 15h\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"veo\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"a Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"time\",\"anchor\":{\"text\":\"a las 17h\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"date\",\"from_unit\":1},{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1134,
+      "output_tokens": 395
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-04\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 15h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-04T15:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 17h\",\"temporal\":{\"kind\":\"EXACT_DATETIME\",\"exact_date\":null,\"exact_datetime\":\"2026-10-04T17:00:00+02:00\",\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 619,
+      "output_tokens": 239
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-04\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Veo a Bea.\"},{\"kind\":\"temporal_reference\",\"text\":\"a las 15h\",\"value\":\"2026-10-04T15:00:00+02:00\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Veo a Luis.\"},{\"kind\":\"temporal_reference\",\"text\":\"a las 17h\",\"value\":\"2026-10-04T17:00:00+02:00\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 11791,
+      "output_tokens": 365
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"veo a Bea\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"15:00 — Veo a Bea.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"a Luis\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"17:00 — Veo a Luis.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1173,
+      "output_tokens": 194
+    }
+  ],
+  "estimated_new_usd": 0.0084627,
+  "estimated_cumulative_usd": 0.5070609
+}

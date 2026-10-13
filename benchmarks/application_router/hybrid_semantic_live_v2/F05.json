@@ -1,0 +1,38 @@
+{
+  "case": "F05",
+  "source_sha256": "7b45b96e714afc16593ee8c8141973b48d41649dab8affa98399b9a64c10edb3",
+  "status": "failed",
+  "error": null,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "El viernes cenaremos con Ana en Toulouse y el sábado a las 10 con Luis en Albi.",
+      "stage_count": 0,
+      "status": "failed",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": []
+    }
+  ],
+  "changed_notes": {},
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"cenaremos\",\"occurrence\":0},{\"text\":\"Ana\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"cenaremos\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"viernes\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Toulouse\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"el sábado a las 10 con Luis en Albi\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"date\",\"anchor\":{\"text\":\"sábado\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"a las 10\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"location\",\"anchor\":{\"text\":\"Albi\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1}],\"state\":\"candidate\"}]}",
+      "input_tokens": 1137,
+      "output_tokens": 557
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"El viernes\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-09\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"el sábado\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-10\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"a las 10\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 522,
+      "output_tokens": 375
+    }
+  ],
+  "estimated_new_usd": 0.0006951,
+  "estimated_cumulative_usd": 0.4717531
+}

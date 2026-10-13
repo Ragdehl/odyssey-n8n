@@ -248,6 +248,7 @@ class CoreCandidateContext:
     verified_correction_temporal: DomainInterpretation | None = None
     verified_sensitive_temporal: DomainInterpretation | None = None
     hybrid_interpretation_mode: bool = False
+    verified_route_temporal: DomainInterpretation | None = None
 
     def validate(self, requested_source: str) -> None:
         """Prohibit stale, altered, oversized or ungrounded candidate hints."""
@@ -308,6 +309,14 @@ class CoreCandidateContext:
             expected = {(r.role, r.text, r.original_start, r.original_end) for r in proof.roles}
             if external != expected or len(self.candidates) != 1:
                 raise ValueError("Inherited Core event has no exact Router provenance")
+        if self.verified_route_temporal is not None and (
+            not self.hybrid_interpretation_mode
+            or not isinstance(self.verified_route_temporal, DomainInterpretation)
+            or self.verified_route_temporal.source_text != self.source
+            or self.verified_route_temporal.capability_id != "temporal"
+            or self.verified_route_temporal.intent != "TEMPORAL_RESOLUTION"
+        ):
+            raise ValueError("Route Temporal proof must be bound to this hybrid source")
         if self.verified_group_temporal is not None and (
             not isinstance(self.verified_group_temporal, DomainInterpretation)
             or not self.scoped_route_source

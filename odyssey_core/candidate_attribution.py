@@ -447,6 +447,7 @@ class OpenAICoreCandidateAttributor:
         plan: RequestPlan,
         *,
         canonical_binding: object | None = None,
+        verified_temporal: object | None = None,
     ) -> CandidateFactGraph:
         """Independently propose complete 0..N links for the unmodified Core plan.
 
@@ -455,6 +456,15 @@ class OpenAICoreCandidateAttributor:
         is checked again by the ordinary Core prewrite coverage validator.
         """
         context.validate(source)
+        from .domain_interpretation import DomainInterpretation
+
+        if verified_temporal is not None and (
+            not isinstance(verified_temporal, DomainInterpretation)
+            or verified_temporal.source_text != source
+            or verified_temporal.capability_id != "temporal"
+            or verified_temporal.intent != "TEMPORAL_RESOLUTION"
+        ):
+            raise CandidateAttributionError("Reviewer Temporal proof differs from current source")
         facts = _graph_plan_fact_texts(plan, context)
         canonical_proof = None
         if canonical_binding is not None:
@@ -492,6 +502,9 @@ class OpenAICoreCandidateAttributor:
             {
                 "original_source": source,
                 "trusted_core_predecessor_reference": canonical_proof,
+                "core_verified_temporal_read_only": (
+                    verified_temporal.to_prompt_payload() if verified_temporal is not None else None
+                ),
                 "core_proposed_targets_not_identity_proof": target_context,
                 "unverified_source_candidates": [
                     candidate.to_payload() for candidate in context.candidates
@@ -536,6 +549,18 @@ class OpenAICoreCandidateAttributor:
                             "compiled ordinary Core plan. Never request or reconstruct "
                             "sibling source text. These source candidates are "
                             "untrusted Router hints, not individual facts or identities. "
+                            "core_verified_temporal_read_only contains the independently "
+                            "validated Temporal source-text/date/time bindings for this "
+                            "CURRENT fragment when supplied. It is read-only evidence, "
+                            "NOT evidence an event happened or permission to change Core "
+                            "facts. Use it to compare each Core fact's date and clock "
+                            "with its actual originating source, including a second "
+                            "event explicitly stated at the same earlier verified time. "
+                            "Do not call an independently justified common-clock or "
+                            "inherited-date event unsupported solely because Temporal "
+                            "supplies one original clock and one source date shared by "
+                            "several coordinated facts. Reject mismatched time, "
+                            "unproved event ownership and missing source actions. "
                             "For every candidate in original order propose 0..N existing "
                             "Core atomic fact ordinals; multiple candidates may support "
                             "one fact, and one candidate may support several facts. "
@@ -569,6 +594,23 @@ class OpenAICoreCandidateAttributor:
                             "An explicit first-person ordinary action may be recorded as a "
                             "literal Day fact without proving a self-Person Note; do not "
                             "invent a canonical user or assign another named subject. "
+                            "Inside the CURRENT complete selected source group, "
+                            "independently analyze COORDINATION and GRAMMATICAL ELLIPSIS: "
+                            "a predicate stated once can govern several separate people, "
+                            "days or locations. A second candidate may quote only its new "
+                            "participant, date and place while its complete proposed Core "
+                            "fact legitimately repeats that source predicate. Verify the "
+                            "shared predicate and scope against the entire CURRENT original "
+                            "source, not merely the second candidate anchor. Source "
+                            "inheritance labels are untrusted hints; confirm the grammar "
+                            "directly and reject any uncertain or competing antecedent. "
+                            "When the grammar unambiguously supports two separate events, "
+                            "attribute each to its own source candidate and Core fact, "
+                            "rather than calling the second event needs_clarification "
+                            "solely because its verb was omitted in the coordinated "
+                            "clause. Preserve each original participant, tense, polarity, "
+                            "place and time; never copy the prior participant or event "
+                            "if the original source does not support that second fact. "
                             "For independent candidates and distinct proposed facts, "
                             "judge EACH candidate/fact semantic correspondence independently. "
                             "If a participant, event, polarity or temporal owner is lost, "
@@ -886,6 +928,7 @@ def review_model_candidate_fact_coverage(
     attributor: OpenAICoreCandidateAttributor,
     *,
     canonical_binding: object | None = None,
+    verified_temporal: object | None = None,
 ):
     """Pass an independent model proposal through existing Core prewrite authority.
 
@@ -895,7 +938,13 @@ def review_model_candidate_fact_coverage(
     """
     from .candidate_coverage import CoreCandidateCoverageClaim, build_candidate_coverage_manifest
 
-    graph = attributor.propose_graph(source, context, plan, canonical_binding=canonical_binding)
+    graph = attributor.propose_graph(
+        source,
+        context,
+        plan,
+        canonical_binding=canonical_binding,
+        verified_temporal=verified_temporal,
+    )
     if not graph.matches_original_plan(source, plan) or graph.may_authorize_writes:
         raise CandidateAttributionError("Candidate graph does not match the current Core plan")
     # Retain existing strict legacy 1:1 canonical reference validation when
