@@ -36,6 +36,7 @@ from odyssey_core.request_planning import (
 )
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 from odyssey_runtime.candidate_route_dispatch import execute_candidate_routed_message
+from odyssey_runtime.composition import _ScopedTaskRouteExecutor
 from odyssey_runtime.hybrid_group_compiler import compile_hybrid_candidate_bundle
 from odyssey_runtime.scoped_temporal_handoff import ScopedTemporalHandoff
 from tests.apps.test_fact_candidates import CASES
@@ -324,7 +325,8 @@ def test_scoped_task_executor_reuses_verified_date_without_predecessor_task_writ
         context_limit=5,
         request_id_factory=lambda: "scoped-task-bridge",
         bundle_compiler=_enabled_compiler(),
-        task_route_executor=ScopedTasks(),
+        # Exercise the exact composition adapter contract, not only the fake app.
+        task_route_executor=_ScopedTaskRouteExecutor(ScopedTasks().execute_scoped),
     )
     assert result.status is ApplicationStatus.COMPLETED, result.execution_flow
     assert seen == [

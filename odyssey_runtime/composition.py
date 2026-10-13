@@ -38,9 +38,13 @@ from odyssey_apps.tasks import (
     TaskOperation,
     TaskQueryError,
     TaskQueryService,
+    TaskScopedEvidence,
+    TaskScopedExecution,
+    TaskScopedInterpretation,
     TaskWorkSessionService,
     WorkSessionError,
     WorkSessionSnapshot,
+    compose_scoped_task_domain_interpretation,
     compose_task_domain_interpretation,
     compose_work_session_activity_date,
     compose_work_session_times,
@@ -144,6 +148,13 @@ from .routing import (
     is_route_execution_id,
 )
 from .serialization import application_result_to_response, operational_to_response
+
+
+@dataclass(frozen=True)
+class _ScopedTaskRouteExecutor:
+    """Expose the dispatcher-required scoped entrypoint, never the legacy 4-arg fallback."""
+
+    execute_scoped: Callable[..., TaskScopedExecution]
 
 
 def _combined_write_preflight_guard(
@@ -2424,12 +2435,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 request_id_factory=lambda: request_id,
                 history_recorder=history_recorder,
                 route_ambiguity_recorder=record_route_ambiguity,
-                # Keep Task source routed to the registered Task capability.
-                # Until the scoped Tasks executor is wired, the generic dispatcher
-                # must fail closed rather than falling back to a Day/Core write.
+                # Keep Task source routed only to the registered scoped Tasks lifecycle.
+                # The dispatcher has no Day/Core fallback for task candidates.
                 bundle_compiler=lambda proposal: compile_hybrid_candidate_bundle(
                     proposal, enable_tasks=True
                 ),
+                task_route_executor=_ScopedTaskRouteExecutor(execute_scoped_tasks),
             ),
         )
 
@@ -2468,7 +2479,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         """One request-local, read-free provider interpretation and its measured evidence."""
 
         clock: dict[str, str]
-        value: TemporalInterpretation | TaskInterpretation | None
+        value: TemporalInterpretation | TaskInterpretation | TaskScopedInterpretation | None
         stage: OperationalStage
 
     def prepare_temporal_interpretation(
@@ -2552,6 +2563,44 @@ def build_runtime_from_environment() -> RuntimeComposition:
             task,
             OperationalStage(
                 "tasks.interpretation",
+                OperationalOutcome.COMPLETED,
+                duration,
+                model=interpreter.model,
+                reasoning_effort=interpreter.reasoning_effort,
+                usage=normalize_provider_usage(interpreter.last_usage),
+            ),
+        )
+
+    def prepare_scoped_task_interpretation(
+        source_text: str, scoped_evidence: TaskScopedEvidence
+    ) -> _PreparedInterpretation:
+        """Interpret one hybrid Task route without granting its source evidence mutation authority."""
+        clock = _current_time()
+        interpreter = OpenAITaskInterpreter.from_environment()
+        started = perf_counter()
+        try:
+            task = interpreter.interpret_scoped(source_text, scoped_evidence=scoped_evidence)
+        except TaskInterpretationError as error:
+            duration = max(0.0, (perf_counter() - started) * 1000)
+            return _PreparedInterpretation(
+                clock,
+                None,
+                OperationalStage(
+                    "tasks.scoped_interpretation",
+                    OperationalOutcome.FAILED,
+                    duration,
+                    model=interpreter.model,
+                    reasoning_effort=interpreter.reasoning_effort,
+                    usage=normalize_provider_usage(interpreter.last_usage),
+                    error_category=type(error).__name__,
+                ),
+            )
+        duration = max(0.0, (perf_counter() - started) * 1000)
+        return _PreparedInterpretation(
+            clock,
+            task,
+            OperationalStage(
+                "tasks.scoped_interpretation",
                 OperationalOutcome.COMPLETED,
                 duration,
                 model=interpreter.model,
@@ -2987,6 +3036,134 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 **_temporal_flow(temporal),
                 **_task_flow(task),
             },
+        )
+
+    def execute_scoped_tasks(
+        source_text: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+        *,
+        scoped_evidence: TaskScopedEvidence,
+    ) -> TaskScopedExecution:
+        """Run one evidence-bound hybrid Task mutation through the ordinary Task/Core lifecycle.
+
+        Router provenance may only constrain the scoped Tasks interpreter.  The interpreter still
+        chooses the Task operation, while fresh Temporal interpretation, Task lifecycle validation,
+        canonical Core planning, persistence, and Git history remain their existing owners.
+        """
+        if scoped_evidence.source_text != source_text:
+            raise ValueError("Scoped Task evidence source changed before interpretation")
+        prepared = prepare_scoped_task_interpretation(source_text, scoped_evidence)
+        task_duration = prepared.stage.duration_ms or 0.0
+        scoped = prepared.value
+        if not isinstance(scoped, TaskScopedInterpretation):
+            return TaskScopedExecution(
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="TASK_SCOPED_INTERPRETATION_FAILED",
+                    operational=OperationalEvidence(task_duration, (prepared.stage,)),
+                )
+            )
+        task = scoped.task
+        # Candidate task groups are mutation-only.  Queries and Work Sessions use their normal
+        # routed entry points and cannot be smuggled through source-scoped hybrid evidence.
+        if task.operation in {
+            TaskOperation.QUERY,
+            TaskOperation.START_WORK_SESSION,
+            TaskOperation.STOP_WORK_SESSION,
+            TaskOperation.EDIT_WORK_SESSION,
+            TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+        }:
+            return TaskScopedExecution(
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="TASK_SCOPED_OPERATION_UNSUPPORTED",
+                    operational=OperationalEvidence(task_duration, (prepared.stage,)),
+                )
+            )
+
+        stages = [prepared.stage]
+        temporal: TemporalInterpretation | None = None
+        total_duration = task_duration
+        if task.requires_temporal():
+            temporal_evidence = prepare_temporal_interpretation(source_text, conversation_context)
+            duration = temporal_evidence.stage.duration_ms or 0.0
+            if not isinstance(temporal_evidence.value, TemporalInterpretation) or any(
+                kind
+                not in {
+                    TemporalResolutionKind.EXACT_DATE,
+                    TemporalResolutionKind.EXACT_DATETIME,
+                }
+                for kind in temporal_evidence.value.kinds()
+            ):
+                failed = replace(
+                    temporal_evidence.stage,
+                    outcome=OperationalOutcome.FAILED,
+                    error_category=(
+                        temporal_evidence.stage.error_category or "TaskRequiresExactTemporalValue"
+                    ),
+                )
+                return TaskScopedExecution(
+                    ApplicationResult(
+                        request_id,
+                        ApplicationStatus.NEEDS_ATTENTION,
+                        (),
+                        (),
+                        planning_error="TASK_TEMPORAL_UNRESOLVED",
+                        operational=OperationalEvidence(
+                            total_duration + duration, tuple((*stages, failed))
+                        ),
+                    )
+                )
+            temporal = temporal_evidence.value
+            total_duration += duration
+            stages.append(temporal_evidence.stage)
+        try:
+            domain = compose_scoped_task_domain_interpretation(
+                scoped, temporal, scoped_evidence, now=prepared.clock["timestamp"]
+            )
+        except TaskInterpretationError:
+            return TaskScopedExecution(
+                ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="TASK_SCOPED_DOMAIN_INVALID",
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                ),
+                temporal,
+            )
+        core_result = core_execute(
+            source_text,
+            request_id,
+            authenticated_actor,
+            conversation_context_override=conversation_context,
+            domain_interpretation=domain,
+            planner_decorator=lambda planner: TaskCorePlanner(planner, task),
+            write_preflight_guard=TaskLifecycleGuard(task.operation),
+        )
+        return TaskScopedExecution(
+            replace(
+                core_result,
+                operational=OperationalEvidence(
+                    total_duration + (core_result.operational.total_duration_ms or 0.0),
+                    (*stages, *core_result.operational.stages),
+                ),
+                execution_flow={
+                    **(core_result.execution_flow or {}),
+                    **_temporal_flow(temporal),
+                    **_task_flow(task),
+                },
+            ),
+            temporal,
         )
 
     if "tasks" in enabled_application_ids:
