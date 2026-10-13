@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
+import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 from urllib.parse import urlsplit
@@ -36,6 +40,30 @@ _JSON_HTML_ESCAPES = str.maketrans(
         "\u2029": "\\u2029",
     }
 )
+
+
+def _log_dev_hybrid_error_category(error: Exception) -> None:
+    """Log bounded exception *locations*, never messages or user/provider data.
+
+    This remains completely inert in PROD and outside an explicitly enabled
+    experimental DEV hybrid. The public HTTP response remains sanitized.
+    """
+    if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or os.environ.get(
+        "ODYSSEY_HYBRID_DEV_ENABLED"
+    ) not in {"1", "true", "True"}:
+        return
+    current: BaseException | None = error
+    parts: list[str] = []
+    for _ in range(3):
+        if current is None:
+            break
+        frames = traceback.extract_tb(current.__traceback__)[-3:]
+        bounded = ",".join(
+            f"{Path(frame.filename).name}:{frame.lineno}:{frame.name[:48]}" for frame in frames
+        )
+        parts.append(f"{type(current).__name__[:80]}[{bounded}]")
+        current = current.__cause__
+    print("odyssey_dev_hybrid_exception " + " <- ".join(parts), file=sys.stderr, flush=True)
 
 
 def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765) -> None:
@@ -325,7 +353,8 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     {"error": "delivery result conflict", "request_id": request_id},
                 )
                 return
-            except Exception:
+            except Exception as error:
+                _log_dev_hybrid_error_category(error)
                 payload: dict[str, Any] = {"error": "runtime failure"}
                 if request_id is not None:
                     payload["request_id"] = request_id
