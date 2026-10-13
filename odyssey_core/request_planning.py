@@ -361,6 +361,44 @@ class RequestPlan:
     presentation_intent: str = "answer"
 
 
+class RequestDisposition(StrEnum):
+    """Describe whether a validated plan may execute without mutation authority.
+
+    This is intentionally derived from Core's closed action types rather than
+    source wording, Router candidates, or an empty candidate proposal.
+    """
+
+    READ_ONLY = "read_only"
+    WRITE_OR_DELEGATE = "write_or_delegate"
+    MIXED = "mixed"
+
+
+def request_disposition(plan: RequestPlan) -> RequestDisposition:
+    """Classify a validated Core plan by its executable action authority.
+
+    Args:
+        plan: The already parsed and validated plan for one exact user source.
+
+    Returns:
+        ``READ_ONLY`` only when every action is a retrieval. ``MIXED`` keeps
+        retrieval plus a possible mutation/delegation together for a caller
+        that cannot safely execute both boundaries. All other plans retain
+        their hybrid write/delegate handling.
+
+    Raises:
+        TypeError: If the caller has not supplied a validated RequestPlan.
+    """
+    if not isinstance(plan, RequestPlan):
+        raise TypeError("RequestPlan is required")
+    has_read = any(isinstance(action, RetrieveAction) for action in plan.actions)
+    has_non_read = any(not isinstance(action, RetrieveAction) for action in plan.actions)
+    if has_read and not has_non_read:
+        return RequestDisposition.READ_ONLY
+    if has_read:
+        return RequestDisposition.MIXED
+    return RequestDisposition.WRITE_OR_DELEGATE
+
+
 @dataclass(frozen=True, slots=True)
 class PlannerClarification:
     """Represent a closed non-executing request for user clarification."""

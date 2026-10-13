@@ -36,10 +36,12 @@ def test_hybrid_is_disabled_by_default_and_v0_core_remains_authoritative(monkeyp
 def test_hybrid_refuses_missing_authenticated_conversation_without_v0_fallback() -> None:
     """An enabled hybrid seam never runs for an unbound delivery."""
     calls: list[tuple[object, ...]] = []
+    reads: list[tuple[object, ...]] = []
     runtime = RuntimeComposition(
         core_execute=lambda source, request_id, *args: _completed(request_id),
         refresh_indexes=lambda: None,
         hybrid_candidate_execute=lambda *args: calls.append(args) or _completed(args[1]),
+        hybrid_read_execute=lambda *args: reads.append(args) or _completed(args[1]),
     )
 
     result = runtime.execute("Mañana iré al cine.", "hybrid-unbound")
@@ -47,6 +49,7 @@ def test_hybrid_refuses_missing_authenticated_conversation_without_v0_fallback()
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert result.clarification_code == "HYBRID_AUTHENTICATED_CONVERSATION_REQUIRED"
     assert calls == []
+    assert reads == []
 
 
 def test_hybrid_receives_only_the_authenticated_conversation_context(tmp_path) -> None:
@@ -68,6 +71,88 @@ def test_hybrid_receives_only_the_authenticated_conversation_context(tmp_path) -
 
     assert result.status is ApplicationStatus.COMPLETED
     assert calls == [("Mañana iré al cine.", "hybrid-bound", ACTOR, "main")]
+
+
+def test_hybrid_proven_read_preserves_the_exact_source_and_bypasses_candidates(tmp_path) -> None:
+    """A Core-proven retrieval keeps ordinary reading available in hybrid DEV."""
+    reads: list[tuple[object, ...]] = []
+    candidates: list[tuple[object, ...]] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda source, request_id, *args: _completed(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        hybrid_read_execute=lambda *args: reads.append(args) or _completed(args[1]),
+        hybrid_candidate_execute=lambda *args: candidates.append(args) or _completed(args[1]),
+    )
+
+    result = runtime.execute("¿Dónde trabajo?", "read-request", "main", ACTOR)
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert reads == [("¿Dónde trabajo?", "read-request", ACTOR, "main")]
+    assert candidates == []
+
+
+def test_hybrid_possible_write_stays_on_the_candidate_guard(tmp_path) -> None:
+    """An unproven read disposition cannot bypass hybrid write validation."""
+    candidates: list[tuple[object, ...]] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda source, request_id, *args: _completed(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        hybrid_read_execute=lambda *args: None,
+        hybrid_candidate_execute=lambda *args: candidates.append(args) or _completed(args[1]),
+    )
+
+    result = runtime.execute(
+        "Guardar que trabajo en Synthetic Systems.", "write-request", "main", ACTOR
+    )
+
+    assert result.status is ApplicationStatus.COMPLETED
+    assert candidates == [
+        ("Guardar que trabajo en Synthetic Systems.", "write-request", ACTOR, "main")
+    ]
+
+
+def test_hybrid_mixed_result_does_not_silently_drop_the_read_or_write(tmp_path) -> None:
+    """A proven mixed plan returns its clarification without candidate fallback."""
+    candidates: list[tuple[object, ...]] = []
+    mixed = ApplicationResult(
+        "mixed-request",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        clarification_code="HYBRID_MIXED_REQUEST_REQUIRES_SEPARATE_REQUESTS",
+    )
+    runtime = RuntimeComposition(
+        core_execute=lambda source, request_id, *args: _completed(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        hybrid_read_execute=lambda *args: mixed,
+        hybrid_candidate_execute=lambda *args: candidates.append(args) or _completed(args[1]),
+    )
+
+    result = runtime.execute(
+        "¿Dónde trabajo? Guarda que hoy teletrabajo.", "mixed-request", "main", ACTOR
+    )
+
+    assert result.clarification_code == "HYBRID_MIXED_REQUEST_REQUIRES_SEPARATE_REQUESTS"
+    assert candidates == []
+
+
+def test_hybrid_ambiguous_disposition_remains_on_candidate_guard(tmp_path) -> None:
+    """No read execution follows an unresolved semantic disposition."""
+    candidates: list[tuple[object, ...]] = []
+    runtime = RuntimeComposition(
+        core_execute=lambda source, request_id, *args: _completed(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        hybrid_read_execute=lambda *args: None,
+        hybrid_candidate_execute=lambda *args: candidates.append(args) or _completed(args[1]),
+    )
+
+    runtime.execute("Haz lo necesario con mi trabajo.", "ambiguous-request", "main", ACTOR)
+
+    assert candidates == [("Haz lo necesario con mi trabajo.", "ambiguous-request", ACTOR, "main")]
 
 
 @pytest.mark.parametrize("value", ("1", "true", "True"))

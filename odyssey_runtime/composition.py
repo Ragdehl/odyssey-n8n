@@ -117,10 +117,12 @@ from odyssey_core.persistence import ActorInput
 from odyssey_core.reference_preflight import ReferencePreflightError, current_identity_guard
 from odyssey_core.request_planning import (
     PlannerClarification,
+    RequestDisposition,
     RequestPlan,
     RetrieveAction,
     SelectionCriteria,
     WriteAction,
+    request_disposition,
     validate_request_plan,
 )
 from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_entity
@@ -386,6 +388,9 @@ class RuntimeComposition:
     ) = None
     hybrid_candidate_execute: (
         Callable[[str, str, AuthenticatedActorContext | None, str | None], ApplicationResult] | None
+    ) = None
+    hybrid_read_execute: (
+        Callable[[str, str, AuthenticatedActorContext, str], ApplicationResult | None] | None
     ) = None
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -1821,7 +1826,14 @@ class RuntimeComposition:
                     clarification_code="HYBRID_AUTHENTICATED_CONVERSATION_REQUIRED",
                 )
             else:
-                result = self.hybrid_candidate_execute(
+                read_result = (
+                    self.hybrid_read_execute(
+                        user_request, request_id, authenticated_actor, conversation_id
+                    )
+                    if self.hybrid_read_execute is not None
+                    else None
+                )
+                result = read_result or self.hybrid_candidate_execute(
                     user_request, request_id, authenticated_actor, conversation_id
                 )
         elif self.application_router is not None:
@@ -2278,11 +2290,16 @@ def build_runtime_from_environment() -> RuntimeComposition:
         planner_decorator: Callable[[Any], Any] | None = None,
         write_preflight_guard: WritePreflightGuard | None = None,
         prepared_core: _PrecomputedCorePlan | None = None,
+        fixed_plan: RequestPlan | None = None,
         dependent_handoff: DependentRouteHandoff | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
         if prepared_core is not None:
-            if resume_plan is not None or prepared_core.source != user_request:
+            if (
+                resume_plan is not None
+                or fixed_plan is not None
+                or prepared_core.source != user_request
+            ):
                 raise ValueError("prepared Core source or continuation mismatch")
             if prepared_core.domain != domain_interpretation:
                 raise ValueError("prepared Core domain mismatch")
@@ -2313,7 +2330,13 @@ def build_runtime_from_environment() -> RuntimeComposition:
         )
         execution_schema = planning_schema_for_capability(schema, capability_id)
         execution_semantic_index = application_semantic_indexes.get(capability_id, semantic_index)
-        if resume_plan is not None:
+        if fixed_plan is not None:
+            if resume_plan is not None:
+                raise ValueError("fixed plan cannot resume a clarification")
+            if request_disposition(fixed_plan) is not RequestDisposition.READ_ONLY:
+                raise ValueError("fixed plan must be proven read-only")
+            planner = _FixedRequestPlanner(fixed_plan)
+        elif resume_plan is not None:
             planner = _FixedRequestPlanner(resume_plan)
         elif prepared_core is not None:
             planner = prepared_core.planner
@@ -2649,6 +2672,52 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 task_route_executor=_ScopedTaskRouteExecutor(execute_scoped_tasks),
             ),
         )
+
+    def execute_hybrid_proven_read(
+        source: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext,
+        conversation_id: str,
+    ) -> ApplicationResult | None:
+        """Execute only an exact-source Core plan proven to contain retrieval actions.
+
+        Planning is read-only. A non-read, mixed, malformed, or unavailable
+        plan never reaches generic Core execution here; the caller retains the
+        guarded candidate route for write-capable work.
+        """
+        clock = _current_time()
+        planner = OpenAIRequestPlanner.from_environment(
+            schema, {key: clock[key] for key in ("date", "time", "timezone")}
+        )
+        try:
+            plan = planner.plan(
+                source,
+                LocalConversationStore(
+                    conversation_root_resolver.resolve(authenticated_actor.stable_user_id)
+                ).recent_context(exclude_request_id=request_id),
+            )
+        except Exception:
+            return None
+        if isinstance(plan, PlannerClarification) or not isinstance(plan, RequestPlan):
+            return None
+        disposition = request_disposition(plan)
+        if disposition is RequestDisposition.READ_ONLY:
+            return core_execute(
+                source,
+                request_id,
+                authenticated_actor,
+                conversation_id,
+                fixed_plan=plan,
+            )
+        if disposition is RequestDisposition.MIXED:
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                clarification_code="HYBRID_MIXED_REQUEST_REQUIRES_SEPARATE_REQUESTS",
+            )
+        return None
 
     notes_service = NotesQueryService(repository, schema, context_index)
     calendar_application = CalendarApplication(
@@ -3586,6 +3655,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         product_progress_store=ProductProgressStore(),
         notes_mutation_actor=notes_mutation_actor,
         hybrid_candidate_execute=execute_hybrid_candidate_route if hybrid_dev_enabled else None,
+        hybrid_read_execute=execute_hybrid_proven_read if hybrid_dev_enabled else None,
     )
 
 
