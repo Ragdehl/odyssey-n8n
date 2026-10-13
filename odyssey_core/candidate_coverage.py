@@ -424,13 +424,25 @@ def validate_candidate_coverage_manifest(
                 source, context, plan, action_index, unit_index, fact_index, index
             )
         grouped_participant_helpers: tuple[int, ...] | None = None
-        if (
-            context.scoped_route_source
-            and len(unit.facts) > 1
-            and any(
-                role.role == "participants"
-                for candidate in context.candidates
-                for role in candidate.roles
+        if context.scoped_route_source and (
+            (
+                len(unit.facts) > 1
+                and any(
+                    role.role == "participants"
+                    for candidate in context.candidates
+                    for role in candidate.roles
+                )
+            )
+            or (
+                context.hybrid_interpretation_mode
+                and context.candidates[index].kind == "occurrence"
+                and not any(role.role == "reference" for role in context.candidates[index].roles)
+                and (
+                    any(role.role == "participants" for role in context.candidates[index].roles)
+                    or any(
+                        edge.role == "participants" for edge in context.candidates[index].inherits
+                    )
+                )
             )
         ):
             # General Core source-ownership proof: check each reviewed
@@ -482,6 +494,10 @@ def validate_candidate_coverage_manifest(
                         unit_index,
                         canonical_binding=canonical_binding,
                         allow_independent_sibling_units=context.hybrid_interpretation_mode,
+                    )
+                elif context.hybrid_interpretation_mode:
+                    raise ValueError(
+                        "Hybrid multi-reference roles require general source-owned proof"
                     )
                 else:
                     validate_two_named_participant_fact(

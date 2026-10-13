@@ -68,6 +68,18 @@ variance never weakens the gate. Generalize the regression with additional note 
 shapes when the product invariant is type-generic. Do not remove or relax an accepted real-chat
 sentinel merely to make a later prompt or architecture change pass.
 
+### 2026-10-13 — Auditoria exhaustiva de formas y casos pendientes
+
+Consultar docs/architecture/hybrid-source-validator-audit-20261013.md.
+La arquitectura hibrida usa evidencia fuente 1..N y nunca plantillas
+espanolas de dos nombres/conversaciones. F22 completo funciona en
+replay real con tres Tasks y enlaces canonicos; nuevo conteo 24/27.
+F09 sigue NO ACEPTADO por duplicacion semantica de Marta aunque el
+WRITE informe COMPLETED. F14/F27 conservan partes correctas y
+no resuelven el pronombre ambiguo el por cercania.
+Priorizar contrato Core semantico de ya representado con readback
+canonicamente verificado. NO parchear nombres ni verbos de ejemplos.
+
 ### 2026-10-13 — Hybrid validator generalization (implemented, feature branch)
 
 The previous Spanish phrase-template pilot in

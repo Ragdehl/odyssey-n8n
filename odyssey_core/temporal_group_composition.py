@@ -58,7 +58,7 @@ def compose_shared_clock_group(
     context.validate(interpretation.source_text)
     if (
         len(context.candidates) < 2
-        or len(context.candidates) > 6
+        or len(context.candidates) * 2 > 16
         or any(c.state != "candidate" for c in context.candidates)
         or any(
             role.role in {"condition", "polarity", "replacement", "time_approx"}

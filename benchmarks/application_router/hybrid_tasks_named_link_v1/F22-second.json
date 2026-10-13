@@ -1,0 +1,31 @@
+{
+  "source_sha256": "baa948e048d314ae510ae8f616273fd9d99b67f91a7a4c39fb52ff8b35241c73",
+  "fragment": " y escribir a Luis",
+  "frozen_task_interpreter": {
+    "model": "gpt-6-luna",
+    "status": "completed",
+    "output_text": "{\"operation\":\"CREATE\",\"temporal_mentions\":[],\"relationship_mentions\":[],\"clear_fields\":[],\"query_scope\":null,\"task_reference\":\"\",\"activity_text\":\"\",\"activity_target\":\"NONE\",\"inherited_temporal_roles\":[{\"reference_index\":0,\"role\":\"TARGET_DATE\"}]}"
+  },
+  "trusted_inherited_day": {
+    "source_text": "Hoy",
+    "value": "2026-10-04",
+    "original_start": 0,
+    "original_end": 3,
+    "original_sha256": "baa948e048d314ae510ae8f616273fd9d99b67f91a7a4c39fb52ff8b35241c73",
+    "origin_route_index": 0
+  },
+  "real_new_model_outputs": [
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"escribir a Luis\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"task\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Escribir a \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[{\"field\":\"status\",\"op\":\"set\",\"value\":\"pending\"},{\"field\":\"target_date\",\"op\":\"set\",\"value\":\"2026-10-04\"}],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 13698,
+      "output_tokens": 459
+    }
+  ],
+  "status": "failed",
+  "planning_error": "Luna semantic WRITE omitted required temporal wording/temporal evidence",
+  "changed_notes": {},
+  "estimated_new_usd": 0.00361944,
+  "estimated_cumulative_usd": 0.65901509
+}

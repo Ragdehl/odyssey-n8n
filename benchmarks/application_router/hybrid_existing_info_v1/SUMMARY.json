@@ -1,0 +1,17 @@
+{
+  "cases": [
+    {
+      "case": "F09",
+      "status": "completed",
+      "calls": 3,
+      "notes": [
+        "Luis.md",
+        "Marta.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.00344124,
+  "estimated_cumulative_usd": 0.66245633
+}

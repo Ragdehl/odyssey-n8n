@@ -1435,3 +1435,17 @@ Future opportunistic Clean Architecture direction is documented in
 clean-architecture-incremental-direction.md and AGENTS.md; no rewrite
 is planned now. Working precedence: complete general hybrid gates and
 give the user a testable DEV build before refactoring architecture.
+
+
+## 2026-10-13 — Auditoria general y F22 completo (24/27)
+
+F22 ya finaliza con tres Task Notes reales en boveda de pruebas, enlaces
+canonicos Ana/Luis y fechas 04/10, 04/10, 05/10. F14/F27 conservan
+correctamente hechos previos y dejan el pronombre ambiguo pendiente.
+F09 continua con duplicacion semantica pese a corregir la concordancia
+verbal: pendiente contrato Core de hecho ya representado y readback.
+La auditoria por llamadas efectivas a los validadores y sus contratos
+activos/historicos esta en hybrid-source-validator-audit-20261013.md.
+Eliminadas restricciones arbitrarias 4 referencias / 6 eventos y
+conjunciones espanolas como garantia. No DEV/PROD. Clean Architecture
+sigue diferida e incremental.

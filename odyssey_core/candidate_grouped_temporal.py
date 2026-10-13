@@ -27,7 +27,8 @@ def validate_grouped_dated_occurrence(
     if temporal is None or temporal.source_text != source:
         raise ValueError("Grouped event has no verified Temporal evidence")
     if (
-        not 2 <= len(context.candidates) <= 6
+        not 2 <= len(context.candidates)
+        or len(context.candidates) * 2 > 16
         or any(c.kind != "occurrence" or c.state != "candidate" for c in context.candidates)
         or any(
             role.role in {"condition", "polarity", "replacement", "modality", "time_approx"}

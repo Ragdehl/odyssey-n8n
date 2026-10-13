@@ -79,8 +79,11 @@ def _canonical_rendered_fact_text(
     Do not treat source/fact word overlap or literal wikilink labels as proof.
     """
     rendered = source_text
-    if not references or len(references) > 4:
+    if not references:
         return None
+    # Real source facts can link an arbitrary bounded number of verified
+    # identities; per-link Core evidence, not a fixed count of four, protects
+    # the canonical fact readback.
     bound = 0
     for reference_index, reference in enumerate(references):
         marker = f"{{{{ref:{reference_index}}}}}"

@@ -1064,6 +1064,24 @@ def validate_plan_against_domain_interpretation(
     anchors = tuple(item.temporal_anchor() for item in evidence)
     found: Counter[str] = Counter()
     consumed: Counter[str] = Counter()
+    if interpretation.capability_id == "tasks":
+        # A verified Temporal date consumed by an independently checked
+        # Tasks-owned scheduling property must not additionally appear as
+        # a fabricated calendar link in the human-readable action fact.
+        property_values = {
+            item.value
+            for item in interpretation.property_evidence()
+            if item.kind
+            in {
+                "property.target_date",
+                "property.planned_start_at",
+                "property.planned_end_at",
+                "property.deadline_at",
+            }
+        }
+        consumed.update(
+            {value: count for value, count in allowed.items() if value in property_values}
+        )
 
     for action in plan.actions:
         if not isinstance(action, WriteAction):

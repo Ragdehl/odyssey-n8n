@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "case": "F14",
+      "status": "partial",
+      "calls": 4,
+      "notes": [
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    },
+    {
+      "case": "F27",
+      "status": "partial",
+      "calls": 4,
+      "notes": [
+        "calendar/days/2026-10-03.md",
+        "calendar/days/2026-10-04.md"
+      ],
+      "error": null
+    }
+  ],
+  "estimated_new_usd": 0.00745184,
+  "estimated_cumulative_usd": 0.65539565
+}

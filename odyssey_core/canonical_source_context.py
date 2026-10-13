@@ -7,6 +7,7 @@ targets, or bypass Core's existing reference/identity preflight.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .candidate_context import CoreCandidateContext
@@ -22,13 +23,17 @@ class CanonicalSourceNameHint:
     mention: str
     name: str
     note_type: str
+    content_excerpt: str = ""
 
     def to_prompt_payload(self) -> dict[str, str]:
-        return {
+        payload = {
             "exact_source_mention": self.mention,
             "existing_note_name": self.name,
             "existing_note_type": self.note_type,
         }
+        if self.content_excerpt:
+            payload["existing_note_content_excerpt"] = self.content_excerpt
+        return payload
 
 
 def matching_canonical_source_names(
@@ -56,7 +61,7 @@ def matching_canonical_source_names(
     paths = repository.list_markdown_paths()
     if len(paths) > MAX_SCANNED_NOTES:
         return ()  # No unbounded vault enumeration in the critical path.
-    matched: dict[str, list[tuple[str, str]]] = {}
+    matched: dict[str, list[tuple[str, str, str]]] = {}
     for path in paths:
         try:
             note = parse_note(repository.read_text(path))
@@ -69,13 +74,62 @@ def matching_canonical_source_names(
             continue
         key = name.casefold()
         if key in mention_by_key:
-            matched.setdefault(key, []).append((name, kind))
+            matched.setdefault(key, []).append((name, kind, note.content.strip()[:320]))
     hints = []
     for key, mention in mention_by_key.items():
         values = matched.get(key, [])
         if len(values) == 1:
-            name, kind = values[0]
-            hints.append(CanonicalSourceNameHint(mention, name, kind))
+            name, kind, excerpt = values[0]
+            hints.append(CanonicalSourceNameHint(mention, name, kind, excerpt))
         if len(hints) >= MAX_HINTS:
             break
     return tuple(hints)
+
+
+def matching_canonical_names_in_source(
+    source: str,
+    repository: VaultRepository,
+    schema: dict,
+) -> tuple[CanonicalSourceNameHint, ...]:
+    """Read-only exact-name hints for specialized consumers with no Router roles.
+
+    A raw whole-word occurrence is evidence that a name appears in the source,
+    NOT that it denotes the known Note. The planner must still decide source
+    semantics, and Core must independently resolve every proposed link.
+    """
+    if (
+        not isinstance(source, str)
+        or not source.strip()
+        or len(source) > 4096
+        or not isinstance(repository, VaultRepository)
+    ):
+        raise ValueError("Untrusted source or repository for canonical hints")
+    paths = repository.list_markdown_paths()
+    if len(paths) > MAX_SCANNED_NOTES:
+        raise ValueError("Canonical name hint lookup exceeds current scan budget")
+    names: dict[str, list[tuple[str, str, str]]] = {}
+    for path in paths:
+        try:
+            note = parse_note(repository.read_text(path))
+            validate_note(note, schema)
+        except (NoteFormatError, NoteValidationError, OSError, ValueError):
+            continue
+        name = note.metadata.get("name")
+        kind = note.metadata.get("type")
+        if not isinstance(name, str) or not isinstance(kind, str):
+            continue
+        if not name.strip() or len(name) > 128:
+            continue
+        if re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", source, re.IGNORECASE):
+            names.setdefault(name.casefold(), []).append((name, kind, note.content.strip()[:320]))
+    result: list[CanonicalSourceNameHint] = []
+    for entries in names.values():
+        if len(entries) != 1:
+            continue
+        name, kind, content = entries[0]
+        match = re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", source, re.IGNORECASE)
+        if match is not None:
+            result.append(CanonicalSourceNameHint(match.group(), name, kind, content))
+        if len(result) >= MAX_HINTS:
+            break
+    return tuple(result)

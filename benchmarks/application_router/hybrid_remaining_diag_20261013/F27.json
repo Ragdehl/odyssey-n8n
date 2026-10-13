@@ -1,0 +1,116 @@
+{
+  "case": "F27",
+  "source_sha256": "c49ba37d4cf0463364d17bbbaa5d0872351b976962412aa2f3dc9f61ac93edc9",
+  "status": "partial",
+  "error": null,
+  "real_model_outputs": [
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"version\":1,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablé\",\"occurrence\":0},{\"text\":\"Eric\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablé\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Eric\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"con Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"order\",\"anchor\":{\"text\":\"después\",\"occurrence\":0}}],\"inheritance\":[{\"role\":\"predicate\",\"from_unit\":1},{\"role\":\"date\",\"from_unit\":1}],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"iré\",\"occurrence\":0},{\"text\":\"cine\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"iré\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"cine\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}},{\"role\":\"reference\",\"anchor\":{\"text\":\"él\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"ambiguous_identity\"}]}",
+      "input_tokens": 1481,
+      "output_tokens": 576
+    },
+    {
+      "model": "gpt-6-luna",
+      "status": "completed",
+      "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-03\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}",
+      "input_tokens": 695,
+      "output_tokens": 106
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-03\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"literal\",\"text\":\"Ayer hablé con \"},{\"kind\":\"identity\",\"text\":\"Eric\",\"identity\":{\"description\":\"Eric\",\"binding\":\"described\",\"direct_name\":\"Eric\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]},{\"parts\":[{\"kind\":\"literal\",\"text\":\"Después hablé con \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}",
+      "input_tokens": 12043,
+      "output_tokens": 311
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "status": "completed",
+      "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"hablé\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"Ayer hablé con {{ref:0}}.\"],\"pending_reason\":null},{\"candidate_id\":\"candidate-2\",\"source_quote\":\"con Luis\",\"fact_ordinals\":[1],\"planned_fact_texts\":[\"Después hablé con {{ref:1}}.\"],\"pending_reason\":null}]}",
+      "input_tokens": 1606,
+      "output_tokens": 205
+    }
+  ],
+  "fresh_model_calls": 3,
+  "routes": [
+    {
+      "capability": "temporal",
+      "text": "Ayer hablé con Eric y después con Luis",
+      "stage_count": 4,
+      "status": "completed",
+      "temporal": [],
+      "plan": [
+        {
+          "operation": "record",
+          "type": "calendar_day",
+          "target": "2026-10-03",
+          "fact": "Ayer hablé con {{ref:0}}."
+        }
+      ],
+      "entities": [
+        {
+          "mention": "Eric",
+          "name": "Eric",
+          "status": "resolved",
+          "type": "person"
+        },
+        {
+          "mention": "Luis",
+          "name": "Luis",
+          "status": "resolved",
+          "type": "person"
+        }
+      ],
+      "writes": [
+        {
+          "status": "succeeded",
+          "operation": "CREATED",
+          "target": "2026-10-03"
+        }
+      ],
+      "steps": [
+        {
+          "name": "planner",
+          "input": "Ayer hablé con Eric y después con Luis",
+          "output": "record · calendar_day → 2026-10-03 · Ayer hablé con {{ref:0}}."
+        },
+        {
+          "name": "candidate_coverage",
+          "input": "Ayer hablé con Eric y después con Luis",
+          "output": ""
+        },
+        {
+          "name": "action.write",
+          "input": "record · calendar_day → 2026-10-03 · Ayer hablé con {{ref:0}}.",
+          "output": "succeeded: CREATED · 2026-10-03\nEric → Eric\nLuis → Luis"
+        },
+        {
+          "name": "pending",
+          "input": "Resultado de Core",
+          "output": "skipped"
+        }
+      ]
+    },
+    {
+      "capability": "temporal",
+      "text": ". Mañana iré al cine con él.",
+      "stage_count": 0,
+      "status": "needs_attention",
+      "temporal": [],
+      "plan": [],
+      "entities": [],
+      "writes": [],
+      "steps": [],
+      "depends_on": 0,
+      "reason": "ROUTE_DEPENDENCY_CANONICAL_EVIDENCE_UNAVAILABLE"
+    }
+  ],
+  "changed_notes": {
+    "calendar/days/2026-10-03.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\ndate: \"2026-10-03\"\nid: \"date:2026-10-03\"\nname: \"2026-10-03\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\n---\n\n# Added [[calendar/days/2026-10-04|04-10-2026]]\n- Ayer hablé con [[Eric|Eric]].\n  <!-- odyssey:fact request=route-1-a312d0c455328c880f110b011164fa76b0cb24d212b82ff2d61195afdbe2e34f ordinal=0 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->\n- Después hablé con [[Luis|Luis]].\n  <!-- odyssey:fact request=route-1-a312d0c455328c880f110b011164fa76b0cb24d212b82ff2d61195afdbe2e34f ordinal=1 recorded_at=2026-10-04T17:35:00+02:00 temporal=2026-10-03 -->",
+    "calendar/days/2026-10-04.md": "---\ncreated_at: \"2026-10-04T17:35:00+02:00\"\ncreated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\ndate: \"2026-10-04\"\nid: \"date:2026-10-04\"\nname: \"2026-10-04\"\nrevision: 1\nschema_version: 3\ntype: \"calendar_day\"\nupdated_at: \"2026-10-04T17:35:00+02:00\"\nupdated_by: {\"app\": \"isolated-v5-real-test\", \"human\": null}\n---\n\n"
+  },
+  "estimated_new_usd": 0.00745184,
+  "estimated_cumulative_usd": 0.65539565
+}

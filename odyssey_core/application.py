@@ -433,6 +433,17 @@ def execute_request(
     planner_started = monotonic()
     provider_recorder = _ProviderCallRecorder(monotonic, planner_started)
     try:
+        if getattr(planner, "wants_verified_source_names", False) and not getattr(
+            planner, "is_local_replay", False
+        ):
+            # Core, not a specialized app or Router, owns the exact
+            # read-only Note lookup. Hints NEVER authorize identity binding.
+            from .canonical_source_context import matching_canonical_names_in_source
+
+            bind = getattr(planner, "bind_verified_source_note_names", None)
+            if not callable(bind):
+                raise ValueError("Planner source-note hint contract unavailable")
+            bind(matching_canonical_names_in_source(user_request, repository, schema))
         if getattr(planner, "is_local_replay", False):
             plan = planner.plan(user_request)
         else:

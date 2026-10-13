@@ -25,8 +25,9 @@ def validate_one_mutual_relationship_fact(
 ) -> None:
     """Check two original named parties against one directed canonical fact.
 
-    This guards only reciprocal constructions with explicit two-name subjects
-    and a shared `se ...` predicate. It does not claim a general ontology
+    This guards reciprocal constructions with two source-owned subjects
+    and one explicit shared predicate, without requiring Spanish `se` or `y`.
+    It does not claim a general ontology
     resolver or semantic equivalence proof for other relation classes.
     """
     if candidate.kind != "relationship" or candidate.state != "candidate":
@@ -54,9 +55,11 @@ def validate_one_mutual_relationship_fact(
     first, second = people
     predicate = predicates[0]
     if (
-        source[first.end : second.start] != " y "
-        or source[second.end : predicate.start] != " "
-        or not predicate.text.startswith("se ")
+        not source[first.end : second.start].strip()
+        or len(source[first.end : second.start]) > 100
+        or any(mark in source[first.end : second.start] for mark in ".;!?")
+        or source[second.end : predicate.start].strip()
+        or not second.end <= predicate.start
         or not all(
             any(
                 anchor.start <= span.start and span.end <= anchor.end
