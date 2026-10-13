@@ -17,6 +17,7 @@ from odyssey_apps.router import RouterError
 from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
+from odyssey_core.git_history import HistoryRecorder
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
@@ -104,6 +105,7 @@ def execute_candidate_routed_message(
     now: str,
     context_limit: int,
     request_id_factory: Callable[[], str],
+    history_recorder: HistoryRecorder | None = None,
     candidate_pending_recorder: Callable[[object], str] | None = None,
     route_ambiguity_recorder: Callable[[object, tuple[object, ...]], str] | None = None,
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
@@ -116,7 +118,10 @@ def execute_candidate_routed_message(
     planner receives only that selected source + source-rebased candidate
     context. Core's predecessor handoff is guarded by actual canonical
     result evidence; ambiguous references never receive guessed identities.
-    This test-only entry has no n8n/DEV registration or real vault selector.
+    The dispatcher itself has no ambient n8n/DEV registration or vault
+    selector.  A composition root may inject it only after explicitly binding
+    an authenticated DEV actor, conversation, repository, and pending-state
+    recorder.
     """
     from types import SimpleNamespace
 
@@ -537,6 +542,7 @@ def execute_candidate_routed_message(
                 )
             ),
             candidate_pending_recorder=candidate_pending_recorder,
+            history_recorder=history_recorder,
             write_preflight_guard=subject_guard or event_guard or guard,
             known_fact_verifier=known_fact_verifier,
         )

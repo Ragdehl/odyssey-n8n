@@ -25,6 +25,7 @@ from tests.apps.test_fact_candidates import CASES
 from tests.benchmarks.test_recorded_real_models_source_replay import (
     _saved_router_outputs,
 )
+from tests.core.test_application_history import FakeHistoryRecorder
 from tests.runtime.test_candidate_pending_state import NOW
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import SCHEMA
 from tests.runtime.test_full_message_corpus_regression import fresh_corpus_vault
@@ -124,6 +125,7 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
     core_inputs = []
     temporal_inputs = []
     core_domains = []
+    history = FakeHistoryRecorder()
 
     class Temporal:
         def interpret(self, scoped):
@@ -175,7 +177,10 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
         now=NOW,
         context_limit=5,
         request_id_factory=lambda: "three-route-eric-v1",
+        history_recorder=history,
     )
+    assert history.begin_calls >= 2
+    assert history.record_calls >= 2
     if dependent_target != "Eric":
         assert result.status is ApplicationStatus.PARTIAL
         assert [item["status"] for item in result.execution_flow["routes"]] == [

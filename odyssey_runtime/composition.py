@@ -23,6 +23,7 @@ from odyssey_apps import (
     OpenAIApplicationRouter,
 )
 from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
+from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
@@ -56,6 +57,8 @@ from odyssey_core.application import (
     allocate_request_id,
     execute_request,
 )
+from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
+from odyssey_core.candidate_pending_state import CandidatePendingRepository
 from odyssey_core.clarification import (
     ClarificationChoice,
     ClarificationClassifier,
@@ -75,6 +78,7 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationService,
 )
 from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
+from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
@@ -125,8 +129,10 @@ from odyssey_core.temporal_interpretation import (
 )
 from odyssey_core.temporal_resolution import TemporalResolutionKind
 
+from .candidate_route_dispatch import execute_candidate_routed_message
 from .delivery_results import LocalDeliveryResultStore
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
+from .hybrid_group_compiler import compile_hybrid_candidate_bundle
 from .progress import ProductProgressStore
 from .routing import (
     ApplicationExecutor,
@@ -363,6 +369,9 @@ class RuntimeComposition:
     )
     notes_mutation_actor: (
         Callable[[AuthenticatedActorContext | None, ExternalPrincipal | None], object] | None
+    ) = None
+    hybrid_candidate_execute: (
+        Callable[[str, str, AuthenticatedActorContext | None, str | None], ApplicationResult] | None
     ) = None
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
@@ -1583,6 +1592,21 @@ class RuntimeComposition:
                 resume_plan,
                 clarification_choice,
             )
+        elif self.hybrid_candidate_execute is not None:
+            if request_id is None:  # Defensive narrowing for the durable route locator.
+                raise ValueError("hybrid candidate execution requires an outer request ID")
+            if authenticated_actor is None or conversation_id is None:
+                result = ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    clarification_code="HYBRID_AUTHENTICATED_CONVERSATION_REQUIRED",
+                )
+            else:
+                result = self.hybrid_candidate_execute(
+                    user_request, request_id, authenticated_actor, conversation_id
+                )
         elif self.application_router is not None:
             if request_id is None:  # Kept explicit for type narrowing and defensive clarity.
                 raise ValueError("routed execution requires an outer request ID")
@@ -1942,6 +1966,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     history_recorder = GitHistoryRecorder(vault_root)
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
+    hybrid_dev_enabled = _hybrid_dev_enabled()
 
     @dataclass(frozen=True)
     class _PrecomputedCorePlan:
@@ -2319,6 +2344,94 @@ def build_runtime_from_environment() -> RuntimeComposition:
             authenticated_actor = identity_mapping_repository.resolve_existing(external_principal)
             authenticated_actor = AuthenticatedActorContext(authenticated_actor.stable_user_id)
         return _persistence_actor(actor, authenticated_actor)
+
+    def execute_hybrid_candidate_route(
+        source: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None,
+        conversation_id: str | None,
+    ) -> ApplicationResult:
+        """Run the reviewed hybrid dispatcher for one authenticated DEV conversation.
+
+        The ordinary v0 route never reaches this callable unless the process
+        was explicitly configured for DEV hybrid evaluation.  Candidate pending
+        state is rooted below the authenticated actor's conversation state, so
+        an outer request ID cannot expose or resume another actor's ambiguity.
+        This route intentionally has no selected-choice continuation: a stored
+        F14/F27 choice remains non-executable until a general E2E continuation
+        contract is approved.
+        """
+        if authenticated_actor is None or conversation_id is None:
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                clarification_code="HYBRID_AUTHENTICATED_CONVERSATION_REQUIRED",
+            )
+        try:
+            from openai import OpenAI
+        except ImportError as error:
+            raise ValueError("Install the OpenAI SDK for DEV hybrid evaluation") from error
+
+        clock = _current_time()
+        client = OpenAI(max_retries=0)
+        candidate_pending_root = (
+            conversation_root_resolver.resolve(authenticated_actor.stable_user_id) / "pending"
+        )
+        candidate_pending_root.mkdir(mode=0o700, exist_ok=True)
+        candidate_pending = CandidatePendingRepository(candidate_pending_root)
+
+        def record_route_ambiguity(preview, options):  # type: ignore[no-untyped-def]
+            """Persist only source-exact, Core-proven ambiguity for this conversation."""
+            return candidate_pending.record(
+                preview,
+                conversation_id=conversation_id,
+                created_at=clock["timestamp"],
+                options=options,
+                vault=repository,
+                schema=schema,
+            )
+
+        return cast(
+            ApplicationResult,
+            execute_candidate_routed_message(
+                source,
+                router=OpenAIFactCandidateRouter(client, prompt_revision="v5"),
+                temporal=OpenAITemporalInterpreter(
+                    client,
+                    {key: clock[key] for key in ("date", "time", "timezone")},
+                    max_output_tokens=1536,
+                    scoped_date_time_context=True,
+                ),
+                core_planner_factory=lambda context, domain: OpenAILunaExperimentalPlanner(
+                    client,
+                    schema,
+                    {key: clock[key] for key in ("date", "time", "timezone")},
+                    candidate_context=context,
+                    domain_interpretation=domain,
+                ),
+                core_candidate_attributor=OpenAICoreCandidateAttributor(client),
+                repository=repository,
+                schema=schema,
+                context_index=context_index,
+                semantic_index=semantic_index,
+                embedder=embedder,
+                contextual_reasoner=contextual_reasoner,
+                actor=_persistence_actor(actor, authenticated_actor),
+                now=clock["timestamp"],
+                context_limit=context_limit,
+                request_id_factory=lambda: request_id,
+                history_recorder=history_recorder,
+                route_ambiguity_recorder=record_route_ambiguity,
+                # Keep Task source routed to the registered Task capability.
+                # Until the scoped Tasks executor is wired, the generic dispatcher
+                # must fail closed rather than falling back to a Day/Core write.
+                bundle_compiler=lambda proposal: compile_hybrid_candidate_bundle(
+                    proposal, enable_tasks=True
+                ),
+            ),
+        )
 
     notes_service = NotesQueryService(repository, schema, context_index)
     calendar_application = CalendarApplication(
@@ -3089,6 +3202,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         work_session_service=work_session_service,
         product_progress_store=ProductProgressStore(),
         notes_mutation_actor=notes_mutation_actor,
+        hybrid_candidate_execute=execute_hybrid_candidate_route if hybrid_dev_enabled else None,
     )
 
 
@@ -3303,6 +3417,23 @@ def _build_contextual_reasoner() -> OpenAIContextualReasoner:
         reasoning_effort="medium",
         examples=load_contextual_calibration_examples(),
     )
+
+
+def _hybrid_dev_enabled() -> bool:
+    """Allow the experimental hybrid route only after an explicit DEV opt-in.
+
+    The default is off.  A process configured as anything other than DEV
+    fails at composition time instead of quietly enabling experimental model
+    execution in PROD or an unidentified environment.
+    """
+    value = os.environ.get("ODYSSEY_HYBRID_DEV_ENABLED", "").strip()
+    if value in {"", "0", "false", "False"}:
+        return False
+    if value not in {"1", "true", "True"}:
+        raise ValueError("ODYSSEY_HYBRID_DEV_ENABLED must be 0 or 1")
+    if os.environ.get("ODYSSEY_DEPLOYMENT_ENV", "").strip() != "DEV":
+        raise ValueError("ODYSSEY_HYBRID_DEV_ENABLED requires ODYSSEY_DEPLOYMENT_ENV=DEV")
+    return True
 
 
 def _positive_int_env(name: str, default: int) -> int:
