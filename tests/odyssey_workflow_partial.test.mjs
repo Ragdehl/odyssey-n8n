@@ -51,6 +51,45 @@ test("partial writes are disclosed instead of misreported as entirely failed", (
   assert.deepEqual(result.note_result_snapshot, snapshot);
 });
 
+test("actual n8n route preserves verified pending-v2 choices for the browser", () => {
+  const clarification = {
+    request_id: "synthetic-partial-r1", requested_reference: "él",
+    explanation: "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+    options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+  };
+  const result = execute({
+    request_id: "synthetic-partial", status: "partial", product_outcome: "CLARIFY",
+    clarification_code: "AMBIGUOUS_REFERENCE_REQUIRES_CHOICE", clarification,
+    affected_stable_note_ids: [], actions: [], operational: {total_duration_ms: 1, stages: []},
+  });
+  assert.equal(result.kind, "clarification");
+  assert.deepEqual(result.clarification, clarification);
+  assert.deepEqual(validateProductResponse(result).clarification, clarification);
+});
+
+test("selected v2 identity never claims the pending fact was saved", () => {
+  const result = execute({
+    request_id: "synthetic-partial", status: "needs_attention",
+    product_outcome: "CANNOT_ANSWER", product_reason: "CONTINUATION_REVIEW_REQUIRED",
+    product_control: "CANDIDATE_SELECTION_RECORDED", affected_stable_note_ids: [],
+    actions: [], operational: {total_duration_ms: 0, stages: []},
+  });
+  assert.equal(result.kind, "cannot_answer");
+  assert.match(result.message, /registrado tu elección/);
+  assert.match(result.message, /no he guardado el hecho pendiente/);
+  assert.equal(result.note_result_snapshot, undefined);
+});
+
+test("v2 cancellation uses the existing bounded acknowledgement", () => {
+  const result = execute({
+    request_id: "synthetic-partial", status: "completed", product_outcome: "ANSWER",
+    product_control: "CANDIDATE_CANCELLED", actions: [], affected_stable_note_ids: [],
+    operational: {total_duration_ms: 0, stages: []},
+  });
+  assert.equal(result.kind, "acknowledgement");
+  assert.match(result.message, /cancelado la aclaración pendiente/);
+});
+
 test("full failure without a write remains a failure and never claims saved work", () => {
   const result = execute({
     request_id: "synthetic-partial", status: "failed",

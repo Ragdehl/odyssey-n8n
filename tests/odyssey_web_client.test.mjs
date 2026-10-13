@@ -225,6 +225,28 @@ test("legacy basic clarification options remain compatible but hybrid shapes fai
   }), ProductRequestError);
 });
 
+test("source-scoped v2 basic choices accept a bounded question but no extra fields", () => {
+  const value = {
+    request_id: "web-v2", status: "needs_attention", kind: "clarification",
+    message: "¿A quién te refieres?",
+    clarification: {
+      request_id: "web-v2-r1", requested_reference: "él",
+      explanation: "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+      options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+    },
+  };
+  assert.deepEqual(validateProductResponse(value).clarification, value.clarification);
+  for (const bad of [
+    {...value.clarification, reason: "AMBIGUOUS_REFERENCE"},
+    {...value.clarification, pending_record_id: "web-v2-r1"},
+    {...value.clarification, requested_reference: ""},
+    {...value.clarification, explanation: "x".repeat(501)},
+    {request_id: "web-v2-r1", requested_reference: "él", options: value.clarification.options},
+  ]) {
+    assert.throws(() => validateProductResponse({...value, clarification: bad}), ProductRequestError);
+  }
+});
+
 test("bounded collection and cannot-answer results keep grounded public fields", () => {
   const result = validateProductResponse({
     request_id: "web-collection",

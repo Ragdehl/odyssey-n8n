@@ -62,7 +62,10 @@ from odyssey_core.application import (
     execute_request,
 )
 from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
-from odyssey_core.candidate_pending_state import CandidatePendingRepository
+from odyssey_core.candidate_pending_state import (
+    CandidatePendingRepository,
+    CandidatePendingStateError,
+)
 from odyssey_core.clarification import (
     ClarificationChoice,
     ClarificationClassifier,
@@ -440,6 +443,26 @@ class RuntimeComposition:
                         CheckpointOutcome.RESULT_PERSISTED,
                     )
                     return replay
+            candidate_response = self._handle_candidate_pending_reply(
+                actor,
+                conversation_id,
+                request_id,
+                user_request,
+            )
+            if candidate_response is not None:
+                if store is not None and fingerprint is not None:
+                    store.save(
+                        request_id, fingerprint, candidate_response, _current_time()["timestamp"]
+                    )
+                self._record_terminal_checkpoint(
+                    checkpoint_store,
+                    request_id,
+                    candidate_response,
+                    store,
+                    fingerprint,
+                    force_replay=True,
+                )
+                return candidate_response
             pending = clarification_store.read() if clarification_store is not None else None
             if pending is not None:
                 decision = resolve_clarification_reply(
@@ -547,7 +570,14 @@ class RuntimeComposition:
                 else None,
                 None,
             )
-            response = self._finish_product_result(result, store, fingerprint, clarification_store)
+            response = self._finish_product_result(
+                result,
+                store,
+                fingerprint,
+                clarification_store,
+                actor=actor,
+                conversation_id=conversation_id,
+            )
             self._record_terminal_checkpoint(
                 checkpoint_store, request_id, response, store, fingerprint
             )
@@ -733,13 +763,24 @@ class RuntimeComposition:
         clarification_store: LocalClarificationStore | None,
         *,
         force_replay: bool = False,
+        actor: str | None = None,
+        conversation_id: str | None = None,
     ) -> dict[str, object]:
         """Persist only one safely resumable decision and replay all product outcomes."""
         response = application_result_to_response(result)
         if response["product_outcome"] == "CLARIFY":
-            view = self._clarification_view(result)
+            candidate_view = self._candidate_pending_view(
+                actor,
+                conversation_id,
+                result.pending_work.record_id
+                if result.pending_work.persisted and result.pending_work.record_id is not None
+                else result.request_id,
+            )
+            view = candidate_view
+            if view is None:
+                view = self._clarification_view(result)
             response["clarification"] = view
-            if clarification_store is not None:
+            if clarification_store is not None and candidate_view is None:
                 pending = self._pending_decision(result, view)
                 if pending is not None:
                     clarification_store.replace(pending)
@@ -758,6 +799,171 @@ class RuntimeComposition:
         ):
             store.save(result.request_id, fingerprint, response, _current_time()["timestamp"])
         return response
+
+    def _candidate_pending_repository(self, actor: str | None) -> CandidatePendingRepository | None:
+        """Bind v2 source pending state only for the explicit authenticated hybrid seam."""
+        if (
+            actor is None
+            or self.hybrid_candidate_execute is None
+            or self.conversation_root_resolver is None
+            or self.vault_repository is None
+            or self.canonical_schema is None
+        ):
+            return None
+        root = self.conversation_root_resolver.resolve(actor) / "pending"
+        if not root.is_dir() or root.is_symlink():
+            return None
+        return CandidatePendingRepository(root)
+
+    def _candidate_pending_view(
+        self, actor: str | None, conversation_id: str | None, request_id: str
+    ) -> dict[str, object] | None:
+        """Project one durable v2 choice without granting its selected value write authority."""
+        if conversation_id is None:
+            return None
+        try:
+            repository = self._candidate_pending_repository(actor)
+            if repository is None:
+                return None
+            record = repository.read(request_id)
+            if record["conversation_id"] != conversation_id or record["status"] != "open":
+                return None
+            options = record["options"]
+            # v2 never truncates an ambiguity into a misleading choice list.
+            if not 1 < len(options) <= 4:
+                options = []
+            pending = record["pending"]
+            return {
+                "request_id": record["request_id"],
+                "requested_reference": pending[0]["reference_text"],
+                "explanation": (
+                    "No puedo identificar con seguridad a "
+                    f"«{pending[0]['reference_text']}». Elige una persona o cancela."
+                    if pending[0]["reference_text"] and options
+                    else "La parte pendiente conserva su fuente original y requiere revisión."
+                ),
+                "options": [{"id": item["id"], "label": item["label"]} for item in options],
+            }
+        except (CandidatePendingStateError, OSError, ValueError, KeyError, TypeError):
+            return None
+
+    def _candidate_reply_is_immediate(
+        self, actor: str, repository: CandidatePendingRepository, conversation_id: str
+    ) -> bool:
+        """Require the exact source delivery immediately before its assistant clarification.
+
+        The browser durably appends its assistant clarification before the human
+        chooses a person. The decision must still be bound to the original outer
+        request ID, rather than merely the last text or a prior unresolved turn.
+        """
+        open_ids = repository.open_requests(conversation_id)
+        if not open_ids:
+            return False
+        with self._conversation_lock:
+            turns = self._conversation_store(actor).load_main_page(limit=3)["turns"]
+        if not turns:
+            return False
+        last = turns[-1]
+        if last["role"] == "assistant":
+            if (
+                len(turns) < 2
+                or turns[-2]["role"] != "user"
+                or turns[-2]["request_id"] != last["request_id"]
+            ):
+                return False
+            user_turn = turns[-2]
+        else:
+            user_turn = last
+        outer_request_id = user_turn["request_id"]
+        return user_turn["role"] == "user" and any(
+            user_turn["text"] == repository.read(record_id)["original_request"]
+            and (
+                outer_request_id == record_id or is_route_execution_id(outer_request_id, record_id)
+            )
+            for record_id in open_ids
+        )
+
+    def _handle_candidate_pending_reply(
+        self,
+        actor: str,
+        conversation_id: str | None,
+        request_id: str | None,
+        user_request: str,
+    ) -> dict[str, object] | None:
+        """Consume a v2 selection/cancel before v1 or hybrid routing, never execute it.
+
+        A ``NEW_REQUEST`` deliberately returns ``None`` so the ordinary enabled
+        hybrid route receives the new source.  It can never fall back to v0
+        while this composition has the hybrid seam enabled.
+        """
+        if conversation_id is None or request_id is None:
+            return None
+        try:
+            repository = self._candidate_pending_repository(actor)
+            if repository is None or not repository.open_requests(conversation_id):
+                return None
+            reply = repository.reply(
+                conversation_id=conversation_id,
+                reply=user_request,
+                answer_id=request_id,
+                vault=self.vault_repository,
+                schema=cast(dict[str, Any], self.canonical_schema),
+                immediate_followup=self._candidate_reply_is_immediate(
+                    actor, repository, conversation_id
+                ),
+                classifier=self.clarification_classifier,
+            )
+        except CandidatePendingStateError:
+            return self._control_response(request_id, "STALE_CANDIDATE_PENDING")
+        if reply.outcome == "new_request":
+            return None
+        self._append_clarification_reply(actor, conversation_id, request_id, user_request)
+        if reply.outcome == "choice_recorded":
+            # Re-check under the repository lock before making even the
+            # non-executing acknowledgement visible to the caller.
+            review = repository.selected_for_core_review(
+                conversation_id=conversation_id,
+                request_id=cast(str, reply.request_id),
+                vault=self.vault_repository,
+                schema=cast(dict[str, Any], self.canonical_schema),
+            )
+            if review.outcome != "choice_ready_for_core_review":
+                return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
+            return {
+                **self._control_response(request_id, "CANDIDATE_SELECTION_RECORDED"),
+                "status": "needs_attention",
+                "product_outcome": "CANNOT_ANSWER",
+                "product_reason": "CONTINUATION_REVIEW_REQUIRED",
+                "selected_pending_request_id": reply.request_id,
+            }
+        if reply.outcome == "cancelled":
+            return self._control_response(request_id, "CANDIDATE_CANCELLED")
+        if reply.outcome == "unresolved":
+            view = self._candidate_pending_view(actor, conversation_id, cast(str, reply.request_id))
+            if view is not None:
+                return {
+                    "request_id": request_id,
+                    "status": "needs_attention",
+                    "product_outcome": "CLARIFY",
+                    "product_reason": "AMBIGUOUS_REFERENCE",
+                    "clarification": view,
+                    "actions": [],
+                    "affected_stable_note_ids": [],
+                    "operational": {"total_duration_ms": 0.0, "stages": []},
+                }
+        controls = {
+            "explicit_request_required": "CANDIDATE_EXPLICIT_REQUEST_REQUIRED",
+            "multiple_or_no_pending": "CANDIDATE_AMBIGUOUS_PENDING",
+            "needs_core_options": "CANDIDATE_OPTIONS_UNAVAILABLE",
+            "stale_choice": "STALE_CANDIDATE_SELECTION",
+            "stale_written_facts": "STALE_CANDIDATE_FACTS",
+            "already_selected": "CANDIDATE_ALREADY_SELECTED",
+            "already_closed": "CANDIDATE_ALREADY_CLOSED",
+            "unavailable": "CANDIDATE_UNAVAILABLE",
+        }
+        return self._control_response(
+            request_id, controls.get(reply.outcome, "CANDIDATE_UNRESOLVED")
+        )
 
     def _pending_decision(
         self, result: ApplicationResult, view: dict[str, object]

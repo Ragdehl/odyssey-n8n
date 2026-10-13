@@ -214,14 +214,17 @@ function hasExactKeys(value, keys) {
 }
 
 function validClarificationKeys(value, shape) {
-  const allowed = shape === "rich"
-    ? new Set(["request_id", "options", "requested_reference", "explanation"])
-    : new Set(["request_id", "options"]);
-  return Object.keys(value).every((key) => allowed.has(key));
+  const allowed = new Set(["request_id", "options", "requested_reference", "explanation"]);
+  if (!Object.keys(value).every((key) => allowed.has(key))) return false;
+  const hasReference = Object.hasOwn(value, "requested_reference");
+  const hasExplanation = Object.hasOwn(value, "explanation");
+  // v2 source-scoped choices have basic canonical labels with a bounded question;
+  // legacy basic choices carry neither, and rich choices always carry both.
+  return hasReference === hasExplanation && (shape !== "rich" || hasReference);
 }
 
 function validClarificationMetadata(value, shape) {
-  if (shape !== "rich") return true;
+  if (shape !== "rich" && !Object.hasOwn(value, "requested_reference")) return true;
   return typeof value.requested_reference === "string" && value.requested_reference.trim() &&
     value.requested_reference.length <= 240 && typeof value.explanation === "string" &&
     value.explanation.trim() && value.explanation.length <= 500;

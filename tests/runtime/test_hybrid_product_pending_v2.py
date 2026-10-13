@@ -1,0 +1,232 @@
+"""Product-boundary E1 coverage for durable hybrid source clarifications."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+from odyssey_core.application import ApplicationResult, ApplicationStatus, PendingWorkStatus
+from odyssey_core.candidate_pending_state import CandidatePendingRepository
+from odyssey_core.clarification import ClarificationOption
+from odyssey_core.identity_boundary import AuthenticatedActorContext
+from odyssey_core.local_conversations import ConversationRootResolver
+from odyssey_runtime.composition import RuntimeComposition
+from odyssey_runtime.routing import route_execution_id
+from tests.runtime.test_candidate_pending_state import NOW, _ready
+from tests.runtime.test_fact_candidate_semantic_luna_vertical import SCHEMA
+
+ACTOR = AuthenticatedActorContext("11111111-1111-4111-8111-111111111111")
+OTHER_ACTOR = AuthenticatedActorContext("22222222-2222-4222-8222-222222222222")
+
+
+class _NewRequestClassifier:
+    """Treat one test-only unrelated message as a new request without provider access."""
+
+    def classify(
+        self, reply: str, original_request: str, options: tuple[ClarificationOption, ...]
+    ) -> str:
+        del original_request, options
+        return "NEW_REQUEST" if reply == "Una petición distinta" else "UNRESOLVED"
+
+
+def _runtime(tmp_path: Path, *, classifier: object | None = None, routed: bool = False):
+    """Build a production composition with a frozen v2 recorder and disposable vault."""
+    fixture_root = tmp_path / "fixture"
+    fixture_root.mkdir()
+    preview, _unused_pending, vault, _unused_state = _ready(fixture_root)
+    resolver = ConversationRootResolver(tmp_path / "state")
+    calls: list[tuple[str, str]] = []
+
+    def hybrid(
+        source: str, request_id: str, actor: AuthenticatedActorContext, conversation_id: str
+    ):
+        calls.append((source, request_id))
+        if source != preview.original_request:
+            return ApplicationResult(request_id, ApplicationStatus.COMPLETED, (), ())
+        root = resolver.resolve(actor.stable_user_id) / "pending"
+        root.mkdir(parents=True, exist_ok=True)
+        pending = CandidatePendingRepository(root)
+        pending_id = route_execution_id(request_id, 0) if routed else request_id
+        pending.record(
+            replace(
+                preview,
+                request_id=pending_id,
+                **(
+                    {"physically_verified_fact_count": 0, "completed_fact_markers": ()}
+                    if routed
+                    else {}
+                ),
+            ),
+            conversation_id=conversation_id,
+            created_at=NOW,
+            options=(
+                ClarificationOption("eric-id", "Eric"),
+                ClarificationOption("luis-id", "Luis"),
+            ),
+            vault=vault,
+            schema=SCHEMA,
+        )
+        return ApplicationResult(
+            request_id,
+            ApplicationStatus.PARTIAL,
+            (),
+            (),
+            pending_work=PendingWorkStatus(required=True, persisted=True, record_id=pending_id),
+            clarification_code="CANDIDATE_AMBIGUITY",
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args: (_ for _ in ()).throw(AssertionError("v0 must not run")),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        vault_repository=vault,
+        canonical_schema=SCHEMA,
+        clarification_classifier=classifier,
+        hybrid_candidate_execute=hybrid,
+    )
+    return runtime, resolver, vault, calls, preview.original_request, preview.request_id
+
+
+def test_product_delivers_v2_options_once_and_records_selected_review_without_writing(
+    tmp_path: Path,
+) -> None:
+    """The existing clarification-card JSON carries only Core-proven current choices."""
+    runtime, resolver, vault, calls, source, initial_id = _runtime(tmp_path)
+    before = {path: vault.read_text(path) for path in vault.list_markdown_paths()}
+
+    initial = runtime.execute_product(source, initial_id, "main", ACTOR)
+
+    assert initial["product_outcome"] == "CLARIFY"
+    assert initial["clarification"] == {
+        "request_id": initial_id,
+        "requested_reference": "él",
+        "explanation": "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+        "options": [{"id": "eric-id", "label": "Eric"}, {"id": "luis-id", "label": "Luis"}],
+    }
+    assert runtime.execute_product(source, initial_id, "main", ACTOR)["delivery_replayed"]
+    assert calls == [(source, initial_id)]
+
+    selected = runtime.execute_product("He elegido a Luis.", "reply-v2", "main", ACTOR)
+
+    assert selected["status"] == "needs_attention"
+    assert selected["product_outcome"] == "CANNOT_ANSWER"
+    assert selected["product_reason"] == "CONTINUATION_REVIEW_REQUIRED"
+    assert selected["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert pending.read(initial_id)["status"] == "selected"
+    assert (
+        pending.selected_for_core_review(
+            conversation_id="main", request_id=initial_id, vault=vault, schema=SCHEMA
+        ).captured_at
+        == NOW
+    )
+    assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
+
+
+def test_v2_choice_after_correlated_assistant_turn_uses_original_route_locator(
+    tmp_path: Path,
+) -> None:
+    """Accept the browser's immediate option only after its exact assistant reply."""
+    runtime, resolver, vault, _calls, source, initial_id = _runtime(tmp_path, routed=True)
+    initial = runtime.execute_product(source, initial_id, "main", ACTOR)
+    route_id = route_execution_id(initial_id, 0)
+    assert initial["clarification"]["request_id"] == route_id
+    runtime._conversation_store(ACTOR.stable_user_id).append_turn(
+        request_id=initial_id,
+        role="assistant",
+        text="No puedo identificar con seguridad a «él». ¿Eric o Luis?",
+        created_at=NOW,
+    )
+    selected = runtime.execute_product("He elegido a Luis.", "reply-after-assistant", "main", ACTOR)
+    assert selected["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    assert selected["product_reason"] == "CONTINUATION_REVIEW_REQUIRED"
+    repo = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert repo.read(route_id)["status"] == "selected"
+
+
+def test_v2_does_not_accept_a_mismatched_assistant_as_immediate_source(
+    tmp_path: Path,
+) -> None:
+    """An unrelated assistant turn cannot authorize a stale implicit choice."""
+    runtime, resolver, _vault, _calls, source, initial_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    runtime._conversation_store(ACTOR.stable_user_id).append_turn(
+        request_id="unrelated-assistant",
+        role="assistant",
+        text="Un mensaje sin correlación con la aclaración.",
+        created_at=NOW,
+    )
+    refusal = runtime.execute_product("Luis", "reply-invalid-assistant", "main", ACTOR)
+    assert refusal["product_control"] == "CANDIDATE_EXPLICIT_REQUEST_REQUIRED"
+    repo = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert repo.read(route_execution_id(initial_id, 0))["status"] == "open"
+
+
+def test_v2_cancel_and_unrelated_request_never_route_to_v0(tmp_path: Path) -> None:
+    """Cancellation is durable; a classifier-proven new request stays on hybrid routing."""
+    runtime, resolver, vault, calls, source, initial_id = _runtime(
+        tmp_path, classifier=_NewRequestClassifier()
+    )
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    cancelled = runtime.execute_product("cancelar", "cancel-v2", "main", ACTOR)
+    assert cancelled["product_control"] == "CANDIDATE_CANCELLED"
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert pending.read(initial_id)["status"] == "cancelled"
+    assert not vault.read_text("Eric.md").endswith("cine")
+
+    runtime.execute_product(source, "initial-new", "main", ACTOR)
+    unrelated = runtime.execute_product("Una petición distinta", "new-v2", "main", ACTOR)
+    assert unrelated["product_outcome"] == "ANSWER"
+    assert calls[-1] == ("Una petición distinta", "new-v2")
+    assert pending.read("initial-new")["status"] == "open"
+
+
+def test_v2_rejects_stale_or_multiple_choice_without_cross_actor_access(tmp_path: Path) -> None:
+    """Choice delivery fails closed for changed evidence, multiple records, and other roots."""
+    runtime, resolver, vault, calls, source, initial_id = _runtime(tmp_path)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    record = pending.read(initial_id)
+    another_root = tmp_path / "another"
+    another_root.mkdir()
+    second = replace(
+        _ready(another_root)[0],
+        request_id="second-v2",
+        physically_verified_fact_count=0,
+        completed_fact_markers=(),
+    )
+    pending.record(
+        second,
+        conversation_id="main",
+        created_at=NOW,
+        options=(ClarificationOption("eric-id", "Eric"), ClarificationOption("luis-id", "Luis")),
+        vault=vault,
+        schema=SCHEMA,
+    )
+    multiple = runtime.execute_product("Luis", "multiple-v2", "main", ACTOR)
+    assert multiple["product_control"] == "CANDIDATE_AMBIGUOUS_PENDING"
+    assert pending.read(initial_id)["status"] == "open"
+
+    # A second actor has no visibility into this root and reaches only its own hybrid request.
+    other = runtime.execute_product("Luis", "other-v2", "main", OTHER_ACTOR)
+    assert other["product_outcome"] == "ANSWER"
+    assert calls[-1] == ("Luis", "other-v2")
+    assert record["conversation_id"] == "main"
+
+
+def test_v2_refuses_a_changed_canonical_option_without_writing(tmp_path: Path) -> None:
+    """A source-backed button is not a valid choice after its canonical guard changes."""
+    runtime, resolver, vault, _calls, source, initial_id = _runtime(tmp_path)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    luis = vault.root / "Luis.md"
+    luis.write_text(luis.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    before = {path: vault.read_text(path) for path in vault.list_markdown_paths()}
+
+    stale = runtime.execute_product("Luis", "stale-v2", "main", ACTOR)
+
+    assert stale["product_outcome"] == "CANNOT_ANSWER"
+    assert stale["product_reason"] == "STALE_EVIDENCE"
+    assert stale["product_control"] == "STALE_CANDIDATE_SELECTION"
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert pending.read(initial_id)["status"] == "open"
+    assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
