@@ -13,7 +13,8 @@ from dataclasses import replace
 
 from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidates import FactCandidateProposal
-from odyssey_apps.router import RouterError
+from odyssey_apps.router import Route, RouterError
+from odyssey_core.application import ApplicationResult
 from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
@@ -28,6 +29,34 @@ from odyssey_runtime.source_scope_compiler import (
     compile_candidate_route_bundle,
     validate_bundle_original_provenance,
 )
+
+
+def _suppress_ambiguous_single_handoff(
+    context: CoreCandidateContext,
+    successor: Route | None,
+    predecessor_ordinal: int,
+    result: ApplicationResult,
+) -> ApplicationResult:
+    """Never promote a sole canonical proof when several source participants compete.
+
+    Alias-derived references may be omitted from a private handoff even when
+    the physical Markdown fact safely links them. One surviving proof is not
+    authority to choose the later singular pronoun. Do not alter the write
+    receipt or verified canonical content; only withhold its unsafe carrier.
+    """
+    if (
+        successor is None
+        or successor.depends_on != predecessor_ordinal
+        or len(result.canonical_reference_evidence) != 1
+    ):
+        return result
+    participants = {
+        (role.span.start, role.span.end)
+        for candidate in context.candidates
+        for role in candidate.roles
+        if role.role == "participants"
+    }
+    return replace(result, canonical_reference_evidence=()) if len(participants) > 1 else result
 
 
 def resolve_scoped_reference_with_core_proof(
@@ -252,7 +281,7 @@ def execute_candidate_routed_message(
             (proof.original_start, proof.original_end) for proof in inherited
         }:
             if not callable(scoped_execute):
-                from odyssey_core.application import ApplicationResult, ApplicationStatus
+                from odyssey_core.application import ApplicationResult
 
                 return ApplicationResult(
                     locator,
@@ -298,7 +327,7 @@ def execute_candidate_routed_message(
             # Retain the ordinary four-argument executor contract, but do not
             # let an executor that cannot receive typed proof act on a date it
             # cannot distinguish from lexical Router context.
-            from odyssey_core.application import ApplicationResult, ApplicationStatus
+            from odyssey_core.application import ApplicationResult
 
             return ApplicationResult(
                 locator,
@@ -568,85 +597,120 @@ def execute_candidate_routed_message(
             known_fact_verifier=known_fact_verifier,
         )
         if result.status is ApplicationStatus.COMPLETED and "plan" in captured:
-            plan = captured["plan"]
-            if any(isinstance(action, WriteAction) for action in plan.actions):
-                evidence = readback_core_facts(
-                    unit_source,
-                    route_context,
-                    plan,
-                    result,
-                    repository,
-                    schema,
-                    incoming_reference=guard,
-                )
-                if not evidence.persisted_facts or any(
-                    item.status not in {"verified_in_markdown", "verified_existing_knowledge"}
-                    for item in evidence.persisted_facts
-                ):
-                    raise ValueError("Core's routed physical Markdown readback failed")
-                # Rebuild only derived indexes, after the authoritative writer.
-                # This test-only composition uses a disposable canonical vault.
-                context_index.rebuild(repository, schema, embedder)
-                semantic_index.rebuild(repository, schema, embedder)
-                event_handoff.remember(
-                    context=route_context,
-                    plan=plan,
-                    result=result,
-                    readback=evidence,
-                    repository=repository,
-                    schema=schema,
-                    start=scoped.original_start,
-                    end=scoped.original_end,
-                    route_index=ordinal,
-                )
-                subject_handoff.remember(
-                    context=route_context,
-                    plan=plan,
-                    result=result,
-                    readback=evidence,
-                    repository=repository,
-                    schema=schema,
-                    start=scoped.original_start,
-                    end=scoped.original_end,
-                    route_index=ordinal,
-                )
-                # A verified canonical WRITE target may itself be the sole
-                # antecedent of the immediately next source reference.
-                # This is distinct from a helper wikilink in the source fact.
-                # Never use Router's lexical role as identity proof, and
-                # never choose among multiple possible antecedents.
-                if ordinal + 1 < len(bundle.units) and not result.canonical_reference_evidence:
-                    next_route = bundle.units[ordinal + 1]
-                    candidate_roles = [
-                        role
-                        for candidate in next_route.context.candidates
-                        for role in candidate.roles
-                    ]
-                    pronoun_roles = [role for role in candidate_roles if role.role == "reference"]
-                    if (
-                        next_route.route.depends_on == ordinal
-                        and len(next_route.context.candidates) == 1
-                        and len(pronoun_roles) == 1
-                        and pronoun_roles[0].span.text == next_route.route.dependent_mention
-                        and any(
-                            role.role in {"subject", "object", "participants"}
-                            and role.span == pronoun_roles[0].span
-                            for role in candidate_roles
-                        )
+            try:
+                plan = captured["plan"]
+                if any(isinstance(action, WriteAction) for action in plan.actions):
+                    evidence = readback_core_facts(
+                        unit_source,
+                        route_context,
+                        plan,
+                        result,
+                        repository,
+                        schema,
+                        incoming_reference=guard,
+                    )
+                    if not evidence.persisted_facts or any(
+                        item.status not in {"verified_in_markdown", "verified_existing_knowledge"}
+                        for item in evidence.persisted_facts
                     ):
-                        antecedent = subject_handoff.reference_from_verified_direct_target(
-                            context=route_context,
-                            route_index=ordinal,
-                            start=scoped.original_start,
-                            end=scoped.original_end,
-                            repository=repository,
-                            schema=schema,
-                        )
-                        if antecedent is not None:
-                            result = replace(
-                                result,
-                                canonical_reference_evidence=(antecedent,),
+                        raise ValueError("Core's routed physical Markdown readback failed")
+                    # Rebuild only derived indexes, after the authoritative writer.
+                    # This test-only composition uses a disposable canonical vault.
+                    context_index.rebuild(repository, schema, embedder)
+                    semantic_index.rebuild(repository, schema, embedder)
+                    event_handoff.remember(
+                        context=route_context,
+                        plan=plan,
+                        result=result,
+                        readback=evidence,
+                        repository=repository,
+                        schema=schema,
+                        start=scoped.original_start,
+                        end=scoped.original_end,
+                        route_index=ordinal,
+                    )
+                    subject_handoff.remember(
+                        context=route_context,
+                        plan=plan,
+                        result=result,
+                        readback=evidence,
+                        repository=repository,
+                        schema=schema,
+                        start=scoped.original_start,
+                        end=scoped.original_end,
+                        route_index=ordinal,
+                    )
+                    # A verified canonical WRITE target may itself be the sole
+                    # antecedent of the immediately next source reference.
+                    # This is distinct from a helper wikilink in the source fact.
+                    # Never use Router's lexical role as identity proof, and
+                    # never choose among multiple possible antecedents.
+                    if ordinal + 1 < len(bundle.units) and not result.canonical_reference_evidence:
+                        next_route = bundle.units[ordinal + 1]
+                        candidate_roles = [
+                            role
+                            for candidate in next_route.context.candidates
+                            for role in candidate.roles
+                        ]
+                        pronoun_roles = [
+                            role for role in candidate_roles if role.role == "reference"
+                        ]
+                        if (
+                            next_route.route.depends_on == ordinal
+                            and len(next_route.context.candidates) == 1
+                            and len(pronoun_roles) == 1
+                            and pronoun_roles[0].span.text == next_route.route.dependent_mention
+                            and any(
+                                role.role in {"subject", "object", "participants"}
+                                and role.span == pronoun_roles[0].span
+                                for role in candidate_roles
                             )
+                        ):
+                            antecedent = subject_handoff.reference_from_verified_direct_target(
+                                context=route_context,
+                                route_index=ordinal,
+                                start=scoped.original_start,
+                                end=scoped.original_end,
+                                repository=repository,
+                                schema=schema,
+                            )
+                            if antecedent is not None:
+                                result = replace(
+                                    result,
+                                    canonical_reference_evidence=(antecedent,),
+                                )
+                result = _suppress_ambiguous_single_handoff(
+                    route_context,
+                    bundle.units[ordinal + 1].route if ordinal + 1 < len(bundle.units) else None,
+                    ordinal,
+                    result,
+                )
+            except Exception as error:
+                # Core has already returned a write receipt. A later readback,
+                # index or handoff failure must not erase successful writes
+                # or allow dependent branches to infer a canonical identity.
+                from odyssey_core.observability import OperationalOutcome, OperationalStage
+
+                failed_stage = OperationalStage(
+                    "candidate.postwrite_verification",
+                    OperationalOutcome.FAILED,
+                    0.0,
+                    error_category=type(error).__name__[:100],
+                )
+                return replace(
+                    result,
+                    status=(
+                        ApplicationStatus.PARTIAL
+                        if result.affected_stable_note_ids
+                        else ApplicationStatus.NEEDS_ATTENTION
+                    ),
+                    planning_error="ROUTE_POSTWRITE_VERIFICATION_REQUIRED",
+                    canonical_reference_evidence=(),
+                    operational=replace(
+                        result.operational,
+                        stages=(*result.operational.stages, failed_stage),
+                    ),
+                )
         return result
 
     def preserve_route_ambiguity(route, locator, predecessor):

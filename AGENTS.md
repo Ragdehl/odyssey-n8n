@@ -111,6 +111,22 @@ variance never weakens the gate. Generalize the regression with additional note 
 shapes when the product invariant is type-generic. Do not remove or relax an accepted real-chat
 sentinel merely to make a later prompt or architecture change pass.
 
+### 2026-10-13 — Mandatory cross-boundary DEV observability and post-write gate
+
+A passing backend write/read test is NOT enough to authorize manual DEV chat
+testing. Any changed Core telemetry field or execution flow must be checked
+through the generated n8n response contract AND the browser validator/graph;
+unknown optional diagnostic metrics must never erase otherwise valid stages,
+costs, or write outcomes. Assert real hybrid lifecycle progress events using
+the authenticated progress store rather than assuming the donut advances.
+When an error occurs after a physical canonical write, retain the verified
+Core write receipt and affected note IDs, disclose partial completion and
+block unsafe dependent handoff; do not convert it into an apparent zero-write
+failure or retry using a new delivery ID. For each real user-chat regression,
+record exact source/result and a provider-free crossing-boundary sentinel,
+and make a bounded DEV E2E smoke (stages, flow, progress, readback) a deployment
+acceptance check. See the active functional roadmap for the 13-Oct findings.
+
 ### 2026-10-13 — Auditoria exhaustiva de formas y casos pendientes
 
 Consultar docs/architecture/hybrid-source-validator-audit-20261013.md.
