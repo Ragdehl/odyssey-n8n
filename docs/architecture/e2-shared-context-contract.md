@@ -75,4 +75,4 @@ La flecha Core Identity se refiere a un *servicio compartido*, no a un tercer mo
 
 ## Continuidad
 
-E2 se implementa en `feat/e2-shared-context-contract`, worktree `/home/ragdehl/projects/odyssey-e2-contract`, base `feat/e1-cross-boundary-integrity` PR #153, todavía DRAFT. Estado exacto y test evidence en el roadmap de ESTA rama. Después E2 → E3, no volver a prolongar E1 mediante parches de frases. Merge y deploy requieren consentimiento explícito y gates.
+E2 se implementa en `feat/e2-shared-context-contract`, worktree `/home/ragdehl/projects/odyssey-e2-contract`, base `feat/e1-cross-boundary-integrity` PR #153, todavía DRAFT. **PR #154 DRAFT** es apilada explícitamente sobre #153; commit inicial `244f93f`. Ninguna está fusionada o desplegada. Estado exacto y test evidence en el roadmap de ESTA rama. Después E2 → E3, no volver a prolongar E1 mediante parches de frases. Merge y deploy requieren consentimiento explícito y gates.
