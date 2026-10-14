@@ -2375,16 +2375,43 @@ def _validate_reference_selection(
     """Validate the compact semantic lookup contract used by fact references.
 
     References may use the same bounded relationship anchor as a write target when their identity
-    or complete participant set is defined by current canonical membership. They still cannot request
-    graph traversal, direct self-binding, or collection semantics; complete sets remain unresolved
-    until Core re-grounds and expands every member before persistence.
+    or complete participant set is defined by current canonical membership. A symbolic direct SELF
+    reference may select only the authenticated person's existing canonical Note; it grants no
+    creation or write ownership. Graph traversal and collection semantics remain forbidden.
     """
     base_keys = {"entity", "query", "type", "filters"}
-    if not isinstance(raw, dict) or set(raw) not in (
-        base_keys,
-        {*base_keys, "relational_reference"},
+    is_self = (
+        isinstance(raw, dict)
+        and set(raw)
+        == {
+            *base_keys,
+            "link_scope",
+            "self_target",
+            "relational_reference",
+            "semantic_set",
+            "collection_subject",
+        }
+        and raw.get("self_target") == SELF_TARGET
+    )
+    if not isinstance(raw, dict) or (
+        not is_self
+        and set(raw)
+        not in (
+            base_keys,
+            {*base_keys, "relational_reference"},
+        )
     ):
         raise RequestPlanningError("KnowledgeReference selection fields are invalid")
+    if is_self and (
+        raw["entity"] is not None
+        or raw["type"] != "person"
+        or raw["filters"] != []
+        or raw["relational_reference"] is not None
+        or raw["link_scope"] is not None
+        or raw["semantic_set"] is not None
+        or raw["collection_subject"] is not None
+    ):
+        raise RequestPlanningError("KnowledgeReference self binding must select only the speaker")
     selector = _validate_note_selector(
         {key: raw[key] for key in base_keys},
         schema,
@@ -2405,7 +2432,7 @@ def _validate_reference_selection(
         type=selector.type,
         filters=selector.filters,
         link_scope=None,
-        self_target=None,
+        self_target=SELF_TARGET if is_self else None,
         relational_reference=relational,
         semantic_set=None,
         collection_subject=None,

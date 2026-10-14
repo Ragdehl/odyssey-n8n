@@ -868,7 +868,22 @@ def is_reference_only_unit(unit: KnowledgeUnit) -> bool:
         and not unit.references
         and unit.destination_type is None
         and unit.target.link_scope is None
-        and unit.target.self_target is None
+        # Existing SELF can be a reference-only target, resolved through the
+        # same authenticated Core preflight as an ordinary self Note write.
+        # It must never be created, inferred from the person's display name,
+        # or accepted as a relationship/collection target.
+        and (
+            unit.target.self_target is None
+            or (
+                unit.reference_lookup_only
+                and unit.target.self_target == "self"
+                and unit.target.type == "person"
+                and unit.target.entity is None
+                and not unit.target.filters
+                and unit.target.relational_reference is None
+                and unit.target.semantic_set is None
+            )
+        )
     )
 
 
