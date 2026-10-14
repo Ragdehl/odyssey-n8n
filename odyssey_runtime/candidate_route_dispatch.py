@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from dataclasses import replace
+from time import perf_counter
 
 from odyssey_apps.catalog import ApplicationCatalog
 from odyssey_apps.fact_candidates import FactCandidateProposal
@@ -19,6 +20,11 @@ from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
 from odyssey_core.git_history import HistoryRecorder
+from odyssey_core.observability import (
+    OperationalOutcome,
+    OperationalStage,
+    normalize_provider_usage,
+)
 from odyssey_core.source_boundary_review import (
     CoreSourceBoundaryInput,
     CoreSourceBoundaryReview,
@@ -69,6 +75,7 @@ def review_router_source_before_writes(
     router: object,
     bundle_compiler: Callable[[FactCandidateProposal], object],
     boundary_reviewer: object | None,
+    telemetry_callback: Callable[[str, object, float, bool], None] | None = None,
 ) -> object:
     """One prewrite Core review and at most ONE bounded Router correction.
 
@@ -89,7 +96,25 @@ def review_router_source_before_writes(
         if len(bundle.units) <= 1:
             return bundle  # No cross-route boundary; Core still reviews each planned fact.
         context = _build_core_source_boundary_input(source, proposal, bundle)
-        decision = reviewer(context)
+        review_started = perf_counter()
+        try:
+            decision = reviewer(context)
+        except Exception:
+            if telemetry_callback is not None:
+                telemetry_callback(
+                    "candidate.source_boundary_review",
+                    boundary_reviewer,
+                    max(0.0, (perf_counter() - review_started) * 1000),
+                    False,
+                )
+            raise
+        if telemetry_callback is not None:
+            telemetry_callback(
+                "candidate.source_boundary_review",
+                boundary_reviewer,
+                max(0.0, (perf_counter() - review_started) * 1000),
+                True,
+            )
         if not isinstance(decision, CoreSourceBoundaryReview):
             raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVIEW_INVALID")
         decision.validate(context)
@@ -101,7 +126,25 @@ def review_router_source_before_writes(
         # source boundary; Router receives no canonical IDs or written notes.
         if attempt or not callable(getattr(router, "revise", None)):
             raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVISION_REQUIRED")
-        amended = router.revise(source, decision)
+        revision_started = perf_counter()
+        try:
+            amended = router.revise(source, decision)
+        except Exception:
+            if telemetry_callback is not None:
+                telemetry_callback(
+                    "candidate.router_revision",
+                    router,
+                    max(0.0, (perf_counter() - revision_started) * 1000),
+                    False,
+                )
+            raise
+        if telemetry_callback is not None:
+            telemetry_callback(
+                "candidate.router_revision",
+                router,
+                max(0.0, (perf_counter() - revision_started) * 1000),
+                True,
+            )
         if (
             not isinstance(amended, FactCandidateProposal)
             or amended.contract_version != 2
@@ -290,6 +333,31 @@ def execute_candidate_routed_message(
         except Exception:
             return
 
+    boundary_stages: list[OperationalStage] = []
+
+    def record_boundary_stage(name: str, provider: object, duration_ms: float, ok: bool) -> None:
+        """Keep bounded provider evidence without source text or decision traces."""
+        model = getattr(provider, "model", None)
+        if model is None and name == "candidate.router_revision":
+            from odyssey_apps.router import ROUTER_MODEL
+
+            model = ROUTER_MODEL
+        boundary_stages.append(
+            OperationalStage(
+                name,
+                OperationalOutcome.COMPLETED if ok else OperationalOutcome.FAILED,
+                duration_ms,
+                model=model,
+                reasoning_effort=getattr(provider, "reasoning_effort", None),
+                usage=normalize_provider_usage(getattr(provider, "last_usage", None)),
+                error_category=(
+                    None
+                    if ok
+                    else getattr(provider, "last_error_category", None) or "ProviderError"
+                ),
+            )
+        )
+
     report_progress("routing.started")
     proposal = router.propose(source)
     if not isinstance(proposal, FactCandidateProposal) or proposal.source != source:
@@ -313,6 +381,7 @@ def execute_candidate_routed_message(
                 router=router,
                 bundle_compiler=compiler,
                 boundary_reviewer=source_boundary_reviewer,
+                telemetry_callback=record_boundary_stage,
             )
         except SourceBoundaryReviewError as error:
             # Only expose stable, source-free diagnostic categories. Never
@@ -328,13 +397,16 @@ def execute_candidate_routed_message(
                 str(error) if str(error) in allowed_detail else "CORE_SOURCE_BOUNDARY_REVIEW_FAILED"
             )
             report_progress("routing.boundary_review_required")
-            return ApplicationResult(
+            blocked = ApplicationResult(
                 request_id_factory(),
                 ApplicationStatus.NEEDS_ATTENTION,
                 (),
                 (),
                 clarification_code="CORE_SOURCE_BOUNDARY_REVIEW_REQUIRED",
                 planning_error=safe_detail,
+            )
+            return replace(
+                blocked, operational=replace(blocked.operational, stages=tuple(boundary_stages))
             )
         report_progress("routing.boundary_review_ready")
     report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
@@ -864,7 +936,7 @@ def execute_candidate_routed_message(
         )
 
     selected_router = SimpleNamespace(route=lambda current, _prior=(): bundle.plan)
-    return execute_routed_request(
+    result = execute_routed_request(
         user_request=source,
         outer_request_id=outer_id,
         router=selected_router,
@@ -876,5 +948,13 @@ def execute_candidate_routed_message(
         ),
         dependent_pending_executor=(
             preserve_route_ambiguity if route_ambiguity_recorder is not None else None
+        ),
+    )
+    if not boundary_stages:
+        return result
+    return replace(
+        result,
+        operational=replace(
+            result.operational, stages=(*boundary_stages, *result.operational.stages)
         ),
     )

@@ -123,6 +123,41 @@ def test_product_delivers_v2_options_once_and_records_selected_review_without_wr
     assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
 
 
+def test_hybrid_terminal_no_write_failure_is_replayed_only_for_its_actor(tmp_path: Path) -> None:
+    """A delivered hybrid failure cannot become a later semantic re-execution."""
+    resolver = ConversationRootResolver(tmp_path / "state")
+    calls: list[tuple[str, str]] = []
+
+    def hybrid(source: str, request_id: str, actor: AuthenticatedActorContext, _conversation: str):
+        calls.append((actor.stable_user_id, request_id))
+        return ApplicationResult(
+            request_id,
+            ApplicationStatus.FAILED,
+            (),
+            (),
+            planning_error="SYNTHETIC_NO_WRITE_FAILURE",
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args: (_ for _ in ()).throw(AssertionError("v0 must not run")),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        hybrid_candidate_execute=hybrid,
+    )
+
+    first = runtime.execute_product("Synthetic source.", "same-delivery", "main", ACTOR)
+    replay = runtime.execute_product("Synthetic source.", "same-delivery", "main", ACTOR)
+    other = runtime.execute_product("Synthetic source.", "same-delivery", "main", OTHER_ACTOR)
+
+    assert first["status"] == "failed"
+    assert replay["delivery_replayed"] is True
+    assert calls == [
+        (ACTOR.stable_user_id, "same-delivery"),
+        (OTHER_ACTOR.stable_user_id, "same-delivery"),
+    ]
+    assert other.get("delivery_replayed") is not True
+
+
 def test_v2_choice_after_correlated_assistant_turn_uses_original_route_locator(
     tmp_path: Path,
 ) -> None:

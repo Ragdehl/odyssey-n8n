@@ -7,7 +7,11 @@ import pytest
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver
-from odyssey_runtime.composition import RuntimeComposition, _hybrid_dev_enabled
+from odyssey_runtime.composition import (
+    RuntimeComposition,
+    _hybrid_dev_enabled,
+    _hybrid_source_review_enabled,
+)
 
 ACTOR = AuthenticatedActorContext("11111111-1111-4111-8111-111111111111")
 
@@ -171,3 +175,21 @@ def test_hybrid_flag_accepts_only_explicit_dev_opt_in(monkeypatch) -> None:
     monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
 
     assert _hybrid_dev_enabled()
+
+
+def test_source_review_remains_disabled_without_its_own_opt_in(monkeypatch) -> None:
+    """DEV hybrid alone retains Router v5 until source review is explicitly selected."""
+    monkeypatch.setenv("ODYSSEY_HYBRID_DEV_ENABLED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+    monkeypatch.delenv("ODYSSEY_HYBRID_SOURCE_REVIEW_ENABLED", raising=False)
+
+    assert not _hybrid_source_review_enabled(_hybrid_dev_enabled())
+
+
+def test_source_review_rejects_prod_or_missing_hybrid_gate(monkeypatch) -> None:
+    """The v6 boundary cannot be accidentally activated independently of DEV hybrid."""
+    monkeypatch.setenv("ODYSSEY_HYBRID_SOURCE_REVIEW_ENABLED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+
+    with pytest.raises(ValueError, match="HYBRID_DEV_ENABLED"):
+        _hybrid_source_review_enabled(False)

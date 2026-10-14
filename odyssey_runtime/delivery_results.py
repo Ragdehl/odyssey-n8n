@@ -93,11 +93,14 @@ class LocalDeliveryResultStore:
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
-            # The execution coordinator is the single writer. Refuse an unexpected race rather
-            # than replacing another process's completed result.
-            if path.exists():
-                raise DeliveryResultError("completed delivery result already exists")
-            os.replace(temporary, path)
+            # ``replace`` is unsafe here: two processes can both observe an absent path and the
+            # later one would silently replace the first semantic outcome.  A hard link creates
+            # the destination atomically on this same state filesystem and therefore refuses the
+            # loser without changing the authoritative first result.
+            try:
+                os.link(temporary, path)
+            except FileExistsError as error:
+                raise DeliveryResultError("completed delivery result already exists") from error
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)

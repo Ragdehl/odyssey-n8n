@@ -129,6 +129,7 @@ from odyssey_core.resolution import ExistingEntityOutcome, resolve_existing_enti
 from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex, SemanticIndexError
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
+from odyssey_core.source_boundary_review import OpenAICoreSourceBoundaryReviewer
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import calendar_day_link_dates
 from odyssey_core.temporal_interpretation import (
@@ -707,6 +708,9 @@ class RuntimeComposition:
             return
         progress_by_stage = {
             "routing.started": 8,
+            "routing.boundary_review_started": 14,
+            "routing.boundary_review_ready": 18,
+            "routing.boundary_review_required": 18,
             "routing.ready": 18,
             "temporal.started": 28,
             "temporal.ready": 42,
@@ -771,7 +775,13 @@ class RuntimeComposition:
         actor: str | None = None,
         conversation_id: str | None = None,
     ) -> dict[str, object]:
-        """Persist only one safely resumable decision and replay all product outcomes."""
+        """Persist one safely completed delivery and replay it without re-execution.
+
+        The DEV hybrid seam is deliberately stricter than v0: once it returns a
+        typed result, including a no-write failure, the same actor/conversation
+        delivery must not be semantically interpreted again. Transport
+        exceptions never reach this method and therefore remain retryable.
+        """
         response = application_result_to_response(result)
         if response["product_outcome"] == "CLARIFY":
             candidate_view = self._candidate_pending_view(
@@ -800,6 +810,7 @@ class RuntimeComposition:
                 force_replay
                 or result.affected_stable_note_ids
                 or response["product_outcome"] == "CLARIFY"
+                or self.hybrid_candidate_execute is not None
             )
         ):
             store.save(result.request_id, fingerprint, response, _current_time()["timestamp"])
@@ -2196,6 +2207,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     actor = os.environ.get("ODYSSEY_ACTOR", "odyssey-runtime")
     context_limit = _positive_int_env("ODYSSEY_CONTEXT_LIMIT", 10)
     hybrid_dev_enabled = _hybrid_dev_enabled()
+    hybrid_source_review_enabled = _hybrid_source_review_enabled(hybrid_dev_enabled)
 
     @dataclass(frozen=True)
     class _PrecomputedCorePlan:
@@ -2637,7 +2649,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ApplicationResult,
             execute_candidate_routed_message(
                 source,
-                router=OpenAIFactCandidateRouter(client, prompt_revision="v5"),
+                router=OpenAIFactCandidateRouter(
+                    client, prompt_revision="v6" if hybrid_source_review_enabled else "v5"
+                ),
                 temporal=OpenAITemporalInterpreter(
                     client,
                     {key: clock[key] for key in ("date", "time", "timezone")},
@@ -2671,6 +2685,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 ),
                 task_route_executor=_ScopedTaskRouteExecutor(execute_scoped_tasks),
                 progress_callback=_emit_progress,
+                source_boundary_reviewer=(
+                    OpenAICoreSourceBoundaryReviewer(client)
+                    if hybrid_source_review_enabled
+                    else None
+                ),
             ),
         )
 
@@ -3887,6 +3906,25 @@ def _hybrid_dev_enabled() -> bool:
         raise ValueError("ODYSSEY_HYBRID_DEV_ENABLED must be 0 or 1")
     if os.environ.get("ODYSSEY_DEPLOYMENT_ENV", "").strip() != "DEV":
         raise ValueError("ODYSSEY_HYBRID_DEV_ENABLED requires ODYSSEY_DEPLOYMENT_ENV=DEV")
+    return True
+
+
+def _hybrid_source_review_enabled(hybrid_dev_enabled: bool) -> bool:
+    """Enable v6 only inside the already-authenticated DEV hybrid seam.
+
+    This is intentionally a second explicit switch: Router v5 remains the
+    default hybrid behavior, and a stray v6 flag can never activate in PROD.
+    """
+    value = os.environ.get("ODYSSEY_HYBRID_SOURCE_REVIEW_ENABLED", "").strip()
+    if value in {"", "0", "false", "False"}:
+        return False
+    if value not in {"1", "true", "True"}:
+        raise ValueError("ODYSSEY_HYBRID_SOURCE_REVIEW_ENABLED must be 0 or 1")
+    if not hybrid_dev_enabled or os.environ.get("ODYSSEY_DEPLOYMENT_ENV", "").strip() != "DEV":
+        raise ValueError(
+            "ODYSSEY_HYBRID_SOURCE_REVIEW_ENABLED requires "
+            "ODYSSEY_HYBRID_DEV_ENABLED=1 and ODYSSEY_DEPLOYMENT_ENV=DEV"
+        )
     return True
 
 

@@ -60,6 +60,10 @@ class Reviewer:
     def __init__(self, *decisions):
         self.decisions = decisions
         self.calls = []
+        self.model = "gpt-5.6"
+        self.reasoning_effort = "low"
+        self.last_usage = {"input_tokens": 11, "output_tokens": 3}
+        self.last_error_category = None
 
     def review(self, context):
         self.calls.append(context)
@@ -236,6 +240,12 @@ def test_dispatcher_blocks_unreviewed_or_disputed_routes_with_zero_mutations(
     assert not core_planner_calls
     assert {path: repository.read_text(path) for path in repository.list_markdown_paths()} == before
     assert not [path for path in repository.list_markdown_paths() if path not in before]
+    if provide_reviewer:
+        stage = result.operational.stages[0]
+        assert stage.name == "candidate.source_boundary_review"
+        assert stage.model == "gpt-5.6"
+        assert stage.usage == {"input_tokens": 11, "output_tokens": 3}
+        assert stage.error_category is None
 
 
 def test_router_revision_receives_only_typed_bounded_core_feedback():
