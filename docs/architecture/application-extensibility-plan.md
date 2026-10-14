@@ -16,6 +16,10 @@ El usuario confirma como **orden obligatorio entre chats/agentes**, sustituyendo
 
 **Alcance inmediato:** esta decisión actualiza el planning, NO autoriza deploy, merge, escrituras sobre datos reales ni refactorización completa. El estado operativo y el próximo paso exacto se mantienen exclusivamente en Functional Roadmap.
 
+## Contrato de producto de E2 precisado el 14-10-2026
+
+El usuario confirma que **las identidades son genéricas para todos los NoteSchema**, los editores de Facts y Work Sessions podrán usar el mismo resolvedor opcional de links que el chat, y los caminos UI y chat confluirán en el E3 común. `SELF` solo es el actor gramatical cuando está probado, no una raíz de todas las referencias. El contexto E2 conserva ancla normalizada más franja natural (`por la tarde`, `por la noche`) sin inventar horas, soporta preparación independiente de Temporal y entidades en paralelo, y provee eventos de etapa universales para el gráfico/donut que sobrevivan Python→n8n→web. Se priorizan `dataclasses`, `Protocol`, puertos y composición sobre una superclase global. La especificación vinculante y los gates detallados están en [E2 Shared Context Contract](e2-shared-context-contract.md). E3 queda como servicio común de garantías de mutación sobre el Writer/persistencia ya existentes. Estas direcciones no implican que todas estén implementadas o desplegadas.
+
 ## Evidencia de partida (auditoría de lectura, 13-10-2026; no sustituye la validación DEV)
 
 - `odyssey_core/materialization.py` y `odyssey_core/persistence.py` ya centralizan mecánicas canónicas de creación, actualización y eliminación; `odyssey_core/application.py` proporciona el recorrido ordinario de preflight/ejecución. **No existe aún una única puerta de entrada de mutación con exactamente las mismas garantías para todos los casos**.

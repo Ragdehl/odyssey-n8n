@@ -8,6 +8,7 @@ request. The active DEV/PROD chat route is not modified.
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from time import perf_counter
@@ -19,6 +20,7 @@ from odyssey_core.application import ApplicationResult
 from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
+from odyssey_core.execution_context import ExecutionContext
 from odyssey_core.git_history import HistoryRecorder
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.observability import (
@@ -839,6 +841,24 @@ def execute_candidate_routed_message(
         ):
             route_context = replace(route_context, verified_sensitive_temporal=domain)
         route_context.validate(unit_source)
+        # E2 seam: bind existing CoreCandidateContext, DomainInterpretation and
+        # runtime-authenticated actor to ONE validated, immutable handoff.
+        # The context is a structural guard, not a second semantic authority.
+        # It is intentionally assembled only after all Core-owned inheritance
+        # and scoped evidence have already been independently verified.
+        execution_context = ExecutionContext(
+            request_id=locator,
+            source=unit_source,
+            captured_at=now,
+            timezone=os.environ.get("TZ", "UTC"),
+            authenticated_actor=routed_authenticated_actor,
+            candidates=route_context,
+            domains=(domain,) if domain is not None else (),
+        )
+        # Subsequent stages consume the validated carrier, not new copies of
+        # the original planner/actor arguments.
+        route_context = execution_context.candidates
+        domain = execution_context.domains[0] if execution_context.domains else None
         from odyssey_core.scoped_event_evidence import CoreInheritedEventWriteGuard
         from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard
 
@@ -926,7 +946,7 @@ def execute_candidate_routed_message(
             progress_callback=progress_callback,
             write_preflight_guard=subject_guard or event_guard or guard,
             known_fact_verifier=known_fact_verifier,
-            authenticated_actor=routed_authenticated_actor,
+            authenticated_actor=execution_context.authenticated_actor,
             self_binding_repository=self_binding_repository,
             conversation_context=tuple(routed_prior_turns),
         )

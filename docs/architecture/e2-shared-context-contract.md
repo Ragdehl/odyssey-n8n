@@ -1,0 +1,78 @@
+# E2 — Contrato compartido de contexto, capacidades y evidencias
+
+**Decisión funcional aprobada por el usuario: 14-10-2026.** Este es el contrato objetivo de E2 para un sistema componible de piezas («Lego»), NO la declaración de que todas sus integraciones están desplegadas. Ver estado efectivo en [Functional Roadmap](functional-roadmap.md). Base de rama E1: PR #153 DRAFT (aún no fusionada); E2 es una rama dependiente, nunca un reemplazo de E1 ni autorización de merge/deploy.
+
+## Objetivo
+
+Eliminar la amplificación de cambios entre Router, Temporal, Core, Apps y el gráfico de ejecución. Cada pieza declara sus entradas, salidas, efectos, fuente y autoridad; la composición detecta dependencias ausentes **antes** de ejecutar. El contexto conserva sin pérdida el texto original, fragmentos/offsets/hashes, actor autenticado, evidencias, identidades canónicas **genéricas de cualquier tipo de nota**, dependencias, incertidumbres y recibos/telemetría. Se reutilizan los tipos ya existentes (`CoreCandidateContext`, `DomainInterpretation`, `TemporalInterpretation`, `AuthenticatedActorContext`, `CoreSpeakerEvidence`, `ApplicationResult`, `OperationalEvidence`) en vez de construir un sistema paralelo de decisiones.
+
+## Decisiones vinculantes
+
+1. **Identidades y referencias genéricas.** `stable_note_id` identifica cualquier nota de `config/note-schema.json` (`person`, `task`, `work_session`, `project`, `calendar_day`, tipos futuros); `note_type` solo orienta reglas diferenciales. `SELF` es una *forma particular de resolver al hablante autenticado*, no el identificador de todas las acciones ni un requisito para relacionar María con Marta. La autoría de un envío nunca implica que el remitente sea el sujeto gramatical.
+2. **Un contexto tipado, inmutable y versionado en la ejecución.** El runtime es dueño del ID, fuente y actor autenticado; Router propone candidatos; Temporal propone/resuelve anclas temporales; Apps añaden exclusivamente evidencias de su dominio; Core es dueño de identidades, autorizaciones y mutaciones. Las piezas obtienen una *vista mínima* según puertos declarados. Un dato transportado no gana autoridad por haber sido transportado ni porque lleve `verified` en JSON. Los pasos del modelo no reciben credenciales ni datos irrelevantes del vault.
+3. **Contratos explícitos por capacidad.** `Protocol`/`dataclass`/registro de puertos compatible por `requires`/`provides`, con validación de esquema/versión, preflight antes de efectos, y adaptadores a los carriers probados. Evitar superclases con cientos de métodos o un orquestador de microservicios adicional. En la medida posible, reemplazar las conversiones duplicadas en vez de perpetuarlas. Las etapas independientes pueden prepararse en paralelo; efectos, dependencias semánticas y writes se ordenan adecuadamente.
+4. **Temporal sin pérdida semántica.** Resolver *«hoy»* a fecha, pero preservar por separado calificadores *«esta tarde», «mañana por la tarde», «ayer por la noche»* con ancla de calendario + franja textual exacta; **no** asignar 15:00 u otra hora arbitraria. Los roles temporales los propone/valida el intérprete, nunca un diccionario rígido de frases; fuente original, zona y precisión permanecen verificables. Consumidores Tasks, Events, Calendar, Notes y Work Sessions acceden a la misma representación sin reparseo autónomo.
+5. **Interfaz y gráfico como consumidores genéricos.** Cada etapa emite eventos observados con `request_id`, `stage_id`, padre, orden, estado, duración/coste disponibles y resumen acotado sin trazas privadas; runtime → n8n → web deben validar la misma versión. La UI proyecta etapas reales; el donut no inventa progreso ni pierde entradas cuando se agrega una capacidad; estados parciales y recibos sobreviven al transporte. El contrato de telemetría jamás confiere autoridad de escritura.
+6. **Un único camino final de mutación es E3.** Chat puede pasar por Router/Temporal/Planner; checkbox/edición por UI pueden omitir interpretación; un editor de Work Session/Fact puede invocar optativamente el servicio *común* de resolución de notas y links. Todas confluyen en E3, que centraliza autorización, targets, revisiones/concurrencia, referencias, idempotencia, materialización/historial y readback, reutilizando `materialization.py`/`persistence.py`/Writer existentes, no otro Writer. Work Sessions son Notes con lifecycle diferencial y texto capaz de enlazar con cualquier otro tipo de nota. **No** desarrollar ahora todos los botones ni rediseñar la UI.
+7. **Seguridad.** Core valida siempre el texto/offsets/hashes, vinculación de actor y autoridad específica del emisor, frescura, completitud y destino antes de la mutación. Atributos externos autoafirmados, similitudes de nombres o sugerencias de Router no son garantías. Conservar fail-closed y aislamiento local-first. No tocar PROD ni vault real para pruebas.
+
+## Arquitectura de puertos
+
+```mermaid
+flowchart TD
+  R[Solicitud + actor autenticado] --> C[ExecutionContext v1: raíz inmutable]
+  C --> Router[Router → candidatos]
+  C --> Temporal[Temporal → tiempo con precisión]
+  C --> Resolver[Core identity resolver → NoteRef genérica]
+  Router --> Merge[Validador de contratos y merge]
+  Temporal --> Merge
+  Resolver --> Merge
+  Merge --> V[Contexto enriquecido con origen + límites]
+  V --> Apps[Apps: semántica exclusiva de dominio]
+  V --> Core[Core Planner, Attribution, Coverage]
+  Apps --> Core
+  Core --> Gate[Puerta E3: mutaciones canónicas]
+  Gate --> Vault[(Markdown)]
+  Vault --> Receipts[Readback + recibos]
+  Receipts --> Events[Eventos de ejecución versionados]
+  Events --> UI[n8n → gráfico / donut / notas]
+```
+
+La flecha Core Identity se refiere a un *servicio compartido*, no a un tercer modelo obligatorio. La preparación puede ser concurrente solo cuando no existe relación de datos entre etapas. Los gráficos describen el destino, no aseguran que todos los adaptadores ya estén desplegados.
+
+## Ejemplos contractuales
+
+- «Ayer María vio a Marta»: actor autenticado distinto de sujeto; dos referencias `NoteRef` tipo `person`, **ningún** `SELF`.
+- «Hablé con Eric»: `SPEAKER` propuesto por fuente; el validador Core decide si puede usar `SELF` como referencia a una Note person existente.
+- «Hoy preparé el informe para Proyecto Atlas»: relaciones genéricas a `project` y posibles `task`, sin validadores nuevos por cada NoteSchema.
+- «Mañana por la tarde»: `{source:"mañana por la tarde", date:"2026-10-15", daypart:"por la tarde", exact_time:null, timezone:"Europe/Paris"}` con fecha de referencia 14-10-2026.
+- UI Work Session: editor → (resolución opcional de entidades) → E3; no necesitar Router/Planner para una edición de estructura ya identificada.
+
+## Definición de terminado de E2
+
+- Un port y un contexto compartido funcionan en un flujo productivo con adapters para Router, Temporal, Core y Apps, sin autoridad implícita ni caminos de contexto competidores.
+- Generic NoteRef y ambigüedad probados con al menos person, task, project, work_session y calendario más un tipo desconocido definido en esquema; no existe `person_id` como infraestructura general.
+- Qualifiers temporales conservan precisión original en handoff de Temporal al consumidor y (cuando el producto pide texto) a la salida Markdown/UI; tests de día sin cualificador, fecha con franja, exact time y ambigüedades.
+- Una App ficticia consume el contrato sin cambiar el dispatcher central ni crear su propia lógica de fechas/enlaces/escritura.
+- Pruebas negativas: actor falso, offsets/hashes alterados, evidencia sin resolver, contexto cruzado, proveedor adversarial, entregas parcialmente escritas y replay.
+- Un evento nuevo de backend sobrevive al contrato runtime→n8n→web sin cambiar listas rígidas en cada capa; respeta costes/latencias y no revela contenido sensible.
+- Tests unitarios + verticales y gate del despliegue independiente; nunca confundir pruebas sintéticas con aceptación de modelo real. Sin nuevos servicios, graph DB ni reescritura general.
+
+## Architecture challenge (inicio E2)
+
+**PROCEED**, con alcance incremental: `DomainInterpretation`, `CoreCandidateContext`, contratos de actor y telemetría ya resuelven partes importantes. Un contrato común de *transporte y comprobación* encima de esos modelos es más sencillo que reescribir Core o sustituir todo por un framework/ABC común. Riesgo prioritario: que un `Context` universal duplique fuentes de verdad o filtre privilegios a Router. Mitigación: estructura inmutable limitada, validación estricta, proyección de mínimos por etapa, persistencia/identidad solo mediante Core; primer slice provider-free en rama dependiente E1. No se requieren cambios de proveedor, despliegue, esquema canónico ni servicios.
+
+## Primer incremento implementado (15-10-2026, provider-free, NO desplegado)
+
+- `odyssey_core/execution_context.py`: `ExecutionContext(version=1)` inmutable, fuente/fecha/actor autenticado inmutables; reutilización validada de `CoreCandidateContext` y `DomainInterpretation`, sin duplicar sus semánticas. `NoteReferenceCandidate`/`NoteMention` representan **hipótesis** genéricas de cualquier `NoteSchema`, no resuelven identidades ni autorizan mutaciones. `QualitativeTime` conserva un cualificador literal verificado contra un `temporal_reference` exacto existente; no añade 15:00 ni analiza lenguaje con diccionarios.
+- Puertos explícitos `ContextPort`/`StageSpec`/`StageInput`/`StageOutput`/`ContextStage(Protocol)` y `run_context_stage` validan datos disponibles, origen y outputs declarados. `stage_input` oculta actor, reloj y evidencias fuera de los puertos solicitados. `run_independent_stages` usa threads solamente para propuestas sin dependencia entre outputs; valida dependencia *antes* de ejecutar y fusiona el resultado a una nueva copia inmutable. No paraleliza escrituras.
+- `odyssey_runtime/candidate_route_dispatch.py`: justo antes del Planner/Writer de Core, valida un `ExecutionContext` formado por el `CoreCandidateContext` revisado, las evidencias `DomainInterpretation` y el actor confiable; entrega a Core el carrier revalidado, sin sustituir sus guards ni cambiar las acciones propuestas. Es una primera conexión real del nuevo contrato, **todavía no una migración completa de todos los traspasos**, y no ejecuta `StageSpec` del Router/Temporal de producción en este slice.
+- `tests/core/test_execution_context.py`: contrato simulado completo Temporal + resolvedor genérico de tipos de nota + App ficticia, equivalencia de orden de dos contribuciones, ejecución realmente simultánea mediante barrier, dependencia negativa, inmutabilidad, fuente falsa, actor falsificado, capacidad duplicada, fechas/cualificadores incongruentes, referencia ambigua y `no-write` implícito. Los tests de dispatcher real, Tasks, Writer y Temporal cubren el seam sin cambios semánticos.
+
+**Gate primer incremento:** full pytest **3184 passed, 80 skipped, los mismos 10 fallos históricos preexistentes** (52 subtests), Node **150 passed**, Ruff lint/format, esquema canónico y diff correctos. Estos tests no prueban que el LLM genere dayparts ni que la UI los renderice.
+
+**No está hecho:** producción de `QualitativeTime` por el modelo real; links automáticos de editor/UI, serialización uniforme de eventos Python→n8n→web, todas las Apps como consumidores nativos del contexto, repositorio de identidad canónica, pruebas live/deploy y E3. Estas entregas siguen en los gates de arriba; ningún port por sí solo vuelve infalible la interpretación gramatical.
+
+## Continuidad
+
+E2 se implementa en `feat/e2-shared-context-contract`, worktree `/home/ragdehl/projects/odyssey-e2-contract`, base `feat/e1-cross-boundary-integrity` PR #153, todavía DRAFT. Estado exacto y test evidence en el roadmap de ESTA rama. Después E2 → E3, no volver a prolongar E1 mediante parches de frases. Merge y deploy requieren consentimiento explícito y gates.
