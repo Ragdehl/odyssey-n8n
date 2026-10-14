@@ -26,6 +26,7 @@ from odyssey_apps.tasks import (
     compose_scoped_task_domain_interpretation,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
+from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.notes import parse_note, validate_note
 from odyssey_core.request_planning import (
     KnowledgeUnit,
@@ -36,7 +37,7 @@ from odyssey_core.request_planning import (
 )
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 from odyssey_runtime.candidate_route_dispatch import execute_candidate_routed_message
-from odyssey_runtime.composition import _ScopedTaskRouteExecutor
+from odyssey_runtime.composition import _persistence_actor, _ScopedTaskRouteExecutor
 from odyssey_runtime.hybrid_group_compiler import compile_hybrid_candidate_bundle
 from odyssey_runtime.scoped_temporal_handoff import ScopedTemporalHandoff
 from tests.apps.test_fact_candidates import CASES
@@ -103,10 +104,13 @@ def test_hybrid_task_app_can_create_real_pending_task_via_existing_core_lifecycl
     ctx.rebuild(repo, task_schema, embedder)
     semantic.rebuild(repo, task_schema, embedder)
     visited = []
+    received_actors = []
     progress: list[str] = []
+    authenticated_actor = AuthenticatedActorContext("11111111-1111-4111-8111-111111111111")
 
-    def tasks_execute(fragment, locator, _actor, _prior):
+    def tasks_execute(fragment, locator, received_actor, _prior):
         visited.append(fragment)
+        received_actors.append(received_actor)
         assert fragment in (
             "Hoy tengo que llamar a Ana",
             " y escribir a Luis",
@@ -176,17 +180,19 @@ def test_hybrid_task_app_can_create_real_pending_task_via_existing_core_lifecycl
         semantic_index=semantic,
         embedder=embedder,
         contextual_reasoner=object(),
-        actor="test-hybrid-task",
+        actor=_persistence_actor("test-hybrid-task", authenticated_actor),
         now=NOW,
         context_limit=5,
         request_id_factory=lambda: "hybrid-tasks-v1",
         bundle_compiler=_enabled_compiler(),
         task_route_executor=tasks_execute,
         progress_callback=lambda stage, _payload: progress.append(stage),
+        authenticated_actor=authenticated_actor,
     )
     # The ordinary four-argument executor remains callable for local routes,
     # but cannot receive the typed predecessor date required by route two.
     assert visited == ["Hoy tengo que llamar a Ana", "; mañana preparar la factura."]
+    assert received_actors == [authenticated_actor, authenticated_actor]
     assert result.status is ApplicationStatus.PARTIAL, result.execution_flow
     assert progress[:2] == ["routing.started", "routing.ready"]
     assert progress.count("planner.started") == 2

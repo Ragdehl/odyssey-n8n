@@ -769,7 +769,15 @@ def _compile_facts(
             if not isinstance(part, IdentityPart):
                 raise SemanticWriteCompileError("Semantic fact part is invalid")
             _safe_text(part.text)
-            selection = _compile_identity(part.identity, allow_self=False, allow_complete_set=True)
+            # The same Core-owned SELF binding used for direct note targets may
+            # also identify a speaker as a fact participant. It remains only a
+            # symbolic lookup: Core verifies the authenticated actor and binding
+            # before producing a wikilink, and never creates a Person implicitly.
+            selection = _compile_identity(
+                part.identity,
+                allow_self=part.identity.binding is IdentityBinding.SELF,
+                allow_complete_set=True,
+            )
             if part.identity == target:
                 raise SemanticWriteCompileError("Fact reference cannot select its own target")
             reference_key = (part.identity, part.text)

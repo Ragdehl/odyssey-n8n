@@ -2690,6 +2690,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     if hybrid_source_review_enabled
                     else None
                 ),
+                authenticated_actor=authenticated_actor,
+                self_binding_repository=self_binding_repository,
+                conversation_context=LocalConversationStore(
+                    conversation_root_resolver.resolve(authenticated_actor.stable_user_id)
+                ).recent_context(exclude_request_id=request_id),
             ),
         )
 

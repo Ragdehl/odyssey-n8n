@@ -285,3 +285,35 @@ test("local candidate preview grounds every role in the message and never interp
     {...preview.candidates[0].roles[0], source: "invented"},
   ]}]}), DiagnosticPreviewError);
 });
+
+test("real v6 Router timing and prewrite Core review stay outside route-local graph", () => {
+  const stages = [
+    stage("candidate.source_proposal", 1840, {model: "gpt-6-luna", usage: {input_tokens: 200, output_tokens: 51}}),
+    stage("candidate.source_boundary_review", 1750, {model: "gpt-5.6-luna"}),
+    stage("candidate.temporal_interpretation", 1960, {model: "gpt-6-luna"}),
+    stage("planner", 3500, {model: "gpt-5.6-luna"}),
+  ];
+  const requestId = "synthetic-v6-staged";
+  const input = "Ayer visité el museo";
+  const detail = validateRequestDetail({
+    request_id: requestId,
+    operational: {total_duration_ms: 11000, stages},
+    flow: {version: 1, input, parallel_preparation: false, routes: [{
+      capability: "temporal", text: input, stage_count: 2, status: "completed", temporal: [],
+      steps: [
+        {name: "candidate.temporal_interpretation", input, output: "Fecha verificada"},
+        {name: "planner", input, output: "Plan verificado"},
+      ],
+    }]},
+  }, requestId);
+  const graph = renderExecutionFlow(doc, detail);
+  assert.match(graph.textContent, /Router/);
+  assert.match(graph.textContent, /1 camino/);
+  assert.match(graph.textContent, /Revisión previa de la división/);
+  assert.match(graph.textContent, /Core · revisión de la división/);
+  assert.match(graph.findAll("flow-lane")[0].textContent, /Temporal/);
+  assert.match(graph.findAll("flow-lane")[0].textContent, /Planner/);
+  const invalid = structuredClone(detail);
+  invalid.operational.stages[2].name = "planner"; // prewrite stages cannot hide a changed route order
+  assert.throws(() => validateRequestDetail(invalid, requestId), ProductRequestError);
+});

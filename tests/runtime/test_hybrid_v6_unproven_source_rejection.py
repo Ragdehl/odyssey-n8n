@@ -71,9 +71,10 @@ def test_unproven_v6_source_never_invokes_writer_or_loses_error_category(tmp_pat
         else "SOURCE_PROVENANCE_UNREPRESENTABLE"
     )
     assert [stage.name for stage in result.operational.stages] == [
-        "candidate.source_compilation" if error_at == "compiler" else "application.router"
+        "candidate.source_proposal",
+        "candidate.source_compilation" if error_at == "compiler" else "application.router",
     ]
-    assert result.operational.stages[0].error_category == (
+    assert result.operational.stages[-1].error_category == (
         "CandidateDependencyError" if error_at == "compiler" else "RouterError"
     )
     assert "routing.boundary_review_required" in progress

@@ -699,3 +699,31 @@ test("Calendar and Notes events switch only the visible application surface", as
   assert.equal(page.elements.notes.hidden, false);
   assert.equal(page.elements.calendar.hidden, true);
 });
+
+test("generic clarification without choices never leaves a stale global choose prompt", async () => {
+  const page = await mountApp({
+    turns: [],
+    createSubmission: (request) => ({request, requestId: "web-coverage-choice-none"}),
+    requestProductResult: async () => ({
+      request_id: "web-coverage-choice-none",
+      status: "needs_attention", kind: "clarification",
+      message: "No he podido verificar todas las partes de la afirmación.",
+      clarification: {request_id: "web-coverage-choice-none", options: []},
+    }),
+  });
+  page.elements.input.value = "Hoy encontré una mochila azul mientras ordenaba el cuarto.";
+  page.elements.form.emit("submit", {preventDefault() {}});
+  await flush();
+  assert.equal(page.elements.clarificationStatus.hidden, true);
+  assert.equal(page.elements.input.disabled, false);
+  assert.match(conversationMessages(page.elements.conversation).at(-1).textContent, /No he podido verificar/);
+});
+
+test("recoverable history warns only that its assistant turn is missing, not its saved delivery", async () => {
+  const page = await mountApp({
+    turns: [{request_id: "web-historical-turn", role: "user", text: "Ayer hice una prueba"}],
+  });
+  const control = page.elements.conversation.querySelector(".recovery-control");
+  assert.match(control.textContent, /La respuesta no figura en el historial/);
+  assert.doesNotMatch(control.textContent, /no tiene una respuesta guardada/);
+});

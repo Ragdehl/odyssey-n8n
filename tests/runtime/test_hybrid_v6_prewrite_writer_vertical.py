@@ -129,7 +129,11 @@ def test_v6_core_review_preserves_two_day_facts_through_real_writer(tmp_path):
     assert [stage.name for stage in result.operational.stages].count(
         "candidate.source_boundary_review"
     ) == 1
-    review_stage = result.operational.stages[0]
+    review_stage = next(
+        stage
+        for stage in result.operational.stages
+        if stage.name == "candidate.source_boundary_review"
+    )
     assert review_stage.model == "gpt-5.6-luna"
     assert review_stage.usage == {"input_tokens": 130, "output_tokens": 12}
     day_before = vault.read_text("calendar/days/2026-10-03.md")

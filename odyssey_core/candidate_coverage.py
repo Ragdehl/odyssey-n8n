@@ -24,6 +24,7 @@ from .candidate_mutual_relation import validate_one_mutual_relationship_fact
 from .candidate_property_evidence import validate_subject_property_fact
 from .candidate_semantic_veto import veto_unsafe_literal_match
 from .candidate_sequential_contacts import validate_two_sequential_contacts
+from .candidate_speaker_evidence import CoreSpeakerEvidence, validate_speaker_evidence
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 MAX_COVERAGE_CLAIMS = 26
@@ -63,6 +64,7 @@ class CoreCandidateCoverageManifest:
     source_digest: str
     plan_digest: str
     claims: tuple[CoreCandidateCoverageClaim, ...]
+    speaker_evidence: tuple[CoreSpeakerEvidence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,13 +101,16 @@ def build_candidate_coverage_manifest(
     claims: tuple[CoreCandidateCoverageClaim, ...],
     *,
     canonical_binding: object | None = None,
+    speaker_evidence: tuple[CoreSpeakerEvidence, ...] = (),
 ) -> CoreCandidateCoverageManifest:
     """Build a plan-bound candidate checklist after explicit Core review.
 
     This builder does not infer candidate ownership or decide dispositions. The
     caller must supply every candidate claim; invalid or incomplete claims raise.
     """
-    manifest = CoreCandidateCoverageManifest(_digest(source), _digest(repr(plan)), claims)
+    manifest = CoreCandidateCoverageManifest(
+        _digest(source), _digest(repr(plan)), claims, speaker_evidence
+    )
     validate_candidate_coverage_manifest(
         source, context, plan, manifest, canonical_binding=canonical_binding
     )
@@ -174,6 +179,8 @@ def validate_candidate_coverage_manifest(
         fact_ordinals.update(per_unit)
     if len(fact_ordinals) > MAX_COVERAGE_FACTS:
         raise ValueError("Fact coverage exceeds review budget")
+    speaker_refs = validate_speaker_evidence(source, context, plan, manifest.speaker_evidence)
+    speaker_proofs = {proof.fact_ordinal: proof for proof in manifest.speaker_evidence}
     facts_by_ordinal: dict[int, str] = {}
     write_unit_ordinals = iter(ordinals)
     for action in plan.actions:
@@ -478,6 +485,17 @@ def validate_candidate_coverage_manifest(
             helper_key = action_index, independent_actor_helper
             if helper_key in claimed_helpers:
                 raise ValueError("The same linked actor helper owns two independent events")
+            claimed_helpers.add(helper_key)
+        elif ordinal in speaker_refs:
+            # The same Core-reviewed speaker evidence is consumed by coverage
+            # and canonical reference helper claiming; named-person validators
+            # must not reinterpret synthetic 'yo' as a named entity.
+            proof = speaker_proofs[ordinal]
+            if proof.candidate_id != context.candidates[index].candidate_id:
+                raise ValueError("Speaker proof belongs to another source candidate")
+            helper_key = action_index, speaker_refs[ordinal][2]
+            if helper_key in claimed_helpers:
+                raise ValueError("Speaker reference helper has duplicated ownership")
             claimed_helpers.add(helper_key)
         elif unit.references and grouped_participant_helpers is None:
             if len(unit.facts) == 1:

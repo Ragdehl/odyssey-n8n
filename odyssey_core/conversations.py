@@ -690,12 +690,15 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
             (
                 index
                 for index, stage in enumerate(stages)
-                if stage.get("name") == "application.router"
+                if stage.get("name") in {"application.router", "candidate.source_proposal"}
             ),
             -1,
         )
         if router_index >= 0:
             cursor = router_index + 1
+            prewrite_stages = {"candidate.source_boundary_review", "candidate.router_revision"}
+            while cursor < len(stages) and stages[cursor].get("name") in prewrite_stages:
+                cursor += 1
             for route in value["routes"]:
                 if "steps" in route:
                     for step in route["steps"]:
@@ -808,6 +811,7 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
             "retrieval_capabilities_bytes",
             "write_capabilities_bytes",
             "recent_context_bytes",
+            "candidate_context_bytes",
             "luna_rules_examples_bytes",
             "user_request_bytes",
             "structured_output_schema_bytes",

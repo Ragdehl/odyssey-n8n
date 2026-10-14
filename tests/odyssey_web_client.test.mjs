@@ -933,3 +933,30 @@ test("malformed optional graph does not hide a validated successful write", () =
   assert.equal(reply.request_detail.diagnostic_issue, "EVIDENCE_REJECTED");
   assert.equal(reply.request_detail.operational.stages.length, 0);
 });
+
+test("conversation diagnostics mismatch retries only a text-only assistant turn, never the write", async () => {
+  const calls = [];
+  const notifications = [];
+  const result = {
+    request_id: "web-transcript-diagnostic",
+    kind: "acknowledgement",
+    status: "completed",
+    message: "He guardado el hecho.",
+  };
+  await renderProductResultWithContinuity({
+    result,
+    renderResult: (value) => calls.push(["render", value.request_id]),
+    persistAssistantTurn: async (options = {}) => {
+      calls.push(["persist", options.withoutDiagnostics === true]);
+      if (!options.withoutDiagnostics) throw new ProductRequestError("diagnostic contract mismatch");
+    },
+    warnDiagnosticFallback: () => notifications.push("diagnostics"),
+    warnContinuity: () => notifications.push("continuity"),
+  });
+  assert.deepEqual(calls, [
+    ["render", result.request_id],
+    ["persist", false],
+    ["persist", true],
+  ]);
+  assert.deepEqual(notifications, ["diagnostics"]);
+});

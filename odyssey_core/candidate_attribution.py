@@ -26,6 +26,11 @@ from .candidate_sequential_contacts import (
     SequentialContactEvidenceError,
     validate_two_sequential_contacts,
 )
+from .candidate_speaker_evidence import (
+    CoreSpeakerEvidence,
+    speaker_fact_references,
+    validate_speaker_evidence,
+)
 from .experimental_luna_planning import (
     LUNA_EXPERIMENT_MODEL,
     LUNA_EXPERIMENT_REASONING_EFFORT,
@@ -466,6 +471,7 @@ class OpenAICoreCandidateAttributor:
         ):
             raise CandidateAttributionError("Reviewer Temporal proof differs from current source")
         facts = _graph_plan_fact_texts(plan, context)
+        speaker_requested = bool(speaker_fact_references(plan))
         canonical_proof = None
         if canonical_binding is not None:
             from .application import CanonicalReferenceEvidence, DependentReferenceGuard
@@ -607,9 +613,26 @@ class OpenAICoreCandidateAttributor:
                             "Use ambiguous_identity only for genuine ambiguity of the SOURCE "
                             "referent itself, such as an unresolved pronoun with competing "
                             "antecedents, never as a generic substitute for absent note context. "
-                            "An explicit first-person ordinary action may be recorded as a "
-                            "literal Day fact without proving a self-Person Note; do not "
-                            "invent a canonical user or assign another named subject. "
+                            "When a fact uses an explicit symbolic SELF person "
+                            "reference and speaker_source_quote is included, "
+                            "independently evaluate whether its exact CURRENT "
+                            "source asserts the speaker as its first-person "
+                            "singular grammatical subject. Provide one exact "
+                            "source-owned predicate or subject role quote only "
+                            "when this is unambiguous; otherwise return null "
+                            "and let Core refuse the write. Sender metadata, "
+                            "quoted speech, another subject, plural we and "
+                            "unresolved speaker references are not evidence. "
+                            "For a first-person ordinary action (including a "
+                            "grammatically elided singular first-person subject), "
+                            "SPEAKER may be a symbolic SELF fact participant ONLY "
+                            "when the CURRENT source unambiguously supports it; "
+                            "a Core-owned authenticated binding must independently "
+                            "resolve the canonical Person reference at preflight. "
+                            "A literal Day fact remains valid if no symbolic "
+                            "identity claim is supported; never invent a user, "
+                            "treat write provenance as the grammatical subject, "
+                            "or misattribute another named or collective subject. "
                             "Inside the CURRENT complete selected source group, "
                             "independently analyze COORDINATION and GRAMMATICAL ELLIPSIS: "
                             "a predicate stated once can govern several separate people, "
@@ -657,9 +680,13 @@ class OpenAICoreCandidateAttributor:
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "odyssey_core_candidate_fact_graph_v2",
+                        "name": (
+                            "odyssey_core_candidate_fact_graph_speaker_v1"
+                            if speaker_requested
+                            else "odyssey_core_candidate_fact_graph_v2"
+                        ),
                         "strict": True,
-                        "schema": candidate_fact_graph_json_schema(),
+                        "schema": candidate_fact_graph_json_schema(with_speaker=speaker_requested),
                     }
                 },
             )
@@ -692,6 +719,7 @@ class CandidateFactLinks:
     source_quote: str
     fact_ordinals: tuple[int, ...]
     pending_reason: str | None = None
+    speaker_source_quote: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -819,6 +847,19 @@ def inspect_candidate_fact_graph(
             )
     if accounted != actual:
         raise CandidateAttributionError("Every planned Core fact needs explicit source evidence")
+    if any(
+        link.speaker_source_quote is not None and len(link.fact_ordinals) != 1 for link in links
+    ):
+        raise CandidateAttributionError("One speaker attestation requires one atomic source fact")
+    speaker_proofs = tuple(
+        CoreSpeakerEvidence(link.candidate_id, link.fact_ordinals[0], link.speaker_source_quote)
+        for link in links
+        if link.speaker_source_quote is not None
+    )
+    try:
+        validate_speaker_evidence(source, context, plan, speaker_proofs)
+    except ValueError as error:
+        raise CandidateAttributionError("Graph speaker evidence is ungrounded") from error
     return CandidateFactGraph(
         links=links,
         source_digest=hashlib.sha256(source.encode("utf-8")).hexdigest(),
@@ -863,8 +904,8 @@ def _graph_plan_fact_texts(plan: RequestPlan, context: CoreCandidateContext) -> 
     return facts
 
 
-def candidate_fact_graph_json_schema() -> dict[str, Any]:
-    """Strict non-executing N:M graph proposal schema for independent Core review."""
+def candidate_fact_graph_json_schema(*, with_speaker: bool = False) -> dict[str, Any]:
+    """Version the closed speaker shape only when a plan requires SELF evidence."""
     item = {
         "type": "object",
         "properties": {
@@ -892,6 +933,9 @@ def candidate_fact_graph_json_schema() -> dict[str, Any]:
         ],
         "additionalProperties": False,
     }
+    if with_speaker:
+        item["properties"]["speaker_source_quote"] = {"type": ["string", "null"]}
+        item["required"].append("speaker_source_quote")
     return {
         "type": "object",
         "properties": {"candidates": {"type": "array", "items": item}},
@@ -914,6 +958,7 @@ def validate_candidate_fact_graph_proposal(
     The result is not authority to write until that validator passes.
     """
     facts = _graph_plan_fact_texts(plan, context)
+    with_speaker = bool(speaker_fact_references(plan))
     if not isinstance(payload, dict) or set(payload) != {"candidates"}:
         raise CandidateAttributionError("Closed graph proposal required")
     entries = payload["candidates"]
@@ -921,13 +966,16 @@ def validate_candidate_fact_graph_proposal(
         raise CandidateAttributionError("Every source candidate needs one graph proposal")
     links: list[CandidateFactLinks] = []
     for _candidate, entry in zip(context.candidates, entries, strict=True):
-        if not isinstance(entry, dict) or set(entry) != {
+        fields = {
             "candidate_id",
             "source_quote",
             "fact_ordinals",
             "planned_fact_texts",
             "pending_reason",
-        }:
+        }
+        if with_speaker:
+            fields.add("speaker_source_quote")
+        if not isinstance(entry, dict) or set(entry) != fields:
             raise CandidateAttributionError("Closed graph candidate fields required")
         ordinals, planned_texts = entry["fact_ordinals"], entry["planned_fact_texts"]
         if (
@@ -951,6 +999,7 @@ def validate_candidate_fact_graph_proposal(
                 entry["source_quote"],
                 tuple(ordinals),
                 entry["pending_reason"],
+                entry["speaker_source_quote"] if with_speaker else None,
             )
         )
     return inspect_candidate_fact_graph(source, context, plan, tuple(links))
@@ -1022,6 +1071,16 @@ def review_model_candidate_fact_coverage(
         )
         for position, link in enumerate(graph.links)
     )
+    speaker_evidence = tuple(
+        CoreSpeakerEvidence(link.candidate_id, link.fact_ordinals[0], link.speaker_source_quote)
+        for link in graph.links
+        if link.speaker_source_quote is not None
+    )
     return build_candidate_coverage_manifest(
-        source, context, plan, claims, canonical_binding=canonical_binding
+        source,
+        context,
+        plan,
+        claims,
+        canonical_binding=canonical_binding,
+        speaker_evidence=speaker_evidence,
     )

@@ -241,7 +241,11 @@ def test_dispatcher_blocks_unreviewed_or_disputed_routes_with_zero_mutations(
     assert {path: repository.read_text(path) for path in repository.list_markdown_paths()} == before
     assert not [path for path in repository.list_markdown_paths() if path not in before]
     if provide_reviewer:
-        stage = result.operational.stages[0]
+        stage = next(
+            item
+            for item in result.operational.stages
+            if item.name == "candidate.source_boundary_review"
+        )
         assert stage.name == "candidate.source_boundary_review"
         assert stage.model == "gpt-5.6"
         assert stage.usage == {"input_tokens": 11, "output_tokens": 3}

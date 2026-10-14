@@ -123,6 +123,29 @@ class UnitStatus(StrEnum):
     FAILED = "failed"
 
 
+class CandidateCoverageErrorCategory(StrEnum):
+    """Bounded diagnostic classes for a rejected pre-write coverage review.
+
+    Coverage failures are intentionally fail-closed. Runtime callers may need
+    to distinguish a malformed Core review from a local adapter failure, but
+    they must never receive source text, exception messages, or model output.
+    """
+
+    VALUE_ERROR = "ValueError"
+    TYPE_ERROR = "TypeError"
+    RUNTIME_ERROR = "RuntimeError"
+    UNEXPECTED_ERROR = "UnexpectedError"
+
+
+def _candidate_coverage_error_category(error: Exception) -> CandidateCoverageErrorCategory:
+    """Map an untrusted coverage exception to the small public allowlist."""
+    return {
+        ValueError: CandidateCoverageErrorCategory.VALUE_ERROR,
+        TypeError: CandidateCoverageErrorCategory.TYPE_ERROR,
+        RuntimeError: CandidateCoverageErrorCategory.RUNTIME_ERROR,
+    }.get(type(error), CandidateCoverageErrorCategory.UNEXPECTED_ERROR)
+
+
 @dataclass(frozen=True, slots=True)
 class PendingWorkStatus:
     """Describe whether incomplete post-plan work was made durable.
@@ -587,7 +610,7 @@ def execute_request(
                 if claim.disposition == "pending"
                 and claim.pending_reason != "superseded_by_correction"
             )
-        except Exception:
+        except Exception as error:
             stages.append(
                 OperationalStage(
                     "planner",
@@ -602,13 +625,12 @@ def execute_request(
                 )
             )
             stages.append(
-                _stage(
+                OperationalStage(
                     "candidate_coverage",
                     OperationalOutcome.FAILED,
-                    candidate_started,
-                    monotonic,
-                    None,
-                    started,
+                    _elapsed_ms(candidate_started, monotonic()),
+                    error_category=_candidate_coverage_error_category(error),
+                    start_offset_ms=_elapsed_ms(started, candidate_started),
                 )
             )
             return _with_operational(

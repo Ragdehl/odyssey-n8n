@@ -104,11 +104,9 @@ def _canonical_rendered_fact_text(
             and item.source_mention == reference.mention
             and item.source_note_id == source_note_id
         ]
-        canonical_display = False
         if len(proofs) == 1:
             evidence = proofs[0]
         elif len(proofs) == 0 and isinstance(incoming_reference, DependentReferenceGuard):
-            canonical_display = True
             # A dependent route does not mint new outgoing canonical carriers
             # for pronouns. Its incoming guard is already Core-persisted proof,
             # and Core's write preflight checks it against this action's
@@ -122,6 +120,38 @@ def _canonical_rendered_fact_text(
                 for item in result.action_results[action_index].unit_results
             ):
                 return None
+        elif len(proofs) == 0:
+            # The canonical writer uses the same target preflight for every
+            # reference helper, but its optional *dependent-route* evidence
+            # intentionally excludes alias or SELF mentions. Physical readback
+            # must not mistake that absence for a failed write. Instead, verify
+            # the already executed reference-only helper's exact unit receipt
+            # against the current unique canonical Note. This never creates a
+            # new antecedent guard or supplies identity to another request.
+            if reference.target_index is None or not (
+                0 <= reference.target_index < len(result.action_results[action_index].unit_results)
+            ):
+                return None
+            helper = result.action_results[action_index].unit_results[reference.target_index]
+            if (
+                helper.unit_index != reference.target_index
+                or helper.status is not UnitStatus.SUCCEEDED
+                or helper.operation != "REFERENCE_BOUND"
+                or helper.materially_affected
+                or not helper.stable_note_id
+            ):
+                return None
+            try:
+                path, name = _find_existing_identity(repository, schema, helper.stable_note_id)
+                target = _wikilink_target(path)
+            except (ReferencePreflightError, ReferenceBindingError, ValueError, OSError):
+                return None
+            if not name:
+                return None
+            if rendered.count(marker) != 1 or any(char in reference.mention for char in "|[]\n\r"):
+                return None
+            rendered = rendered.replace(marker, f"[[{target}|{name}]]")
+            continue
         else:
             return None
         if not _dependent_evidence_is_current(evidence, repository, schema):
@@ -135,8 +165,10 @@ def _canonical_rendered_fact_text(
             return None
         if rendered.count(marker) != 1 or any(char in reference.mention for char in "|[]\n\r"):
             return None
-        display = evidence.canonical_name if canonical_display else reference.mention
-        rendered = rendered.replace(marker, f"[[{target}|{display}]]")
+        # Core's canonical reference renderer always uses the resolved Note
+        # name as the display label, not the source mention. Readback must
+        # reproduce the same convention for every reference (including SELF).
+        rendered = rendered.replace(marker, f"[[{target}|{evidence.canonical_name}]]")
     if not bound or "{{ref" in rendered:
         return None
     return rendered
