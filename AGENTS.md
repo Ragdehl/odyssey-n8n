@@ -161,6 +161,25 @@ Complete Core review, Tasks/canonical readback, n8n/browser diagnostics,
 multi-lingual provider variance and replay safety before DEV activation.
 See the E1.x direction in application-extensibility-plan.md.
 
+### 2026-10-14 — Bounded independent Core source review BEFORE any writes
+
+Router source candidates and a compiler split are proposals, not sufficient
+authority for independent execution. Opt-in v6 now supports a Core-owned
+whole-message boundary reviewer BEFORE Temporal, per-group Planner, Tasks or
+Writer. It reviews only multi-route requests, uses low-effort GPT-5.6, and
+produces an enum accept/revise/needs_attention with one boundary index and
+reason, bound to original/partition hashes. Core's existing candidate/fact
+mapping still independently validates each plan before mutation. One unsafe
+boundary may receive ONE Router v6 correction with bounded reason/index;
+after a second rejection, missing reviewer, stale text/partition, or provider
+error, fail closed with no writes. NEVER retry Router automatically after Core
+may have written ANY note. v1-v5 and PROD/DEV remain unchanged until gates.
+This is NOT a generic inference service behind every other AI nor a proof of
+perfect semantics. Review `odyssey_core/source_boundary_review.py` and
+`docs/architecture/application-extensibility-plan.md` E1.x for the contracts.
+Remaining gates are reviewer telemetry into n8n/web, real Core write/readback
+on disposable data, reference/pending edge cases, and request-id idempotency.
+
 ### 2026-10-13 — Auditoria exhaustiva de formas y casos pendientes
 
 Consultar docs/architecture/hybrid-source-validator-audit-20261013.md.

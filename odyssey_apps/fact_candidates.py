@@ -8,6 +8,7 @@ changing today's provider prompt or canonical mutation policy.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -664,7 +665,12 @@ class OpenAIFactCandidateRouter:
         self.last_usage: Any | None = None
         self.last_error_category: str | None = None
 
-    def propose(self, source: str) -> FactCandidateProposal:
+    def propose(
+        self,
+        source: str,
+        *,
+        boundary_feedback: object | None = None,
+    ) -> FactCandidateProposal:
         """Ask Luna once for source-only proposed units, then fail closed locally.
 
         Args:
@@ -681,6 +687,36 @@ class OpenAIFactCandidateRouter:
         if not isinstance(source, str) or not source.strip() or len(source) > MAX_MESSAGE_CHARS:
             raise RouterError("Fact source request is invalid or too long")
         from .router import ROUTER_MODEL, ROUTER_REASONING_EFFORT
+
+        revision_instruction = ""
+        if boundary_feedback is not None:
+            from odyssey_core.source_boundary_review import (
+                BOUNDARY_REVIEW_REASONS,
+                CoreSourceBoundaryReview,
+            )
+
+            if (
+                self._prompt_revision != "v6"
+                or not isinstance(boundary_feedback, CoreSourceBoundaryReview)
+                or boundary_feedback.decision != "revise"
+                or type(boundary_feedback.boundary_index) is not int
+                or not 1 <= boundary_feedback.boundary_index < MAX_CANDIDATES
+                or boundary_feedback.reason not in BOUNDARY_REVIEW_REASONS
+                or boundary_feedback.source_digest
+                != hashlib.sha256(source.encode("utf-8")).hexdigest()
+            ):
+                raise RouterError("Unverified Core boundary feedback cannot revise Router")
+            # Only an enum and ordinal, not a free-form prompt or internal
+            # reasoning. The dispatcher binds the partition digest separately.
+            revision_instruction = (
+                " Reconsider the source segmentation at proposed route boundary "
+                f"{boundary_feedback.boundary_index}: "
+                f"{boundary_feedback.reason}. Preserve every independent "
+                "assertion and all exact source anchors. Do not discard "
+                "dependent content, invent units, change the original message, "
+                "or supply canonical write instructions. This is the one "
+                "permitted correction attempt; return complete source v2 JSON."
+            )
 
         self.last_usage = None
         self.last_error_category = None
@@ -746,7 +782,8 @@ class OpenAIFactCandidateRouter:
                             FACT_CANDIDATE_PROMPT_V6_EXTENSION
                             if self._prompt_revision == "v6"
                             else ""
-                        ),
+                        )
+                        + revision_instruction,
                     },
                     {"role": "user", "content": source},
                 ],
@@ -788,3 +825,9 @@ class OpenAIFactCandidateRouter:
         except (RouterError, TypeError, ValueError) as error:
             self.last_error_category = "InvalidSourceEvidence"
             raise RouterError("Fact candidate output lacks grounded source evidence") from error
+
+    def revise(self, source: str, feedback: object) -> FactCandidateProposal:
+        """One revised untrusted proposal; ONLY the dispatcher sets retry cap."""
+        if self._prompt_revision != "v6":
+            raise RouterError("Source boundary revision is opt-in v6 only")
+        return self.propose(source, boundary_feedback=feedback)

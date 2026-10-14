@@ -19,6 +19,12 @@ from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
 from odyssey_core.git_history import HistoryRecorder
+from odyssey_core.source_boundary_review import (
+    CoreSourceBoundaryInput,
+    CoreSourceBoundaryReview,
+    CoreSourceBoundaryUnit,
+    SourceBoundaryReviewError,
+)
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
@@ -29,6 +35,82 @@ from odyssey_runtime.source_scope_compiler import (
     compile_candidate_route_bundle,
     validate_bundle_original_provenance,
 )
+
+
+def _build_core_source_boundary_input(
+    source: str, proposal: FactCandidateProposal, bundle: object
+) -> CoreSourceBoundaryInput:
+    """Project Router's source-only assertions into a Core-owned review envelope."""
+    original_to_index = {
+        candidate.candidate_id: index for index, candidate in enumerate(proposal.candidates)
+    }
+    units = []
+    for scoped in bundle.units:
+        chosen = [original_to_index[cid] for cid in scoped.original_candidate_ids]
+        units.append(
+            CoreSourceBoundaryUnit(
+                scoped.original_start,
+                scoped.original_end,
+                scoped.route.capability_id,
+                tuple(proposal.candidates[i].kind for i in chosen),
+                tuple(proposal.semantic_relations[i].kind for i in chosen),
+            )
+        )
+    context = CoreSourceBoundaryInput(source, tuple(units))
+    context.validate()
+    return context
+
+
+def review_router_source_before_writes(
+    source: str,
+    proposal: FactCandidateProposal,
+    bundle: object,
+    *,
+    router: object,
+    bundle_compiler: Callable[[FactCandidateProposal], object],
+    boundary_reviewer: object | None,
+) -> object:
+    """One prewrite Core review and at most ONE bounded Router correction.
+
+    An unsafe split is rejected before Temporal, Planner, Apps, or Markdown
+    mutation. Core's final candidate/fact validation remains independent.
+    Router's revised source must be the EXACT same immutable user request.
+    """
+    if proposal.contract_version != 2:
+        return bundle
+    if boundary_reviewer is None:
+        if len(bundle.units) > 1:
+            raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVIEW_UNAVAILABLE")
+        return bundle
+    reviewer = getattr(boundary_reviewer, "review", None)
+    if not callable(reviewer):
+        raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVIEW_UNAVAILABLE")
+    for attempt in range(2):
+        if len(bundle.units) <= 1:
+            return bundle  # No cross-route boundary; Core still reviews each planned fact.
+        context = _build_core_source_boundary_input(source, proposal, bundle)
+        decision = reviewer(context)
+        if not isinstance(decision, CoreSourceBoundaryReview):
+            raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVIEW_INVALID")
+        decision.validate(context)
+        if decision.decision == "accept":
+            return bundle
+        if decision.decision == "needs_attention":
+            raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_NEEDS_CLARIFICATION")
+        # Reviewer is asking the original Router to REVISE only the affected
+        # source boundary; Router receives no canonical IDs or written notes.
+        if attempt or not callable(getattr(router, "revise", None)):
+            raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVISION_REQUIRED")
+        amended = router.revise(source, decision)
+        if (
+            not isinstance(amended, FactCandidateProposal)
+            or amended.contract_version != 2
+            or amended.source != source
+        ):
+            raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVISION_INVALID")
+        proposal = amended
+        bundle = bundle_compiler(amended)
+    raise SourceBoundaryReviewError("CORE_SOURCE_BOUNDARY_REVISION_REQUIRED")
 
 
 def _suppress_ambiguous_single_handoff(
@@ -140,6 +222,7 @@ def execute_candidate_routed_message(
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
     task_route_executor: object | None = None,
     progress_callback: Callable[[str, dict[str, object]], None] | None = None,
+    source_boundary_reviewer: object | None = None,
 ) -> object:
     """Execute scoped candidates through existing sequential Core and route guards.
 
@@ -216,7 +299,44 @@ def execute_candidate_routed_message(
     # request, never into one forced mutation or canonical identity.
     # Resolve the default at call time: historical frozen-reply tests can
     # inject their exact previous compiler without changing new hybrid logic.
-    bundle = (bundle_compiler or compile_candidate_route_bundle)(proposal)
+    compiler = bundle_compiler or compile_candidate_route_bundle
+    bundle = compiler(proposal)
+    if proposal.contract_version == 2:
+        # This happens BEFORE a route-local planner or mutator can run.
+        # Do not let a missing reviewer silently authorize an independent split.
+        report_progress("routing.boundary_review_started")
+        try:
+            bundle = review_router_source_before_writes(
+                source,
+                proposal,
+                bundle,
+                router=router,
+                bundle_compiler=compiler,
+                boundary_reviewer=source_boundary_reviewer,
+            )
+        except SourceBoundaryReviewError as error:
+            # Only expose stable, source-free diagnostic categories. Never
+            # forward arbitrary provider exceptions or free-text model output.
+            allowed_detail = {
+                "CORE_SOURCE_BOUNDARY_REVIEW_UNAVAILABLE",
+                "CORE_SOURCE_BOUNDARY_REVIEW_INVALID",
+                "CORE_SOURCE_BOUNDARY_NEEDS_CLARIFICATION",
+                "CORE_SOURCE_BOUNDARY_REVISION_REQUIRED",
+                "CORE_SOURCE_BOUNDARY_REVISION_INVALID",
+            }
+            safe_detail = (
+                str(error) if str(error) in allowed_detail else "CORE_SOURCE_BOUNDARY_REVIEW_FAILED"
+            )
+            report_progress("routing.boundary_review_required")
+            return ApplicationResult(
+                request_id_factory(),
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                clarification_code="CORE_SOURCE_BOUNDARY_REVIEW_REQUIRED",
+                planning_error=safe_detail,
+            )
+        report_progress("routing.boundary_review_ready")
     report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
     uses_tasks = any(route.capability_id == "tasks" for route in bundle.plan.routes)
     if uses_tasks:
