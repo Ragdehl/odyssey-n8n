@@ -6,6 +6,16 @@
 
 Permitir incorporar Events, Projects y otras capacidades sin replicar la interpretación común, la resolución de identidades, el transporte de evidencias, la autorización de cambios ni la escritura canónica. Mantener la arquitectura Router híbrido → grupos semánticos → Temporal/aplicaciones → Core Planner/validación → persistencia Markdown; una aplicación debe aportar **solo** su semántica/lifecycle diferencial. Evitar transformaciones o parches específicos de frases del corpus. Adoptar Clean Architecture **incrementalmente**, sin refactorización global ni bloqueo preventivo de DEV.
 
+## Prioridad aprobada el 14-10-2026 — consolidar antes de seguir ampliando casos
+
+El usuario confirma como **orden obligatorio entre chats/agentes**, sustituyendo la secuencia abierta anterior: **(1) finalizar sólo las correcciones E1 ya detectadas** (atribución genérica del actor implícito, relación actor/fact en el gráfico, progreso y diagnóstico de extremo a extremo, recibos/readback e idempotencia), **(2) ejecutar E2 — contrato común de contexto**, **(3) ejecutar E3 — puerta común de mutaciones**. Sólo después retomar una campaña extensa de pruebas manuales y E4/E5. No cambiar la arquitectura híbrida aprobada ni usar Clean Architecture como excusa para reescribir módulos: separarla incrementalmente mientras se trabaja en E2/E3.
+
+**Criterio de trabajo ante cada fallo:** clasificar antes de modificar el código si pertenece a interpretación semántica, contrato/transmisión entre etapas, implementación local o representación/telemetría. Para fallos de contrato corregir el mecanismo compartido y probar **todos los consumidores**, no el caso textual concreto; evitar excepciones por frase, idioma, nombre, ID, verbo o número fijo de entidades. Conservar la evidencia de origen y los rechazos seguros.
+
+**Gates transversales de E2/E3:** verificar que no desaparecen identidades verificadas ni relaciones, que ninguna hipótesis hereda autoridad sin prueba, que todas las mutaciones pasan por las mismas garantías de autorización, referencia, concurrencia, idempotencia, recibo y readback, y que el resultado llega sin pérdida runtime→n8n→web (etapas, coste cuando exista, gráfico y donut). Tests deterministas + adversariales/multilingües + end-to-end con datos desechables y App ficticia; aceptar de forma explícita incertidumbre semántica en vez de fabricar certezas. No declarar terminada una etapa sólo por suites aisladas ni prometer ausencia total de errores de modelos.
+
+**Alcance inmediato:** esta decisión actualiza el planning, NO autoriza deploy, merge, escrituras sobre datos reales ni refactorización completa. El estado operativo y el próximo paso exacto se mantienen exclusivamente en Functional Roadmap.
+
 ## Evidencia de partida (auditoría de lectura, 13-10-2026; no sustituye la validación DEV)
 
 - `odyssey_core/materialization.py` y `odyssey_core/persistence.py` ya centralizan mecánicas canónicas de creación, actualización y eliminación; `odyssey_core/application.py` proporciona el recorrido ordinario de preflight/ejecución. **No existe aún una única puerta de entrada de mutación con exactamente las mismas garantías para todos los casos**.
