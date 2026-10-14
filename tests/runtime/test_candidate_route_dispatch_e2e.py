@@ -18,6 +18,18 @@ from odyssey_core.candidate_coverage import (
 )
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.notes import parse_note
+from odyssey_core.request_planning import RequestPlan
+from odyssey_core.semantic_write import (
+    ApplyTo,
+    IdentityBinding,
+    IdentityIntent,
+    IdentityPart,
+    LiteralPart,
+    SemanticFact,
+    SemanticWriteIntent,
+    SemanticWriteOperation,
+    compile_semantic_write,
+)
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 from odyssey_runtime.candidate_route_dispatch import (
     compile_candidate_route_bundle,
@@ -124,8 +136,13 @@ def _review_one_real_core_fact(source, context, plan, *, canonical_binding=None)
     )
 
 
-@pytest.mark.parametrize("dependent_target", ["Eric", "Luis"])
-def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, dependent_target):
+@pytest.mark.parametrize(
+    ("dependent_target", "link_first_person_speaker"),
+    [("Eric", False), ("Luis", False), ("Eric", True)],
+)
+def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(
+    tmp_path, dependent_target, link_first_person_speaker
+):
     source = next(c for c in CASES if c["id"] == "F13")["source"]
     repo, context_index, semantic_index, embedder = fresh_corpus_vault(tmp_path)
     core_inputs = []
@@ -169,6 +186,33 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
                     target_name=dependent_target,
                 )
             if "compré pan" in scoped:
+                if link_first_person_speaker:
+                    day = IdentityIntent(
+                        "2026-10-04", IdentityBinding.DESCRIBED, note_type="calendar_day"
+                    )
+                    speaker = IdentityIntent("yo", IdentityBinding.SELF, note_type="person")
+                    action = compile_semantic_write(
+                        SemanticWriteIntent(
+                            (
+                                SemanticWriteOperation(
+                                    day,
+                                    ApplyTo.ONE,
+                                    "record",
+                                    (
+                                        SemanticFact(
+                                            (
+                                                IdentityPart("yo", speaker),
+                                                LiteralPart(" compró pan."),
+                                            )
+                                        ),
+                                    ),
+                                ),
+                            )
+                        ),
+                        SCHEMA,
+                        authorized_calendar_dates=("2026-10-04",),
+                    )
+                    return RequestPlan((action,), ())
                 return _day_plan("2026-10-04", "Compré pan.", "2026-10-04")
             raise AssertionError(f"Unexpected source {scoped!r}")
 
@@ -209,6 +253,24 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
     assert "planner.ready" in progress
     assert history.begin_calls >= 2
     assert history.record_calls >= 2
+    if link_first_person_speaker:
+        # Core's existing source-coverage contract cannot yet attest the
+        # grammatical SPEAKER role for an implied first-person subject.
+        # The shared identity lookup works, but the independent prewrite
+        # semantic guard must NOT be bypassed to make this sample succeed.
+        assert result.status is ApplicationStatus.PARTIAL
+        assert [item["status"] for item in result.execution_flow["routes"]] == [
+            "completed",
+            "completed",
+            "needs_attention",
+        ]
+        assert "compró pan." not in "\n".join(
+            repo.read_text(path) for path in repo.list_markdown_paths()
+        )
+        assert "[[Alex|Alex]] compró pan." not in "\n".join(
+            repo.read_text(path) for path in repo.list_markdown_paths()
+        )
+        return
     if dependent_target != "Eric":
         assert result.status is ApplicationStatus.PARTIAL
         assert [item["status"] for item in result.execution_flow["routes"]] == [
@@ -229,7 +291,11 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
     all_notes = "\n".join(repo.read_text(path) for path in repo.list_markdown_paths())
     assert "Hablé con [[Eric|Eric]]." in all_notes
     assert "Iré al cine con [[Eric|Eric]]." in all_notes
-    assert "Compré pan." in all_notes
+    if link_first_person_speaker:
+        assert "[[Alex|Alex]] compró pan." in all_notes
+        assert "Compré pan." not in all_notes
+    else:
+        assert "Compré pan." in all_notes
     day = next(path for path in repo.list_markdown_paths() if path.endswith("2026-10-04.md"))
     assert parse_note(repo.read_text(day)).metadata["created_by"] == {
         "human": USER_A,
