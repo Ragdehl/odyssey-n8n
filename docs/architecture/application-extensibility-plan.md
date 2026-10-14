@@ -33,6 +33,20 @@ Permitir incorporar Events, Projects y otras capacidades sin replicar la interpr
 - Mantener Planner Core en GPT-5.6 durante esta etapa salvo nueva decisión explícita. Comprobar prerequisitos, compatibilidad y límites de la recuperación de contexto (>5000 Notes se sabe limitado en el hint scanner experimental).
 - **Aceptación**: tests/gates de despliegue, verificación de versión efectiva DEV, capturas seguras de escrituras/pending en datos de DEV desechables, lista reproducible de casos para el usuario. El usuario realiza pruebas reales antes de convertir observaciones en nuevos compromisos de arquitectura.
 
+#### E1.x — Independencia semántica y traza de decisiones de Router (pendiente)
+
+**Motivo observado:** en n8n una ejecución de «Hoy he comido una pera roja para probar el indicador de progreso de Odyssey» se dividió en tres rutas, incluyendo «roja» y «para probar...». El esquema actual de Router v5 sólo demuestra que las citas son literales y tienen roles; no certifica que una unidad forme una afirmación autónoma. El compilador puede convertir candidatos sin dependencia explícita en rutas separadas. La propuesta JSON exacta del modelo en aquella ejecución NO se conserva: el adaptador devuelve los candidatos ya validados y la API usa store=False; n8n guardó sólo las rutas y errores.
+
+**Contrato a implementar en modo opt-in antes de desplegar cambios de segmentación:**
+
+- Distinguir candidato para análisis de hecho independientemente ejecutable. Router puede aportar etiquetas tipadas de relación con la afirmación principal: independent_assertion, attribute_of, purpose_of, condition_of, shared_predicate, unresolved, con vínculo a candidato padre y cita exacta. No solicitar ni almacenar razonamientos privados; las etiquetas tampoco autorizan escritura.
+- Core/compilador debe validar evidencias y límites por separado. Si una unidad no puede acreditarse como afirmación independiente, interpretarla con su contexto fuente completo o bloquearla de forma explícita; no usar una lista cerrada de nombres, adjetivos o conectores. Conservar hechos independientes, fechas, Tasks y herencias legítimas del corpus.
+- Conservar en DEV una traza corta y versionada: hash de la fuente, modelo/revisión, candidatos con ID, clase, cita/offsets, roles/relación propuesta, grupo asignado y decisión del compilador (group/split/reject) con motivo de validación. Es evidencia de entradas/salidas observadas, NO razonamiento interno. Respetar límites de tamaño, retención, actor/conversación autenticados y ausencia de secretos. Exponerla sólo en detalles técnicos; validar toda ampliación simultáneamente en runtime, n8n y navegador para no repetir gráficos vacíos.
+- Gates: propuestas adversariales sintéticas multilingües, modificadores, finalidades, contraste, acciones independientes, varios días, Tasks y pronombres; tests deterministas congelados y varias ejecuciones reales SIN escritura; readback físico, no degradación del gráfico, y garantías de idempotencia.
+- Contrato separado para fallos y reintentos: el mismo delivery ID produjo en n8n una respuesta failed y una completed bajo ejecuciones distintas porque el fallo previo no quedó conservado como resultado autoritativo. Prohibir reejecución silenciosa que pueda duplicar una escritura.
+
+No asumir que añadir ejemplos o subir reasoning asegura corrección. El guard experimental ec2d2ba todavía NO cubre de forma general cláusulas de finalidad y permanece sin deploy.
+
 ### E2 — Contrato de contexto entre etapas (después del primer ciclo de DEV, o antes si un fallo real lo exige)
 
 - Inventariar información y propiedad de Router, Temporal, Core, Task, Calendar y próximos Events. Diseñar un único contrato tipado/versión mínima para fuente, evidencias de fecha, entidades, dependencias, pendientes y correlación; conectar sin transformar hipótesis en autoridades.
