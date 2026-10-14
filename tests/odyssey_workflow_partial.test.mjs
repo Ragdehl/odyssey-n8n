@@ -259,3 +259,24 @@ test("inconsistent split Temporal returns actionable safe message and retains bl
   assert.equal(result.request_detail.flow.routes.length, 2);
   assert.equal(result.request_detail.changes.affected_stable_note_ids.length, 0);
 });
+
+test("unproven v6 source dependency presents a safe clarification and keeps its failure stage", () => {
+  const result = execute({
+    request_id: "synthetic-partial", status: "needs_attention",
+    product_outcome: "CLARIFY",
+    clarification_code: "CANDIDATE_SOURCE_COMPILATION_UNREPRESENTABLE",
+    product_reason: "SOURCE_DEPENDENCY_UNVERIFIED",
+    affected_stable_note_ids: [], actions: [],
+    operational: {total_duration_ms: 10, stages: [{
+      name: "candidate.source_compilation", outcome: "failed", duration_ms: 10,
+      error_category: "CandidateDependencyError", model: null, provider_calls: [],
+    }]},
+  });
+  assert.equal(result.status, "needs_attention");
+  assert.equal(result.kind, "clarification");
+  assert.match(result.message, /No puedo verificar cómo se relacionan/);
+  assert.match(result.message, /No he guardado nada/);
+  assert.equal(result.request_detail.operational.stages[0].error_category, "CandidateDependencyError");
+  assert.equal(result.request_detail.changes.units.length, 0);
+  assert.equal(validateProductResponse(result).kind, "clarification");
+});

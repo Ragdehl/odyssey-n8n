@@ -290,6 +290,7 @@ def execute_candidate_routed_message(
         OpenAICoreCandidateAttributor,
         review_model_candidate_fact_coverage,
     )
+    from odyssey_core.candidate_dependencies import CandidateDependencyError
     from odyssey_core.candidate_fact_readback import readback_core_facts
     from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
     from odyssey_core.request_planning import RequestPlan, WriteAction
@@ -358,8 +359,45 @@ def execute_candidate_routed_message(
             )
         )
 
+    def reject_unrepresentable_source(stage_name: str, error: Exception, started: float):
+        """Return a safe typed NO-WRITE outcome with the real failure category.
+
+        An unproven Router inheritance or impossible source partition cannot
+        reach Core and must not become an opaque HTTP error, a guessed write,
+        or an unlimited model retry. No user text or provider message escapes.
+        """
+        failed_stage = OperationalStage(
+            stage_name,
+            OperationalOutcome.FAILED,
+            max(0.0, (perf_counter() - started) * 1000),
+            error_category=type(error).__name__[:100],
+        )
+        blocked = ApplicationResult(
+            request_id_factory(),
+            ApplicationStatus.NEEDS_ATTENTION,
+            (),
+            (),
+            clarification_code="CANDIDATE_SOURCE_COMPILATION_UNREPRESENTABLE",
+            planning_error=(
+                "SOURCE_DEPENDENCY_UNVERIFIED"
+                if type(error).__name__ == "CandidateDependencyError"
+                else "SOURCE_PROVENANCE_UNREPRESENTABLE"
+            ),
+        )
+        report_progress("routing.boundary_review_required")
+        return replace(
+            blocked,
+            operational=replace(blocked.operational, stages=(failed_stage,)),
+        )
+
     report_progress("routing.started")
-    proposal = router.propose(source)
+    router_started = perf_counter()
+    try:
+        proposal = router.propose(source)
+    except RouterError as error:
+        if source_boundary_reviewer is None:
+            raise
+        return reject_unrepresentable_source("application.router", error, router_started)
     if not isinstance(proposal, FactCandidateProposal) or proposal.source != source:
         raise RouterError("Router did not preserve the original message")
     # The default strict atomic route compiler is unchanged. The explicit
@@ -368,7 +406,15 @@ def execute_candidate_routed_message(
     # Resolve the default at call time: historical frozen-reply tests can
     # inject their exact previous compiler without changing new hybrid logic.
     compiler = bundle_compiler or compile_candidate_route_bundle
-    bundle = compiler(proposal)
+    compiler_started = perf_counter()
+    try:
+        bundle = compiler(proposal)
+    except (RouterError, CandidateDependencyError) as error:
+        if proposal.contract_version != 2:
+            raise
+        return reject_unrepresentable_source(
+            "candidate.source_compilation", error, compiler_started
+        )
     if proposal.contract_version == 2:
         # This happens BEFORE a route-local planner or mutator can run.
         # Do not let a missing reviewer silently authorize an independent split.

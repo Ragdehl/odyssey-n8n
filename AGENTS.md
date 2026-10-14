@@ -161,6 +161,19 @@ Complete Core review, Tasks/canonical readback, n8n/browser diagnostics,
 multi-lingual provider variance and replay safety before DEV activation.
 See the E1.x direction in application-extensibility-plan.md.
 
+### 2026-10-14 — Preserve safe diagnostics on unproven source dependency
+
+Even before an independent Core boundary reviewer starts, a valid-looking
+Router v6 proposal can encode an inherited source role that has no real
+predecessor evidence. Core's dependency tracer correctly refuses it. The
+product boundary must preserve that refusal as a typed no-write
+`NEEDS_ATTENTION` outcome with a safe failure stage/category, not an opaque
+HTTP error or a guessed role. Never drop inherited source roles just to get
+an executable route, nor automatically rerun a potentially written delivery.
+Cross-check this path through runtime, n8n and browser contracts. The
+synthetic 14-Oct DEV modifier smoke and generic deterministic sentinel are
+recorded in the functional roadmap.
+
 ### 2026-10-14 — Bounded independent Core source review BEFORE any writes
 
 Router source candidates and a compiler split are proposals, not sufficient
