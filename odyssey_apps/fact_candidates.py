@@ -57,6 +57,20 @@ CANDIDATE_KINDS = frozenset(
     }
 )
 CANDIDATE_STATES = frozenset({"candidate", "ambiguous_identity"})
+# Candidate-level source relationships, NOT mutation or Note authorities.
+SOURCE_RELATION_KINDS = frozenset(
+    {
+        "independent_assertion",
+        "attribute_of",
+        "purpose_of",
+        "condition_of",
+        "shared_predicate",
+        "unresolved",
+    }
+)
+DEPENDENT_SOURCE_RELATIONS = frozenset(
+    {"attribute_of", "purpose_of", "condition_of", "shared_predicate"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,11 +116,23 @@ class FactCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class CandidateSourceRelation:
+    """Untrusted source-only semantic dependency, locally grounded in text."""
+
+    unit: int  # 1-based ordinal of a candidate, not a route or Core target.
+    kind: str
+    parent_unit: int  # 0 means no parent; never a write dependency.
+    evidence: SourceAnchor
+
+
+@dataclass(frozen=True, slots=True)
 class FactCandidateProposal:
     """Hold validated request-local candidates without execution or write authority."""
 
     source: str
     candidates: tuple[FactCandidate, ...]
+    semantic_relations: tuple[CandidateSourceRelation, ...] = ()
+    contract_version: int = 1
 
 
 def _keys(value: Any, expected: set[str], *, label: str) -> Mapping[str, Any]:
@@ -274,6 +300,90 @@ def validate_fact_candidate_proposal(
     if len(signatures) != len(units):
         raise RouterError("Duplicate fact candidates for identical source evidence")
     return FactCandidateProposal(source, units)
+
+
+def validate_semantic_fact_candidate_proposal(
+    source: str, payload: Mapping[str, Any]
+) -> FactCandidateProposal:
+    """Validate v2 source semantics without trusting them to authorize writes.
+
+    The v1 validator and all historical model receipts remain untouched.
+    Dependencies refer only to prior source candidate ordinals; no forward
+    guessing or cross-request source identity is possible.
+    """
+    envelope = _keys(
+        payload, {"version", "units", "semantic_relations"}, label="semantic candidate proposal"
+    )
+    if type(envelope["version"]) is not int or envelope["version"] != 2:
+        raise RouterError("Unsupported semantic candidate proposal version")
+    original = validate_fact_candidate_proposal(source, {"version": 1, "units": envelope["units"]})
+    rows = _bounded_array(
+        envelope["semantic_relations"],
+        label="source semantic relations",
+        maximum=MAX_CANDIDATES,
+        nonempty=True,
+    )
+    if len(rows) != len(original.candidates):
+        raise RouterError("Semantic relations must cover every source candidate")
+    relations = []
+    for expected_unit, raw in enumerate(rows, start=1):
+        relation = _keys(
+            raw,
+            {"unit", "kind", "parent_unit", "evidence"},
+            label="semantic relation",
+        )
+        kind, parent, unit = relation["kind"], relation["parent_unit"], relation["unit"]
+        if (
+            type(unit) is not int
+            or unit != expected_unit
+            or not isinstance(kind, str)
+            or kind not in SOURCE_RELATION_KINDS
+            or type(parent) is not int
+            or not 0 <= parent < unit
+            or (
+                (kind == "independent_assertion" and parent != 0)
+                or (kind in DEPENDENT_SOURCE_RELATIONS and parent == 0)
+            )
+        ):
+            raise RouterError("Semantic relation is not source-grounded or acyclic")
+        evidence = resolve_source_anchor(source, relation["evidence"])
+        own = original.candidates[unit - 1]
+        if (evidence.start, evidence.end) not in {
+            (a.start, a.end) for a in (*own.anchors, *(s.anchor for s in own.scopes))
+        }:
+            raise RouterError("Semantic relation witness is not grounded in its own candidate")
+        relations.append(CandidateSourceRelation(unit, kind, parent, evidence))
+    return FactCandidateProposal(
+        original.source,
+        original.candidates,
+        tuple(relations),
+        contract_version=2,
+    )
+
+
+def semantic_fact_candidate_json_schema() -> dict[str, Any]:
+    """Strict opt-in v2 provider schema; v1 remains byte-for-byte unchanged."""
+    schema = fact_candidate_json_schema()
+    relation = {
+        "type": "object",
+        "properties": {
+            "unit": {"type": "integer", "minimum": 1, "maximum": MAX_CANDIDATES},
+            "kind": {"type": "string", "enum": sorted(SOURCE_RELATION_KINDS)},
+            "parent_unit": {"type": "integer", "minimum": 0, "maximum": MAX_CANDIDATES},
+            "evidence": schema["properties"]["units"]["items"]["properties"]["anchors"]["items"],
+        },
+        "required": ["unit", "kind", "parent_unit", "evidence"],
+        "additionalProperties": False,
+    }
+    schema["properties"]["version"]["enum"] = [2]
+    schema["properties"]["semantic_relations"] = {
+        "type": "array",
+        "items": relation,
+        "minItems": 1,
+        "maxItems": MAX_CANDIDATES,
+    }
+    schema["required"].append("semantic_relations")
+    return schema
 
 
 def fact_candidate_json_schema() -> dict[str, Any]:
@@ -517,6 +627,27 @@ FACT_CANDIDATE_PROMPT_V5_EXTENSION = (
 )
 
 
+FACT_CANDIDATE_PROMPT_V6_EXTENSION = (
+    " For each candidate, additionally return exactly one semantic_relations entry "
+    "for strict JSON version 2. Classify whether this is an independent assertion "
+    "or a source attribute/purpose/condition/shared predicate of an EARLIER "
+    "candidate. For a dependent relation use the earlier source-unit index, "
+    "not a Core write dependency or canonical identity. Use parent_unit 0 "
+    "ONLY for independent_assertion or unresolved without a proven parent. "
+    "Keep qualifiers, subordinate aims, circumstances and descriptors attached "
+    "to their parent assertion even if they contain a verb or a date; do not "
+    "promote them merely because words can be quoted separately. "
+    "Preserve genuinely independent statements, including clauses sharing a "
+    "predicate, as separate candidates where needed, and express their shared "
+    "lexical scope as shared_predicate. If the relation is uncertain mark "
+    "unresolved; never guess a canonical target, app instruction or Markdown. "
+    "The evidence field must exactly repeat one anchor or scope quotation "
+    "from that candidate with the same occurrence index; return one relation "
+    "per candidate ordered by its 1-based unit index. "
+    "These are SOURCE-ONLY proposals, not route permissions or explanations."
+)
+
+
 class OpenAIFactCandidateRouter:
     """Opt-in, non-executing Router v1 proposal adapter with an injected provider.
 
@@ -526,7 +657,7 @@ class OpenAIFactCandidateRouter:
 
     def __init__(self, client: Any, *, prompt_revision: str = "v1") -> None:
         """Select a reviewed source-only teaching revision without changing Router v0."""
-        if prompt_revision not in {"v1", "v2", "v3", "v4", "v5"}:
+        if prompt_revision not in {"v1", "v2", "v3", "v4", "v5", "v6"}:
             raise ValueError("Unknown fact-candidate prompt revision")
         self._client = client
         self._prompt_revision = prompt_revision
@@ -563,8 +694,17 @@ class OpenAIFactCandidateRouter:
                     {
                         "role": "system",
                         "content": (
-                            "Interpret only the original CURRENT request as independently manageable "
-                            "semantic fact candidates. Return strict JSON version 1. Each candidate "
+                            (
+                                "Interpret only the original CURRENT request as source-grounded "
+                                "semantic units, including dependent attributes, circumstances "
+                                "and purposes. "
+                                if self._prompt_revision == "v6"
+                                else "Interpret only the original CURRENT request as independently manageable "
+                                "semantic fact candidates. "
+                            )
+                            + "Return strict JSON version "
+                            + ("2" if self._prompt_revision == "v6" else "1")
+                            + ". Each candidate "
                             "uses one or more original exact quoted substrings as anchors, with "
                             "zero-based occurrence indices for duplicate substrings. No rewriting of "
                             "source, invented text or resolved Note identity. Source roles are only "
@@ -584,22 +724,27 @@ class OpenAIFactCandidateRouter:
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V2_EXTENSION
-                            if self._prompt_revision in {"v2", "v3", "v4", "v5"}
+                            if self._prompt_revision in {"v2", "v3", "v4", "v5", "v6"}
                             else ""
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V3_EXTENSION
-                            if self._prompt_revision in {"v3", "v4", "v5"}
+                            if self._prompt_revision in {"v3", "v4", "v5", "v6"}
                             else ""
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V4_EXTENSION
-                            if self._prompt_revision in {"v4", "v5"}
+                            if self._prompt_revision in {"v4", "v5", "v6"}
                             else ""
                         )
                         + (
                             FACT_CANDIDATE_PROMPT_V5_EXTENSION
-                            if self._prompt_revision == "v5"
+                            if self._prompt_revision in {"v5", "v6"}
+                            else ""
+                        )
+                        + (
+                            FACT_CANDIDATE_PROMPT_V6_EXTENSION
+                            if self._prompt_revision == "v6"
                             else ""
                         ),
                     },
@@ -608,9 +753,17 @@ class OpenAIFactCandidateRouter:
                 text={
                     "format": {
                         "type": "json_schema",
-                        "name": "odyssey_fact_candidate_proposal_v1",
+                        "name": (
+                            "odyssey_fact_candidate_proposal_v2"
+                            if self._prompt_revision == "v6"
+                            else "odyssey_fact_candidate_proposal_v1"
+                        ),
                         "strict": True,
-                        "schema": fact_candidate_json_schema(),
+                        "schema": (
+                            semantic_fact_candidate_json_schema()
+                            if self._prompt_revision == "v6"
+                            else fact_candidate_json_schema()
+                        ),
                     }
                 },
             )
@@ -629,6 +782,8 @@ class OpenAIFactCandidateRouter:
             self.last_error_category = "MalformedProviderJSON"
             raise RouterError("Fact candidate output is not valid JSON") from error
         try:
+            if self._prompt_revision == "v6":
+                return validate_semantic_fact_candidate_proposal(source, raw)
             return validate_fact_candidate_proposal(source, raw)
         except (RouterError, TypeError, ValueError) as error:
             self.last_error_category = "InvalidSourceEvidence"

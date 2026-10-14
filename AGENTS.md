@@ -143,6 +143,24 @@ do not infer that a delivered failure was the post-write receipt of a later
 success. Source-independent assertions and replay/idempotency require explicit
 contracts, not accidental retries. See current Functional Roadmap checkpoint.
 
+### 2026-10-14 — Router v6 source semantics are opt-in, not an executable authority
+
+For any future Router revision, do not infer a new executable fact merely from
+one accurately quoted anchor, a local predicate, or a model-supplied
+independent_assertion label. The opt-in v6 JSON source-relation contract
+expresses attributes, purposes, conditions, shared lexical context and uncertain
+relationships with previous source candidates; the runtime compiler revalidates
+their positions and groups uncertain same-clause material for Core review.
+Existing v1-v5 prompts and DEV runtime remain unchanged until new gates pass.
+No name, example-specific adjective, language connective or two-entity template
+may be used as the independence oracle. Successful route grouping is NOT
+evidence of successful Core semantic review. The pure decision trace contains
+only source hash, offsets, tags and deterministic validation decisions and is
+not yet authorized for user-facing logging without privacy/contract tests.
+Complete Core review, Tasks/canonical readback, n8n/browser diagnostics,
+multi-lingual provider variance and replay safety before DEV activation.
+See the E1.x direction in application-extensibility-plan.md.
+
 ### 2026-10-13 — Auditoria exhaustiva de formas y casos pendientes
 
 Consultar docs/architecture/hybrid-source-validator-audit-20261013.md.
