@@ -101,6 +101,45 @@ def _needs_joint_interpretation(left: CoreCandidate, right: CoreCandidate) -> bo
     return False
 
 
+def _requires_shared_clause_review(
+    source: str,
+    left_end: int,
+    right_start: int,
+    left: CoreCandidate,
+    right: CoreCandidate,
+) -> bool:
+    """Do not dispatch an unproven same-clause fragment as a standalone fact.
+
+    Grouping retains every source candidate for independent Core review: it
+    neither decides fact identity nor authorizes a write. Sentence boundaries
+    are kept, as are genuinely new predicates with their own or inherited
+    semantic predicate. We never merge across the Tasks capability boundary.
+    """
+    if (
+        left.kind == "task"
+        or right.kind == "task"
+        or left.state != "candidate"
+        or right.state != "candidate"
+        or not 0 <= left_end <= right_start <= len(source)
+    ):
+        return False
+    # Structural sentence termination, independent of any names or verbs.
+    if any(mark in source[left_end:right_start] for mark in ".;!?\n"):
+        return False
+    new_predicate = any(
+        role.role in {"predicate", "predicate_relation", "transaction"}
+        and role.span.start >= left_end
+        for role in right.roles
+    )
+    # An explicit new clock belongs to a distinct assertion even if the
+    # Router anchored its verb but omitted a redundant predicate scope.
+    # A shared earlier clock is not fresh independent source evidence.
+    new_temporal_scope = any(
+        role.role in _TEMPORAL_ROLES and role.span.start >= left_end for role in right.roles
+    )
+    return not (new_predicate or new_temporal_scope)
+
+
 def hybrid_tasks_catalog() -> ApplicationCatalog:
     """Explicitly registered Tasks app, never an inferred Core write."""
     descriptor = ApplicationDescriptor(
@@ -126,12 +165,23 @@ def compile_hybrid_candidate_bundle(
 
     groups: list[list[int]] = []
     for group in atomic_groups:
-        if groups and _needs_joint_interpretation(
-            original.candidates[groups[-1][-1]], original.candidates[group[0]]
-        ):
-            groups[-1].extend(group)
-        else:
-            groups.append(list(group))
+        if groups:
+            preceding = groups[-1]
+            last_end = max(a.end for i in preceding for a in primary[i])
+            first_start = min(a.start for i in group for a in primary[i])
+            join = _needs_joint_interpretation(
+                original.candidates[preceding[-1]], original.candidates[group[0]]
+            ) or _requires_shared_clause_review(
+                source,
+                last_end,
+                first_start,
+                original.candidates[preceding[-1]],
+                original.candidates[group[0]],
+            )
+            if join:
+                preceding.extend(group)
+                continue
+        groups.append(list(group))
     boundaries = _route_boundaries(original, primary, groups)
     units: list[ScopedCandidateRoute] = []
     routes: list[Route] = []

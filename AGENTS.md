@@ -127,6 +127,22 @@ record exact source/result and a provider-free crossing-boundary sentinel,
 and make a bounded DEV E2E smoke (stages, flow, progress, readback) a deployment
 acceptance check. See the active functional roadmap for the 13-Oct findings.
 
+### 2026-10-14 — Candidate source cohesion and same-ID replay evidence
+
+One source anchor is not proof of an independently assertable fact. Qualifiers,
+objects and subordinate purposes must not be dispatched as autonomous Core
+writes merely because Router emitted additional candidates. Prefer conservative
+source grouping for Core review when semantic independence is unproven, and
+verify unrelated actions, dates, Tasks, ambiguous references and physical
+Markdown readback against the frozen regression corpus. Never patch an example
+word, language-specific connective, person or test identifier.
+
+Two n8n executions of one user message under the SAME delivery ID may differ
+if the first failed result was not persisted. Diagnose each execution separately;
+do not infer that a delivered failure was the post-write receipt of a later
+success. Source-independent assertions and replay/idempotency require explicit
+contracts, not accidental retries. See current Functional Roadmap checkpoint.
+
 ### 2026-10-13 — Auditoria exhaustiva de formas y casos pendientes
 
 Consultar docs/architecture/hybrid-source-validator-audit-20261013.md.
