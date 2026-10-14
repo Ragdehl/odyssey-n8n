@@ -82,6 +82,15 @@ def _run(tmp_path, *, temporal):
     return result, repository, before
 
 
+def test_candidate_dispatch_envelope_includes_real_router_and_route_wall(tmp_path):
+    """The candidate envelope includes actual source proposal plus route execution time."""
+    result, _, _ = _run(tmp_path, temporal=_MeasuredTemporal())
+    assert result.operational.total_duration_ms is not None
+    assert result.operational.total_duration_ms > 0.0
+    assert result.operational.stages[0].name == "candidate.source_proposal"
+    assert result.operational.total_duration_ms >= result.operational.stages[0].duration_ms
+
+
 def test_dispatch_records_actual_router_and_temporal_stages_not_zero_adapter(tmp_path):
     result, _repository, _before = _run(tmp_path, temporal=_MeasuredTemporal())
 

@@ -88,6 +88,53 @@ def _result(
     )
 
 
+def test_routed_parent_duration_is_observed_wall_time_not_stage_sum() -> None:
+    """A route's idle/opaque work remains visible as parent time, never fabricated child stages."""
+    from time import sleep
+
+    router = FixedRouter(RoutePlan(RouteOutcome.ROUTE, (Route("core", "Remember tea."),)))
+
+    def core(source, locator, actor, **_kwargs):
+        sleep(0.016)
+        return _result(locator)
+
+    result = execute_routed_request(
+        user_request="Remember tea.",
+        outer_request_id="measured-parent",
+        router=router,
+        catalog=_catalog(),
+        core_execute=core,
+        application_executors={},
+    )
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.operational.total_duration_ms is not None
+    assert result.operational.total_duration_ms >= 12.0
+    assert all(stage.name != "application.execution" for stage in result.operational.stages)
+
+
+def test_routed_rejection_also_retains_measured_wall_time() -> None:
+    """A rejected Router path still reports a real enclosing request duration."""
+    from time import sleep
+
+    class SlowInvalidRouter(FixedRouter):
+        def route(self, request, conversation_context=()):
+            sleep(0.012)
+            return super().route(request, conversation_context)
+
+    router = SlowInvalidRouter(RoutePlan(RouteOutcome.ROUTE, (Route("core", "wrong"),)))
+    result = execute_routed_request(
+        user_request="original",
+        outer_request_id="rejected-parent",
+        router=router,
+        catalog=_catalog(),
+        core_execute=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no write")),
+        application_executors={},
+    )
+    assert result.status is ApplicationStatus.FAILED
+    assert result.operational.total_duration_ms is not None
+    assert result.operational.total_duration_ms >= 9.0
+
+
 def test_route_locator_is_safe_for_128_character_and_unsafe_outer_ids() -> None:
     """Keep subordinate locators ASCII-safe and independent of delivery-ID length or spelling."""
     outer = "!" * 128

@@ -307,6 +307,18 @@ def execute_routed_request(
     and invalid correlations become bounded failed route evidence, allowing later independent
     routes to continue.  No route receives sibling current-message text.
     """
+    request_started = perf_counter()
+
+    def with_measured_wall(result: ApplicationResult) -> ApplicationResult:
+        """Report observed parent duration, never a sum of incomplete or overlapping stages."""
+        return replace(
+            result,
+            operational=replace(
+                result.operational,
+                total_duration_ms=max(0.0, (perf_counter() - request_started) * 1000),
+            ),
+        )
+
     if progress_callback is not None:
         progress_callback("routing.started", {})
     router_started = perf_counter()
@@ -315,22 +327,28 @@ def execute_routed_request(
         plan = validate_route_plan(plan, user_request, catalog)
     except Exception as error:
         stage = _router_stage(router, router_started, error)
-        return _prepend_router_stage(
-            _router_failure(outer_request_id, "ROUTER_INVALID", error), stage
+        return with_measured_wall(
+            _prepend_router_stage(_router_failure(outer_request_id, "ROUTER_INVALID", error), stage)
         )
     stage = _router_stage(router, router_started)
     if progress_callback is not None:
         progress_callback("routing.ready", {"route_count": len(plan.routes)})
     if plan.outcome is RouteOutcome.CLARIFY:
-        return _prepend_router_stage(_router_outcome(outer_request_id, "ROUTER_CLARIFY"), stage)
+        return with_measured_wall(
+            _prepend_router_stage(_router_outcome(outer_request_id, "ROUTER_CLARIFY"), stage)
+        )
     if plan.outcome is RouteOutcome.NEEDS_CAPABILITY:
-        return _prepend_router_stage(
-            _router_outcome(outer_request_id, "ROUTER_NEEDS_CAPABILITY"), stage
+        return with_measured_wall(
+            _prepend_router_stage(
+                _router_outcome(outer_request_id, "ROUTER_NEEDS_CAPABILITY"), stage
+            )
         )
     if plan.outcome is not RouteOutcome.ROUTE:  # Defensive against a malicious Protocol adapter.
-        return _prepend_router_stage(
-            _router_failure(outer_request_id, "ROUTER_INVALID", TypeError("unknown outcome")),
-            stage,
+        return with_measured_wall(
+            _prepend_router_stage(
+                _router_failure(outer_request_id, "ROUTER_INVALID", TypeError("unknown outcome")),
+                stage,
+            )
         )
 
     if max_parallel_preparations < 1 or max_parallel_preparations > 2:
@@ -411,8 +429,15 @@ def execute_routed_request(
                     )
                     for ordinal, route in enumerate(plan.routes)
                 )
-                return _routed_result(
-                    outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
+                return with_measured_wall(
+                    _routed_result(
+                        outer_request_id,
+                        user_request,
+                        plan.routes,
+                        subresults,
+                        scheduled_routes,
+                        stage,
+                    )
                 )
             for ordinal, route in enumerate(plan.routes):
                 locator = route_execution_id(outer_request_id, ordinal)
@@ -456,8 +481,10 @@ def execute_routed_request(
                         prepared_executor=callback,
                     )
                 )
-    return _routed_result(
-        outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
+    return with_measured_wall(
+        _routed_result(
+            outer_request_id, user_request, plan.routes, subresults, scheduled_routes, stage
+        )
     )
 
 

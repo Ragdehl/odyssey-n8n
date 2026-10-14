@@ -358,7 +358,18 @@ def execute_candidate_routed_message(
         except Exception:
             return
 
+    candidate_started = perf_counter()
     prewrite_stages: list[OperationalStage] = []
+
+    def completed_with_wall(result: ApplicationResult) -> ApplicationResult:
+        """Measure the full source→Core envelope without inferring local stage offsets."""
+        return replace(
+            result,
+            operational=replace(
+                result.operational,
+                total_duration_ms=max(0.0, (perf_counter() - candidate_started) * 1000),
+            ),
+        )
 
     def record_provider_stage(name: str, provider: object, duration_ms: float, ok: bool) -> None:
         """Keep bounded provider evidence without source text or decision traces."""
@@ -409,9 +420,11 @@ def execute_candidate_routed_message(
             ),
         )
         report_progress("routing.boundary_review_required")
-        return replace(
-            blocked,
-            operational=replace(blocked.operational, stages=(*prewrite_stages, failed_stage)),
+        return completed_with_wall(
+            replace(
+                blocked,
+                operational=replace(blocked.operational, stages=(*prewrite_stages, failed_stage)),
+            )
         )
 
     report_progress("routing.started")
@@ -487,8 +500,10 @@ def execute_candidate_routed_message(
                 clarification_code="CORE_SOURCE_BOUNDARY_REVIEW_REQUIRED",
                 planning_error=safe_detail,
             )
-            return replace(
-                blocked, operational=replace(blocked.operational, stages=tuple(prewrite_stages))
+            return completed_with_wall(
+                replace(
+                    blocked, operational=replace(blocked.operational, stages=tuple(prewrite_stages))
+                )
             )
         report_progress("routing.boundary_review_ready")
     report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
@@ -1098,10 +1113,12 @@ def execute_candidate_routed_message(
         ),
     )
     if not prewrite_stages:
-        return result
-    return replace(
-        result,
-        operational=replace(
-            result.operational, stages=(*prewrite_stages, *result.operational.stages)
-        ),
+        return completed_with_wall(result)
+    return completed_with_wall(
+        replace(
+            result,
+            operational=replace(
+                result.operational, stages=(*prewrite_stages, *result.operational.stages)
+            ),
+        )
     )
