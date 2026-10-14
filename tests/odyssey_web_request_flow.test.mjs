@@ -204,6 +204,25 @@ const checkpoint = {
   ],
 };
 
+test("v6 Core review checkpoint stages survive validation and render as observed", () => {
+  const events = [
+    {sequence: 1, stage: "routing.started", outcome: "milestone_observed", observed_at: "2026-10-14T11:01:00+02:00"},
+    {sequence: 2, stage: "routing.boundary_review_started", outcome: "milestone_observed", observed_at: "2026-10-14T11:01:01+02:00"},
+    {sequence: 3, stage: "routing.boundary_review_ready", outcome: "milestone_observed", observed_at: "2026-10-14T11:01:03+02:00"},
+    {sequence: 4, stage: "routing.ready", outcome: "milestone_observed", observed_at: "2026-10-14T11:01:04+02:00"},
+  ];
+  const observed = validateExecutionCheckpoint({
+    version: 1, request_id: "source-v6", stage: events.at(-1).stage,
+    outcome: "milestone_observed", sequence: 4, observed_at: events.at(-1).observed_at,
+    events, truncated: false,
+  });
+  assert.equal(observed.events.length, 4);
+  const graph = renderExecutionFlow(doc, diagnostic(), {checkpoint: {...observed, request_id: diagnostic().request_id}});
+  assert.match(graph.textContent, /Historial de ejecución/);
+  assert.match(graph.textContent, /routing · boundary review started/);
+  assert.match(graph.textContent, /routing · boundary review ready/);
+});
+
 test("validated route graph and checkpoint history render without claiming a canonical write", () => {
   const detail = diagnostic();
   detail.flow.routes[0].writes = [];

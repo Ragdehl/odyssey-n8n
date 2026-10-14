@@ -5,6 +5,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const STAGE_COPY = {
   starting: "Preparando tu solicitud…",
   "routing.started": "Entendiendo tu mensaje…",
+  "routing.boundary_review_started": "Comprobando que las partes conservan su significado…",
+  "routing.boundary_review_ready": "He verificado la división del mensaje.",
+  "routing.boundary_review_required": "Necesito revisar cómo se relacionan las partes.",
   "routing.ready": "He entendido cómo dividir tu mensaje.",
   "temporal.started": "Interpretando fechas y horas…",
   "temporal.ready": "He interpretado la fecha y la hora.",
@@ -505,7 +508,9 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
 }
 
 const CHECKPOINT_STAGES = new Set([
-  "starting", "routing.started", "routing.ready", "temporal.started", "temporal.ready",
+  "starting", "routing.started", "routing.boundary_review_started",
+  "routing.boundary_review_ready", "routing.boundary_review_required",
+  "routing.ready", "temporal.started", "temporal.ready",
   "planner.started", "planner.ready", "action.retrieve.started", "action.delegate.started",
   "action.write.started", "finalizing", "delivery.result_persisted", "processing.returned",
   "failed_or_unknown",

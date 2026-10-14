@@ -63,6 +63,21 @@ test("progress copy keeps only the latest user-facing stage", () => {
   );
 });
 
+test("Core source-boundary review has actual progress labels instead of generic processing", () => {
+  assert.match(
+    formatStage({stage: "routing.boundary_review_started", details: []}),
+    /Comprobando que las partes conservan su significado/,
+  );
+  assert.match(
+    formatStage({stage: "routing.boundary_review_ready", details: []}),
+    /He verificado la división/,
+  );
+  assert.match(
+    formatStage({stage: "routing.boundary_review_required", details: []}),
+    /Necesito revisar/,
+  );
+});
+
 test("donut updates monotonically and completes at 100", () => {
   const indicator = createProcessingIndicator(fakeDocument);
   const donut = indicator.element.querySelector(".processing-donut");
