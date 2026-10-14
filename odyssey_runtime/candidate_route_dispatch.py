@@ -8,7 +8,7 @@ request. The active DEV/PROD chat route is not modified.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from time import perf_counter
 
@@ -20,7 +20,9 @@ from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
 from odyssey_core.git_history import HistoryRecorder
+from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.observability import (
+    OperationalEvidence,
     OperationalOutcome,
     OperationalStage,
     normalize_provider_usage,
@@ -266,6 +268,9 @@ def execute_candidate_routed_message(
     task_route_executor: object | None = None,
     progress_callback: Callable[[str, dict[str, object]], None] | None = None,
     source_boundary_reviewer: object | None = None,
+    authenticated_actor: AuthenticatedActorContext | None = None,
+    self_binding_repository: SelfBindingRepository | None = None,
+    conversation_context: Sequence[Mapping[str, str]] = (),
 ) -> object:
     """Execute scoped candidates through existing sequential Core and route guards.
 
@@ -277,7 +282,10 @@ def execute_candidate_routed_message(
     The dispatcher itself has no ambient n8n/DEV registration or vault
     selector.  A composition root may inject it only after explicitly binding
     an authenticated DEV actor, conversation, repository, and pending-state
-    recorder.
+    recorder. Authenticated identity, its trusted self binding, and prior
+    conversation context are optional composition-root inputs. They are
+    transported unchanged to Core; Router source candidates never establish
+    either identity or conversation authority.
     """
     from types import SimpleNamespace
 
@@ -303,6 +311,22 @@ def execute_candidate_routed_message(
 
     if not isinstance(repository, VaultRepository):
         raise ValueError("An explicitly bound canonical repository is required")
+    if authenticated_actor is not None and not isinstance(
+        authenticated_actor, AuthenticatedActorContext
+    ):
+        raise ValueError("authenticated actor context is invalid")
+    if authenticated_actor is not None and (
+        not isinstance(actor, Mapping)
+        or set(actor) != {"human", "app"}
+        or actor["human"] != authenticated_actor.stable_user_id
+        or not isinstance(actor["app"], str)
+        or not actor["app"].strip()
+    ):
+        raise ValueError("authenticated actor does not match persistence provenance")
+    if self_binding_repository is not None and not isinstance(
+        self_binding_repository, SelfBindingRepository
+    ):
+        raise ValueError("self binding repository is invalid")
     if (candidate_coverage_factory is None) == (core_candidate_attributor is None):
         raise ValueError("Exactly one Core-owned coverage reviewer must be supplied")
     if core_candidate_attributor is not None:
@@ -334,16 +358,16 @@ def execute_candidate_routed_message(
         except Exception:
             return
 
-    boundary_stages: list[OperationalStage] = []
+    prewrite_stages: list[OperationalStage] = []
 
-    def record_boundary_stage(name: str, provider: object, duration_ms: float, ok: bool) -> None:
+    def record_provider_stage(name: str, provider: object, duration_ms: float, ok: bool) -> None:
         """Keep bounded provider evidence without source text or decision traces."""
         model = getattr(provider, "model", None)
-        if model is None and name == "candidate.router_revision":
+        if model is None and name in {"candidate.source_proposal", "candidate.router_revision"}:
             from odyssey_apps.router import ROUTER_MODEL
 
             model = ROUTER_MODEL
-        boundary_stages.append(
+        prewrite_stages.append(
             OperationalStage(
                 name,
                 OperationalOutcome.COMPLETED if ok else OperationalOutcome.FAILED,
@@ -387,7 +411,7 @@ def execute_candidate_routed_message(
         report_progress("routing.boundary_review_required")
         return replace(
             blocked,
-            operational=replace(blocked.operational, stages=(failed_stage,)),
+            operational=replace(blocked.operational, stages=(*prewrite_stages, failed_stage)),
         )
 
     report_progress("routing.started")
@@ -395,9 +419,21 @@ def execute_candidate_routed_message(
     try:
         proposal = router.propose(source)
     except RouterError as error:
+        record_provider_stage(
+            "candidate.source_proposal",
+            router,
+            max(0.0, (perf_counter() - router_started) * 1000),
+            False,
+        )
         if source_boundary_reviewer is None:
             raise
         return reject_unrepresentable_source("application.router", error, router_started)
+    record_provider_stage(
+        "candidate.source_proposal",
+        router,
+        max(0.0, (perf_counter() - router_started) * 1000),
+        True,
+    )
     if not isinstance(proposal, FactCandidateProposal) or proposal.source != source:
         raise RouterError("Router did not preserve the original message")
     # The default strict atomic route compiler is unchanged. The explicit
@@ -427,7 +463,7 @@ def execute_candidate_routed_message(
                 router=router,
                 bundle_compiler=compiler,
                 boundary_reviewer=source_boundary_reviewer,
-                telemetry_callback=record_boundary_stage,
+                telemetry_callback=record_provider_stage,
             )
         except SourceBoundaryReviewError as error:
             # Only expose stable, source-free diagnostic categories. Never
@@ -452,7 +488,7 @@ def execute_candidate_routed_message(
                 planning_error=safe_detail,
             )
             return replace(
-                blocked, operational=replace(blocked.operational, stages=tuple(boundary_stages))
+                blocked, operational=replace(blocked.operational, stages=tuple(prewrite_stages))
             )
         report_progress("routing.boundary_review_ready")
     report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
@@ -584,16 +620,20 @@ def execute_candidate_routed_message(
     def run_unit(
         unit_source: str,
         locator: str,
-        _authenticated_actor: object = None,
-        _prior_turns: object = (),
+        routed_authenticated_actor: AuthenticatedActorContext | None = None,
+        routed_prior_turns: Sequence[Mapping[str, str]] = (),
         *,
         dependent_handoff: object | None = None,
         conversation_context_override: object | None = None,
     ):
         # The existing v0 Core route executor passes prior-turn context as a
         # keyword. It must never be repurposed to carry sibling route text.
-        if conversation_context_override is not None and _prior_turns not in ((), None):
+        if conversation_context_override is not None and routed_prior_turns not in ((), None):
             raise ValueError("Two competing route contexts are not allowed")
+        if routed_authenticated_actor != authenticated_actor:
+            raise ValueError("route authenticated actor changed before Core execution")
+        if tuple(routed_prior_turns) != tuple(conversation_context):
+            raise ValueError("route conversation context changed before Core execution")
         ordinal, scoped = route_scopes[locator]
         if scoped.route.source_text != unit_source:
             raise ValueError("Route source changed before Core interpretation")
@@ -620,15 +660,47 @@ def execute_candidate_routed_message(
         interpretation = None
         domain = None
         composed_shared_clock = False
+        temporal_stage: OperationalStage | None = None
         if scoped.route.capability_id == "temporal":
             if temporal is None or not callable(getattr(temporal, "interpret", None)):
                 raise ValueError("Temporal resolution is unavailable for dated route")
             report_progress("temporal.started")
-            if inherited:
-                interpretation = temporal.interpret(unit_source, inherited_temporal=inherited)
-            else:
-                interpretation = temporal.interpret(unit_source)
+            temporal_started = perf_counter()
+            try:
+                if inherited:
+                    interpretation = temporal.interpret(unit_source, inherited_temporal=inherited)
+                else:
+                    interpretation = temporal.interpret(unit_source)
+            except Exception as error:
+                temporal_stage = OperationalStage(
+                    "candidate.temporal_interpretation",
+                    OperationalOutcome.FAILED,
+                    max(0.0, (perf_counter() - temporal_started) * 1000),
+                    model=getattr(temporal, "model", None),
+                    reasoning_effort=getattr(temporal, "reasoning_effort", None),
+                    usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
+                    error_category=type(error).__name__[:100],
+                )
+                return ApplicationResult(
+                    locator,
+                    ApplicationStatus.FAILED,
+                    (),
+                    (),
+                    planning_error="TEMPORAL_INTERPRETATION_REQUIRED",
+                    operational=OperationalEvidence(
+                        total_duration_ms=temporal_stage.duration_ms,
+                        stages=(temporal_stage,),
+                    ),
+                )
             report_progress("temporal.ready")
+            temporal_stage = OperationalStage(
+                "candidate.temporal_interpretation",
+                OperationalOutcome.COMPLETED,
+                max(0.0, (perf_counter() - temporal_started) * 1000),
+                model=getattr(temporal, "model", None),
+                reasoning_effort=getattr(temporal, "reasoning_effort", None),
+                usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
+            )
             if interpretation.source_text != unit_source:
                 raise ValueError("Temporal must interpret only its routed source")
             from odyssey_core.temporal_interpretation import TemporalInterpreterError
@@ -777,10 +849,16 @@ def execute_candidate_routed_message(
         class RecordingCorePlanner:
             """Observe the original planner's output without changing its actions."""
 
-            def plan(self, request):
+            def plan(self, request: str, conversation_context: Sequence[Mapping[str, str]] = ()):
                 if request != unit_source:
                     raise ValueError("Core was given a sibling or full original message")
-                result = planner.plan(request)
+                if tuple(conversation_context) != tuple(routed_prior_turns):
+                    raise ValueError("Core planner received untrusted conversation context")
+                result = (
+                    planner.plan(request, conversation_context)
+                    if conversation_context
+                    else planner.plan(request)
+                )
                 if isinstance(result, RequestPlan):
                     captured["plan"] = result
                 return result
@@ -833,7 +911,18 @@ def execute_candidate_routed_message(
             progress_callback=progress_callback,
             write_preflight_guard=subject_guard or event_guard or guard,
             known_fact_verifier=known_fact_verifier,
+            authenticated_actor=routed_authenticated_actor,
+            self_binding_repository=self_binding_repository,
+            conversation_context=tuple(routed_prior_turns),
         )
+        if temporal_stage is not None:
+            result = replace(
+                result,
+                operational=replace(
+                    result.operational,
+                    stages=(temporal_stage, *result.operational.stages),
+                ),
+            )
         if result.status is ApplicationStatus.COMPLETED and "plan" in captured:
             try:
                 plan = captured["plan"]
@@ -927,8 +1016,6 @@ def execute_candidate_routed_message(
                 # Core has already returned a write receipt. A later readback,
                 # index or handoff failure must not erase successful writes
                 # or allow dependent branches to infer a canonical identity.
-                from odyssey_core.observability import OperationalOutcome, OperationalStage
-
                 failed_stage = OperationalStage(
                     "candidate.postwrite_verification",
                     OperationalOutcome.FAILED,
@@ -995,12 +1082,26 @@ def execute_candidate_routed_message(
         dependent_pending_executor=(
             preserve_route_ambiguity if route_ambiguity_recorder is not None else None
         ),
+        authenticated_actor=authenticated_actor,
+        conversation_context=conversation_context,
     )
-    if not boundary_stages:
+    # ``selected_router`` adapts an already validated bundle to the generic
+    # executor. Its zero-duration stage is not a provider call, so retaining
+    # it would misstate the actual Router latency recorded above.
+    result = replace(
+        result,
+        operational=replace(
+            result.operational,
+            stages=tuple(
+                stage for stage in result.operational.stages if stage.name != "application.router"
+            ),
+        ),
+    )
+    if not prewrite_stages:
         return result
     return replace(
         result,
         operational=replace(
-            result.operational, stages=(*boundary_stages, *result.operational.stages)
+            result.operational, stages=(*prewrite_stages, *result.operational.stages)
         ),
     )

@@ -16,11 +16,14 @@ from odyssey_core.candidate_coverage import (
     CoreCandidateCoverageClaim,
     build_candidate_coverage_manifest,
 )
+from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
+from odyssey_core.notes import parse_note
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 from odyssey_runtime.candidate_route_dispatch import (
     compile_candidate_route_bundle,
     execute_candidate_routed_message,
 )
+from odyssey_runtime.composition import _persistence_actor
 from tests.apps.test_fact_candidates import CASES
 from tests.benchmarks.test_recorded_real_models_source_replay import (
     _saved_router_outputs,
@@ -30,6 +33,9 @@ from tests.runtime.test_candidate_pending_state import NOW
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import SCHEMA
 from tests.runtime.test_full_message_corpus_regression import fresh_corpus_vault
 from tests.runtime.test_temporal_user_path_e2e import _day_plan, _linked_day_plan
+
+USER_A = "11111111-1111-4111-8111-111111111111"
+USER_B = "22222222-2222-4222-8222-222222222222"
 
 
 class RecordedRouter:
@@ -127,6 +133,12 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
     core_domains = []
     history = FakeHistoryRecorder()
     progress: list[str] = []
+    state = tmp_path / "state"
+    state.mkdir()
+    bindings = SelfBindingRepository(state, repo, SCHEMA)
+    bindings.bind(USER_A, "fixture-person-alex")
+    actor = AuthenticatedActorContext(USER_A)
+    prior = ({"role": "assistant", "text": "Previous authenticated turn."},)
 
     class Temporal:
         def interpret(self, scoped):
@@ -160,7 +172,13 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
                 return _day_plan("2026-10-04", "Compré pan.", "2026-10-04")
             raise AssertionError(f"Unexpected source {scoped!r}")
 
-        return SimpleNamespace(plan=plan)
+        return SimpleNamespace(
+            plan=lambda scoped, conversation_context=(): (
+                plan(scoped)
+                if tuple(conversation_context) == prior
+                else (_ for _ in ()).throw(AssertionError("unexpected conversation context"))
+            )
+        )
 
     result = execute_candidate_routed_message(
         source,
@@ -174,12 +192,15 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
         semantic_index=semantic_index,
         embedder=embedder,
         contextual_reasoner=object(),
-        actor="routed-real-core-test",
+        actor=_persistence_actor("routed-real-core-test", actor),
         now=NOW,
         context_limit=5,
         request_id_factory=lambda: "three-route-eric-v1",
         history_recorder=history,
         progress_callback=lambda stage, _payload: progress.append(stage),
+        authenticated_actor=actor,
+        self_binding_repository=bindings,
+        conversation_context=prior,
     )
     assert progress[:2] == ["routing.started", "routing.ready"]
     assert "temporal.started" in progress
@@ -209,3 +230,36 @@ def test_three_scoped_eric_routes_reach_real_writer_and_link_safely(tmp_path, de
     assert "Hablé con [[Eric|Eric]]." in all_notes
     assert "Iré al cine con [[Eric|Eric]]." in all_notes
     assert "Compré pan." in all_notes
+    day = next(path for path in repo.list_markdown_paths() if path.endswith("2026-10-04.md"))
+    assert parse_note(repo.read_text(day)).metadata["created_by"] == {
+        "human": USER_A,
+        "app": "routed-real-core-test",
+    }
+
+
+def test_hybrid_rejects_forged_authenticated_actor_before_router_or_core(tmp_path):
+    """A direct dispatcher caller cannot replace trusted write provenance."""
+    repo, context_index, semantic_index, embedder = fresh_corpus_vault(tmp_path)
+    actor = AuthenticatedActorContext(USER_A)
+
+    with pytest.raises(ValueError, match="does not match persistence provenance"):
+        execute_candidate_routed_message(
+            "Hoy encontré una mochila verde mientras ordenaba el armario.",
+            router=SimpleNamespace(
+                propose=lambda _: (_ for _ in ()).throw(AssertionError("router"))
+            ),
+            temporal=None,
+            core_planner_factory=lambda *_: (_ for _ in ()).throw(AssertionError("planner")),
+            candidate_coverage_factory=lambda *_: (_ for _ in ()).throw(AssertionError("coverage")),
+            repository=repo,
+            schema=SCHEMA,
+            context_index=context_index,
+            semantic_index=semantic_index,
+            embedder=embedder,
+            contextual_reasoner=object(),
+            actor=_persistence_actor("test", AuthenticatedActorContext(USER_B)),
+            now=NOW,
+            context_limit=5,
+            request_id_factory=lambda: "forged-actor",
+            authenticated_actor=actor,
+        )

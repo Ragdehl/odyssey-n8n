@@ -110,12 +110,23 @@ function validateConversationTurn(value) {
  * @param {{result: object, renderResult: (result: object) => void, persistAssistantTurn: () => Promise<void>, warnContinuity: () => void}} options Rendering and persistence callbacks.
  * @returns {Promise<void>} Resolves after the best-effort persistence attempt.
  */
-export async function renderProductResultWithContinuity({result, renderResult, persistAssistantTurn, warnContinuity}) {
+export async function renderProductResultWithContinuity({
+  result, renderResult, persistAssistantTurn, warnContinuity, warnDiagnosticFallback,
+}) {
   renderResult(result);
   try {
     await persistAssistantTurn();
   } catch {
-    warnContinuity();
+    // The delivery result is authoritative. A conversation diagnostic schema
+    // mismatch must not leave the *answer* absent from the transcript. Retry
+    // only this idempotent assistant turn without optional diagnostic metadata,
+    // never the original semantic request or any note write.
+    try {
+      await persistAssistantTurn({withoutDiagnostics: true});
+      warnDiagnosticFallback?.();
+    } catch {
+      warnContinuity();
+    }
   }
 }
 
@@ -384,11 +395,20 @@ export function validateExecutionFlow(value, stages) {
       status: route.status, temporal, plan, entities, writes, ...(steps ? {steps} : {}),
       ...(hasDependency ? {depends_on: route.depends_on, reason: route.reason} : {})};
   });
-  const routerIndex = stages.findIndex(stage => stage.name === "application.router");
-  if (routerIndex < 0 || routerIndex + 1 + totalStages > stages.length) {
+  // v6 exposes the ACTUAL proposal model instead of an adapter's 0ms
+  // "application.router" stage. Only known prewrite, source-bound review
+  // stages may intervene before the first route-local operation.
+  const routerIndex = stages.findIndex(stage =>
+    ["application.router", "candidate.source_proposal"].includes(stage.name));
+  if (routerIndex < 0) {
     throw new ProductRequestError("Execution stages do not match the route graph.");
   }
   let index = routerIndex + 1;
+  const prewrite = new Set(["candidate.source_boundary_review", "candidate.router_revision"]);
+  while (prewrite.has(stages[index]?.name)) index++;
+  if (index + totalStages > stages.length) {
+    throw new ProductRequestError("Execution stages do not match the route graph.");
+  }
   for (const route of routes) {
     if (route.steps) {
       for (const step of route.steps) {

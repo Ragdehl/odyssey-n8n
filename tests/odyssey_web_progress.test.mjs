@@ -160,3 +160,26 @@ test("poller tolerates progress failures without affecting delivery", async () =
   assert.ok(calls >= 1);
   assert.ok(queued.length <= 1);
 });
+
+test("progress never fabricates elapsed percentage while waiting for a provider", () => {
+  const originalInterval = globalThis.setInterval;
+  let called = false;
+  try {
+    globalThis.setInterval = () => {called = true; throw new Error("synthetic autonomous progress forbidden");};
+    const indicator = createProcessingIndicator(fakeDocument);
+    assert.equal(called, false, "no timer should invent progress");
+    const donut = indicator.element.querySelector(".processing-donut");
+    assert.match(donut.getAttribute("title"), /etapas verificadas/);
+    indicator.update({stage: "action.write.started", progress: 84, details: []});
+    assert.equal(donut.getAttribute("aria-valuenow"), "84");
+    indicator.update({stage: "action.write.started", progress: 84, details: []});
+    assert.equal(donut.getAttribute("aria-valuenow"), "84");
+    indicator.update({stage: "finalizing", progress: 94, details: []});
+    assert.equal(donut.getAttribute("aria-valuenow"), "94");
+    indicator.complete();
+    assert.equal(donut.getAttribute("aria-valuenow"), "100");
+    indicator.destroy();
+  } finally {
+    globalThis.setInterval = originalInterval;
+  }
+});

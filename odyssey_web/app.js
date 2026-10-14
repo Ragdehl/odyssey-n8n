@@ -121,6 +121,7 @@ async function loadMainConversation() {
   olderCursor = data.before ?? null;
   hasOlder = data.has_older === true;
   conversation.replaceChildren();
+  if (clarificationStatus) clarificationStatus.hidden = true;
   recoveryControl = null;
   userTextByRequestId.clear();
   for (const turn of data.turns ?? []) {
@@ -488,7 +489,7 @@ function appendRecoveryControl(submission, userMessage) {
   control.className = "recovery-control";
   control.dataset.requestId = submission.requestId;
   const text = document.createElement("p");
-  text.textContent = "Esta solicitud no tiene una respuesta guardada.";
+  text.textContent = "La respuesta no figura en el historial. Puedes recuperar la entrega original.";
   const action = document.createElement("button");
   action.type = "button";
   action.className = "recovery-action";
@@ -527,6 +528,14 @@ function removeRecoveryControl(control) {
   control?.remove();
 }
 
+function appendDiagnosticFallbackWarning() {
+  const warning = document.createElement("p");
+  warning.className = "continuity-warning";
+  warning.textContent = "He conservado la respuesta, pero no he podido guardar sus detalles técnicos.";
+  conversation.append(warning);
+  conversation.scrollTop = conversation.scrollHeight;
+}
+
 function appendContinuityWarning() {
   const warning = document.createElement("p");
   warning.className = "continuity-warning";
@@ -544,7 +553,13 @@ function renderProductResult(result) {
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
   appendClarificationCard(message, result.clarification);
-  if (clarificationStatus) clarificationStatus.hidden = result.kind !== "clarification";
+  if (clarificationStatus) {
+    clarificationStatus.hidden = !(
+      result.kind === "clarification"
+      && Array.isArray(result.clarification?.options)
+      && result.clarification.options.length >= 2
+    );
+  }
   const confirmedWrite = ["completed", "partial"].includes(result.status)
     && (result.note_result_snapshot?.kind === "affected_notes"
       && result.note_result_snapshot.total > 0
@@ -630,6 +645,7 @@ function submitClarificationReply(reply) {
 }
 
 async function sendSubmission(submission, isRetry = false, activeRecoveryControl = null) {
+  if (clarificationStatus) clarificationStatus.hidden = true;
   if (!isRetry) appendMessage("user", submission.request);
   if (typeof submission.requestId === "string" && typeof submission.request === "string") {
     userTextByRequestId.set(submission.requestId, submission.request.slice(0, 4096));
@@ -655,7 +671,7 @@ async function sendSubmission(submission, isRetry = false, activeRecoveryControl
     await renderProductResultWithContinuity({
       result,
       renderResult: renderProductResult,
-      persistAssistantTurn: async () => {
+      persistAssistantTurn: async ({withoutDiagnostics = false} = {}) => {
         if (!conversationId) return;
         await requestConversation({
           endpoint: conversationEndpoint,
@@ -666,12 +682,15 @@ async function sendSubmission(submission, isRetry = false, activeRecoveryControl
             role: "assistant",
             text: result.message,
             status: result.status,
-            request_detail: result.request_detail,
-            note_result_snapshot: result.note_result_snapshot,
+            ...(withoutDiagnostics ? {} : {
+              request_detail: result.request_detail,
+              note_result_snapshot: result.note_result_snapshot,
+            }),
           },
         });
       },
       warnContinuity: appendContinuityWarning,
+      warnDiagnosticFallback: appendDiagnosticFallbackWarning,
     });
   } catch (error) {
     retrySubmission = error instanceof ProductRequestError && error.retryable ? submission : null;

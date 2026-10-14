@@ -280,3 +280,24 @@ test("unproven v6 source dependency presents a safe clarification and keeps its 
   assert.equal(result.request_detail.changes.units.length, 0);
   assert.equal(validateProductResponse(result).kind, "clarification");
 });
+
+test("a prewrite Core coverage review failure requests semantic reformulation, not a person", () => {
+  const result = execute({
+    request_id: "synthetic-partial", status: "needs_attention",
+    product_outcome: "CLARIFY",
+    clarification_code: "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+    product_reason: "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+    affected_stable_note_ids: [], actions: [],
+    operational: {total_duration_ms: 45, stages: [{
+      name: "candidate_coverage", outcome: "failed", duration_ms: 38,
+      model: null, error_category: "CandidateAttributionError", provider_calls: [],
+    }]},
+  });
+  assert.equal(result.kind, "clarification");
+  assert.equal(result.status, "needs_attention");
+  assert.match(result.message, /conserve todas las partes de tu mensaje/);
+  assert.match(result.message, /No he guardado nada/);
+  assert.doesNotMatch(result.message, /qué persona/);
+  assert.deepEqual(result.clarification.options, []);
+  assert.equal(validateProductResponse(result).kind, "clarification");
+});

@@ -1,5 +1,4 @@
 const POLL_MS = 350;
-const CREEP_MS = 280;
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const STAGE_COPY = {
@@ -93,6 +92,10 @@ export function createProcessingIndicator(documentImpl = document) {
   updateCopy(STAGE_COPY.starting);
   wrapper.append(donut, copyRow);
 
+  // The backend reports coarse, observed phase milestones: there is no
+  // evidence-backed estimate of fraction of total wall-clock time remaining.
+  // Never animate a numeric "completion" without a new server milestone.
+  donut.setAttribute("title", "Avance por etapas verificadas; no indica tiempo restante");
   let displayed = 0;
   let stageTarget = 0;
   const applyProgress = (next) => {
@@ -101,12 +104,6 @@ export function createProcessingIndicator(documentImpl = document) {
     value.setAttribute("stroke-dashoffset", String(100 - displayed));
     percentage.textContent = String(displayed);
   };
-
-  const creepTimer = setInterval(() => {
-    const cap = Math.min(96, stageTarget + 9);
-    if (displayed < cap) applyProgress(displayed + 1);
-  }, CREEP_MS);
-  creepTimer?.unref?.();
 
   return {
     element: wrapper,
@@ -121,7 +118,8 @@ export function createProcessingIndicator(documentImpl = document) {
       applyProgress(100);
     },
     destroy() {
-      clearInterval(creepTimer);
+      // The indicator owns no autonomous progress timer. Visual loading
+      // dots animate via CSS independently while waiting for a real stage.
     },
   };
 }
@@ -182,7 +180,10 @@ function chip(doc, text, type = "", title = "") {
 }
 
 function stageTitle(name) {
-  if (name === "application.router") return "Router";
+  if (name === "application.router" || name === "candidate.source_proposal") return "Router";
+  if (name === "candidate.router_revision") return "Router · corrección";
+  if (name === "candidate.source_boundary_review") return "Core · revisión de la división";
+  if (name === "candidate.temporal_interpretation") return "Temporal";
   if (name === "planner") return "Planner";
   if (name === "temporal.interpretation") return "Temporal";
   if (name === "temporal.coherence") return "Coherencia de fechas";
@@ -282,7 +283,9 @@ function ioPanel(doc, input, output) {
 
 function stageCard(doc, stage, route = null, observedStep = null) {
   const card = element(doc, "article", `flow-card ${stage.outcome === "failed" ? "flow-card-failed" : ""}`);
-  const icon = stage.name === "application.router" ? "router" :
+  const icon = ["application.router", "candidate.source_proposal", "candidate.router_revision"].includes(stage.name) ? "router" :
+    stage.name === "candidate.source_boundary_review" ? "core" :
+    stage.name === "candidate.temporal_interpretation" ? "temporal" :
     stage.name === "planner" ? "planner" :
     stage.name === "temporal.interpretation" ? "temporal" :
     stage.name === "tasks.interpretation" ? "tasks" :
@@ -396,7 +399,8 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
   if (!flow?.routes?.length) {
     root.append(element(doc, "p", "flow-legacy", "Esta solicitud no conserva la división de Router ni las transformaciones por etapa. El mensaje original y las métricas registradas sí están disponibles."));
   }
-  const routerIndex = stages.findIndex(stage => stage.name === "application.router");
+  const routerIndex = stages.findIndex(stage =>
+    ["application.router", "candidate.source_proposal"].includes(stage.name));
   const prefix = routerIndex < 0 ? [] : stages.slice(0, routerIndex);
   if (prefix.length) {
     const prelim = element(doc, "details", "flow-technical");
@@ -420,6 +424,18 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
     if (!flow?.routes?.length) root.append(arrow(doc));
   }
   let consumed = routerIndex + 1;
+  const prewriteNames = new Set(["candidate.source_boundary_review", "candidate.router_revision"]);
+  const prewrite = [];
+  while (prewriteNames.has(stages[consumed]?.name)) {
+    prewrite.push(stages[consumed]);
+    consumed += 1;
+  }
+  if (prewrite.length) {
+    const review = element(doc, "details", "flow-technical");
+    review.append(element(doc, "summary", "", "Revisión previa de la división"));
+    for (const stage of prewrite) review.append(stageCard(doc, stage));
+    root.append(review);
+  }
   if (flow?.routes?.length) {
     const paths = element(doc, "div", "flow-paths-viewport");
     const inner = element(doc, "div", "flow-paths-inner");
