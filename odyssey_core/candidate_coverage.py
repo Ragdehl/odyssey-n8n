@@ -325,14 +325,39 @@ def validate_candidate_coverage_manifest(
             from .temporal_approximation_handoff import TEMPORAL_APPROXIMATE_LITERAL
 
             temporal = context.verified_route_temporal
-            if temporal is None or any(
-                span.text not in lexical
-                or not any(
+
+            def proven_approximate_span(
+                span, lexical=lexical, temporal=temporal, unit=unit
+            ) -> bool:
+                if span.text not in lexical or temporal is None:
+                    return False
+                if any(
                     item.kind == TEMPORAL_APPROXIMATE_LITERAL and item.source_text == span.text
                     for item in temporal.evidence
-                )
-                for span in approximate_roles
-            ):
+                ):
+                    return True
+                # E2: an approximate *daypart* can accompany a proven
+                # exact-date source phrase without becoming an exact hour.
+                # It must be inside that same original Temporal quote and
+                # attached to a matching, exclusively dated Day fact.
+                if unit.target.type != "calendar_day" or len(unit.fact_temporal_anchors) != 1:
+                    return False
+                for item in temporal.temporal_references():
+                    anchor = item.temporal_anchor()
+                    start = source.find(item.source_text)
+                    if (
+                        anchor.time is None
+                        and unit.target.query == anchor.date
+                        and start >= 0
+                        and start <= span.start < span.end <= start + len(item.source_text)
+                        and len(unit.fact_temporal_anchors[0]) == 1
+                        and unit.fact_temporal_anchors[0][0].date == anchor.date
+                        and unit.fact_temporal_anchors[0][0].time is None
+                    ):
+                        return True
+                return False
+
+            if any(not proven_approximate_span(span) for span in approximate_roles):
                 raise ValueError(
                     "Approximate time must be represented literally with Core Temporal provenance"
                 )

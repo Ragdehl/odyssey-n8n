@@ -895,13 +895,21 @@ def execute_candidate_routed_message(
         ):
             route_context = replace(route_context, verified_sensitive_temporal=domain)
         route_context.validate(unit_source)
+        # The same *exact-source* Temporal proof is needed by Core coverage;
+        # Router's lexical time_approx alone cannot authorize this binding.
+        from odyssey_core.temporal_qualifier_handoff import source_bound_qualitative_times
+
+        verified_qualitative = source_bound_qualitative_times(
+            interpretation, route_context, domain, timezone=context_timezone
+        )
+        if verified_qualitative and route_context.verified_route_temporal is None:
+            route_context = replace(route_context, verified_route_temporal=domain)
+            route_context.validate(unit_source)
         # E2 seam: bind existing CoreCandidateContext, DomainInterpretation and
         # runtime-authenticated actor to ONE validated, immutable handoff.
         # The context is a structural guard, not a second semantic authority.
         # It is intentionally assembled only after all Core-owned inheritance
         # and scoped evidence have already been independently verified.
-        from odyssey_core.temporal_qualifier_handoff import source_bound_qualitative_times
-
         execution_context = ExecutionContext(
             request_id=locator,
             source=unit_source,
@@ -925,9 +933,7 @@ def execute_candidate_routed_message(
                     else ()
                 )
             ),
-            qualitative_times=source_bound_qualitative_times(
-                interpretation, route_context, domain, timezone=context_timezone
-            ),
+            qualitative_times=verified_qualitative,
         )
         # Subsequent stages consume the validated carrier, not new copies of
         # the original planner/actor arguments.
@@ -983,6 +989,12 @@ def execute_candidate_routed_message(
                     else planner.plan(request)
                 )
                 if isinstance(result, RequestPlan):
+                    if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+                        from odyssey_core.qualitative_fact_preservation import (
+                            preserve_qualitative_day_facts,
+                        )
+
+                        result = preserve_qualitative_day_facts(result, context=execution_context)
                     captured["plan"] = result
                 return result
 
