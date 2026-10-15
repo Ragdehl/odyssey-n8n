@@ -361,6 +361,7 @@ class StageInput:
     managed_notes: tuple[ManagedNoteHandle, ...] = ()
     temporal_references: tuple[DomainEvidence, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
+    pending: tuple[PendingContext, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,6 +412,8 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         missing.add(ContextPort.MANAGED_NOTES)
     if ContextPort.SOURCE_NOTE_HINTS in spec.requires and not context.source_note_hints:
         missing.add(ContextPort.SOURCE_NOTE_HINTS)
+    if ContextPort.PENDING in spec.requires and not context.pending:
+        missing.add(ContextPort.PENDING)
     if missing:
         raise ContextContractError(f"Missing required context ports: {sorted(missing)}")
     return StageInput(
@@ -429,6 +432,7 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         qualitative_times=(
             context.qualitative_times if ContextPort.TEMPORAL in spec.requires else ()
         ),
+        pending=(context.pending if ContextPort.PENDING in spec.requires else ()),
     )
 
 

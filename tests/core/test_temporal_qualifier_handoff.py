@@ -145,3 +145,39 @@ def test_source_mismatch_and_unverified_date_cannot_claim_daypart():
         source_bound_qualitative_times(
             temporal, ctx, replace(domain, source_text="Marta"), timezone="Europe/Paris"
         )
+
+
+def test_shared_original_temporal_span_is_one_qualifier_not_two_claims():
+    source = "Mañana por la tarde hablaré y escribiré."
+    daypart = "por la tarde"
+    at = source.index(daypart)
+    shared_span = CoreSourceSpan(daypart, at, at + len(daypart))
+    candidates = []
+    for index, verb in enumerate(("hablaré", "escribiré"), 1):
+        start = source.index(verb)
+        candidates.append(
+            CoreCandidate(
+                f"candidate-{index}",
+                "occurrence",
+                "candidate",
+                (CoreSourceSpan(verb, start, start + len(verb)),),
+                (CoreCandidateRole("time_approx", shared_span),),
+                (),
+            )
+        )
+    ctx = CoreCandidateContext(source, tuple(candidates))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                "Mañana por la tarde",
+                TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-16"),
+            ),
+        ),
+    )
+    qualifiers = source_bound_qualitative_times(
+        temporal, ctx, temporal.core_domain_interpretation(), timezone="Europe/Paris"
+    )
+    assert [(q.qualifier, q.date) for q in qualifiers] == [(daypart, "2026-10-16")]
+    # The duplicated candidate does NOT certify which of two facts owns it;
+    # Core's later fact-ownership mapping must still prove that separately.

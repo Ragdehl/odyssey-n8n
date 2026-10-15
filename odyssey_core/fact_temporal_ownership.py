@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from hashlib import sha256
 
-from .candidate_context import CoreCandidateContext
+from .candidate_context import CoreCandidateContext, CoreSourceSpan
 from .candidate_coverage import CoreCandidateCoverageManifest, validate_candidate_coverage_manifest
 from .execution_context import ContextContractError, ExecutionContext
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
@@ -26,6 +26,26 @@ class CoreFactTemporalOwnership:
     fact_ordinal: int
     source_digest: str
     plan_digest: str
+
+
+def _qualifier_in_unique_original_temporal_span(
+    context: ExecutionContext, qualifier_index: int, span: CoreSourceSpan
+) -> bool:
+    """Require one physical occurrence of the date quote enclosing this role.
+
+    Identical dayparts in different clauses cannot be disambiguated by substring
+    equality or candidate list order; the current QualitativeTime carrier has
+    no independently certified source offsets for such repetitions.
+    """
+    qualifier = context.qualitative_times[qualifier_index]
+    start = context.source.find(qualifier.source_text)
+    return bool(
+        start >= 0
+        and context.source.find(qualifier.source_text, start + 1) < 0
+        and start <= span.start < span.end <= start + len(qualifier.source_text)
+        and span.text == qualifier.qualifier
+        and context.source[span.start : span.end] == qualifier.qualifier
+    )
 
 
 def reviewed_fact_temporal_ownership(
@@ -47,17 +67,14 @@ def reviewed_fact_temporal_ownership(
     if len(ordinals) > 128:
         raise ContextContractError("Temporal owner exceeds bounded fact coverage")
     result = []
-    for index, qualifier in enumerate(context.qualitative_times):
+    for index, _qualifier in enumerate(context.qualitative_times):
         matches = []
         for candidate, claim in zip(source_context.candidates, manifest.claims, strict=True):
             if claim.disposition != "planned_fact":
                 continue
             spans = [r.span for r in candidate.roles if r.role == "time_approx"]
             if not any(
-                span.text == qualifier.qualifier
-                and span.text in qualifier.source_text
-                and context.source[span.start : span.end] == qualifier.qualifier
-                for span in spans
+                _qualifier_in_unique_original_temporal_span(context, index, span) for span in spans
             ):
                 continue
             claimed = (
@@ -168,7 +185,7 @@ def proposed_fact_temporal_ownership(
         raise ContextContractError("Unverified candidate graph cannot bind a temporal owner")
     source_context.validate(context.source)
     pairs: list[CoreFactTemporalOwnership] = []
-    for i, qualifier in enumerate(context.qualitative_times):
+    for i, _qualifier in enumerate(context.qualitative_times):
         found: list[int] = []
         for candidate_index, (candidate, link) in enumerate(
             zip(source_context.candidates, graph.links, strict=True)
@@ -176,23 +193,11 @@ def proposed_fact_temporal_ownership(
             if not link.fact_ordinals:
                 continue
             for role in candidate.roles:
-                if (
-                    role.role == "time_approx"
-                    and role.span.text == qualifier.qualifier
-                    and context.source[role.span.start : role.span.end] == qualifier.qualifier
+                if role.role == "time_approx" and _qualifier_in_unique_original_temporal_span(
+                    context, i, role.span
                 ):
-                    # Temporal quote must contain the *same physical span*,
-                    # not just a common substring elsewhere in the message.
-                    start = context.source.find(qualifier.source_text)
-                    if start < 0 or context.source.find(qualifier.source_text, start + 1) >= 0:
-                        raise ContextContractError("Temporal quote is not uniquely source-bound")
-                    if (
-                        not start
-                        <= role.span.start
-                        < role.span.end
-                        <= start + len(qualifier.source_text)
-                    ):
-                        continue
+                    # Both validated and proposed paths require the SAME
+                    # unique literal temporal quote and exact physical role.
                     if len(link.fact_ordinals) != 1:
                         raise ContextContractError("Several facts claim one temporal qualifier")
                     if not _source_role_fits_original_fact(

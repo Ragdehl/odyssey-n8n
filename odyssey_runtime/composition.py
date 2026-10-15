@@ -415,11 +415,9 @@ class RuntimeComposition:
         """
         actor = self._resolve_actor(authenticated_actor, external_principal)
         checkpoint_store = self._checkpoint_store(actor)
-        self._record_checkpoint(
-            checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED
-        )
-        if request_id is not None and self.product_progress_store is not None:
-            self.product_progress_store.begin(actor, request_id)
+        # A replay is a verified read of an existing delivery, not a new
+        # execution. Do not register a fake "starting" milestone or reset its
+        # in-memory donut until after the durable same-ID replay check.
         store: LocalDeliveryResultStore | None = None
         fingerprint: str | None = None
         if request_id is not None and conversation_id is not None:
@@ -449,6 +447,11 @@ class RuntimeComposition:
                         CheckpointOutcome.RESULT_PERSISTED,
                     )
                     return replay
+            self._record_checkpoint(
+                checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED
+            )
+            if request_id is not None and self.product_progress_store is not None:
+                self.product_progress_store.begin(actor, request_id)
             candidate_response = self._handle_candidate_pending_reply(
                 actor,
                 conversation_id,
@@ -554,7 +557,13 @@ class RuntimeComposition:
                         original_request=pending.original_request,
                     )
                     response = self._finish_product_result(
-                        result, store, fingerprint, clarification_store, force_replay=True
+                        result,
+                        store,
+                        fingerprint,
+                        clarification_store,
+                        force_replay=True,
+                        actor=actor,
+                        conversation_id=conversation_id,
                     )
                     self._record_terminal_checkpoint(
                         checkpoint_store,
@@ -685,6 +694,7 @@ class RuntimeComposition:
                 force_replay
                 or response.get("product_outcome") == "CLARIFY"
                 or bool(response.get("affected_stable_note_ids"))
+                or self.hybrid_candidate_execute is not None
             )
         )
         self._record_checkpoint(
@@ -804,7 +814,12 @@ class RuntimeComposition:
                     checkpoint = diagnostic_store.load(result.request_id)
                 except Exception:
                     checkpoint = None
-        response["execution_ledger"] = project_execution_ledger(result, checkpoint)
+        try:
+            response["execution_ledger"] = project_execution_ledger(result, checkpoint)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            # A failed optional projection after a canonical write must not
+            # turn a verified delivery into a retryable transport failure.
+            pass
         if response["product_outcome"] == "CLARIFY":
             candidate_view = self._candidate_pending_view(
                 actor,

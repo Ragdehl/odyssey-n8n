@@ -414,3 +414,40 @@ def test_protocol_stage_compatibility_is_structural_not_inheritance():
     assert isinstance(WrongSpec(), ContextStage)
     with pytest.raises(ContextContractError, match="does not implement"):
         run_context_stage(initial_context(), WrongSpec())
+
+
+def test_pending_port_is_an_actual_least_privilege_dependency_not_an_empty_placeholder():
+    """A future App must be able to see exactly the pending observations it declares."""
+    base = initial_context()
+    pending = PendingContext(
+        "notes",
+        "AMBIGUOUS_NOTE_REFERENCE",
+        "Marta",
+        SOURCE.index("Marta"),
+        SOURCE.index("Marta") + 5,
+    )
+    context = replace(base, pending=(pending,))
+    port = StageSpec(
+        "future.app", frozenset({ContextPort.PENDING}), frozenset({ContextPort.DOMAIN})
+    )
+    assert stage_input(context, port).pending == (pending,)
+    assert stage_input(context, port).source is None
+    assert (
+        stage_input(
+            context,
+            StageSpec("notes", frozenset({ContextPort.SOURCE}), frozenset({ContextPort.DOMAIN})),
+        ).pending
+        == ()
+    )
+    with pytest.raises(ContextContractError, match="Missing required context ports"):
+        stage_input(base, port)
+
+    class PendingConsumer:
+        spec = port
+
+        def execute(self, data):
+            assert data.pending == (pending,)
+            assert data.actor is None
+            return StageOutput()
+
+    assert run_context_stage(context, PendingConsumer()) == context

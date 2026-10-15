@@ -33,12 +33,16 @@ def source_bound_qualitative_times(
     if domain.source_text != interpretation.source_text:
         raise ValueError("Qualitative time domain source changed")
     source = interpretation.source_text
-    approximate = [
-        role.span
+    # Two Core candidates may legitimately refer to the same physical
+    # temporal phrase. Deduplicate the identical source span, not its text:
+    # separate occurrences of the same wording must remain distinct/ambiguous.
+    approximate_by_span = {
+        (role.span.start, role.span.end, role.span.text): role.span
         for candidate in context.candidates
         for role in candidate.roles
         if role.role == "time_approx"
-    ]
+    }
+    approximate = tuple(approximate_by_span.values())
     if not approximate:
         return ()
     exact_dates = {

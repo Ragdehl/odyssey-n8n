@@ -212,3 +212,29 @@ def test_reviewed_core_coverage_generates_source_bound_fact_ownership_without_or
                 CoreCandidateCoverageClaim("candidate-2", "planned_fact", 0),
             ),
         )
+
+
+def test_source_qualified_owner_requires_unique_physical_temporal_quote():
+    from odyssey_core.candidate_context import CoreSourceSpan
+    from odyssey_core.fact_temporal_ownership import (
+        _qualifier_in_unique_original_temporal_span,
+    )
+
+    first = ctx()
+    phrase, daypart = PHRASES[0]
+    pos = SRC.index(daypart)
+    assert _qualifier_in_unique_original_temporal_span(
+        first, 0, CoreSourceSpan(daypart, pos, pos + len(daypart))
+    )
+    # A candidate role from the other clause cannot steal the qualifier.
+    pos_other = SRC.index("por la noche")
+    assert not _qualifier_in_unique_original_temporal_span(
+        first, 0, CoreSourceSpan("por la noche", pos_other, pos_other + len("por la noche"))
+    )
+    repeated = SRC + " " + SRC
+    double_context = replace(
+        first, source=repeated, domains=(replace(first.domains[0], source_text=repeated),)
+    )
+    assert not _qualifier_in_unique_original_temporal_span(
+        double_context, 0, CoreSourceSpan(daypart, pos, pos + len(daypart))
+    )

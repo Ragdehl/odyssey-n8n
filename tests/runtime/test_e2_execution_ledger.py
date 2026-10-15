@@ -207,3 +207,117 @@ def test_route_aggregate_attaches_actual_owner_to_each_stage_without_guessing():
     assert [st.route_index for st in router.operational.stages] == [None, 0, 1]
     summary = project_execution_ledger(router)
     assert [st["route_index"] for st in summary["stages"]] == [None, 0, 1]
+
+
+def test_same_id_replay_does_not_add_false_start_or_reset_live_progress(tmp_path):
+    from odyssey_core.identity_boundary import AuthenticatedActorContext
+    from odyssey_core.local_conversations import ConversationRootResolver
+    from odyssey_runtime.composition import RuntimeComposition
+    from odyssey_runtime.progress import ProductProgressStore
+
+    identity = AuthenticatedActorContext("11111111-1111-4111-8111-111111111111")
+    resolver = ConversationRootResolver(tmp_path / "state")
+    calls = []
+    runtime = RuntimeComposition(
+        core_execute=lambda _text, request_id, *_args, **_kwargs: (
+            calls.append(request_id) or replace(partial_result(), request_id=request_id)
+        ),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
+        product_progress_store=ProductProgressStore(),
+    )
+    first = runtime.execute_product("sensitive fact", "replay-keep", "main", identity)
+    first_progress = runtime.product_progress("replay-keep", identity)
+    store = LocalExecutionCheckpointStore(
+        resolver.resolve(identity.stable_user_id) / "execution-checkpoints"
+    )
+    old = store.load("replay-keep")
+    assert old is not None
+    assert [event["stage"] for event in old["events"]].count("starting") == 1
+    second = runtime.execute_product("sensitive fact", "replay-keep", "main", identity)
+    after = store.load("replay-keep")
+    assert first["request_id"] == second["request_id"]
+    assert second["delivery_replayed"] is True
+    assert calls == ["replay-keep"]
+    assert after is not None
+    assert [event["stage"] for event in after["events"]].count("starting") == 1
+    assert after["events"][-1]["stage"] == "delivery.result_persisted"
+    assert runtime.product_progress("replay-keep", identity) == first_progress
+
+
+def test_optional_ledger_failure_does_not_lose_a_verified_delivery(tmp_path, monkeypatch):
+    from odyssey_core.identity_boundary import AuthenticatedActorContext
+    from odyssey_core.local_conversations import ConversationRootResolver
+    from odyssey_runtime import execution_ledger
+    from odyssey_runtime.composition import RuntimeComposition
+
+    actor = AuthenticatedActorContext("11111111-1111-4111-8111-111111111111")
+    calls = []
+
+    def executor(_message, request_id, *_args, **_kwargs):
+        calls.append(request_id)
+        return replace(partial_result(), request_id=request_id)
+
+    runtime = RuntimeComposition(
+        core_execute=executor,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
+    )
+
+    def failed_projection(_result, _checkpoint):
+        raise ValueError("unavailable optional diagnostic")
+
+    monkeypatch.setattr(execution_ledger, "project_execution_ledger", failed_projection)
+    first = runtime.execute_product("Day fixture", "delivery-optional", "main", actor)
+    assert first["affected_stable_note_ids"] == ["date:2026-10-15"]
+    assert "execution_ledger" not in first
+    replay = runtime.execute_product("Day fixture", "delivery-optional", "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert replay["affected_stable_note_ids"] == first["affected_stable_note_ids"]
+    assert calls == ["delivery-optional"]
+
+
+def test_no_write_hybrid_decision_checkpoint_reports_real_durable_result(tmp_path):
+    from odyssey_core.identity_boundary import AuthenticatedActorContext
+    from odyssey_core.local_conversations import ConversationRootResolver
+    from odyssey_runtime.composition import RuntimeComposition
+
+    actor = AuthenticatedActorContext("11111111-1111-4111-8111-111111111111")
+    resolver = ConversationRootResolver(tmp_path / "state")
+    calls = []
+
+    def candidate_executor(source, request_id, *_args, **_kwargs):
+        calls.append(source)
+        return ApplicationResult(
+            request_id,
+            ApplicationStatus.NEEDS_ATTENTION,
+            (),
+            (),
+            planning_error="SOURCE_DEPENDENCY_UNVERIFIED",
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: pytest.fail("Hybrid did not run"),
+        hybrid_candidate_execute=candidate_executor,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
+    )
+    first = runtime.execute_product("source requires review", "hybrid-no-write", "main", actor)
+    assert first["status"] == "needs_attention"
+    assert first["affected_stable_note_ids"] == []
+    checkpoint = LocalExecutionCheckpointStore(
+        resolver.resolve(actor.stable_user_id) / "execution-checkpoints"
+    ).load("hybrid-no-write")
+    assert checkpoint is not None
+    assert checkpoint["stage"] == "delivery.result_persisted"
+    assert checkpoint["outcome"] == "result_persisted"
+    assert (
+        runtime.execute_product("source requires review", "hybrid-no-write", "main", actor)[
+            "delivery_replayed"
+        ]
+        is True
+    )
+    assert calls == ["source requires review"]
