@@ -98,6 +98,37 @@ La flecha Core Identity se refiere a un *servicio compartido*, no a un tercer mo
 
 **Pendiente:** producción automática de `NoteLookupRequest` con offsets desde la fuente, adaptadores completos del editor Work Session y UI, conversión verificada de referencias en Markdown mediante el gate E3, cobertura de concurrencia/latencia en grandes vaults y eventos versionados hasta el gráfico. No se ha cambiado el `TASK_SCHEMA_EXTENSION` ni la autoridad de Work Sessions.
 
+## Cuarto incremento — fuente → lookup → Planner compatible; un solo recorrido del Vault (15-10-2026)
+
+**Problema detectado mediante medición en la Raspberry Pi:** la prueba descartable con 260 Note `person` válidas y 3 menciones independientes arrojó **~113 ms** secuencial frente a **~147 ms** con tres lectores concurrentes: cada llamada a `resolve_exact_entity` volvía a leer y validar las mismas 260 notas. El fan-out por hilo no puede asumirse más rápido que un trabajo I/O repetido.
+
+**Corrección general, sin tercer resolvedor:** `odyssey_core/identity.py` ofrece `find_exact_entity_candidates_batch` y `resolve_exact_entities_batch`: **exactamente la lógica de identidad existente** (Unicode NFC, casefold, espacios, nombre vs alias, tipo del NoteSchema, deleted, homónimos y orden) ahora recorriendo cada nota **una sola vez** para las 1–12 consultas; el método anterior `find_exact_entity_candidates` delega a ese mismo batch con una sola consulta. Un error de nota canónica invalida el lote completo, no entrega éxitos parciales. El adaptador `ParallelExactNoteLookup` utiliza este batch como camino real predeterminado (puede ejecutar una búsqueda única en paralelo con Temporal); la estrategia por hilos queda para implementaciones inyectadas con trabajos que sí sean independientes. La medición con el mismo fixture cayó a **~38 ms** por lote, ~3× más rápido que tres resoluciones secuenciales. Es una medición local sintética, no una promesa de latencia DEV o producción. No se ha modificado el esquema canónico ni las reglas de autorización.
+
+**Fuente común de menciones (evita parches por frases):** `canonical_source_context.source_note_role_spans` y `note_lookup_batch.note_lookup_requests_from_source_roles` comparten las roles genéricas **subject / participants / object / reference** validadas por `CoreCandidateContext`. Su extracción lleva posición Python exacta, conserva usos repetidos de una misma nota, deduplica el mismo span citado dos veces y no adivina nombres, separa por `y`, ni supone que todo es `person`. El helper antiguo `matching_canonical_source_names` vuelve a usar esa misma extracción, conservando sus comprobaciones de hints sin otorgar autoridad al Router. Más de 12 spans requiere tratamiento explícito: no se truncan ni se inventan identidades.
+
+**Primera ruta real compatible, sin modificar la existente:** `odyssey_runtime/context_planner_ports.py` introduce `ContextAwareCorePlannerFactory(Protocol)` con método `create_for_context(ctx: ExecutionContext)`. En el dispatcher híbrido, cuando el factory implementa *estructuralmente* este puerto, se ejecuta la preparación tipada E2 desde los roles actuales: `ExecutionContext` → `NoteLookupRequest` → `ParallelExactNoteLookup` → `ExecutionContext.note_mentions/pending` → `create_for_context(ctx)` → **Planner de Core original** → Core coverage/preflight → Writer/readback originales. Los factories existentes con forma `factory(candidate_context, domain)` siguen ejecutándose **sin lecturas añadidas, mismo contrato, mismo Writer**. Esta puerta es de lectura: los NoteReferenceCandidates son hipótesis, no identidad validada para escribir. No se altera el prompt ni el modelo de producción.
+
+```python
+@runtime_checkable
+class ContextAwareCorePlannerFactory(Protocol):
+    def create_for_context(self, context: ExecutionContext) -> object: ...
+
+# Compatible SIN heredar el Protocol:
+class MiPlannerFactory:
+    def create_for_context(self, ctx):
+        # ctx.note_mentions = candidatos fuente+offsets, sin autoridad de write
+        return planner_core_existente
+
+# Dispatcher: crea contexto, ejecuta etapa de lookup, y usa el nuevo puerto
+# solo si el factory está conectado. La rama antigua continúa intacta.
+```
+
+**Evidencia de integración:** `tests/runtime/test_e2_context_planner_integration.py` ejecuta un route v2 real `«Hoy hablé con Bea.»` con fuente exacta, rol participants, Temporal, Core candidato/cobertura, **Core Writer y Markdown readback**, comparando el puerto nuevo y el factory de dos argumentos antiguo. Los tests de `identity.py` cubren alias, Unicode, homónimos intertipo, ausencia, una sola enumeración de vault y fallo de un Note inválido; los tests del adaptador prueban reaparición de Marta en dos offsets de la misma frase y protección de presupuesto. No hay escrituras fuera de fixtures.
+
+**Gate de regresión tras el cuarto incremento:** pytest completo **3222 correctos, 80 omitidos, los mismos 10 fallos históricos** (52 subtests), por tanto comando global exit 1, no «todo verde». **150 Node correctos**, Ruff lint/format, esquema y diff PASS; **46 pruebas específicas** de contexto fuente, batch, identidad, alias y Writer, más el resto de la suite. No se ejecutaron proveedores ni deploy ni mutación del vault personal.
+
+**Limitación explícita:** en producción, el constructor real del Planner aún utiliza el factory antiguo y el `matching_canonical_source_names` de lectura única; el nuevo contrato se activa solo con una implementación `ContextAwareCorePlannerFactory` inyectada. Temporal sigue procesándose antes del lookup en el dispatcher actual; su paralelización con la lectura en una ejecución real requiere reubicar la preparación en el motor que ya conoce los grupos, preservando dependencias y la decisión de no duplicar lecturas. E2 no está cerrada ni desplegada.
+
 ## Continuidad
 
 E2 se implementa en `feat/e2-shared-context-contract`, worktree `/home/ragdehl/projects/odyssey-e2-contract`, base `feat/e1-cross-boundary-integrity` PR #153, todavía DRAFT. **PR #154 DRAFT** es apilada explícitamente sobre #153; commit inicial `244f93f`. Ninguna está fusionada o desplegada. Estado exacto y test evidence en el roadmap de ESTA rama. Después E2 → E3, no volver a prolongar E1 mediante parches de frases. Merge y deploy requieren consentimiento explícito y gates.

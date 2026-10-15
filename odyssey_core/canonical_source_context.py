@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .candidate_context import CoreCandidateContext
+from .candidate_context import CoreCandidateContext, CoreSourceSpan
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .storage import VaultRepository
 
@@ -36,6 +36,34 @@ class CanonicalSourceNameHint:
         return payload
 
 
+SOURCE_NOTE_MENTION_ROLES = frozenset({"subject", "participants", "object", "reference"})
+
+
+def source_note_role_spans(context: CoreCandidateContext) -> tuple[CoreSourceSpan, ...]:
+    """Share exact source-role extraction across Core hints and E2 batch.
+
+    No person detection, English/Spanish endings, phrase splitting, name
+    guessing or trusted identity claims: these are *Router-proposed mentions*.
+    Only the ordinary Core exact resolver can test whether a named Note exists.
+    """
+    if not isinstance(context, CoreCandidateContext):
+        raise ValueError("Core source candidate context is required")
+    context.validate(context.source)
+    unique: dict[tuple[int, int], CoreSourceSpan] = {}
+    for candidate in context.candidates:
+        for role in candidate.roles:
+            if role.role not in SOURCE_NOTE_MENTION_ROLES:
+                continue
+            span = role.span
+            text = span.text.strip()
+            if not text or len(text) > 128:
+                continue
+            start = span.start + len(span.text) - len(span.text.lstrip())
+            end = start + len(text)
+            unique.setdefault((start, end), CoreSourceSpan(text, start, end))
+    return tuple(span for _, span in sorted(unique.items()))
+
+
 def matching_canonical_source_names(
     context: CoreCandidateContext,
     repository: VaultRepository,
@@ -45,17 +73,9 @@ def matching_canonical_source_names(
     if not isinstance(context, CoreCandidateContext) or not isinstance(repository, VaultRepository):
         raise ValueError("Trusted Core context and root-bound vault required")
     context.validate(context.source)
-    roles = (
-        role
-        for candidate in context.candidates
-        for role in candidate.roles
-        if role.role in {"subject", "participants", "object", "reference"}
-    )
     mention_by_key: dict[str, str] = {}
-    for role in roles:
-        text = role.span.text.strip()
-        if text and len(text) <= 128:
-            mention_by_key.setdefault(text.casefold(), text)
+    for span in source_note_role_spans(context):
+        mention_by_key.setdefault(span.text.casefold(), span.text)
     if not mention_by_key:
         return ()
     paths = repository.list_markdown_paths()

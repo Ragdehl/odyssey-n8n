@@ -141,64 +141,118 @@ def find_exact_entity_candidates(
         ``find_exact_entity_candidates(repository, schema, " carrefour ", type="store")`` can
         return a filename match for ``stores/Carrefour.md`` or an alias match on another store.
     """
-    normalized_query = _normalize_reference(query)
-    if not normalized_query:
-        raise ValueError("Entity reference must not be empty")
-    canonical_types = _canonical_types(schema)
-    if type is not None and (not isinstance(type, str) or type not in canonical_types):
-        raise ValueError(f"Unknown canonical note type: {type!r}")
+    return find_exact_entity_candidates_batch(
+        repository, schema, ((query, type),), include_deleted=include_deleted
+    )[0]
 
-    candidates: list[ExactEntityCandidate] = []
+
+def find_exact_entity_candidates_batch(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    queries: tuple[tuple[str, str | None], ...],
+    *,
+    include_deleted: bool = False,
+) -> tuple[tuple[ExactEntityCandidate, ...], ...]:
+    """Resolve multiple exact canonical Note names/aliases in ONE validated vault scan.
+
+    This is the same canonical identity logic as `find_exact_entity_candidates`,
+    not a competing search algorithm. Results preserve query order and multiple
+    homonyms. A malformed Note fails the whole batch; nothing is partially
+    returned or used to authorize a write.
+    """
+    if (
+        not isinstance(queries, tuple)
+        or not 1 <= len(queries) <= 12
+        or any(not isinstance(item, tuple) or len(item) != 2 for item in queries)
+    ):
+        raise ValueError("Exact Note batch requires 1-12 typed queries")
+    canonical_types = _canonical_types(schema)
+    parsed: list[tuple[str, str | None]] = []
+    for query, note_type in queries:
+        normalized = _normalize_reference(query)
+        if not normalized:
+            raise ValueError("Entity reference must not be empty")
+        if note_type is not None and (
+            not isinstance(note_type, str) or note_type not in canonical_types
+        ):
+            raise ValueError(f"Unknown canonical note type: {note_type!r}")
+        parsed.append((normalized, note_type))
+
+    results: list[list[ExactEntityCandidate]] = [[] for _ in parsed]
     for path in repository.list_markdown_paths():
         try:
             note = parse_note(repository.read_text(path))
             validate_note(note, schema)
         except (NoteFormatError, NoteValidationError) as error:
             raise ExactEntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
-
         note_type = cast(str, note.metadata["type"])
         if note_type not in canonical_types:
             continue
         if note.metadata.get("deleted") is True and not include_deleted:
             continue
-        if type is not None and note_type != type:
-            continue
-
         primary_name = cast(str, note.metadata["name"])
-        match_kind: MatchKind | None = None
-        matched_value = primary_name
-        if _normalize_reference(primary_name) == normalized_query:
-            match_kind = MatchKind.PRIMARY_NAME
-        else:
-            aliases = cast(list[str], note.metadata.get("aliases", []))
-            for alias in aliases:
-                # Canonical validation guarantees that aliases are strings.
-                if _normalize_reference(alias) == normalized_query:
-                    match_kind = MatchKind.ALIAS
-                    matched_value = alias
-                    break
-
-        if match_kind is not None:
-            candidates.append(
+        primary_key = _normalize_reference(primary_name)
+        aliases = cast(list[str], note.metadata.get("aliases", []))
+        alias_by_key: dict[str, str] = {}
+        for alias in aliases:
+            alias_by_key.setdefault(_normalize_reference(alias), alias)
+        for index, (normalized_query, requested_type) in enumerate(parsed):
+            if requested_type is not None and note_type != requested_type:
+                continue
+            matched = None
+            if primary_key == normalized_query:
+                matched = MatchKind.PRIMARY_NAME, primary_name
+            elif normalized_query in alias_by_key:
+                matched = MatchKind.ALIAS, alias_by_key[normalized_query]
+            if matched is None:
+                continue
+            kind, value = matched
+            results[index].append(
                 ExactEntityCandidate(
                     path=path,
                     id=cast(str, note.metadata["id"]),
                     type=note_type,
                     primary_name=primary_name,
-                    match_kind=match_kind,
-                    matched_value=matched_value,
+                    match_kind=kind,
+                    matched_value=value,
                 )
             )
-
-    candidates.sort(
-        key=lambda candidate: (
-            0 if candidate.match_kind is MatchKind.PRIMARY_NAME else 1,
-            candidate.primary_name.casefold(),
-            candidate.path,
-            candidate.id,
+    return tuple(
+        tuple(
+            sorted(
+                candidates,
+                key=lambda candidate: (
+                    0 if candidate.match_kind is MatchKind.PRIMARY_NAME else 1,
+                    candidate.primary_name.casefold(),
+                    candidate.path,
+                    candidate.id,
+                ),
+            )
         )
+        for candidates in results
     )
-    return tuple(candidates)
+
+
+def resolve_exact_entities_batch(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    queries: tuple[tuple[str, str | None], ...],
+) -> tuple[ExactEntityResolution, ...]:
+    """Return ordinary Core exact-resolution outcomes in one read-only batch."""
+    candidates_by_query = find_exact_entity_candidates_batch(repository, schema, queries)
+    return tuple(
+        ExactEntityResolution(
+            ExactResolutionOutcome.NO_EXACT_MATCH
+            if not candidates
+            else ExactResolutionOutcome.EXACT_MATCH
+            if len(candidates) == 1
+            else ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH,
+            query.strip(),
+            note_type,
+            candidates,
+        )
+        for (query, note_type), candidates in zip(queries, candidates_by_query, strict=True)
+    )
 
 
 def resolve_exact_entity(

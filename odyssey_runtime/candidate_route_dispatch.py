@@ -35,6 +35,7 @@ from odyssey_core.source_boundary_review import (
     CoreSourceBoundaryUnit,
     SourceBoundaryReviewError,
 )
+from odyssey_runtime.context_planner_ports import ContextAwareCorePlannerFactory
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
@@ -346,7 +347,10 @@ def execute_candidate_routed_message(
             )
     else:
         coverage = candidate_coverage_factory
-    if not callable(coverage) or not callable(core_planner_factory):
+    if not callable(coverage) or not (
+        callable(core_planner_factory)
+        or isinstance(core_planner_factory, ContextAwareCorePlannerFactory)
+    ):
         raise ValueError("Core planner and coverage callbacks are required")
     if not callable(getattr(router, "propose", None)):
         raise ValueError("Original source requires a validated Router candidate adapter")
@@ -874,7 +878,28 @@ def execute_candidate_routed_message(
             if event is not None
             else None
         )
-        planner = core_planner_factory(route_context, domain)
+        if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+            # The new structural port enables actual E2 enrichment; legacy
+            # factories do not perform a second, redundant vault lookup.
+            # These are untrusted exact-name candidates, NEVER Core identity
+            # decisions. The canonical Planner/Writer contracts stay intact.
+            from odyssey_core.execution_context import run_context_stage
+            from odyssey_core.note_lookup_batch import (
+                ParallelExactNoteLookup,
+                note_lookup_requests_from_source_roles,
+            )
+
+            requests = note_lookup_requests_from_source_roles(route_context)
+            if requests:
+                execution_context = run_context_stage(
+                    execution_context,
+                    ParallelExactNoteLookup(
+                        requests=requests, repository=repository, schema=schema
+                    ),
+                )
+            planner = core_planner_factory.create_for_context(execution_context)
+        else:
+            planner = core_planner_factory(route_context, domain)
         if route_context.hybrid_interpretation_mode:
             from odyssey_core.canonical_source_context import matching_canonical_source_names
             from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner

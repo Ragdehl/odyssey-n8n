@@ -316,3 +316,85 @@ def test_composed_runtime_schema_resolves_app_owned_task_by_existing_core_lookup
         NoteReferenceCandidate("task-report", "task", "Preparar informe"),
     )
     assert [len(mention.candidates) for mention in result.note_mentions] == [2, 1, 1]
+
+
+def test_core_role_extraction_reuses_hint_source_spans_and_occurrences():
+    from odyssey_core.candidate_context import (
+        CoreCandidate,
+        CoreCandidateContext,
+        CoreCandidateRole,
+        CoreSourceSpan,
+    )
+    from odyssey_core.canonical_source_context import source_note_role_spans
+    from odyssey_core.note_lookup_batch import note_lookup_requests_from_source_roles
+
+    source = "Marta vio a María y Marta habló del Proyecto Atlas."
+    wanted = ("Marta", "María", "Marta", "Proyecto Atlas")
+    roles = []
+    start = -1
+    for word in wanted:
+        start = source.find(word, start + 1)
+        assert start >= 0
+        role = "participants" if word != "Proyecto Atlas" else "object"
+        roles.append(CoreCandidateRole(role, CoreSourceSpan(word, start, start + len(word))))
+    roles.append(roles[0])  # Router may reuse the same source occurrence
+    roles.append(
+        CoreCandidateRole(
+            "predicate", CoreSourceSpan("vio", source.index("vio"), source.index("vio") + 3)
+        )
+    )
+    context = CoreCandidateContext(
+        source,
+        (
+            CoreCandidate(
+                "candidate-1",
+                "occurrence",
+                "candidate",
+                (CoreSourceSpan(source, 0, len(source)),),
+                tuple(roles),
+                (),
+            ),
+        ),
+    )
+    offsets = source_note_role_spans(context)
+    requests = note_lookup_requests_from_source_roles(context)
+    assert [q.text for q in requests] == list(wanted)
+    assert len(requests) == len(offsets)
+    assert [q.start for q in requests] == [q.start for q in offsets]
+    assert all(source[q.start : q.end] == q.text for q in requests)
+    assert len({(q.start, q.end) for q in requests}) == 4
+    assert all(q.note_type is None for q in requests)  # no Person assumption
+
+
+def test_role_extraction_is_bounded_without_truncating_to_first_twelve():
+    from odyssey_core.candidate_context import (
+        CoreCandidate,
+        CoreCandidateContext,
+        CoreCandidateRole,
+        CoreSourceSpan,
+    )
+    from odyssey_core.note_lookup_batch import note_lookup_requests_from_source_roles
+
+    words = tuple(f"Entidad{i:02}" for i in range(13))
+    source = " ".join(words)
+    roles = tuple(
+        CoreCandidateRole(
+            "participants", CoreSourceSpan(word, source.index(word), source.index(word) + len(word))
+        )
+        for word in words
+    )
+    context = CoreCandidateContext(
+        source,
+        (
+            CoreCandidate(
+                "candidate-1",
+                "occurrence",
+                "candidate",
+                (CoreSourceSpan(source, 0, len(source)),),
+                roles,
+                (),
+            ),
+        ),
+    )
+    with pytest.raises(ContextContractError, match="exceeds bounded"):
+        note_lookup_requests_from_source_roles(context)

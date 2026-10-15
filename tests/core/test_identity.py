@@ -346,3 +346,91 @@ def test_candidate_discovery_is_read_only(
 
     assert repository.read_text("stores/Carrefour.md") == before
     assert repository.list_markdown_paths() == before_paths
+
+
+def test_multi_query_canonical_batch_preserves_exact_name_alias_type_and_order(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
+    """One vault scan returns the same canonical evidence as independent Core lookups."""
+    from odyssey_core.identity import resolve_exact_entities_batch
+
+    _write_note(
+        repository,
+        "stores/Marta.md",
+        note_id="marta-project",
+        note_type="project",
+        aliases=["Proyecto Especial"],
+    )
+    _write_note(repository, "documents/Marta.md", note_id="marta-document", note_type="document")
+    _write_note(
+        repository,
+        "stores/Café du Port.md",
+        note_id="cafe",
+        note_type="project",
+        aliases=["El Café"],
+    )
+    queries = (
+        ("Marta", None),
+        ("Marta", "project"),
+        ("El Café", None),
+        ("Proyecto Especial", "project"),
+        ("Cafe du Port", None),
+    )
+    lookups = resolve_exact_entities_batch(repository, schema, queries)
+    assert [tuple(c.id for c in outcome.candidates) for outcome in lookups] == [
+        ("marta-document", "marta-project"),
+        ("marta-project",),
+        ("cafe",),
+        ("marta-project",),
+        (),
+    ]
+    assert lookups[2].candidates[0].match_kind is MatchKind.ALIAS
+    assert lookups[0].outcome is ExactResolutionOutcome.AMBIGUOUS_EXACT_MATCH
+    assert lookups[-1].outcome is ExactResolutionOutcome.NO_EXACT_MATCH
+    assert [result.candidates for result in lookups] == [
+        resolve_exact_entity(repository, schema, query, type=kind).candidates
+        for query, kind in queries
+    ]
+
+
+def test_multi_query_batch_enumerates_vault_only_once(
+    repository: VaultRepository, schema: dict[str, object], monkeypatch
+) -> None:
+    from odyssey_core.identity import resolve_exact_entities_batch
+
+    _write_note(repository, "stores/Proyecto A.md", note_id="project-a", note_type="project")
+    _write_note(repository, "stores/Proyecto B.md", note_id="project-b", note_type="project")
+    original = repository.list_markdown_paths
+    calls = []
+
+    def list_once():
+        calls.append(True)
+        return original()
+
+    monkeypatch.setattr(repository, "list_markdown_paths", list_once)
+    outcomes = resolve_exact_entities_batch(
+        repository,
+        schema,
+        (
+            ("Proyecto A", None),
+            ("Proyecto B", "project"),
+            ("Nadie", None),
+        ),
+    )
+    assert len(calls) == 1
+    assert tuple(r.candidate.id if r.candidate else None for r in outcomes) == (
+        "project-a",
+        "project-b",
+        None,
+    )
+
+
+def test_multi_query_invalid_note_fails_closed_for_whole_batch(
+    repository: VaultRepository, schema: dict[str, object]
+) -> None:
+    from odyssey_core.identity import resolve_exact_entities_batch
+
+    _write_note(repository, "stores/Marta.md", note_id="marta", note_type="project")
+    repository.create_text("documents/INVALID.md", "invalid markdown")
+    with pytest.raises(ExactEntityLookupError):
+        resolve_exact_entities_batch(repository, schema, (("Marta", None), ("Luis", None)))

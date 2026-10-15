@@ -13,6 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any
 
+from .candidate_context import CoreCandidateContext
+from .canonical_source_context import source_note_role_spans
 from .execution_context import (
     ContextContractError,
     ContextPort,
@@ -23,7 +25,7 @@ from .execution_context import (
     StageOutput,
     StageSpec,
 )
-from .identity import ExactEntityResolution, resolve_exact_entity
+from .identity import ExactEntityResolution, resolve_exact_entities_batch, resolve_exact_entity
 from .schema_types import referenceable_type_ids
 from .storage import VaultRepository
 
@@ -57,6 +59,21 @@ class NoteLookupRequest:
             and (not isinstance(self.note_type, str) or not self.note_type.strip())
         ):
             raise ContextContractError("Note lookup must retain exact original source offsets")
+
+
+def note_lookup_requests_from_source_roles(
+    context: CoreCandidateContext,
+) -> tuple[NoteLookupRequest, ...]:
+    """Convert existing Core-validated Router role spans to read-only queries.
+
+    Every mention carries its own exact occurrence. An oversized candidate
+    set fails CLOSED for this optional enrichment; no first-N truncation and
+    no cross-route/cross-source shortcut. A missing role means no lookup.
+    """
+    spans = source_note_role_spans(context)
+    if len(spans) > MAX_MENTION_LOOKUPS:
+        raise ContextContractError("Source-role Note lookup exceeds bounded mention budget")
+    return tuple(NoteLookupRequest(span.text, span.start, span.end) for span in spans)
 
 
 class ParallelExactNoteLookup:
@@ -115,7 +132,10 @@ class ParallelExactNoteLookup:
             if request.note_type is not None and request.note_type not in all_types:
                 raise ContextContractError("Note lookup type is not in canonical NoteSchema")
 
-        def find(request: NoteLookupRequest) -> tuple[NoteMention, PendingContext | None]:
+        def find(
+            request: NoteLookupRequest,
+            outcome: ExactEntityResolution | None = None,
+        ) -> tuple[NoteMention, PendingContext | None]:
             if request.note_type is not None and request.note_type not in referenceable:
                 return NoteMention(request.text, (), request.start, request.end), PendingContext(
                     "core.note_lookup_exact",
@@ -124,9 +144,10 @@ class ParallelExactNoteLookup:
                     request.start,
                     request.end,
                 )
-            outcome = self._lookup(
-                self._repository, self._schema, request.text, type=request.note_type
-            )
+            if outcome is None:
+                outcome = self._lookup(
+                    self._repository, self._schema, request.text, type=request.note_type
+                )
             if not isinstance(outcome, ExactEntityResolution):
                 raise ContextContractError("Core exact lookup returned an invalid result")
             if any(
@@ -163,10 +184,42 @@ class ParallelExactNoteLookup:
                 )
             return mention, None
 
-        # map returns results in source request order even when workers finish
-        # out of order. An exception aborts the whole stage; no partial merge.
-        with ThreadPoolExecutor(max_workers=min(self._max_workers, len(self._requests))) as pool:
-            results = tuple(pool.map(find, self._requests))
+        # Ordinary Core lookup needs only ONE vault scan, not one scan per
+        # mention. The real batch has the same canonical exact/alias rules.
+        # Optional custom lookups retain a concurrent test/adaptor port; the
+        # outer context can execute this whole stage in parallel with Temporal.
+        if self._lookup is resolve_exact_entity:
+            scanned = (
+                resolve_exact_entities_batch(
+                    self._repository,
+                    self._schema,
+                    tuple(
+                        (request.text, request.note_type)
+                        for request in self._requests
+                        if request.note_type is None or request.note_type in referenceable
+                    ),
+                )
+                if any(
+                    request.note_type is None or request.note_type in referenceable
+                    for request in self._requests
+                )
+                else ()
+            )
+            iterator = iter(scanned)
+
+            def from_scan(request: NoteLookupRequest):
+                if request.note_type is not None and request.note_type not in referenceable:
+                    return find(request)  # returns pending with no vault read
+                return find(request, next(iterator))
+
+            results = tuple(from_scan(request) for request in self._requests)
+        else:
+            # Injected resolver implementations may perform genuinely
+            # independent work; retain bounded parallel execution for those.
+            with ThreadPoolExecutor(
+                max_workers=min(self._max_workers, len(self._requests))
+            ) as pool:
+                results = tuple(pool.map(find, self._requests))
         return StageOutput(
             note_mentions=tuple(item for item, _ in results),
             pending=tuple(reason for _, reason in results if reason is not None),
