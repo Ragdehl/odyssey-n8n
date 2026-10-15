@@ -78,7 +78,7 @@ class ContextFactory:
         )
         self.seen.append(context)
         return SimpleNamespace(
-            plan=lambda text: _linked_day_plan(
+            plan=lambda text, prior=(): _linked_day_plan(
                 "2026-10-04", "Hablé con {{ref:0}}.", "Bea", "2026-10-04"
             )
         )
@@ -91,6 +91,7 @@ def _execute(
     temporal_override=None,
     repository_hook=None,
     progress_callback=None,
+    conversation_context=(),
 ):
     repo, context_index, semantic_index, embedder = fresh_corpus_vault(tmp_path)
     original_bea = repo.read_text("Bea.md")
@@ -115,6 +116,7 @@ def _execute(
         bundle_compiler=compile_hybrid_candidate_bundle,
         source_boundary_reviewer=Reviewer(),
         progress_callback=progress_callback,
+        conversation_context=conversation_context,
     )
     assert result.status is ApplicationStatus.COMPLETED, (
         result.planning_error,
@@ -178,3 +180,14 @@ def test_missing_factory_callable_or_port_is_rejected_before_source_execution(tm
             request_id_factory=lambda: "e2-invalid-port",
             bundle_compiler=compile_hybrid_candidate_bundle,
         )
+
+
+def test_e2_hybrid_with_real_prior_turns_survives_core_adapter(tmp_path):
+    """Previous turns must reach Core before a canonical, source-verified write."""
+    prior = (
+        {"role": "user", "content": "Una pregunta anterior"},
+        {"role": "assistant", "content": "Respuesta anterior"},
+    )
+    result = _execute(tmp_path, ContextFactory(), conversation_context=prior)
+    assert result.status is ApplicationStatus.COMPLETED
+    assert result.execution_flow["routes"][0]["status"] == "completed"

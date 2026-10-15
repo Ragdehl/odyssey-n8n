@@ -660,14 +660,28 @@ def execute_candidate_routed_message(
         dependent_handoff: object | None = None,
         conversation_context_override: object | None = None,
     ):
-        # The existing v0 Core route executor passes prior-turn context as a
-        # keyword. It must never be repurposed to carry sibling route text.
+        # The ordinary v0 Core adapter forwards recent trusted turns by
+        # keyword; Temporal and other scoped executors forward them
+        # positionally. Both are the SAME prior-turn contract, not rival
+        # histories. Normalize once, then prove exact equality with the
+        # outer authenticated snapshot before the Planner can run.
         if conversation_context_override is not None and routed_prior_turns not in ((), None):
             raise ValueError("Two competing route contexts are not allowed")
+        route_prior = (
+            conversation_context_override
+            if conversation_context_override is not None
+            else routed_prior_turns
+        )
         if routed_authenticated_actor != authenticated_actor:
             raise ValueError("route authenticated actor changed before Core execution")
-        if tuple(routed_prior_turns) != tuple(conversation_context):
+        if not isinstance(route_prior, (tuple, list)) or tuple(route_prior) != tuple(
+            conversation_context
+        ):
             raise ValueError("route conversation context changed before Core execution")
+        # From this point onward the Planner sees the normalized, authenticated
+        # snapshot; otherwise it would silently lose all prior turns on Core
+        # routes even after the boundary check succeeds.
+        routed_prior_turns = tuple(route_prior)
         ordinal, scoped = route_scopes[locator]
         if scoped.route.source_text != unit_source:
             raise ValueError("Route source changed before Core interpretation")
