@@ -138,8 +138,17 @@ class QualitativeTime:
     date: str
     qualifier: str
     timezone: str
+    # When Temporal independently reports a calendar date and a non-clock
+    # source qualifier as separate mentions, retain the EXACT date quote.
+    date_source_text: str | None = None
 
     def __post_init__(self) -> None:
+        if self.date_source_text is not None and (
+            not isinstance(self.date_source_text, str)
+            or not self.date_source_text.strip()
+            or self.source_text.count(self.date_source_text) != 1
+        ):
+            raise ContextContractError("Qualitative date provenance is invalid")
         if (
             not isinstance(self.source_text, str)
             or not self.source_text.strip()
@@ -312,7 +321,8 @@ class ExecutionContext:
             for evidence in domain.temporal_references()
         }
         if any(
-            (item.source_text, item.date) not in date_sources for item in self.qualitative_times
+            ((item.date_source_text or item.source_text), item.date) not in date_sources
+            for item in self.qualitative_times
         ):
             raise ContextContractError("Qualitative time needs a verified temporal date anchor")
 

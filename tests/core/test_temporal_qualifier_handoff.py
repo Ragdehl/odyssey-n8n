@@ -181,3 +181,63 @@ def test_shared_original_temporal_span_is_one_qualifier_not_two_claims():
     assert [(q.qualifier, q.date) for q in qualifiers] == [(daypart, "2026-10-16")]
     # The duplicated candidate does NOT certify which of two facts owns it;
     # Core's later fact-ownership mapping must still prove that separately.
+
+
+def test_french_provider_split_date_plus_qualitative_time_is_lossless_without_hour():
+    from odyssey_core.execution_context import ExecutionContext
+    from odyssey_core.temporal_approximation_handoff import compose_safe_approximate_group
+
+    source = "Demain dans l'après-midi je parlerai avec Bea."
+    date = "Demain"
+    time = "dans l'après-midi"
+    roles = tuple(
+        CoreCandidateRole(
+            role, CoreSourceSpan(text, source.index(text), source.index(text) + len(text))
+        )
+        for role, text in (("date", date), ("time", time))
+    )
+    candidate = CoreCandidate(
+        "candidate-1",
+        "occurrence",
+        "candidate",
+        (CoreSourceSpan("parlerai", source.index("parlerai"), source.index("parlerai") + 8),),
+        roles,
+        (),
+    )
+    context = CoreCandidateContext(
+        source, (candidate,), scoped_route_source=True, hybrid_interpretation_mode=True
+    )
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                date, TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-16")
+            ),
+            TemporalMention(time, TemporalResolution(TemporalResolutionKind.UNSPECIFIED)),
+        ),
+    )
+    domain = compose_safe_approximate_group(temporal, context)
+    matched = source_bound_qualitative_times(temporal, context, domain, timezone="Europe/Paris")
+    assert len(matched) == 1
+    assert matched[0].source_text == "Demain dans l'après-midi"
+    assert matched[0].date_source_text == "Demain"
+    assert matched[0].qualifier == time
+    assert matched[0].date == "2026-10-16"
+    envelope = ExecutionContext(
+        "french-source",
+        source,
+        "2026-10-15T20:00:00+02:00",
+        "Europe/Paris",
+        domains=(domain,),
+        qualitative_times=matched,
+    )
+    assert envelope.qualitative_times == matched
+    assert not hasattr(matched[0], "exact_time")
+    # The date and time must belong to the SAME scoped candidate.
+    no_date_in_candidate = replace(context, candidates=(replace(candidate, roles=roles[1:]),))
+    assert (
+        source_bound_qualitative_times(
+            temporal, no_date_in_candidate, domain, timezone="Europe/Paris"
+        )
+        == ()
+    )

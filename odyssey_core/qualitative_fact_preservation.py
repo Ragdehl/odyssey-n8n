@@ -76,6 +76,27 @@ def preserve_qualitative_day_facts(
     if not any(isinstance(action, WriteAction) for action in plan.actions):
         return plan  # A read-only request does not require durable facts.
     qualifiers = context.qualitative_times
+    if not reviewed_ownership and not any(
+        unit.target.type == "calendar_day"
+        for action in plan.actions
+        if isinstance(action, WriteAction)
+        for unit in action.units
+    ):
+        # The Day enrichment seam cannot seize authority over a Person,
+        # Project or other Core-chosen note. Preserve a non-Day plan ONLY if
+        # the ordinary Planner has already kept every qualitative phrase.
+        facts = tuple(
+            fact
+            for action in plan.actions
+            if isinstance(action, WriteAction)
+            for unit in action.units
+            for fact in unit.facts
+        )
+        if any(
+            not any(q.qualifier.casefold() in fact.casefold() for fact in facts) for q in qualifiers
+        ):
+            raise ContextContractError("Qualitative source is missing from non-Day fact")
+        return plan
     if len({item.date for item in qualifiers}) != len(qualifiers) and not reviewed_ownership:
         raise ContextContractError("Multiple qualitative dates need explicit fact ownership")
     owner_by_qualifier: dict[int, tuple[int, int, int]] = {}
@@ -111,7 +132,9 @@ def preserve_qualitative_day_facts(
     replacements: dict[tuple[int, int], str] = {}
     for qi, qualifier in enumerate(qualifiers):
         matching_source = [
-            item for item in original_evidence if item.source_text == qualifier.source_text
+            item
+            for item in original_evidence
+            if item.source_text == (qualifier.date_source_text or qualifier.source_text)
         ]
         if (
             len(matching_source) != 1
@@ -187,7 +210,7 @@ def preserve_qualitative_activity_text(text: str, *, context: ExecutionContext) 
         item
         for domain in context.domains
         for item in domain.temporal_references()
-        if item.source_text == qualifier.source_text
+        if item.source_text == (qualifier.date_source_text or qualifier.source_text)
     ]
     if (
         len(matching) != 1

@@ -126,3 +126,100 @@ def test_daypart_already_in_fact_is_not_repeated(tmp_path):
     assert result.status is ApplicationStatus.COMPLETED
     day = repo.read_text("calendar/days/2026-10-05.md")
     assert day.count("por la tarde") == 1
+
+
+def test_provider_observed_french_split_date_and_daypart_passes_hybrid_writer(tmp_path):
+    from odyssey_core.temporal_interpretation import parse_temporal_interpretation
+
+    source = "Demain dans l'après-midi je parlerai avec Bea."
+    qualifier = "dans l'après-midi"
+    date = "2026-10-16"
+
+    class FrenchRouter:
+        def propose(self, text):
+            assert text == source
+            item = unit(source, "je parlerai avec Bea", predicate="parlerai", date="Demain")
+            item["scoped_source"].extend(
+                [
+                    {"role": "time", "anchor": quote(qualifier)},
+                    {"role": "participants", "anchor": quote("Bea")},
+                ]
+            )
+            return validate_semantic_fact_candidate_proposal(
+                source, proposal(source, [item], [("independent_assertion", 0)])
+            )
+
+    class FrenchTemporal:
+        timezone = "Europe/Paris"
+
+        def interpret(self, _source):
+            return parse_temporal_interpretation(
+                {
+                    "mentions": [
+                        {
+                            "temporal_text": "Demain",
+                            "temporal": {
+                                "kind": "EXACT_DATE",
+                                "exact_date": date,
+                                "exact_datetime": None,
+                                "range_start": None,
+                                "range_end_exclusive": None,
+                            },
+                        },
+                        {
+                            "temporal_text": qualifier,
+                            "temporal": {
+                                "kind": "UNSPECIFIED",
+                                "exact_date": None,
+                                "exact_datetime": None,
+                                "range_start": None,
+                                "range_end_exclusive": None,
+                            },
+                        },
+                    ]
+                },
+                source,
+                timezone=self.timezone,
+            )
+
+    class FrenchPlannerFactory:
+        def create_for_context(self, context):
+            assert context.qualitative_times[0].date_source_text == "Demain"
+            return SimpleNamespace(
+                plan=lambda _source: _linked_day_plan(
+                    date, "Je parlerai avec {{ref:0}}.", "Bea", date
+                )
+            )
+
+    repo, index, semantic, embedder = fresh_corpus_vault(tmp_path)
+    original_bea = repo.read_text("Bea.md")
+    result = execute_candidate_routed_message(
+        source,
+        router=FrenchRouter(),
+        temporal=FrenchTemporal(),
+        core_planner_factory=FrenchPlannerFactory(),
+        candidate_coverage_factory=_review_one_real_core_fact,
+        repository=repo,
+        schema=SCHEMA,
+        context_index=index,
+        semantic_index=semantic,
+        embedder=embedder,
+        contextual_reasoner=object(),
+        actor=_persistence_actor("e2-split-source", None),
+        now="2026-10-15T20:00:00+02:00",
+        context_limit=5,
+        request_id_factory=lambda: "e2-split-source",
+        bundle_compiler=compile_hybrid_candidate_bundle,
+    )
+    assert result.status is ApplicationStatus.COMPLETED, result.planning_error
+    assert "Je parlerai avec [[Bea|Bea]] (dans l'après-midi)." in repo.read_text(
+        "calendar/days/2026-10-16.md"
+    )
+    assert repo.read_text("Bea.md") == original_bea
+    # An explicitly persisted "Added" backlink to the capture day deliberately
+    # materializes that referenced virtual Day. It is not a second user fact.
+    day = repo.read_text("calendar/days/2026-10-16.md")
+    assert "# Added [[calendar/days/2026-10-15|15-10-2026]]" in day
+    assert "calendar/days/2026-10-15.md" in repo.list_markdown_paths()
+    assert "<!-- odyssey:fact" not in repo.read_text("calendar/days/2026-10-15.md")
+    assert result.affected_stable_note_ids == ("date:2026-10-16",)

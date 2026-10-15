@@ -104,11 +104,14 @@ def validate_prewrite_fact_text_enrichment(
             role
             for candidate in source_context.candidates
             for role in candidate.roles
-            if role.role == "time_approx"
+            if role.role in {"time", "time_approx"}
         ):
             if any(
                 role.span.text in item.source_text
                 for item in source_context.verified_route_temporal.temporal_references()
+            ) or any(
+                item.kind == "temporal_approximate_literal" and item.source_text == role.span.text
+                for item in source_context.verified_route_temporal.evidence
             ):
                 permitted.add(role.span.text)
     if (

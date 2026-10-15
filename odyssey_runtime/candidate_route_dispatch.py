@@ -787,11 +787,13 @@ def execute_candidate_routed_message(
                 try:
                     domain = interpretation.core_domain_interpretation()
                 except TemporalInterpreterError:
-                    if bundle_compiler is None or len(scoped.context.candidates) < 2:
+                    if bundle_compiler is None:
                         raise
                     from odyssey_core.temporal_group_composition import compose_shared_clock_group
 
                     try:
+                        if len(scoped.context.candidates) < 2:
+                            raise TemporalInterpreterError("No multi-candidate clock composition")
                         domain = compose_shared_clock_group(
                             interpretation,
                             scoped.context,

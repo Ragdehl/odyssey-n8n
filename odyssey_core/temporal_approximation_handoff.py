@@ -35,16 +35,23 @@ def compose_safe_approximate_group(
         or any(candidate.state != "candidate" for candidate in context.candidates)
     ):
         raise TemporalInterpreterError("Approximate time needs validated hybrid source")
-    approximate_roles = [
-        role.span
-        for candidate in context.candidates
-        for role in candidate.roles
-        if role.role == "time_approx"
-    ]
     unresolved = [
         item
         for item in interpretation.mentions
         if item.resolution.kind is TemporalResolutionKind.UNSPECIFIED
+    ]
+    # Router `time` also denotes EXACT clocks; do not count those as
+    # approximate merely because the same candidate has an UNSPECIFIED
+    # daypart. The only admissible literal is an independent Temporal quote.
+    from .temporal_qualifier_handoff import qualitative_source_time_role
+
+    unresolved_quotes = {item.temporal_text for item in unresolved}
+    approximate_roles = [
+        role.span
+        for candidate in context.candidates
+        for role in candidate.roles
+        if qualitative_source_time_role(role.role, role.span.text)
+        and role.span.text in unresolved_quotes
     ]
     if not unresolved or not approximate_roles or len(unresolved) != len(approximate_roles):
         raise TemporalInterpreterError("Approximate source/Temporal evidence differs")

@@ -245,3 +245,23 @@ def test_two_qualified_day_facts_reach_existing_core_writer_and_real_markdown(tm
     assert "Veré a [[Marta|Marta]] (por la noche)." in repo.read_text("calendar/days/2026-10-06.md")
     assert repo.read_text("Bea.md") == before_bea
     assert repo.read_text("Marta.md") == before_marta
+
+
+def test_prewrite_daypart_does_not_seize_a_core_chosen_person_target():
+    """A real GPT-5.6 Luna result can directly own a Person fact rather than a Day."""
+    from odyssey_core.request_planning import SelectionCriteria
+
+    original = plan()
+    day_unit = original.actions[0].units[0]
+    person_unit = replace(
+        day_unit,
+        target=SelectionCriteria(None, "Bea", "person", (), None),
+        facts=("2026-10-05 por la tarde hablará con {{ref:0}}.",),
+    )
+    person_plan = RequestPlan((WriteAction((person_unit,)),), ())
+    assert preserve_qualitative_day_facts(person_plan, context=context()) is person_plan
+    omitted = RequestPlan(
+        (WriteAction((replace(person_unit, facts=("Hablará con {{ref:0}}.",)),)),), ()
+    )
+    with pytest.raises(ContextContractError, match="missing from non-Day fact"):
+        preserve_qualitative_day_facts(omitted, context=context())

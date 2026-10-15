@@ -16,6 +16,7 @@ from .candidate_context import CoreCandidateContext, CoreSourceSpan
 from .candidate_coverage import CoreCandidateCoverageManifest, validate_candidate_coverage_manifest
 from .execution_context import ContextContractError, ExecutionContext
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
+from .temporal_qualifier_handoff import qualitative_source_time_role
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +73,9 @@ def reviewed_fact_temporal_ownership(
         for candidate, claim in zip(source_context.candidates, manifest.claims, strict=True):
             if claim.disposition != "planned_fact":
                 continue
-            spans = [r.span for r in candidate.roles if r.role == "time_approx"]
+            spans = [
+                r.span for r in candidate.roles if qualitative_source_time_role(r.role, r.span.text)
+            ]
             if not any(
                 _qualifier_in_unique_original_temporal_span(context, index, span) for span in spans
             ):
@@ -193,9 +196,10 @@ def proposed_fact_temporal_ownership(
             if not link.fact_ordinals:
                 continue
             for role in candidate.roles:
-                if role.role == "time_approx" and _qualifier_in_unique_original_temporal_span(
-                    context, i, role.span
-                ):
+                if role.role in {
+                    "time",
+                    "time_approx",
+                } and _qualifier_in_unique_original_temporal_span(context, i, role.span):
                     # Both validated and proposed paths require the SAME
                     # unique literal temporal quote and exact physical role.
                     if len(link.fact_ordinals) != 1:
