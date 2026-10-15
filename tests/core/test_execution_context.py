@@ -376,3 +376,41 @@ def test_temporal_port_accepts_exact_date_even_without_daypart():
     assert info.qualitative_times == ()
     assert info.actor is None
     assert info.domains == ()
+
+
+def test_protocol_stage_compatibility_is_structural_not_inheritance():
+    """Runtime checks *presence*, then explicit boundary checks types/results."""
+    from odyssey_core.execution_context import ContextStage
+
+    stage = TemporalStage()
+    assert ContextStage not in TemporalStage.__bases__
+    assert isinstance(stage, ContextStage)
+    assert run_context_stage(initial_context(), stage).qualitative_times
+
+    class MissingExecute:
+        spec = stage.spec
+
+    assert not isinstance(MissingExecute(), ContextStage)
+    with pytest.raises(ContextContractError, match="does not implement"):
+        run_context_stage(initial_context(), MissingExecute())
+
+    class WrongOutput:
+        spec = stage.spec
+
+        def execute(self, data) -> str:
+            return "not StageOutput"
+
+    # Protocol at runtime cannot inspect return annotations or actual values.
+    assert isinstance(WrongOutput(), ContextStage)
+    with pytest.raises(ContextContractError, match="typed StageOutput"):
+        run_context_stage(initial_context(), WrongOutput())
+
+    class WrongSpec:
+        spec = {"requires": "source"}
+
+        def execute(self, data):
+            return StageOutput()
+
+    assert isinstance(WrongSpec(), ContextStage)
+    with pytest.raises(ContextContractError, match="does not implement"):
+        run_context_stage(initial_context(), WrongSpec())

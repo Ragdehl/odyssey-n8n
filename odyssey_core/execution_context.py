@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .candidate_context import CoreCandidateContext
@@ -40,6 +40,7 @@ class ContextPort(StrEnum):
     TEMPORAL = "temporal"
     PENDING = "pending"
     NOTE_MENTIONS = "note_mentions"
+    MANAGED_NOTES = "managed_notes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +100,28 @@ class NoteMention:
             )
         ):
             raise ContextContractError("Note mentions must be bounded source proposals")
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedNoteHandle:
+    """Read-only identity of an app-owned/virtual Note; no right to link or write."""
+
+    stable_note_id: str
+    note_type: str
+    owner: str
+    materialized: bool
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.stable_note_id, str)
+            or not self.stable_note_id.strip()
+            or not isinstance(self.note_type, str)
+            or not self.note_type.strip()
+            or not isinstance(self.owner, str)
+            or not self.owner.strip()
+            or type(self.materialized) is not bool
+        ):
+            raise ContextContractError("Managed identity evidence is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +206,7 @@ class ExecutionContext:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    managed_notes: tuple[ManagedNoteHandle, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
     pending: tuple[PendingContext, ...] = ()
     version: int = 1
@@ -239,6 +263,14 @@ class ExecutionContext:
         ):
             raise ContextContractError("Note reference proposal is not source-grounded")
         if (
+            not isinstance(self.managed_notes, tuple)
+            or len(self.managed_notes) > 16
+            or any(not isinstance(item, ManagedNoteHandle) for item in self.managed_notes)
+            or len({(item.note_type, item.stable_note_id) for item in self.managed_notes})
+            != len(self.managed_notes)
+        ):
+            raise ContextContractError("Managed Note identities cannot be duplicated or forged")
+        if (
             not isinstance(self.qualitative_times, tuple)
             or len(self.qualitative_times) > 8
             or any(
@@ -290,6 +322,7 @@ class StageSpec:
                 ContextPort.TEMPORAL,
                 ContextPort.PENDING,
                 ContextPort.NOTE_MENTIONS,
+                ContextPort.MANAGED_NOTES,
             }
         ):
             raise ContextContractError("Stage port declaration is invalid")
@@ -306,6 +339,7 @@ class StageInput:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    managed_notes: tuple[ManagedNoteHandle, ...] = ()
     temporal_references: tuple[DomainEvidence, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
 
@@ -317,10 +351,12 @@ class StageOutput:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    managed_notes: tuple[ManagedNoteHandle, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
     pending: tuple[PendingContext, ...] = ()
 
 
+@runtime_checkable
 class ContextStage(Protocol):
     """Structural protocol: plug capabilities into the same checked seam."""
 
@@ -333,6 +369,8 @@ class ContextStage(Protocol):
 
 def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
     """Validate dependencies before invocation and expose only requested ports."""
+    if not isinstance(context, ExecutionContext) or not isinstance(spec, StageSpec):
+        raise ContextContractError("Stage boundary requires typed context and port specification")
     missing = (
         {ContextPort.CANDIDATES}
         if ContextPort.CANDIDATES in spec.requires and context.candidates is None
@@ -349,6 +387,8 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         missing.add(ContextPort.TEMPORAL)
     if ContextPort.NOTE_MENTIONS in spec.requires and not context.note_mentions:
         missing.add(ContextPort.NOTE_MENTIONS)
+    if ContextPort.MANAGED_NOTES in spec.requires and not context.managed_notes:
+        missing.add(ContextPort.MANAGED_NOTES)
     if missing:
         raise ContextContractError(f"Missing required context ports: {sorted(missing)}")
     return StageInput(
@@ -359,6 +399,7 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         candidates=context.candidates if ContextPort.CANDIDATES in spec.requires else None,
         domains=context.domains if ContextPort.DOMAIN in spec.requires else (),
         note_mentions=(context.note_mentions if ContextPort.NOTE_MENTIONS in spec.requires else ()),
+        managed_notes=(context.managed_notes if ContextPort.MANAGED_NOTES in spec.requires else ()),
         temporal_references=(verified_temporal if ContextPort.TEMPORAL in spec.requires else ()),
         qualitative_times=(
             context.qualitative_times if ContextPort.TEMPORAL in spec.requires else ()
@@ -381,6 +422,8 @@ def apply_stage_output(
         claimed.add(ContextPort.TEMPORAL)
     if output.note_mentions:
         claimed.add(ContextPort.NOTE_MENTIONS)
+    if output.managed_notes:
+        claimed.add(ContextPort.MANAGED_NOTES)
     if output.pending:
         claimed.add(ContextPort.PENDING)
     if not claimed <= spec.provides:
@@ -392,6 +435,7 @@ def apply_stage_output(
         candidates=output.candidates or context.candidates,
         domains=context.domains + output.domains,
         note_mentions=context.note_mentions + output.note_mentions,
+        managed_notes=context.managed_notes + output.managed_notes,
         qualitative_times=context.qualitative_times + output.qualitative_times,
         pending=context.pending + output.pending,
     )
@@ -399,6 +443,8 @@ def apply_stage_output(
 
 def run_context_stage(context: ExecutionContext, stage: ContextStage) -> ExecutionContext:
     """Compose one stage via a checked port; no mutation grants or implied retries."""
+    if not isinstance(stage, ContextStage) or not isinstance(stage.spec, StageSpec):
+        raise ContextContractError("Stage does not implement the runtime port Protocol")
     return apply_stage_output(context, stage.spec, stage.execute(stage_input(context, stage.spec)))
 
 
@@ -415,7 +461,10 @@ def run_independent_stages(
     if (
         not isinstance(stages, tuple)
         or not 1 <= len(stages) <= 4
-        or any(not isinstance(stage.spec, StageSpec) for stage in stages)
+        or any(
+            not isinstance(stage, ContextStage) or not isinstance(stage.spec, StageSpec)
+            for stage in stages
+        )
         or len({stage.spec.capability for stage in stages}) != len(stages)
     ):
         raise ContextContractError("Concurrent stage specification is invalid")

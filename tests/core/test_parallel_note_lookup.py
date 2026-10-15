@@ -273,3 +273,46 @@ def test_worker_failure_does_not_merge_partial_candidates(tmp_path):
     with pytest.raises(RuntimeError, match="read failure"):
         run_context_stage(original, stage)
     assert original.note_mentions == () and original.pending == ()
+
+
+def test_composed_runtime_schema_resolves_app_owned_task_by_existing_core_lookup(tmp_path):
+    from odyssey_apps.schema_extensions import compose_application_schema
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.persistence import create_entity
+
+    repository, base_schema = fixtures(tmp_path)
+    schema = compose_application_schema(base_schema, (TASK_SCHEMA_EXTENSION,))
+    create_entity(
+        repository,
+        schema,
+        path="Preparer informe.md",
+        entity_id="task-report",
+        metadata={"name": "Preparar informe", "type": "task", "status": "pending"},
+        content="",
+        actor="test",
+        now="2026-10-15T09:00:00+02:00",
+    )
+    source = "Marta trabajó en Preparar informe y Proyecto Atlas."
+    requests = (
+        NoteLookupRequest("Marta", 0, 5, "person"),
+        NoteLookupRequest(
+            "Preparar informe",
+            source.index("Preparar informe"),
+            source.index("Preparar informe") + len("Preparar informe"),
+            "task",
+        ),
+        NoteLookupRequest(
+            "Proyecto Atlas",
+            source.index("Proyecto Atlas"),
+            source.index("Proyecto Atlas") + len("Proyecto Atlas"),
+            "project",
+        ),
+    )
+    result = run_context_stage(
+        ExecutionContext("req-task-schema", source, "2026-10-15T09:00:00+02:00", "Europe/Paris"),
+        ParallelExactNoteLookup(requests=requests, repository=repository, schema=schema),
+    )
+    assert result.note_mentions[1].candidates == (
+        NoteReferenceCandidate("task-report", "task", "Preparar informe"),
+    )
+    assert [len(mention.candidates) for mention in result.note_mentions] == [2, 1, 1]
