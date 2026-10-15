@@ -588,11 +588,25 @@ def execute_request(
     if candidate_context is not None:
         # Opt-in only. A proposal/partial Core plan must not mutate the vault
         # before full structural source accounting has passed Core preflight.
-        from .candidate_coverage import validate_candidate_coverage_manifest
+        from .candidate_coverage import (
+            PreparedCoreCandidateCoverage,
+            validate_candidate_coverage_manifest,
+            validate_prewrite_fact_text_enrichment,
+        )
 
         candidate_started = monotonic()
         try:
-            manifest = candidate_coverage_factory(user_request, candidate_context, plan)
+            reviewed = candidate_coverage_factory(user_request, candidate_context, plan)
+            if isinstance(reviewed, PreparedCoreCandidateCoverage):
+                from hashlib import sha256
+
+                if reviewed.original_plan_digest != sha256(repr(plan).encode()).hexdigest():
+                    raise ValueError("Core reviewer prewrite plan is stale")
+                validate_prewrite_fact_text_enrichment(plan, reviewed.plan, candidate_context)
+                plan = reviewed.plan
+                manifest = reviewed.manifest
+            else:
+                manifest = reviewed
             validate_candidate_coverage_manifest(
                 user_request,
                 candidate_context,

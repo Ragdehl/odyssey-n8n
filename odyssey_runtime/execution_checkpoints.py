@@ -15,6 +15,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from odyssey_core.stage_presentation import progress_stage_view
+
 _MAX_RECORD_BYTES = 16 * 1024
 _MAX_EVENTS = 64
 _MAX_RECORDS = 500
@@ -31,6 +33,8 @@ _STAGES = frozenset(
         "temporal.ready",
         "planner.started",
         "planner.ready",
+        "core.notes.started",
+        "core.notes.ready",
         "action.retrieve.started",
         "action.delegate.started",
         "action.write.started",
@@ -368,7 +372,9 @@ class LocalExecutionCheckpointStore:
 
     @staticmethod
     def _validate_stage(stage: object) -> None:
-        if not isinstance(stage, str) or stage not in _STAGES:
+        if not isinstance(stage, str) or (
+            stage not in _STAGES and progress_stage_view(stage) is None
+        ):
             raise ExecutionCheckpointError("checkpoint stage is invalid")
 
     @staticmethod

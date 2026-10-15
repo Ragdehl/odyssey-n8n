@@ -8,7 +8,10 @@ request. The active DEV/PROD chat route is not modified.
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import replace
 from time import perf_counter
 
@@ -19,6 +22,7 @@ from odyssey_core.application import ApplicationResult
 from odyssey_core.candidate_context import CoreCandidateContext
 from odyssey_core.candidate_correction_chain import correction_chain
 from odyssey_core.candidate_sensitive_statement import supports_sensitive_literal_candidates
+from odyssey_core.execution_context import ExecutionContext
 from odyssey_core.git_history import HistoryRecorder
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.observability import (
@@ -33,6 +37,7 @@ from odyssey_core.source_boundary_review import (
     CoreSourceBoundaryUnit,
     SourceBoundaryReviewError,
 )
+from odyssey_runtime.context_planner_ports import ContextAwareCorePlannerFactory
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
@@ -247,7 +252,9 @@ def execute_candidate_routed_message(
     *,
     router: object,
     temporal: object | None,
-    core_planner_factory: Callable[[CoreCandidateContext, object | None], object],
+    core_planner_factory: (
+        Callable[[CoreCandidateContext, object | None], object] | ContextAwareCorePlannerFactory
+    ),
     candidate_coverage_factory: Callable[[str, CoreCandidateContext, object], object] | None = None,
     core_candidate_attributor: object | None = None,
     known_fact_verifier: object | None = None,
@@ -333,7 +340,15 @@ def execute_candidate_routed_message(
         if not isinstance(core_candidate_attributor, OpenAICoreCandidateAttributor):
             raise ValueError("Use the existing Core fact graph reviewer")
 
-        def coverage(text, context, plan, *, canonical_binding=None, verified_temporal=None):
+        def coverage(
+            text,
+            context,
+            plan,
+            *,
+            canonical_binding=None,
+            verified_temporal=None,
+            qualitative_context=None,
+        ):
             return review_model_candidate_fact_coverage(
                 text,
                 context,
@@ -341,10 +356,14 @@ def execute_candidate_routed_message(
                 core_candidate_attributor,
                 canonical_binding=canonical_binding,
                 verified_temporal=verified_temporal,
+                qualitative_context=qualitative_context,
             )
     else:
         coverage = candidate_coverage_factory
-    if not callable(coverage) or not callable(core_planner_factory):
+    if not callable(coverage) or not (
+        callable(core_planner_factory)
+        or isinstance(core_planner_factory, ContextAwareCorePlannerFactory)
+    ):
         raise ValueError("Core planner and coverage callbacks are required")
     if not callable(getattr(router, "propose", None)):
         raise ValueError("Original source requires a validated Router candidate adapter")
@@ -641,14 +660,28 @@ def execute_candidate_routed_message(
         dependent_handoff: object | None = None,
         conversation_context_override: object | None = None,
     ):
-        # The existing v0 Core route executor passes prior-turn context as a
-        # keyword. It must never be repurposed to carry sibling route text.
+        # The ordinary v0 Core adapter forwards recent trusted turns by
+        # keyword; Temporal and other scoped executors forward them
+        # positionally. Both are the SAME prior-turn contract, not rival
+        # histories. Normalize once, then prove exact equality with the
+        # outer authenticated snapshot before the Planner can run.
         if conversation_context_override is not None and routed_prior_turns not in ((), None):
             raise ValueError("Two competing route contexts are not allowed")
+        route_prior = (
+            conversation_context_override
+            if conversation_context_override is not None
+            else routed_prior_turns
+        )
         if routed_authenticated_actor != authenticated_actor:
             raise ValueError("route authenticated actor changed before Core execution")
-        if tuple(routed_prior_turns) != tuple(conversation_context):
+        if not isinstance(route_prior, (tuple, list)) or tuple(route_prior) != tuple(
+            conversation_context
+        ):
             raise ValueError("route conversation context changed before Core execution")
+        # From this point onward the Planner sees the normalized, authenticated
+        # snapshot; otherwise it would silently lose all prior turns on Core
+        # routes even after the boundary check succeeds.
+        routed_prior_turns = tuple(route_prior)
         ordinal, scoped = route_scopes[locator]
         if scoped.route.source_text != unit_source:
             raise ValueError("Route source changed before Core interpretation")
@@ -672,88 +705,138 @@ def execute_candidate_routed_message(
             raise TemporalInterpreterError(
                 "Inherited temporal scope has no verified earlier Temporal result"
             )
-        interpretation = None
-        domain = None
-        composed_shared_clock = False
-        temporal_stage: OperationalStage | None = None
-        if scoped.route.capability_id == "temporal":
-            if temporal is None or not callable(getattr(temporal, "interpret", None)):
-                raise ValueError("Temporal resolution is unavailable for dated route")
-            report_progress("temporal.started")
-            temporal_started = perf_counter()
-            try:
-                if inherited:
-                    interpretation = temporal.interpret(unit_source, inherited_temporal=inherited)
-                else:
-                    interpretation = temporal.interpret(unit_source)
-            except Exception as error:
+        # E2: the exact-name lookup is independent of Temporal. Start one
+        # read-only canonical vault scan while Temporal may call its provider.
+        # An inherited Core proof is still resolved only after its predecessor
+        # has persisted; no future route is prefetched across write barriers.
+        # An optional lookup budget overflow must NOT block the normal Planner.
+        from odyssey_core.canonical_source_context import source_note_role_spans
+        from odyssey_core.execution_context import PendingContext, run_context_stage
+        from odyssey_core.note_lookup_batch import (
+            MAX_MENTION_LOOKUPS,
+            NoteLookupRequest,
+            ParallelExactNoteLookup,
+        )
+
+        context_timezone = getattr(temporal, "timezone", None) or os.environ.get("TZ", "UTC")
+        prepared_note_context = None
+        note_lookup_budget_exceeded = False
+        lookup_stage = None
+        if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+            spans = source_note_role_spans(scoped.context)
+            if len(spans) > MAX_MENTION_LOOKUPS:
+                note_lookup_budget_exceeded = True
+            elif spans:
+                lookup_stage = ParallelExactNoteLookup(
+                    requests=tuple(
+                        NoteLookupRequest(span.text, span.start, span.end) for span in spans
+                    ),
+                    repository=repository,
+                    schema=schema,
+                )
+        with (
+            ThreadPoolExecutor(max_workers=1) if lookup_stage is not None else nullcontext() as pool
+        ):
+            lookup_future = None
+            if lookup_stage is not None:
+                initial = ExecutionContext(
+                    request_id=locator,
+                    source=unit_source,
+                    captured_at=now,
+                    timezone=context_timezone,
+                    authenticated_actor=routed_authenticated_actor,
+                )
+                report_progress("core.notes.started")
+                lookup_future = pool.submit(run_context_stage, initial, lookup_stage)
+            interpretation = None
+            domain = None
+            composed_shared_clock = False
+            temporal_stage: OperationalStage | None = None
+            if scoped.route.capability_id == "temporal":
+                if temporal is None or not callable(getattr(temporal, "interpret", None)):
+                    raise ValueError("Temporal resolution is unavailable for dated route")
+                report_progress("temporal.started")
+                temporal_started = perf_counter()
+                try:
+                    if inherited:
+                        interpretation = temporal.interpret(
+                            unit_source, inherited_temporal=inherited
+                        )
+                    else:
+                        interpretation = temporal.interpret(unit_source)
+                except Exception as error:
+                    temporal_stage = OperationalStage(
+                        "candidate.temporal_interpretation",
+                        OperationalOutcome.FAILED,
+                        max(0.0, (perf_counter() - temporal_started) * 1000),
+                        model=getattr(temporal, "model", None),
+                        reasoning_effort=getattr(temporal, "reasoning_effort", None),
+                        usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
+                        error_category=type(error).__name__[:100],
+                    )
+                    return ApplicationResult(
+                        locator,
+                        ApplicationStatus.FAILED,
+                        (),
+                        (),
+                        planning_error="TEMPORAL_INTERPRETATION_REQUIRED",
+                        operational=OperationalEvidence(
+                            total_duration_ms=temporal_stage.duration_ms,
+                            stages=(temporal_stage,),
+                        ),
+                    )
+                report_progress("temporal.ready")
                 temporal_stage = OperationalStage(
                     "candidate.temporal_interpretation",
-                    OperationalOutcome.FAILED,
+                    OperationalOutcome.COMPLETED,
                     max(0.0, (perf_counter() - temporal_started) * 1000),
                     model=getattr(temporal, "model", None),
                     reasoning_effort=getattr(temporal, "reasoning_effort", None),
                     usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
-                    error_category=type(error).__name__[:100],
                 )
-                return ApplicationResult(
-                    locator,
-                    ApplicationStatus.FAILED,
-                    (),
-                    (),
-                    planning_error="TEMPORAL_INTERPRETATION_REQUIRED",
-                    operational=OperationalEvidence(
-                        total_duration_ms=temporal_stage.duration_ms,
-                        stages=(temporal_stage,),
-                    ),
-                )
-            report_progress("temporal.ready")
-            temporal_stage = OperationalStage(
-                "candidate.temporal_interpretation",
-                OperationalOutcome.COMPLETED,
-                max(0.0, (perf_counter() - temporal_started) * 1000),
-                model=getattr(temporal, "model", None),
-                reasoning_effort=getattr(temporal, "reasoning_effort", None),
-                usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
-            )
-            if interpretation.source_text != unit_source:
-                raise ValueError("Temporal must interpret only its routed source")
-            from odyssey_core.temporal_interpretation import TemporalInterpreterError
-
-            try:
-                domain = interpretation.core_domain_interpretation()
-            except TemporalInterpreterError:
-                if bundle_compiler is None or len(scoped.context.candidates) < 2:
-                    raise
-                from odyssey_core.temporal_group_composition import compose_shared_clock_group
+                if interpretation.source_text != unit_source:
+                    raise ValueError("Temporal must interpret only its routed source")
+                from odyssey_core.temporal_interpretation import TemporalInterpreterError
 
                 try:
-                    domain = compose_shared_clock_group(
-                        interpretation,
-                        scoped.context,
-                        timezone=getattr(temporal, "timezone", None),
-                    )
-                    composed_shared_clock = True
+                    domain = interpretation.core_domain_interpretation()
                 except TemporalInterpreterError:
-                    # Keep genuinely approximate source wording literal;
-                    # only exact independently validated dates/clocks may
-                    # be used as calendar targets or time coordinates.
-                    from odyssey_core.temporal_approximation_handoff import (
-                        compose_safe_approximate_group,
-                    )
+                    if bundle_compiler is None:
+                        raise
+                    from odyssey_core.temporal_group_composition import compose_shared_clock_group
 
-                    domain = compose_safe_approximate_group(interpretation, scoped.context)
-            if not composed_shared_clock:
-                temporal_handoff.remember(
-                    interpretation,
-                    route_index=ordinal,
-                    start=scoped.original_start,
-                    end=scoped.original_end,
-                    verified_domain=domain,
-                )
-            # Two different instants sourced from one shared clock cannot be
-            # cached as one unique cross-group clock handoff. The group owns
-            # the two independently dated values; later groups fail closed.
+                    try:
+                        if len(scoped.context.candidates) < 2:
+                            raise TemporalInterpreterError("No multi-candidate clock composition")
+                        domain = compose_shared_clock_group(
+                            interpretation,
+                            scoped.context,
+                            timezone=getattr(temporal, "timezone", None),
+                        )
+                        composed_shared_clock = True
+                    except TemporalInterpreterError:
+                        # Keep genuinely approximate source wording literal;
+                        # only exact independently validated dates/clocks may
+                        # be used as calendar targets or time coordinates.
+                        from odyssey_core.temporal_approximation_handoff import (
+                            compose_safe_approximate_group,
+                        )
+
+                        domain = compose_safe_approximate_group(interpretation, scoped.context)
+                if not composed_shared_clock:
+                    temporal_handoff.remember(
+                        interpretation,
+                        route_index=ordinal,
+                        start=scoped.original_start,
+                        end=scoped.original_end,
+                        verified_domain=domain,
+                    )
+                # Two different instants sourced from one shared clock cannot be
+                # cached as one unique cross-group clock handoff. The group owns
+                # the two independently dated values; later groups fail closed.
+            if lookup_future is not None:
+                prepared_note_context = lookup_future.result()
+                report_progress("core.notes.ready")
         domain = with_scoped_inherited_temporal(domain, source=unit_source, inherited=inherited)
         guard = None
         if dependent_handoff is not None:
@@ -839,6 +922,50 @@ def execute_candidate_routed_message(
         ):
             route_context = replace(route_context, verified_sensitive_temporal=domain)
         route_context.validate(unit_source)
+        # The same *exact-source* Temporal proof is needed by Core coverage;
+        # Router's lexical time_approx alone cannot authorize this binding.
+        from odyssey_core.temporal_qualifier_handoff import source_bound_qualitative_times
+
+        verified_qualitative = source_bound_qualitative_times(
+            interpretation, route_context, domain, timezone=context_timezone
+        )
+        if verified_qualitative and route_context.verified_route_temporal is None:
+            route_context = replace(route_context, verified_route_temporal=domain)
+            route_context.validate(unit_source)
+        # E2 seam: bind existing CoreCandidateContext, DomainInterpretation and
+        # runtime-authenticated actor to ONE validated, immutable handoff.
+        # The context is a structural guard, not a second semantic authority.
+        # It is intentionally assembled only after all Core-owned inheritance
+        # and scoped evidence have already been independently verified.
+        execution_context = ExecutionContext(
+            request_id=locator,
+            source=unit_source,
+            captured_at=now,
+            timezone=context_timezone,
+            authenticated_actor=routed_authenticated_actor,
+            candidates=route_context,
+            domains=(domain,) if domain is not None else (),
+            note_mentions=(
+                prepared_note_context.note_mentions if prepared_note_context is not None else ()
+            ),
+            source_note_hints=(
+                prepared_note_context.source_note_hints if prepared_note_context is not None else ()
+            ),
+            pending=(
+                prepared_note_context.pending
+                if prepared_note_context is not None
+                else (
+                    (PendingContext("core.note_lookup_exact", "LOOKUP_BUDGET_EXCEEDED"),)
+                    if note_lookup_budget_exceeded
+                    else ()
+                )
+            ),
+            qualitative_times=verified_qualitative,
+        )
+        # Subsequent stages consume the validated carrier, not new copies of
+        # the original planner/actor arguments.
+        route_context = execution_context.candidates
+        domain = execution_context.domains[0] if execution_context.domains else None
         from odyssey_core.scoped_event_evidence import CoreInheritedEventWriteGuard
         from odyssey_core.scoped_subject_evidence import CoreInheritedSubjectWriteGuard
 
@@ -848,13 +975,27 @@ def execute_candidate_routed_message(
             if event is not None
             else None
         )
-        planner = core_planner_factory(route_context, domain)
+        if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+            planner = core_planner_factory.create_for_context(execution_context)
+        else:
+            planner = core_planner_factory(route_context, domain)
         if route_context.hybrid_interpretation_mode:
             from odyssey_core.canonical_source_context import matching_canonical_source_names
             from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 
             if isinstance(planner, OpenAILunaExperimentalPlanner):
-                names = matching_canonical_source_names(route_context, repository, schema)
+                if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+                    # Normal E2 path: this evidence was gathered during the
+                    # same canonical Note batch, concurrently with Temporal.
+                    # On budget overflow, retain the historic bounded hint
+                    # lookup rather than silently changing planner prompts.
+                    names = (
+                        matching_canonical_source_names(route_context, repository, schema)
+                        if note_lookup_budget_exceeded
+                        else execution_context.source_note_hints
+                    )
+                else:
+                    names = matching_canonical_source_names(route_context, repository, schema)
                 if names:
                     planner.bind_verified_source_note_names(names)
         if not callable(getattr(planner, "plan", None)):
@@ -875,11 +1016,62 @@ def execute_candidate_routed_message(
                     else planner.plan(request)
                 )
                 if isinstance(result, RequestPlan):
+                    if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+                        from odyssey_core.qualitative_fact_preservation import (
+                            preserve_qualitative_day_facts,
+                        )
+
+                        # Different verified dates have unique Day owners. Same-day
+                        # multi-facts require the EXISTING Core attributor first;
+                        # it prepares a final plan+manifest in its single call.
+                        dates = [q.date for q in execution_context.qualitative_times]
+                        if len(dates) == len(set(dates)):
+                            result = preserve_qualitative_day_facts(
+                                result, context=execution_context
+                            )
                     captured["plan"] = result
                 return result
 
             def __getattr__(self, name):
                 return getattr(planner, name)
+
+        from odyssey_core.candidate_coverage import PreparedCoreCandidateCoverage
+
+        def reviewed_coverage(text, candidate_ctx, core_plan):
+            """Use the existing Core review once; record the FINAL validated plan.
+
+            The Core prewrite path will validate its reviewed manifest against
+            the exact enriched plan before any physical mutation. This callback
+            only observes that plan for the existing Markdown readback.
+            """
+            if core_candidate_attributor is not None:
+                reviewed = coverage(
+                    text,
+                    candidate_ctx,
+                    core_plan,
+                    canonical_binding=guard,
+                    verified_temporal=(
+                        domain
+                        if route_context.hybrid_interpretation_mode
+                        and domain is not None
+                        and domain.capability_id == "temporal"
+                        and domain.intent == "TEMPORAL_RESOLUTION"
+                        else None
+                    ),
+                    qualitative_context=(
+                        execution_context
+                        if len({q.date for q in execution_context.qualitative_times})
+                        != len(execution_context.qualitative_times)
+                        else None
+                    ),
+                )
+            elif guard is not None:
+                reviewed = coverage(text, candidate_ctx, core_plan, canonical_binding=guard)
+            else:
+                reviewed = coverage(text, candidate_ctx, core_plan)
+            if isinstance(reviewed, PreparedCoreCandidateCoverage):
+                captured["plan"] = reviewed.plan
+            return reviewed
 
         result = execute_request(
             unit_source,
@@ -895,38 +1087,13 @@ def execute_candidate_routed_message(
             context_limit=context_limit,
             request_id_factory=lambda: locator,
             candidate_context=route_context,
-            candidate_coverage_factory=(
-                (
-                    lambda text, ctx, plan: coverage(
-                        text,
-                        ctx,
-                        plan,
-                        canonical_binding=guard,
-                        verified_temporal=(
-                            domain
-                            if (
-                                route_context.hybrid_interpretation_mode
-                                and domain is not None
-                                and domain.capability_id == "temporal"
-                                and domain.intent == "TEMPORAL_RESOLUTION"
-                            )
-                            else None
-                        ),
-                    )
-                )
-                if core_candidate_attributor is not None
-                else (
-                    (lambda text, ctx, plan: coverage(text, ctx, plan, canonical_binding=guard))
-                    if guard is not None
-                    else coverage
-                )
-            ),
+            candidate_coverage_factory=reviewed_coverage,
             candidate_pending_recorder=candidate_pending_recorder,
             history_recorder=history_recorder,
             progress_callback=progress_callback,
             write_preflight_guard=subject_guard or event_guard or guard,
             known_fact_verifier=known_fact_verifier,
-            authenticated_actor=routed_authenticated_actor,
+            authenticated_actor=execution_context.authenticated_actor,
             self_binding_repository=self_binding_repository,
             conversation_context=tuple(routed_prior_turns),
         )

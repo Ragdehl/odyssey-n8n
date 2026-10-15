@@ -117,6 +117,7 @@ def test_application_result_serialization_exposes_bounded_operational_evidence()
         "stages": [
             {
                 "name": "planner",
+                "stage_view": {"version": 1, "label": "Planner", "icon": "planner"},
                 "outcome": "completed",
                 "duration_ms": 4.0,
                 "model": "gpt-5.6-sol",
@@ -1607,6 +1608,29 @@ def test_runtime_composition_builds_from_environment(monkeypatch, tmp_path: Path
 
     runtime = composition.build_runtime_from_environment()
     assert pending.is_dir()
+    assert runtime.execution_checkpoint_store_factory is composition.LocalExecutionCheckpointStore
+    # Verify the *production assembly* supplies a working actor-isolated
+    # checkpoint source, rather than only passing tests when explicitly injected.
+    from datetime import UTC, datetime
+
+    from odyssey_core.identity_boundary import AuthenticatedActorContext
+    from odyssey_runtime.execution_checkpoints import CheckpointOutcome
+
+    fixture_actor = AuthenticatedActorContext("99999999-9999-4999-8999-999999999999")
+    store = runtime._checkpoint_store(fixture_actor.stable_user_id)
+    assert store is not None
+    store.record(
+        "builder-verified",
+        "starting",
+        CheckpointOutcome.MILESTONE_OBSERVED,
+        datetime.now(UTC).isoformat(),
+    )
+    assert (
+        runtime._checkpoint_store(fixture_actor.stable_user_id).load("builder-verified")["events"][
+            0
+        ]["stage"]
+        == "starting"
+    )
     assert isinstance(runtime.identity_mapping_repository, IdentityMappingRepository)
     tasks_capability = next(
         item for item in runtime.application_catalog.capabilities() if item.id == "tasks"

@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "description": "Genuine newly recorded provider responses to synthetic E2 acceptance phrases, no API tokens, safe offline reproduction only",
+  "cases": [
+    {
+      "case": "daypart_known_person",
+      "source": "Mañana por la tarde Bea hablará con Marta.",
+      "source_sha256": "ab4aff4acad6ad55707ba40bddc29cce0fb138332d49a1a4922c5357ce5b9490",
+      "responses": [
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"version\":2,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"hablará\",\"occurrence\":0},{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"Marta\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"predicate\",\"anchor\":{\"text\":\"hablará\",\"occurrence\":0}},{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Mañana\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"por la tarde\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}],\"semantic_relations\":[{\"unit\":1,\"kind\":\"independent_assertion\",\"parent_unit\":0,\"evidence\":{\"text\":\"hablará\",\"occurrence\":0}}]}"
+        },
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"mentions\":[{\"temporal_text\":\"Mañana\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-16\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"por la tarde\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"Mañana\",\"value\":\"2026-10-16\"},{\"kind\":\"literal\",\"text\":\" por la tarde Bea hablará con \"},{\"kind\":\"identity\",\"text\":\"Marta\",\"identity\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"hablará\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"[[calendar/days/2026-10-16|16-10-2026]] por la tarde Bea hablará con {{ref:0}}.\"],\"pending_reason\":null}]}"
+        }
+      ]
+    },
+    {
+      "case": "two_same_day",
+      "source": "hoy por la tarde Bea llamó a Marta y hoy por la noche Ana vio a Luis.",
+      "source_sha256": "1eb0b4050c9d460626c7fbf99fbbbbbd8d705524af5e95435bb22005e9650eed",
+      "responses": [
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"version\":2,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"llamó\",\"occurrence\":0},{\"text\":\"Marta\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"llamó\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"por la tarde\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"},{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Ana\",\"occurrence\":0},{\"text\":\"vio\",\"occurrence\":0},{\"text\":\"Luis\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vio\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Luis\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"hoy\",\"occurrence\":1}},{\"role\":\"time\",\"anchor\":{\"text\":\"por la noche\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}],\"semantic_relations\":[{\"unit\":1,\"kind\":\"independent_assertion\",\"parent_unit\":0,\"evidence\":{\"text\":\"Bea\",\"occurrence\":0}},{\"unit\":2,\"kind\":\"independent_assertion\",\"parent_unit\":0,\"evidence\":{\"text\":\"Ana\",\"occurrence\":0}}]}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"decision\":\"accept\",\"boundary_index\":0,\"reason\":null}"
+        },
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"mentions\":[{\"temporal_text\":\"hoy\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-15\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"por la tarde\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-15\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" llamó a \"},{\"kind\":\"identity\",\"text\":\"Marta\",\"identity\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" por la tarde.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"llamó\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"{{ref:0}} llamó a {{ref:1}} por la tarde.\"],\"pending_reason\":null}]}"
+        },
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"mentions\":[{\"temporal_text\":\"hoy por la noche\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-15\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-15\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"identity\",\"text\":\"Ana\",\"identity\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" vio a \"},{\"kind\":\"identity\",\"text\":\"Luis\",\"identity\":{\"description\":\"Luis\",\"binding\":\"described\",\"direct_name\":\"Luis\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vio\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"{{ref:0}} vio a {{ref:1}} (por la noche).\"],\"pending_reason\":null}]}"
+        }
+      ]
+    },
+    {
+      "case": "third_party",
+      "source": "Ayer Ana vio a Marta.",
+      "source_sha256": "398c5de7b3709521060834c81a3707dbbda777e77f1d69f285dfa6f66e7e9611",
+      "responses": [
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"version\":2,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Ana\",\"occurrence\":0},{\"text\":\"vio\",\"occurrence\":0},{\"text\":\"Marta\",\"occurrence\":0},{\"text\":\"Ayer\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Ana\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"vio\",\"occurrence\":0}},{\"role\":\"object\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Ayer\",\"occurrence\":0}}],\"inheritance\":[],\"state\":\"candidate\"}],\"semantic_relations\":[{\"unit\":1,\"kind\":\"independent_assertion\",\"parent_unit\":0,\"evidence\":{\"text\":\"vio\",\"occurrence\":0}}]}"
+        },
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"mentions\":[{\"temporal_text\":\"Ayer\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-14\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"Ana\",\"binding\":\"described\",\"direct_name\":\"Ana\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"temporal_reference\",\"text\":\"Ayer\",\"value\":\"2026-10-14\"},{\"kind\":\"literal\",\"text\":\"Ana vio a \"},{\"kind\":\"identity\",\"text\":\"Marta\",\"identity\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\".\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"vio\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"[[calendar/days/2026-10-14|14-10-2026]] Ana vio a {{ref:0}}.\"],\"pending_reason\":null}]}"
+        }
+      ]
+    },
+    {
+      "case": "french_daypart",
+      "source": "Demain dans l'après-midi Bea parlera avec Marta.",
+      "source_sha256": "e2581581fc8bf8d9f945ba59ce98f207aefd2130ada9c2897908ad7285a8bd6d",
+      "responses": [
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"version\":2,\"units\":[{\"kind\":\"occurrence\",\"anchors\":[{\"text\":\"Bea\",\"occurrence\":0},{\"text\":\"parlera\",\"occurrence\":0},{\"text\":\"Marta\",\"occurrence\":0}],\"scoped_source\":[{\"role\":\"subject\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"predicate\",\"anchor\":{\"text\":\"parlera\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Bea\",\"occurrence\":0}},{\"role\":\"participants\",\"anchor\":{\"text\":\"Marta\",\"occurrence\":0}},{\"role\":\"date\",\"anchor\":{\"text\":\"Demain\",\"occurrence\":0}},{\"role\":\"time\",\"anchor\":{\"text\":\"dans l'après-midi\",\"occurrence\":0}}],\"inheritance\":[], \"state\":\"candidate\"}],\"semantic_relations\":[{\"unit\":1,\"kind\":\"independent_assertion\",\"parent_unit\":0,\"evidence\":{\"text\":\"parlera\",\"occurrence\":0}}]}"
+        },
+        {
+          "model": "gpt-6-luna",
+          "status": "completed",
+          "output_text": "{\"mentions\":[{\"temporal_text\":\"Demain\",\"temporal\":{\"kind\":\"EXACT_DATE\",\"exact_date\":\"2026-10-16\",\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}},{\"temporal_text\":\"dans l'après-midi\",\"temporal\":{\"kind\":\"UNSPECIFIED\",\"exact_date\":null,\"exact_datetime\":null,\"range_start\":null,\"range_end_exclusive\":null}}]}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"result\":{\"outcome\":\"PLAN\",\"actions\":[{\"kind\":\"write\",\"operations\":[{\"target\":{\"description\":\"2026-10-16\",\"binding\":\"described\",\"direct_name\":null,\"note_type\":\"calendar_day\",\"filters\":[],\"candidate_scope\":null},\"apply_to\":\"one\",\"intent\":\"record\",\"facts\":[{\"parts\":[{\"kind\":\"identity\",\"text\":\"Bea\",\"identity\":{\"description\":\"Bea\",\"binding\":\"described\",\"direct_name\":\"Bea\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" parlera avec \"},{\"kind\":\"identity\",\"text\":\"Marta\",\"identity\":{\"description\":\"Marta\",\"binding\":\"described\",\"direct_name\":\"Marta\",\"note_type\":\"person\",\"filters\":[],\"candidate_scope\":null}},{\"kind\":\"literal\",\"text\":\" dans l'après-midi.\"}]}],\"properties\":[],\"tag_changes\":[],\"destination_type\":null}]}],\"limitations\":[],\"clarification_code\":null,\"presentation_intent\":\"answer\"}}"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "status": "completed",
+          "output_text": "{\"candidates\":[{\"candidate_id\":\"candidate-1\",\"source_quote\":\"parlera\",\"fact_ordinals\":[0],\"planned_fact_texts\":[\"{{ref:0}} parlera avec {{ref:1}} dans l'après-midi.\"],\"pending_reason\":null}]}"
+        }
+      ]
+    }
+  ]
+}

@@ -301,3 +301,143 @@ test("a prewrite Core coverage review failure requests semantic reformulation, n
   assert.deepEqual(result.clarification.options, []);
   assert.equal(validateProductResponse(result).kind, "clarification");
 });
+
+test("versioned stage views survive actual n8n filtering and browser validation", () => {
+  const newAppStage = {name: "events.classify_occurrence", outcome: "completed", duration_ms: 11,
+    model: null, reasoning_effort: null, error_category: null, provider_calls: [],
+    stage_view: {version: 1, label: "events · classify occurrence", icon: "result"}};
+  const result = execute({request_id: "synthetic-partial", status: "completed", product_outcome: "ANSWER",
+    affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-09"}]}],
+    operational: {total_duration_ms: 12, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 1, provider_calls: [],
+        stage_view: {version: 1, label: "Router", icon: "router"}},
+      newAppStage,
+    ]},
+    execution_flow: {version: 1, input: "Un hecho de prueba", parallel_preparation: false,
+      routes: [{capability: "events", text: "Un hecho de prueba", status: "completed", stage_count: 1,
+        temporal: [], steps: [{name: "events.classify_occurrence", input: "", output: ""}]}]},
+  });
+  assert.deepEqual(result.request_detail.operational.stages[1].stage_view,
+    newAppStage.stage_view);
+  assert.deepEqual(validateProductResponse(result).request_detail.operational.stages[1].stage_view,
+    newAppStage.stage_view);
+  assert.equal(result.request_detail.flow.routes[0].stage_count, 1);
+});
+
+test("invalid optional stage presentation is discarded, never clears stages or saved receipts", () => {
+  const result = execute({request_id: "synthetic-partial", status: "completed", product_outcome: "ANSWER",
+    affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-09"}]}],
+    operational: {total_duration_ms: 12, stages: [
+      {name: "events.future", outcome: "completed", duration_ms: 12, provider_calls: [],
+        stage_view: {version: 1, label: "Z".repeat(1000), icon: "unknown"}},
+    ]},
+  });
+  assert.equal(result.request_detail.operational.stages.length, 1);
+  assert.equal(result.request_detail.operational.stages[0].stage_view, undefined);
+  assert.equal(validateProductResponse(result).status, "completed");
+  assert.deepEqual(result.request_detail.changes.affected_stable_note_ids, ["date:2026-10-09"]);
+});
+
+const ledgerFixture = {
+  version: 1, request_id: "synthetic-partial", status: "partial",
+  event_sequence: 3, events_truncated: false,
+  events: [
+    {sequence: 1, stage: "starting", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:00+02:00"},
+    {sequence: 2, stage: "core.notes.started", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:01+02:00"},
+    {sequence: 3, stage: "core.notes.ready", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:02+02:00"},
+  ],
+  stages: [
+    {name: "planner", outcome: "failed", duration_ms: 10, start_offset_ms: null,
+      error_category: "ProviderError", provider_call_count: 1, route_index: 1},
+  ],
+  routes: [
+    {route_index: 0, capability: "temporal", status: "completed", depends_on: null},
+    {route_index: 1, capability: "tasks", status: "failed", depends_on: 0},
+  ],
+  write_receipts: [
+    {action_index: 0, unit_index: 0, stable_note_id: "date:2026-10-08",
+      operation: "UPDATED", status: "succeeded"},
+  ],
+  affected_stable_note_ids: ["date:2026-10-08"],
+};
+
+test("joined ledger survives actual n8n->browser trip even when later route fails after write", () => {
+  const result = execute({
+    request_id: "synthetic-partial", status: "partial", product_outcome: "CANNOT_ANSWER",
+    product_reason: "INCOMPLETE_EVIDENCE",
+    affected_stable_note_ids: ["date:2026-10-08"],
+    actions: [{units: [{status: "succeeded", operation: "UPDATED", stable_note_id: "date:2026-10-08"}]}],
+    operational: {total_duration_ms: 100, stages: []},
+    execution_ledger: ledgerFixture,
+  });
+  const validated = validateProductResponse(result);
+  assert.equal(validated.status, "partial");
+  assert.equal(validated.request_detail.execution_ledger.events.length, 3);
+  assert.equal(validated.request_detail.execution_ledger.routes[1].status, "failed");
+  assert.equal(validated.request_detail.execution_ledger.stages[0].error_category, "ProviderError");
+  assert.deepEqual(validated.request_detail.execution_ledger.write_receipts.map(x => x.stable_note_id),
+    ["date:2026-10-08"]);
+  assert.deepEqual(validated.request_detail.changes.affected_stable_note_ids, ["date:2026-10-08"]);
+});
+
+test("forged optional ledger cannot claim unconfirmed receipt or leak private route text", () => {
+  const tampered = {...ledgerFixture,
+    write_receipts: [{...ledgerFixture.write_receipts[0], stable_note_id: "unconfirmed-note"}],
+    routes: [{...ledgerFixture.routes[0], text: "Never expose this hidden route"}],
+  };
+  const result = execute({
+    request_id: "synthetic-partial", status: "partial", product_outcome: "CANNOT_ANSWER",
+    product_reason: "INCOMPLETE_EVIDENCE", affected_stable_note_ids: ["date:2026-10-08"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-08"}]}],
+    operational: {total_duration_ms: 100, stages: []}, execution_ledger: tampered,
+  });
+  const validated = validateProductResponse(result);
+  assert.equal(validated.request_detail.execution_ledger, undefined);
+  assert.deepEqual(validated.request_detail.changes.affected_stable_note_ids, ["date:2026-10-08"]);
+  assert.doesNotMatch(JSON.stringify(validated), /Never expose this hidden route/);
+});
+
+test("real hybrid v6 flow survives n8n and browser after index/source review prefixes", () => {
+  const actualFlow = {
+    version: 1, input: "Hoy por la tarde compré una silla de cartón ficticia.",
+    parallel_preparation: true,
+    routes: [{
+      capability: "temporal", text: "Hoy por la tarde compré una silla de cartón ficticia.",
+      stage_count: 3, status: "completed", temporal: [],
+      steps: [
+        {name: "candidate.temporal_interpretation", input: "Hoy por la tarde", output: ""},
+        {name: "planner", input: "Voy a escribir", output: "Plan"},
+        {name: "action.write", input: "Plan", output: "succeeded"},
+      ],
+    }],
+  };
+  const stages = ["index_barrier", "candidate.source_proposal", "candidate.source_boundary_review",
+    "candidate.temporal_interpretation", "planner", "action.write", "index_refresh.schedule"]
+    .map(name => ({name, duration_ms: 2, outcome: "completed", model: null,
+      error_category: null, provider_calls: []}));
+  const result = execute({request_id: "synthetic-partial", status: "completed",
+    product_outcome: "ANSWER", affected_stable_note_ids: ["date:2026-10-15"],
+    actions: [{units: [{status: "succeeded", operation: "UPDATED",
+      stable_note_id: "date:2026-10-15"}]}],
+    execution_flow: actualFlow,
+    operational: {total_duration_ms: 16, stages},
+  });
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.request_detail.flow, actualFlow,
+    "Never silently discard authentic hybrid route trace while retaining its write receipts");
+  const browser = validateProductResponse(result);
+  assert.equal(browser.request_detail.flow.routes.length, 1);
+  assert.deepEqual(browser.request_detail.changes.affected_stable_note_ids, ["date:2026-10-15"]);
+
+  // Unknown prewrite stages or a shifted route must NOT be accepted as provenance.
+  const shifted = execute({request_id: "synthetic-partial", status: "completed",
+    product_outcome: "ANSWER", affected_stable_note_ids: ["date:2026-10-15"],
+    execution_flow: actualFlow,
+    operational: {total_duration_ms: 16, stages: stages.map(stage =>
+      stage.name === "candidate.source_boundary_review" ? {...stage, name: "invented.review"} : stage)},
+  });
+  assert.equal(shifted.request_detail.flow, undefined);
+  assert.deepEqual(shifted.request_detail.changes.affected_stable_note_ids, ["date:2026-10-15"]);
+});

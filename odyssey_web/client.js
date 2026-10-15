@@ -307,12 +307,66 @@ export function validateRequestDetail(value, requestId) {
   const changes = value.changes === undefined ? undefined : validateDetailChanges(value.changes);
   const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
   const flow = value.flow === undefined ? undefined : validateExecutionFlow(value.flow, operational.stages);
+  const execution_ledger = validateExecutionLedger(value.execution_ledger, requestId, changes);
   const diagnostic_issue = value.diagnostic_issue;
   if (diagnostic_issue !== undefined && !["EVIDENCE_REJECTED", "DELIVERY_UNKNOWN", "CLIENT_FAILURE"].includes(diagnostic_issue)) {
     throw new ProductRequestError("Invalid client diagnostic category.");
   }
   return {request_id: requestId, operational, changes, estimated_cost, flow,
+    ...(execution_ledger ? {execution_ledger} : {}),
     ...(diagnostic_issue ? {diagnostic_issue} : {})};
+}
+
+/** Optional read-only joined diagnostics; invalid metadata never erases writes. */
+export function validateExecutionLedger(value, requestId, changes) {
+  if (value === undefined) return undefined;
+  const safeId = x => typeof x === "string" && x.length > 0 && x.length <= 128;
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1 ||
+      value.request_id !== requestId ||
+      !["completed", "failed", "partial", "needs_attention"].includes(value.status) ||
+      !Array.isArray(value.events) || value.events.length > 64 ||
+      !Array.isArray(value.stages) || value.stages.length > 64 ||
+      !Array.isArray(value.routes) || value.routes.length > 32 ||
+      !Array.isArray(value.write_receipts) || value.write_receipts.length > 64 ||
+      !Array.isArray(value.affected_stable_note_ids) || value.affected_stable_note_ids.length > 64 ||
+      !value.affected_stable_note_ids.every(safeId) ||
+      JSON.stringify(value.affected_stable_note_ids) !== JSON.stringify(changes?.affected_stable_note_ids ?? []) ||
+      !value.events.every(e => e && Number.isSafeInteger(e.sequence) && e.sequence >= 1 && safeId(e.stage) &&
+        ["milestone_observed", "result_persisted", "processing_returned", "failed_or_unknown"].includes(e.outcome) &&
+        typeof e.observed_at === "string" && e.observed_at.length <= 40) ||
+      !value.stages.every(st => st && safeId(st.name) &&
+        ["completed", "failed", "skipped", "not_called", "unavailable"].includes(st.outcome) &&
+        (st.duration_ms === null || validMs(st.duration_ms)) &&
+        (st.start_offset_ms === null || validMs(st.start_offset_ms)) &&
+        (st.error_category === null || typeof st.error_category === "string" && st.error_category.length <= 120) &&
+        Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
+        (st.route_index === null || Number.isSafeInteger(st.route_index) &&
+          st.route_index >= 0 && st.route_index < value.routes.length)) ||
+      !value.routes.every((rt,i) => rt && rt.route_index === i && typeof rt.capability === "string" &&
+        rt.capability.length <= 40 && typeof rt.status === "string" && rt.status.length <= 40 &&
+        (rt.depends_on === null || Number.isSafeInteger(rt.depends_on) && rt.depends_on >= 0 && rt.depends_on < i)) ||
+      !value.write_receipts.every(item => item && Number.isSafeInteger(item.action_index) && item.action_index >= 0 &&
+        Number.isSafeInteger(item.unit_index) && item.unit_index >= 0 && item.status === "succeeded" &&
+        safeId(item.stable_note_id) && value.affected_stable_note_ids.includes(item.stable_note_id) &&
+        typeof item.operation === "string" && item.operation.length <= 48) ||
+      (value.event_sequence !== null && (!Number.isSafeInteger(value.event_sequence) ||
+         value.event_sequence < value.events.length)) || typeof value.events_truncated !== "boolean") return undefined;
+  return {
+    version: 1, request_id: requestId, status: value.status,
+    event_sequence: value.event_sequence, events_truncated: value.events_truncated,
+    events: value.events.map(e => ({sequence: e.sequence, stage: e.stage,
+      outcome: e.outcome, observed_at: e.observed_at})),
+    stages: value.stages.map(st => ({name: st.name, outcome: st.outcome,
+      duration_ms: st.duration_ms, start_offset_ms: st.start_offset_ms,
+      error_category: st.error_category, provider_call_count: st.provider_call_count,
+      route_index: st.route_index})),
+    routes: value.routes.map(rt => ({route_index: rt.route_index,
+      capability: rt.capability, status: rt.status, depends_on: rt.depends_on})),
+    write_receipts: value.write_receipts.map(item => ({action_index: item.action_index,
+      unit_index: item.unit_index, stable_note_id: item.stable_note_id,
+      operation: item.operation, status: item.status})),
+    affected_stable_note_ids: [...value.affected_stable_note_ids],
+  };
 }
 
 /** Preserve only exact, bounded route provenance for the diagnostic graph. */
@@ -498,6 +552,16 @@ function validateEstimatedCost(value) {
   return {status: value.status, amount_usd: value.status === "estimated" ? value.amount_usd : null, pricing_basis: value.pricing_basis};
 }
 
+function validateStageView(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).length !== 3 || value.version !== 1 ||
+      typeof value.label !== "string" || !value.label.trim() || value.label.length > 80 ||
+      !["router", "temporal", "planner", "tasks", "core", "git", "index", "pending", "result"].includes(value.icon)) {
+    return null; // Optional presentation cannot invalidate an authoritative result.
+  }
+  return {version: 1, label: value.label, icon: value.icon};
+}
+
 function validateDetailStage(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ProductRequestError("Odyssey returned invalid stage details.");
@@ -524,6 +588,7 @@ function validateDetailStage(value) {
   const coverage = value.coverage === undefined ? undefined : validateCoverage(value.coverage);
   const input_sizes = value.input_sizes === undefined ? undefined : validateInputSizes(value.input_sizes);
   const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
+  const stage_view = validateStageView(value.stage_view);
   const diagnostics = {};
   for (const key of ["validation_stage", "validation_code", "provider_status", "incomplete_reason", "parse_status", "result_kind"]) {
     if (value[key] == null) continue;
@@ -539,7 +604,7 @@ function validateDetailStage(value) {
     reasoning_effort: value.reasoning_effort, usage, error_category: value.error_category, provider_calls: providerCalls,
     ...(value.start_offset_ms !== undefined ? {start_offset_ms: value.start_offset_ms} : {}),
     ...(substeps ? {substeps} : {}), ...(coverage ? {coverage} : {}), ...(input_sizes ? {input_sizes} : {}),
-    ...(estimated_cost ? {estimated_cost} : {}), ...diagnostics};
+    ...(estimated_cost ? {estimated_cost} : {}), ...(stage_view ? {stage_view} : {}), ...diagnostics};
 }
 
 function validateUsage(value) {

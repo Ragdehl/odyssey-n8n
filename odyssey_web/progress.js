@@ -31,6 +31,10 @@ function formatStage(snapshot) {
   if (snapshot?.stage === "planner.ready" && details.length) {
     return "He identificado: " + details.join(", ");
   }
+  const view = snapshot?.stage_view;
+  if (view?.version === 1 && typeof view.label === "string"
+    && view.label.trim().length > 0 && view.label.length <= 80
+    && Object.hasOwn(FLOW_ICONS, view.icon)) return view.label;
   return STAGE_COPY[snapshot?.stage] ?? "Odyssey está trabajando…";
 }
 
@@ -98,6 +102,8 @@ export function createProcessingIndicator(documentImpl = document) {
   donut.setAttribute("title", "Avance por etapas verificadas; no indica tiempo restante");
   let displayed = 0;
   let stageTarget = 0;
+  let lastSequence = 0;
+  let completed = false;
   const applyProgress = (next) => {
     displayed = boundedProgress(next);
     donut.setAttribute("aria-valuenow", String(displayed));
@@ -108,11 +114,17 @@ export function createProcessingIndicator(documentImpl = document) {
   return {
     element: wrapper,
     update(snapshot) {
+      if (completed) return;
+      if (Number.isSafeInteger(snapshot?.sequence) && snapshot.sequence > 0) {
+        if (snapshot.sequence <= lastSequence) return;
+        lastSequence = snapshot.sequence;
+      }
       stageTarget = Math.max(stageTarget, boundedProgress(snapshot?.progress));
       updateCopy(formatStage(snapshot));
       applyProgress(Math.max(displayed, stageTarget));
     },
     complete() {
+      completed = true;
       stageTarget = 100;
       updateCopy("Listo");
       applyProgress(100);
@@ -133,12 +145,20 @@ export function startProgressPolling({
 }) {
   let stopped = false;
   let timer = null;
+  let lastSequence = -1;
 
   const poll = async () => {
     if (stopped) return;
     try {
       const snapshot = await requestProgress(requestId);
-      if (!stopped && snapshot && typeof snapshot === "object") onProgress(snapshot);
+      if (!stopped && snapshot && typeof snapshot === "object"
+        && (snapshot.request_id === undefined || snapshot.request_id === requestId)) {
+        const sequence = snapshot.sequence;
+        if (sequence === undefined || (Number.isSafeInteger(sequence) && sequence >= 0 && sequence > lastSequence)) {
+          if (sequence !== undefined) lastSequence = sequence;
+          onProgress(snapshot);
+        }
+      }
     } catch {
       // Progress is optional UX. Delivery continues on the authoritative request channel.
     }
@@ -293,7 +313,11 @@ function stageCard(doc, stage, route = null, observedStep = null) {
     stage.name === "index_barrier" ? "index" :
     stage.name === "pending" ? "pending" :
     stage.name.startsWith("action.") ? "core" : "result";
-  card.append(headingWithIcon(doc, stageTitle(stage.name), icon));
+  const view = stage.stage_view?.version === 1
+    && typeof stage.stage_view.label === "string" && stage.stage_view.label.length <= 80
+    && Object.hasOwn(FLOW_ICONS, stage.stage_view.icon)
+    ? stage.stage_view : null;
+  card.append(headingWithIcon(doc, view?.label || stageTitle(stage.name), view?.icon || icon));
   if (observedStep) {
     card.append(ioPanel(doc, observedStep.input,
       observedStep.output.replace(/\{\{ref:\d+\}\}/gu, "↗ referencia")));
@@ -519,6 +543,30 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
   }
   end.append(stats);
   root.append(end);
+  if (detail.execution_ledger?.version === 1) {
+    const ledger = detail.execution_ledger;
+    const section = element(doc, "details", "flow-execution-ledger");
+    section.append(element(doc, "summary", "", "Historial unificado de ejecución"));
+    const receipts = ledger.write_receipts.length;
+    const failedStages = ledger.stages.filter(stage => stage.outcome === "failed").length;
+    section.append(element(doc, "p", "flow-ledger-summary",
+      `${ledger.events.length} hitos · ${ledger.routes.length} rutas · ${ledger.stages.length} etapas · ${receipts} recibos de escritura · ${failedStages} etapas fallidas`));
+    if (ledger.events_truncated) section.append(element(doc, "p", "flow-diagnostic-warning",
+      "Historial parcial: los hitos más antiguos no están disponibles."));
+    for (const event of ledger.events) {
+      section.append(element(doc, "p", "flow-ledger-event",
+        `${event.sequence} · ${stageTitle(event.stage)} · ${event.outcome}`));
+    }
+    for (const stage of ledger.stages) {
+      if (stage.outcome === "failed") section.append(element(doc, "p", "flow-ledger-stage-error",
+        `${stage.route_index === null ? "Etapa general" : `Ruta ${stage.route_index + 1}`} · ${stage.name} · ${stage.error_category || "Error sin categoría"}`));
+    }
+    for (const receipt of ledger.write_receipts) {
+      section.append(element(doc, "p", "flow-ledger-receipt",
+        `Recibo · ${receipt.operation} · ${receipt.stable_note_id}`));
+    }
+    root.append(section);
+  }
   if (checkpoint !== undefined) root.append(renderCheckpointHistory(doc, checkpoint, detail.request_id));
   return root;
 }
@@ -556,7 +604,10 @@ function validateCheckpointEvent(event, expectedSequence) {
   if (!event || typeof event !== "object" || Array.isArray(event) ||
       !exactKeys(event, ["sequence", "stage", "outcome", "observed_at"]) ||
       !Number.isInteger(event.sequence) || event.sequence !== expectedSequence ||
-      !CHECKPOINT_STAGES.has(event.stage) || !CHECKPOINT_OUTCOMES.has(event.outcome) ||
+      !(CHECKPOINT_STAGES.has(event.stage) ||
+        typeof event.stage === "string" && event.stage.length <= 80 &&
+        /^(?:[a-z][a-z0-9_]*\.)+[a-z][a-z0-9_]*\.(?:started|ready|failed|required)$/u.test(event.stage)) ||
+      !CHECKPOINT_OUTCOMES.has(event.outcome) ||
       !validTimestamp(event.observed_at)) {
     throw new DiagnosticPreviewError("Invalid execution checkpoint event.");
   }

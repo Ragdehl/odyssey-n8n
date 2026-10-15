@@ -68,6 +68,79 @@ class CoreCandidateCoverageManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedCoreCandidateCoverage:
+    """Core-reviewed prewrite fact-text enrichment plus its FINAL coverage manifest.
+
+    A reviewer may return this only when it has tied original source candidates
+    to exact original fact ordinals. Core revalidates the final plan and every
+    candidate before the first mutation. This is NOT an executable proposal.
+    """
+
+    plan: RequestPlan
+    manifest: CoreCandidateCoverageManifest
+    original_plan_digest: str
+
+
+def validate_prewrite_fact_text_enrichment(
+    original: RequestPlan,
+    amended: RequestPlan,
+    source_context: CoreCandidateContext | None = None,
+) -> None:
+    """Disallow all semantic plan/target/reference/property changes by a reviewer.
+
+    The only allowed difference is the literal of existing fact(s) at their
+    exact old ordinal; count, destination, references and temporal anchors stay.
+    """
+    if not isinstance(original, RequestPlan) or not isinstance(amended, RequestPlan):
+        raise ValueError("Core prewrite enrichment needs typed request plans")
+    # The reviewer cannot supply arbitrary newly written sentences. Only an
+    # exact source-anchored qualitative span is allowed to be appended, and
+    # the separately verified Temporal evidence must include that quotation.
+    from .qualitative_fact_preservation import _qualified_day_fact
+
+    permitted: set[str] = set()
+    if source_context is not None and source_context.verified_route_temporal is not None:
+        for role in (
+            role
+            for candidate in source_context.candidates
+            for role in candidate.roles
+            if role.role in {"time", "time_approx"}
+        ):
+            if any(
+                role.span.text in item.source_text
+                for item in source_context.verified_route_temporal.temporal_references()
+            ) or any(
+                item.kind == "temporal_approximate_literal" and item.source_text == role.span.text
+                for item in source_context.verified_route_temporal.evidence
+            ):
+                permitted.add(role.span.text)
+    if (
+        len(original.actions) != len(amended.actions)
+        or original.limitations != amended.limitations
+        or original.presentation_intent != amended.presentation_intent
+    ):
+        raise ValueError("Core reviewer changed plan topology")
+    for before, after in zip(original.actions, amended.actions, strict=True):
+        if isinstance(before, WriteAction) and isinstance(after, WriteAction):
+            if len(before.units) != len(after.units):
+                raise ValueError("Core reviewer changed write-unit cardinality")
+            for original_unit, updated_unit in zip(before.units, after.units, strict=True):
+                if (
+                    len(original_unit.facts) != len(updated_unit.facts)
+                    or replace(updated_unit, facts=original_unit.facts) != original_unit
+                ):
+                    raise ValueError("Core reviewer changed non-fact mutation authority")
+                for old_fact, new_fact in zip(original_unit.facts, updated_unit.facts, strict=True):
+                    if old_fact != new_fact and not any(
+                        _qualified_day_fact(old_fact, qualifier) == new_fact
+                        for qualifier in permitted
+                    ):
+                        raise ValueError("Core reviewer injected a non-source fact change")
+        elif before != after:
+            raise ValueError("Core reviewer changed non-write plan action")
+
+
+@dataclass(frozen=True, slots=True)
 class CoreCandidateCoverageItem:
     """State structural mapping and independently observed persistence only."""
 
@@ -325,14 +398,43 @@ def validate_candidate_coverage_manifest(
             from .temporal_approximation_handoff import TEMPORAL_APPROXIMATE_LITERAL
 
             temporal = context.verified_route_temporal
-            if temporal is None or any(
-                span.text not in lexical
-                or not any(
+
+            def proven_approximate_span(
+                span, lexical=lexical, temporal=temporal, unit=unit, fact_index=fact_index
+            ) -> bool:
+                if span.text not in lexical or temporal is None:
+                    return False
+                if any(
                     item.kind == TEMPORAL_APPROXIMATE_LITERAL and item.source_text == span.text
                     for item in temporal.evidence
-                )
-                for span in approximate_roles
-            ):
+                ):
+                    return True
+                # E2: an approximate *daypart* can accompany a proven
+                # exact-date source phrase without becoming an exact hour.
+                # It must be inside that same original Temporal quote and
+                # attached to a matching, exclusively dated Day fact.
+                if (
+                    unit.target.type != "calendar_day"
+                    or len(unit.fact_temporal_anchors) != len(unit.facts)
+                    or fact_index >= len(unit.fact_temporal_anchors)
+                ):
+                    return False
+                for item in temporal.temporal_references():
+                    anchor = item.temporal_anchor()
+                    start = source.find(item.source_text)
+                    if (
+                        anchor.time is None
+                        and unit.target.query == anchor.date
+                        and start >= 0
+                        and start <= span.start < span.end <= start + len(item.source_text)
+                        and len(unit.fact_temporal_anchors[fact_index]) == 1
+                        and unit.fact_temporal_anchors[fact_index][0].date == anchor.date
+                        and unit.fact_temporal_anchors[fact_index][0].time is None
+                    ):
+                        return True
+                return False
+
+            if any(not proven_approximate_span(span) for span in approximate_roles):
                 raise ValueError(
                     "Approximate time must be represented literally with Core Temporal provenance"
                 )

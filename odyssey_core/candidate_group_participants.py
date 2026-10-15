@@ -150,9 +150,43 @@ def validate_group_participant_fact(
     participants = _participant_evidence(context, candidate_index)
     if any(source[span.start : span.end] != span.text for span in participants):
         raise ValueError("Grouped participant wording is not in the original source")
-    expected_mentions = tuple(span.text for span in participants)
+    # A scoped grammatical subject is also an explicitly named participant
+    # even when Router emits `participants` only for the direct object. Core
+    # may validly link that subject in a Calendar Day fact; the existing
+    # lookup-helper and source-span checks still decide its real identity.
+    # Never infer a subject from "I"/SELF or from a different candidate.
+    direct_subjects = tuple(
+        role.span.text
+        for role in candidate.roles
+        if role.role == "subject" and source[role.span.start : role.span.end] == role.span.text
+    )
+    expected_mentions = tuple(
+        dict.fromkeys((*direct_subjects, *(span.text for span in participants)))
+    )
     fact_words = normalized_words(lexical_fact)
-    if any(not normalized_words(mention) <= fact_words for mention in expected_mentions):
+    # When Core writes a fact directly UNDER an existing Person Note, that
+    # note's canonical target may represent the grammatical subject without
+    # repeating its name in each line. It must be the exact original subject
+    # AND a direct source participant; a mere Router guess, arbitrary target,
+    # alias or inferred group membership is never enough. Normal Core target
+    # resolution still decides whether that Person actually exists.
+    source_subjects = {role.span.text for role in candidate.roles if role.role == "subject"}
+    target_subject = (
+        unit.target.entity
+        if unit.target.type == "person"
+        and unit.target.entity == unit.target.query
+        and unit.target.entity in source_subjects
+        and unit.target.entity in expected_mentions
+        and not unit.target.filters
+        and unit.target.self_target is None
+        and unit.target.semantic_set is None
+        and unit.target.relational_reference is None
+        else None
+    )
+    if any(
+        not normalized_words(mention) <= fact_words and mention != target_subject
+        for mention in expected_mentions
+    ):
         raise ValueError("Grouped event fact lost a source participant")
     own_event = _event_words(context, candidate_index)
     if not own_event or not own_event & fact_words:

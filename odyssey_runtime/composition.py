@@ -85,7 +85,6 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationService,
 )
 from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
-from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
@@ -140,6 +139,7 @@ from odyssey_core.temporal_interpretation import (
 from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .candidate_route_dispatch import execute_candidate_routed_message
+from .context_planner_ports import OpenAILunaContextPlannerFactory
 from .delivery_results import LocalDeliveryResultStore
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
 from .hybrid_group_compiler import compile_hybrid_candidate_bundle
@@ -415,11 +415,9 @@ class RuntimeComposition:
         """
         actor = self._resolve_actor(authenticated_actor, external_principal)
         checkpoint_store = self._checkpoint_store(actor)
-        self._record_checkpoint(
-            checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED
-        )
-        if request_id is not None and self.product_progress_store is not None:
-            self.product_progress_store.begin(actor, request_id)
+        # A replay is a verified read of an existing delivery, not a new
+        # execution. Do not register a fake "starting" milestone or reset its
+        # in-memory donut until after the durable same-ID replay check.
         store: LocalDeliveryResultStore | None = None
         fingerprint: str | None = None
         if request_id is not None and conversation_id is not None:
@@ -442,13 +440,16 @@ class RuntimeComposition:
                 replay = store.load(request_id, fingerprint)
                 if replay is not None:
                     replay["delivery_replayed"] = True
-                    self._record_checkpoint(
-                        checkpoint_store,
-                        request_id,
-                        "delivery.result_persisted",
-                        CheckpointOutcome.RESULT_PERSISTED,
-                    )
+                    # Replay only READS the previously committed delivery.
+                    # The original terminal checkpoint already records the
+                    # durable write; appending it again invents an event and
+                    # inflates the timeline on every n8n retry.
                     return replay
+            self._record_checkpoint(
+                checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED
+            )
+            if request_id is not None and self.product_progress_store is not None:
+                self.product_progress_store.begin(actor, request_id)
             candidate_response = self._handle_candidate_pending_reply(
                 actor,
                 conversation_id,
@@ -554,7 +555,13 @@ class RuntimeComposition:
                         original_request=pending.original_request,
                     )
                     response = self._finish_product_result(
-                        result, store, fingerprint, clarification_store, force_replay=True
+                        result,
+                        store,
+                        fingerprint,
+                        clarification_store,
+                        force_replay=True,
+                        actor=actor,
+                        conversation_id=conversation_id,
                     )
                     self._record_terminal_checkpoint(
                         checkpoint_store,
@@ -685,6 +692,7 @@ class RuntimeComposition:
                 force_replay
                 or response.get("product_outcome") == "CLARIFY"
                 or bool(response.get("affected_stable_note_ids"))
+                or self.hybrid_candidate_execute is not None
             )
         )
         self._record_checkpoint(
@@ -722,7 +730,14 @@ class RuntimeComposition:
         }
         progress = progress_by_stage.get(stage)
         if progress is None:
-            return
+            from odyssey_core.stage_presentation import progress_stage_view
+
+            if progress_stage_view(stage) is None:
+                return
+            # A new App reports its observed lifecycle, NOT a fabricated
+            # percentage. Keep the latest proven coarse milestone intact.
+            previous = self.product_progress_store.read(actor, request_id)
+            progress = previous.progress if previous is not None else 0
         details: tuple[str, ...] = ()
         if stage == "routing.ready":
             route_count = payload.get("route_count")
@@ -755,6 +770,7 @@ class RuntimeComposition:
         )
         if snapshot is None:
             return {
+                "version": 1,
                 "request_id": request_id,
                 "stage": "starting",
                 "progress": 0,
@@ -783,6 +799,25 @@ class RuntimeComposition:
         exceptions never reach this method and therefore remain retryable.
         """
         response = application_result_to_response(result)
+        # One read-only ledger joins existing observed operational stages,
+        # route statuses, physical Core receipts and actor-root checkpoints.
+        # It never makes or retries a mutation decision.
+        from .execution_ledger import project_execution_ledger
+
+        checkpoint = None
+        if actor is not None:
+            diagnostic_store = self._checkpoint_store(actor)
+            if diagnostic_store is not None:
+                try:
+                    checkpoint = diagnostic_store.load(result.request_id)
+                except Exception:
+                    checkpoint = None
+        try:
+            response["execution_ledger"] = project_execution_ledger(result, checkpoint)
+        except (ValueError, TypeError, KeyError, AttributeError):
+            # A failed optional projection after a canonical write must not
+            # turn a verified delivery into a retryable transport failure.
+            pass
         if response["product_outcome"] == "CLARIFY":
             candidate_view = self._candidate_pending_view(
                 actor,
@@ -2658,12 +2693,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     max_output_tokens=1536,
                     scoped_date_time_context=True,
                 ),
-                core_planner_factory=lambda context, domain: OpenAILunaExperimentalPlanner(
-                    client,
-                    schema,
-                    {key: clock[key] for key in ("date", "time", "timezone")},
-                    candidate_context=context,
-                    domain_interpretation=domain,
+                core_planner_factory=OpenAILunaContextPlannerFactory(
+                    client=client,
+                    schema=schema,
+                    clock={key: clock[key] for key in ("date", "time", "timezone")},
                 ),
                 core_candidate_attributor=OpenAICoreCandidateAttributor(client),
                 repository=repository,
@@ -3299,7 +3332,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         ),
                     ),
                 ),
-                (mutation.task_id,),
+                # The physical write touched the Work Session Note, NOT its
+                # parent Task. Keep this canonical affected ID aligned with
+                # the already returned UnitResult receipt and actual Markdown.
+                (mutation.session.id,),
                 history=mutation.history,
                 operational=OperationalEvidence(total_duration, tuple(stages)),
                 execution_flow=_task_flow(task),
@@ -3678,6 +3714,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         direct_task_mutations=direct_task_mutations,
         work_session_service=work_session_service,
         product_progress_store=ProductProgressStore(),
+        # The canonical environment factory must wire the SAME actor-root
+        # source-free checkpoints tested on standalone RuntimeComposition.
+        # Without this, DEV/PROD responses silently return an empty E2 ledger
+        # despite their live progress UI updating correctly.
+        execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
         notes_mutation_actor=notes_mutation_actor,
         hybrid_candidate_execute=execute_hybrid_candidate_route if hybrid_dev_enabled else None,
         hybrid_read_execute=execute_hybrid_proven_read if hybrid_dev_enabled else None,
