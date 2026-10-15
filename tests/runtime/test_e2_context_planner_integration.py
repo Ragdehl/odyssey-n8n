@@ -84,7 +84,14 @@ class ContextFactory:
         )
 
 
-def _execute(tmp_path, factory, *, temporal_override=None, repository_hook=None):
+def _execute(
+    tmp_path,
+    factory,
+    *,
+    temporal_override=None,
+    repository_hook=None,
+    progress_callback=None,
+):
     repo, context_index, semantic_index, embedder = fresh_corpus_vault(tmp_path)
     original_bea = repo.read_text("Bea.md")
     if repository_hook is not None:
@@ -107,6 +114,7 @@ def _execute(tmp_path, factory, *, temporal_override=None, repository_hook=None)
         request_id_factory=lambda: "e2-context-port",
         bundle_compiler=compile_hybrid_candidate_bundle,
         source_boundary_reviewer=Reviewer(),
+        progress_callback=progress_callback,
     )
     assert result.status is ApplicationStatus.COMPLETED, (
         result.planning_error,

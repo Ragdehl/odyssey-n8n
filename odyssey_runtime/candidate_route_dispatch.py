@@ -723,6 +723,7 @@ def execute_candidate_routed_message(
                     timezone=context_timezone,
                     authenticated_actor=routed_authenticated_actor,
                 )
+                report_progress("core.notes.started")
                 lookup_future = pool.submit(run_context_stage, initial, lookup_stage)
             interpretation = None
             domain = None
@@ -810,6 +811,7 @@ def execute_candidate_routed_message(
                 # the two independently dated values; later groups fail closed.
             if lookup_future is not None:
                 prepared_note_context = lookup_future.result()
+                report_progress("core.notes.ready")
         domain = with_scoped_inherited_temporal(domain, source=unit_source, inherited=inherited)
         guard = None
         if dependent_handoff is not None:

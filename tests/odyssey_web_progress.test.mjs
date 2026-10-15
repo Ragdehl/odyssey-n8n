@@ -183,3 +183,55 @@ test("progress never fabricates elapsed percentage while waiting for a provider"
     globalThis.setInterval = originalInterval;
   }
 });
+
+test("donut displays newly observed App label and ignores stale sequence after concurrent stages", () => {
+  const indicator = createProcessingIndicator(fakeDocument);
+  const donut = indicator.element.querySelector(".processing-donut");
+  const copy = indicator.element.querySelector(".processing-copy");
+  indicator.update({request_id: "test", stage: "planner.started", sequence: 5, progress: 50});
+  indicator.update({request_id: "test", stage: "events.classify_occurrence.started", sequence: 6,
+    progress: 50, stage_view: {version: 1, label: "Events · análisis en curso", icon: "result"}});
+  assert.equal(copy.textContent, "Events · análisis en curso");
+  assert.equal(donut.getAttribute("aria-valuenow"), "50");
+  indicator.update({request_id: "test", stage: "temporal.ready", sequence: 4, progress: 42});
+  assert.equal(copy.textContent, "Events · análisis en curso");
+  indicator.update({request_id: "test", stage: "events.classify_occurrence.ready", sequence: 7,
+    progress: 50, stage_view: {version: 1, label: "Events · preparado", icon: "result"}});
+  assert.equal(copy.textContent, "Events · preparado");
+  indicator.complete();
+  indicator.update({request_id: "test", stage: "temporal.ready", sequence: 8, progress: 90});
+  assert.equal(copy.textContent, "Listo");
+  assert.equal(donut.getAttribute("aria-valuenow"), "100");
+});
+
+test("invalid stage view cannot replace observed safe fallback", () => {
+  assert.equal(formatStage({stage: "planner.started", stage_view: {
+    version: 1, label: "bad", icon: "unknown"
+  }}), "Organizando la información…");
+});
+
+test("polling ignores mismatched deliveries and stale sequence but accepts future stages", async () => {
+  const queued = [];
+  const inputs = [
+    {request_id: "different-request", sequence: 2, stage: "planner.ready", progress: 68},
+    {request_id: "ours", sequence: 3, stage: "events.prepare.started", progress: 42},
+    {request_id: "ours", sequence: 2, stage: "temporal.ready", progress: 42},
+    {request_id: "ours", sequence: 4, stage: "events.prepare.ready", progress: 42},
+  ];
+  const timers = [];
+  const stop = startProgressPolling({
+    requestId: "ours",
+    requestProgress: async () => inputs.shift() ?? {request_id:"ours", sequence:4, stage:"events.prepare.ready", progress:42},
+    onProgress: snapshot => queued.push(snapshot.stage),
+    setTimeoutImpl: callback => {timers.push(callback); return timers.length;},
+    clearTimeoutImpl() {},
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  for (let i = 0; i < 3; i += 1) {
+    const task = timers.shift();
+    task();
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  stop();
+  assert.deepEqual(queued, ["events.prepare.started", "events.prepare.ready"]);
+});

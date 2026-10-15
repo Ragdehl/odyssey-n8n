@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any
 
+from odyssey_core.stage_presentation import StageView, progress_stage_view
+
 MAX_PROGRESS_RECORDS = 128
 MAX_DETAILS = 6
 MAX_DETAIL_LENGTH = 120
@@ -22,15 +24,18 @@ class ProductProgress:
     details: tuple[str, ...]
     sequence: int
     complete: bool = False
+    stage_view: StageView | None = None
 
     def to_response(self) -> dict[str, Any]:
         return {
+            "version": 1,
             "request_id": self.request_id,
             "stage": self.stage,
             "progress": self.progress,
             "details": list(self.details),
             "sequence": self.sequence,
             "complete": self.complete,
+            **({"stage_view": self.stage_view.to_response()} if self.stage_view else {}),
         }
 
 
@@ -77,6 +82,7 @@ class ProductProgressStore:
                 safe_details,
                 sequence,
                 complete,
+                progress_stage_view(stage),
             )
             self._records[key] = snapshot
             self._records.move_to_end(key)

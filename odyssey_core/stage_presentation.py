@@ -77,3 +77,60 @@ def stage_view_for(name: str) -> StageView:
     }.get(namespace, "result")
     label = name.replace("_", " ").replace(".", " · ")[:80]
     return StageView(1, label, icon)
+
+
+# The existing product milestones use *real* dispatcher callbacks. This
+# presentation contract is shared by the progress store and all consumers;
+# it does not infer that an unobserved step has happened.
+_PROGRESS_COPY = {
+    "starting": "Preparando tu solicitud…",
+    "routing.started": "Entendiendo tu mensaje…",
+    "routing.boundary_review_started": "Comprobando que las partes conservan su significado…",
+    "routing.boundary_review_ready": "He verificado la división del mensaje.",
+    "routing.boundary_review_required": "Necesito revisar cómo se relacionan las partes.",
+    "routing.ready": "He entendido cómo dividir tu mensaje.",
+    "temporal.started": "Interpretando fechas y horas…",
+    "temporal.ready": "He interpretado la fecha y la hora.",
+    "planner.started": "Organizando la información…",
+    "planner.ready": "He identificado las referencias importantes.",
+    "action.retrieve.started": "Buscando la información relacionada…",
+    "action.delegate.started": "Preparando la siguiente acción…",
+    "action.write.started": "Guardando la información…",
+    "finalizing": "Terminando…",
+}
+_PROGRESS_NAME = re.compile(r"[a-z][a-z0-9_.-]{0,79}\Z")
+_PROGRESS_SUFFIXES = (".started", ".ready", ".failed", ".required")
+
+
+def progress_stage_view(stage: str) -> StageView | None:
+    """Describe an *observed* milestone with no arbitrary source-derived text.
+
+    Unknown future Apps get their own readable label, but not a fabricated
+    progress percentage. Unbounded/untrusted strings never enter the UI.
+    """
+    if not isinstance(stage, str) or _PROGRESS_NAME.fullmatch(stage) is None:
+        return None
+    if stage in _PROGRESS_COPY:
+        base = stage.rsplit(".", 1)[0]
+        if base == "routing" or base.startswith("routing."):
+            icon = "router"
+        elif base.startswith("action"):
+            icon = "core"
+        elif base in {"starting", "finalizing"}:
+            icon = "result"
+        else:
+            icon = stage_view_for(base).icon
+        return StageView(1, _PROGRESS_COPY[stage], icon)
+    if not stage.endswith(_PROGRESS_SUFFIXES):
+        return None
+    base, state = stage.rsplit(".", 1)
+    if not base or base in {"starting", "finalizing"}:
+        return None
+    view = stage_view_for(base)
+    suffix = {
+        "started": " · en curso",
+        "ready": " · preparado",
+        "failed": " · error",
+        "required": " · revisión necesaria",
+    }[state]
+    return StageView(1, (view.label[: 80 - len(suffix)] + suffix), view.icon)

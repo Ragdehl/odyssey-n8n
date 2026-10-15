@@ -210,3 +210,45 @@ def test_real_composed_luna_factory_receives_same_prompt_hints_and_keeps_real_wr
     _execute(tmp_path, factory)
     assert len(planned) == 1
     assert planned[0][0].name == "Bea"
+
+
+def test_real_parallel_core_note_scan_reports_observed_progress_without_fake_percentage(tmp_path):
+    """Dispatcher reports start/join of ONE real Core batch in its normal route."""
+    from odyssey_runtime.composition import RuntimeComposition
+    from odyssey_runtime.progress import ProductProgressStore
+
+    store = ProductProgressStore()
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: None,
+        refresh_indexes=lambda: None,
+        product_progress_store=store,
+    )
+    actor = "odyssey-runtime"
+    request_id = "e2-observed-scan"
+    store.begin(actor, request_id)
+    observed = []
+
+    def report(stage, payload):
+        runtime._record_progress_event(actor, request_id, stage, payload)
+        observed.append((stage, store.read(actor, request_id)))
+
+    factory = ContextFactory()
+    _execute(tmp_path, factory, progress_callback=report)
+    names = [name for name, _ in observed]
+    assert names.index("core.notes.started") < names.index("core.notes.ready")
+    assert names.index("core.notes.started") < names.index("temporal.ready")
+    assert names.index("temporal.ready") < names.index("core.notes.ready")
+    assert len(factory.seen) == 1
+    assert [item.stage for _, item in observed if item.stage.startswith("core.notes")] == [
+        "core.notes.started",
+        "core.notes.ready",
+    ]
+    stages = [item for _, item in observed]
+    assert all(
+        after.sequence > before.sequence for before, after in zip(stages, stages[1:], strict=False)
+    )
+    assert all(
+        after.progress >= before.progress for before, after in zip(stages, stages[1:], strict=False)
+    )
+    assert all(item.stage_view is not None for item in stages)
+    assert all(item.progress < 100 for item in stages)

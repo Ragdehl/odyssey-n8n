@@ -722,7 +722,14 @@ class RuntimeComposition:
         }
         progress = progress_by_stage.get(stage)
         if progress is None:
-            return
+            from odyssey_core.stage_presentation import progress_stage_view
+
+            if progress_stage_view(stage) is None:
+                return
+            # A new App reports its observed lifecycle, NOT a fabricated
+            # percentage. Keep the latest proven coarse milestone intact.
+            previous = self.product_progress_store.read(actor, request_id)
+            progress = previous.progress if previous is not None else 0
         details: tuple[str, ...] = ()
         if stage == "routing.ready":
             route_count = payload.get("route_count")
@@ -755,6 +762,7 @@ class RuntimeComposition:
         )
         if snapshot is None:
             return {
+                "version": 1,
                 "request_id": request_id,
                 "stage": "starting",
                 "progress": 0,

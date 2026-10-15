@@ -31,6 +31,10 @@ function formatStage(snapshot) {
   if (snapshot?.stage === "planner.ready" && details.length) {
     return "He identificado: " + details.join(", ");
   }
+  const view = snapshot?.stage_view;
+  if (view?.version === 1 && typeof view.label === "string"
+    && view.label.trim().length > 0 && view.label.length <= 80
+    && Object.hasOwn(FLOW_ICONS, view.icon)) return view.label;
   return STAGE_COPY[snapshot?.stage] ?? "Odyssey está trabajando…";
 }
 
@@ -98,6 +102,8 @@ export function createProcessingIndicator(documentImpl = document) {
   donut.setAttribute("title", "Avance por etapas verificadas; no indica tiempo restante");
   let displayed = 0;
   let stageTarget = 0;
+  let lastSequence = 0;
+  let completed = false;
   const applyProgress = (next) => {
     displayed = boundedProgress(next);
     donut.setAttribute("aria-valuenow", String(displayed));
@@ -108,11 +114,17 @@ export function createProcessingIndicator(documentImpl = document) {
   return {
     element: wrapper,
     update(snapshot) {
+      if (completed) return;
+      if (Number.isSafeInteger(snapshot?.sequence) && snapshot.sequence > 0) {
+        if (snapshot.sequence <= lastSequence) return;
+        lastSequence = snapshot.sequence;
+      }
       stageTarget = Math.max(stageTarget, boundedProgress(snapshot?.progress));
       updateCopy(formatStage(snapshot));
       applyProgress(Math.max(displayed, stageTarget));
     },
     complete() {
+      completed = true;
       stageTarget = 100;
       updateCopy("Listo");
       applyProgress(100);
@@ -133,12 +145,20 @@ export function startProgressPolling({
 }) {
   let stopped = false;
   let timer = null;
+  let lastSequence = -1;
 
   const poll = async () => {
     if (stopped) return;
     try {
       const snapshot = await requestProgress(requestId);
-      if (!stopped && snapshot && typeof snapshot === "object") onProgress(snapshot);
+      if (!stopped && snapshot && typeof snapshot === "object"
+        && (snapshot.request_id === undefined || snapshot.request_id === requestId)) {
+        const sequence = snapshot.sequence;
+        if (sequence === undefined || (Number.isSafeInteger(sequence) && sequence >= 0 && sequence > lastSequence)) {
+          if (sequence !== undefined) lastSequence = sequence;
+          onProgress(snapshot);
+        }
+      }
     } catch {
       // Progress is optional UX. Delivery continues on the authoritative request channel.
     }
