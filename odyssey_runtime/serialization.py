@@ -18,6 +18,7 @@ from odyssey_core.observability import (
     reconcile_duration,
 )
 from odyssey_core.semantic_sets import IdentitySetMember, SemanticSetOutcome
+from odyssey_core.stage_presentation import stage_view_for
 
 
 def _span_response(span: OperationalSpan) -> dict[str, Any]:
@@ -91,6 +92,7 @@ def _stage_response(stage: Any) -> dict[str, Any]:
     """Serialize one stage and reconcile only child intervals with known offsets."""
     response: dict[str, Any] = {
         "name": stage.name,
+        "stage_view": stage_view_for(stage.name).to_response(),
         "outcome": stage.outcome.value,
         "duration_ms": stage.duration_ms,
         "model": stage.model,

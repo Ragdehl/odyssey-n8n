@@ -498,6 +498,16 @@ function validateEstimatedCost(value) {
   return {status: value.status, amount_usd: value.status === "estimated" ? value.amount_usd : null, pricing_basis: value.pricing_basis};
 }
 
+function validateStageView(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      Object.keys(value).length !== 3 || value.version !== 1 ||
+      typeof value.label !== "string" || !value.label.trim() || value.label.length > 80 ||
+      !["router", "temporal", "planner", "tasks", "core", "git", "index", "pending", "result"].includes(value.icon)) {
+    return null; // Optional presentation cannot invalidate an authoritative result.
+  }
+  return {version: 1, label: value.label, icon: value.icon};
+}
+
 function validateDetailStage(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ProductRequestError("Odyssey returned invalid stage details.");
@@ -524,6 +534,7 @@ function validateDetailStage(value) {
   const coverage = value.coverage === undefined ? undefined : validateCoverage(value.coverage);
   const input_sizes = value.input_sizes === undefined ? undefined : validateInputSizes(value.input_sizes);
   const estimated_cost = value.estimated_cost === undefined ? undefined : validateEstimatedCost(value.estimated_cost);
+  const stage_view = validateStageView(value.stage_view);
   const diagnostics = {};
   for (const key of ["validation_stage", "validation_code", "provider_status", "incomplete_reason", "parse_status", "result_kind"]) {
     if (value[key] == null) continue;
@@ -539,7 +550,7 @@ function validateDetailStage(value) {
     reasoning_effort: value.reasoning_effort, usage, error_category: value.error_category, provider_calls: providerCalls,
     ...(value.start_offset_ms !== undefined ? {start_offset_ms: value.start_offset_ms} : {}),
     ...(substeps ? {substeps} : {}), ...(coverage ? {coverage} : {}), ...(input_sizes ? {input_sizes} : {}),
-    ...(estimated_cost ? {estimated_cost} : {}), ...diagnostics};
+    ...(estimated_cost ? {estimated_cost} : {}), ...(stage_view ? {stage_view} : {}), ...diagnostics};
 }
 
 function validateUsage(value) {

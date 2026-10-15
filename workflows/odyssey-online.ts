@@ -138,7 +138,12 @@ function safeDetailStage(value, nested = false) {
   const coverage = value.coverage === undefined || value.coverage === null ? undefined : safeCoverage(value.coverage);
   const sizes = value.input_sizes === undefined || value.input_sizes === null ? undefined : safeInputSizes(value.input_sizes);
   if ((value.start_offset_ms != null && start === undefined) || (value.substeps !== undefined && spans === undefined) || (value.coverage != null && coverage === undefined)) return undefined;
-  const result = { name: value.name, outcome: value.outcome, duration_ms: duration, model, reasoning_effort: reasoning, error_category: error, ...(usage ? { usage } : {}), provider_calls: calls };
+  const view = value.stage_view;
+  const validView = !nested && view && typeof view === 'object' && !Array.isArray(view) &&
+    Object.keys(view).length === 3 && view.version === 1 &&
+    typeof view.label === 'string' && view.label.length > 0 && view.label.length <= 80 &&
+    typeof view.icon === 'string' && ['router','temporal','planner','tasks','core','git','index','pending','result'].includes(view.icon);
+  const result = { name: value.name, outcome: value.outcome, duration_ms: duration, model, reasoning_effort: reasoning, error_category: error, ...(usage ? { usage } : {}), provider_calls: calls, ...(validView ? { stage_view: {version: 1, label: view.label, icon: view.icon} } : {}) };
   if (start !== undefined) result.start_offset_ms = start;
   if (spans !== undefined) result.substeps = spans;
   if (coverage !== undefined) result.coverage = coverage;

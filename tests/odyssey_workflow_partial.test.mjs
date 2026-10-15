@@ -301,3 +301,41 @@ test("a prewrite Core coverage review failure requests semantic reformulation, n
   assert.deepEqual(result.clarification.options, []);
   assert.equal(validateProductResponse(result).kind, "clarification");
 });
+
+test("versioned stage views survive actual n8n filtering and browser validation", () => {
+  const newAppStage = {name: "events.classify_occurrence", outcome: "completed", duration_ms: 11,
+    model: null, reasoning_effort: null, error_category: null, provider_calls: [],
+    stage_view: {version: 1, label: "events · classify occurrence", icon: "result"}};
+  const result = execute({request_id: "synthetic-partial", status: "completed", product_outcome: "ANSWER",
+    affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-09"}]}],
+    operational: {total_duration_ms: 12, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 1, provider_calls: [],
+        stage_view: {version: 1, label: "Router", icon: "router"}},
+      newAppStage,
+    ]},
+    execution_flow: {version: 1, input: "Un hecho de prueba", parallel_preparation: false,
+      routes: [{capability: "events", text: "Un hecho de prueba", status: "completed", stage_count: 1,
+        temporal: [], steps: [{name: "events.classify_occurrence", input: "", output: ""}]}]},
+  });
+  assert.deepEqual(result.request_detail.operational.stages[1].stage_view,
+    newAppStage.stage_view);
+  assert.deepEqual(validateProductResponse(result).request_detail.operational.stages[1].stage_view,
+    newAppStage.stage_view);
+  assert.equal(result.request_detail.flow.routes[0].stage_count, 1);
+});
+
+test("invalid optional stage presentation is discarded, never clears stages or saved receipts", () => {
+  const result = execute({request_id: "synthetic-partial", status: "completed", product_outcome: "ANSWER",
+    affected_stable_note_ids: ["date:2026-10-09"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-09"}]}],
+    operational: {total_duration_ms: 12, stages: [
+      {name: "events.future", outcome: "completed", duration_ms: 12, provider_calls: [],
+        stage_view: {version: 1, label: "Z".repeat(1000), icon: "unknown"}},
+    ]},
+  });
+  assert.equal(result.request_detail.operational.stages.length, 1);
+  assert.equal(result.request_detail.operational.stages[0].stage_view, undefined);
+  assert.equal(validateProductResponse(result).status, "completed");
+  assert.deepEqual(result.request_detail.changes.affected_stable_note_ids, ["date:2026-10-09"]);
+});

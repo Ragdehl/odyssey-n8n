@@ -293,7 +293,11 @@ function stageCard(doc, stage, route = null, observedStep = null) {
     stage.name === "index_barrier" ? "index" :
     stage.name === "pending" ? "pending" :
     stage.name.startsWith("action.") ? "core" : "result";
-  card.append(headingWithIcon(doc, stageTitle(stage.name), icon));
+  const view = stage.stage_view?.version === 1
+    && typeof stage.stage_view.label === "string" && stage.stage_view.label.length <= 80
+    && Object.hasOwn(FLOW_ICONS, stage.stage_view.icon)
+    ? stage.stage_view : null;
+  card.append(headingWithIcon(doc, view?.label || stageTitle(stage.name), view?.icon || icon));
   if (observedStep) {
     card.append(ioPanel(doc, observedStep.input,
       observedStep.output.replace(/\{\{ref:\d+\}\}/gu, "↗ referencia")));

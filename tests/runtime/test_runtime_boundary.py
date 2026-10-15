@@ -117,6 +117,7 @@ def test_application_result_serialization_exposes_bounded_operational_evidence()
         "stages": [
             {
                 "name": "planner",
+                "stage_view": {"version": 1, "label": "Planner", "icon": "planner"},
                 "outcome": "completed",
                 "duration_ms": 4.0,
                 "model": "gpt-5.6-sol",

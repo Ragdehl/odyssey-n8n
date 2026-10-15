@@ -317,3 +317,18 @@ test("real v6 Router timing and prewrite Core review stay outside route-local gr
   invalid.operational.stages[2].name = "planner"; // prewrite stages cannot hide a changed route order
   assert.throws(() => validateRequestDetail(invalid, requestId), ProductRequestError);
 });
+
+test("unknown Apps render from the stage_view contract without a client name catalog", () => {
+  const futureStage = stage("events.classify_occurrence", 9, {
+    stage_view: {version: 1, label: "Events · análisis", icon: "tasks"},
+  });
+  const detail = validateRequestDetail({request_id: "events-1",
+    operational: {total_duration_ms: 9, stages: [futureStage]}}, "events-1");
+  const graph = renderExecutionFlow(doc, detail);
+  assert.match(graph.textContent, /Events · análisis/);
+  assert.doesNotMatch(graph.textContent, /events · classify occurrence/);
+  const oldDetail = validateRequestDetail({request_id: "events-2",
+    operational: {total_duration_ms: 9, stages: [stage("events.classify_occurrence", 9)]}},
+  "events-2");
+  assert.match(renderExecutionFlow(doc, oldDetail).textContent, /events · classify occurrence/);
+});
