@@ -84,13 +84,15 @@ class ContextFactory:
         )
 
 
-def _execute(tmp_path, factory):
+def _execute(tmp_path, factory, *, temporal_override=None, repository_hook=None):
     repo, context_index, semantic_index, embedder = fresh_corpus_vault(tmp_path)
     original_bea = repo.read_text("Bea.md")
+    if repository_hook is not None:
+        repository_hook(repo)
     result = execute_candidate_routed_message(
         SOURCE,
         router=Router(),
-        temporal=Temporal(),
+        temporal=temporal_override or Temporal(),
         core_planner_factory=factory,
         candidate_coverage_factory=_review_one_real_core_fact,
         repository=repo,

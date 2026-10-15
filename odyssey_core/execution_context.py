@@ -17,6 +17,7 @@ from typing import Protocol, runtime_checkable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .candidate_context import CoreCandidateContext
+from .canonical_source_context import CanonicalSourceNameHint
 from .domain_interpretation import DomainEvidence, DomainInterpretation
 from .identity_boundary import AuthenticatedActorContext
 from .temporal_resolution import TemporalResolution, TemporalResolutionKind
@@ -41,6 +42,7 @@ class ContextPort(StrEnum):
     PENDING = "pending"
     NOTE_MENTIONS = "note_mentions"
     MANAGED_NOTES = "managed_notes"
+    SOURCE_NOTE_HINTS = "source_note_hints"
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +208,7 @@ class ExecutionContext:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    source_note_hints: tuple[CanonicalSourceNameHint, ...] = ()
     managed_notes: tuple[ManagedNoteHandle, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
     pending: tuple[PendingContext, ...] = ()
@@ -262,6 +265,20 @@ class ExecutionContext:
             )
         ):
             raise ContextContractError("Note reference proposal is not source-grounded")
+        if (
+            not isinstance(self.source_note_hints, tuple)
+            or len(self.source_note_hints) > 16
+            or any(
+                not isinstance(hint, CanonicalSourceNameHint)
+                or not hint.mention
+                or hint.mention not in self.source
+                or not hint.name
+                or not hint.note_type
+                or len(hint.content_excerpt) > 320
+                for hint in self.source_note_hints
+            )
+        ):
+            raise ContextContractError("Canonical name hints are not source-grounded")
         if (
             not isinstance(self.managed_notes, tuple)
             or len(self.managed_notes) > 16
@@ -323,6 +340,7 @@ class StageSpec:
                 ContextPort.PENDING,
                 ContextPort.NOTE_MENTIONS,
                 ContextPort.MANAGED_NOTES,
+                ContextPort.SOURCE_NOTE_HINTS,
             }
         ):
             raise ContextContractError("Stage port declaration is invalid")
@@ -339,6 +357,7 @@ class StageInput:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    source_note_hints: tuple[CanonicalSourceNameHint, ...] = ()
     managed_notes: tuple[ManagedNoteHandle, ...] = ()
     temporal_references: tuple[DomainEvidence, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
@@ -351,6 +370,7 @@ class StageOutput:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    source_note_hints: tuple[CanonicalSourceNameHint, ...] = ()
     managed_notes: tuple[ManagedNoteHandle, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
     pending: tuple[PendingContext, ...] = ()
@@ -389,6 +409,8 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         missing.add(ContextPort.NOTE_MENTIONS)
     if ContextPort.MANAGED_NOTES in spec.requires and not context.managed_notes:
         missing.add(ContextPort.MANAGED_NOTES)
+    if ContextPort.SOURCE_NOTE_HINTS in spec.requires and not context.source_note_hints:
+        missing.add(ContextPort.SOURCE_NOTE_HINTS)
     if missing:
         raise ContextContractError(f"Missing required context ports: {sorted(missing)}")
     return StageInput(
@@ -399,6 +421,9 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         candidates=context.candidates if ContextPort.CANDIDATES in spec.requires else None,
         domains=context.domains if ContextPort.DOMAIN in spec.requires else (),
         note_mentions=(context.note_mentions if ContextPort.NOTE_MENTIONS in spec.requires else ()),
+        source_note_hints=(
+            context.source_note_hints if ContextPort.SOURCE_NOTE_HINTS in spec.requires else ()
+        ),
         managed_notes=(context.managed_notes if ContextPort.MANAGED_NOTES in spec.requires else ()),
         temporal_references=(verified_temporal if ContextPort.TEMPORAL in spec.requires else ()),
         qualitative_times=(
@@ -422,6 +447,8 @@ def apply_stage_output(
         claimed.add(ContextPort.TEMPORAL)
     if output.note_mentions:
         claimed.add(ContextPort.NOTE_MENTIONS)
+    if output.source_note_hints:
+        claimed.add(ContextPort.SOURCE_NOTE_HINTS)
     if output.managed_notes:
         claimed.add(ContextPort.MANAGED_NOTES)
     if output.pending:
@@ -435,6 +462,7 @@ def apply_stage_output(
         candidates=output.candidates or context.candidates,
         domains=context.domains + output.domains,
         note_mentions=context.note_mentions + output.note_mentions,
+        source_note_hints=context.source_note_hints + output.source_note_hints,
         managed_notes=context.managed_notes + output.managed_notes,
         qualitative_times=context.qualitative_times + output.qualitative_times,
         pending=context.pending + output.pending,

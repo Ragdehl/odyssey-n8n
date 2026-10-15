@@ -85,7 +85,6 @@ from odyssey_core.direct_note_mutations import (
     DirectNoteMutationService,
 )
 from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
-from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 from odyssey_core.fact_selection import OpenAILunaFactSelector
 from odyssey_core.git_history import GitHistoryRecorder
 from odyssey_core.identity_boundary import (
@@ -140,6 +139,7 @@ from odyssey_core.temporal_interpretation import (
 from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .candidate_route_dispatch import execute_candidate_routed_message
+from .context_planner_ports import OpenAILunaContextPlannerFactory
 from .delivery_results import LocalDeliveryResultStore
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
 from .hybrid_group_compiler import compile_hybrid_candidate_bundle
@@ -2658,12 +2658,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     max_output_tokens=1536,
                     scoped_date_time_context=True,
                 ),
-                core_planner_factory=lambda context, domain: OpenAILunaExperimentalPlanner(
-                    client,
-                    schema,
-                    {key: clock[key] for key in ("date", "time", "timezone")},
-                    candidate_context=context,
-                    domain_interpretation=domain,
+                core_planner_factory=OpenAILunaContextPlannerFactory(
+                    client=client,
+                    schema=schema,
+                    clock={key: clock[key] for key in ("date", "time", "timezone")},
                 ),
                 core_candidate_attributor=OpenAICoreCandidateAttributor(client),
                 repository=repository,

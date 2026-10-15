@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import os
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import replace
 from time import perf_counter
 
@@ -250,7 +252,9 @@ def execute_candidate_routed_message(
     *,
     router: object,
     temporal: object | None,
-    core_planner_factory: Callable[[CoreCandidateContext, object | None], object],
+    core_planner_factory: (
+        Callable[[CoreCandidateContext, object | None], object] | ContextAwareCorePlannerFactory
+    ),
     candidate_coverage_factory: Callable[[str, CoreCandidateContext, object], object] | None = None,
     core_candidate_attributor: object | None = None,
     known_fact_verifier: object | None = None,
@@ -678,88 +682,134 @@ def execute_candidate_routed_message(
             raise TemporalInterpreterError(
                 "Inherited temporal scope has no verified earlier Temporal result"
             )
-        interpretation = None
-        domain = None
-        composed_shared_clock = False
-        temporal_stage: OperationalStage | None = None
-        if scoped.route.capability_id == "temporal":
-            if temporal is None or not callable(getattr(temporal, "interpret", None)):
-                raise ValueError("Temporal resolution is unavailable for dated route")
-            report_progress("temporal.started")
-            temporal_started = perf_counter()
-            try:
-                if inherited:
-                    interpretation = temporal.interpret(unit_source, inherited_temporal=inherited)
-                else:
-                    interpretation = temporal.interpret(unit_source)
-            except Exception as error:
+        # E2: the exact-name lookup is independent of Temporal. Start one
+        # read-only canonical vault scan while Temporal may call its provider.
+        # An inherited Core proof is still resolved only after its predecessor
+        # has persisted; no future route is prefetched across write barriers.
+        # An optional lookup budget overflow must NOT block the normal Planner.
+        from odyssey_core.canonical_source_context import source_note_role_spans
+        from odyssey_core.execution_context import PendingContext, run_context_stage
+        from odyssey_core.note_lookup_batch import (
+            MAX_MENTION_LOOKUPS,
+            NoteLookupRequest,
+            ParallelExactNoteLookup,
+        )
+
+        context_timezone = getattr(temporal, "timezone", None) or os.environ.get("TZ", "UTC")
+        prepared_note_context = None
+        note_lookup_budget_exceeded = False
+        lookup_stage = None
+        if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+            spans = source_note_role_spans(scoped.context)
+            if len(spans) > MAX_MENTION_LOOKUPS:
+                note_lookup_budget_exceeded = True
+            elif spans:
+                lookup_stage = ParallelExactNoteLookup(
+                    requests=tuple(
+                        NoteLookupRequest(span.text, span.start, span.end) for span in spans
+                    ),
+                    repository=repository,
+                    schema=schema,
+                )
+        with (
+            ThreadPoolExecutor(max_workers=1) if lookup_stage is not None else nullcontext() as pool
+        ):
+            lookup_future = None
+            if lookup_stage is not None:
+                initial = ExecutionContext(
+                    request_id=locator,
+                    source=unit_source,
+                    captured_at=now,
+                    timezone=context_timezone,
+                    authenticated_actor=routed_authenticated_actor,
+                )
+                lookup_future = pool.submit(run_context_stage, initial, lookup_stage)
+            interpretation = None
+            domain = None
+            composed_shared_clock = False
+            temporal_stage: OperationalStage | None = None
+            if scoped.route.capability_id == "temporal":
+                if temporal is None or not callable(getattr(temporal, "interpret", None)):
+                    raise ValueError("Temporal resolution is unavailable for dated route")
+                report_progress("temporal.started")
+                temporal_started = perf_counter()
+                try:
+                    if inherited:
+                        interpretation = temporal.interpret(
+                            unit_source, inherited_temporal=inherited
+                        )
+                    else:
+                        interpretation = temporal.interpret(unit_source)
+                except Exception as error:
+                    temporal_stage = OperationalStage(
+                        "candidate.temporal_interpretation",
+                        OperationalOutcome.FAILED,
+                        max(0.0, (perf_counter() - temporal_started) * 1000),
+                        model=getattr(temporal, "model", None),
+                        reasoning_effort=getattr(temporal, "reasoning_effort", None),
+                        usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
+                        error_category=type(error).__name__[:100],
+                    )
+                    return ApplicationResult(
+                        locator,
+                        ApplicationStatus.FAILED,
+                        (),
+                        (),
+                        planning_error="TEMPORAL_INTERPRETATION_REQUIRED",
+                        operational=OperationalEvidence(
+                            total_duration_ms=temporal_stage.duration_ms,
+                            stages=(temporal_stage,),
+                        ),
+                    )
+                report_progress("temporal.ready")
                 temporal_stage = OperationalStage(
                     "candidate.temporal_interpretation",
-                    OperationalOutcome.FAILED,
+                    OperationalOutcome.COMPLETED,
                     max(0.0, (perf_counter() - temporal_started) * 1000),
                     model=getattr(temporal, "model", None),
                     reasoning_effort=getattr(temporal, "reasoning_effort", None),
                     usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
-                    error_category=type(error).__name__[:100],
                 )
-                return ApplicationResult(
-                    locator,
-                    ApplicationStatus.FAILED,
-                    (),
-                    (),
-                    planning_error="TEMPORAL_INTERPRETATION_REQUIRED",
-                    operational=OperationalEvidence(
-                        total_duration_ms=temporal_stage.duration_ms,
-                        stages=(temporal_stage,),
-                    ),
-                )
-            report_progress("temporal.ready")
-            temporal_stage = OperationalStage(
-                "candidate.temporal_interpretation",
-                OperationalOutcome.COMPLETED,
-                max(0.0, (perf_counter() - temporal_started) * 1000),
-                model=getattr(temporal, "model", None),
-                reasoning_effort=getattr(temporal, "reasoning_effort", None),
-                usage=normalize_provider_usage(getattr(temporal, "last_usage", None)),
-            )
-            if interpretation.source_text != unit_source:
-                raise ValueError("Temporal must interpret only its routed source")
-            from odyssey_core.temporal_interpretation import TemporalInterpreterError
-
-            try:
-                domain = interpretation.core_domain_interpretation()
-            except TemporalInterpreterError:
-                if bundle_compiler is None or len(scoped.context.candidates) < 2:
-                    raise
-                from odyssey_core.temporal_group_composition import compose_shared_clock_group
+                if interpretation.source_text != unit_source:
+                    raise ValueError("Temporal must interpret only its routed source")
+                from odyssey_core.temporal_interpretation import TemporalInterpreterError
 
                 try:
-                    domain = compose_shared_clock_group(
-                        interpretation,
-                        scoped.context,
-                        timezone=getattr(temporal, "timezone", None),
-                    )
-                    composed_shared_clock = True
+                    domain = interpretation.core_domain_interpretation()
                 except TemporalInterpreterError:
-                    # Keep genuinely approximate source wording literal;
-                    # only exact independently validated dates/clocks may
-                    # be used as calendar targets or time coordinates.
-                    from odyssey_core.temporal_approximation_handoff import (
-                        compose_safe_approximate_group,
-                    )
+                    if bundle_compiler is None or len(scoped.context.candidates) < 2:
+                        raise
+                    from odyssey_core.temporal_group_composition import compose_shared_clock_group
 
-                    domain = compose_safe_approximate_group(interpretation, scoped.context)
-            if not composed_shared_clock:
-                temporal_handoff.remember(
-                    interpretation,
-                    route_index=ordinal,
-                    start=scoped.original_start,
-                    end=scoped.original_end,
-                    verified_domain=domain,
-                )
-            # Two different instants sourced from one shared clock cannot be
-            # cached as one unique cross-group clock handoff. The group owns
-            # the two independently dated values; later groups fail closed.
+                    try:
+                        domain = compose_shared_clock_group(
+                            interpretation,
+                            scoped.context,
+                            timezone=getattr(temporal, "timezone", None),
+                        )
+                        composed_shared_clock = True
+                    except TemporalInterpreterError:
+                        # Keep genuinely approximate source wording literal;
+                        # only exact independently validated dates/clocks may
+                        # be used as calendar targets or time coordinates.
+                        from odyssey_core.temporal_approximation_handoff import (
+                            compose_safe_approximate_group,
+                        )
+
+                        domain = compose_safe_approximate_group(interpretation, scoped.context)
+                if not composed_shared_clock:
+                    temporal_handoff.remember(
+                        interpretation,
+                        route_index=ordinal,
+                        start=scoped.original_start,
+                        end=scoped.original_end,
+                        verified_domain=domain,
+                    )
+                # Two different instants sourced from one shared clock cannot be
+                # cached as one unique cross-group clock handoff. The group owns
+                # the two independently dated values; later groups fail closed.
+            if lookup_future is not None:
+                prepared_note_context = lookup_future.result()
         domain = with_scoped_inherited_temporal(domain, source=unit_source, inherited=inherited)
         guard = None
         if dependent_handoff is not None:
@@ -852,7 +902,6 @@ def execute_candidate_routed_message(
         # and scoped evidence have already been independently verified.
         from odyssey_core.temporal_qualifier_handoff import source_bound_qualitative_times
 
-        context_timezone = getattr(temporal, "timezone", None) or os.environ.get("TZ", "UTC")
         execution_context = ExecutionContext(
             request_id=locator,
             source=unit_source,
@@ -861,6 +910,21 @@ def execute_candidate_routed_message(
             authenticated_actor=routed_authenticated_actor,
             candidates=route_context,
             domains=(domain,) if domain is not None else (),
+            note_mentions=(
+                prepared_note_context.note_mentions if prepared_note_context is not None else ()
+            ),
+            source_note_hints=(
+                prepared_note_context.source_note_hints if prepared_note_context is not None else ()
+            ),
+            pending=(
+                prepared_note_context.pending
+                if prepared_note_context is not None
+                else (
+                    (PendingContext("core.note_lookup_exact", "LOOKUP_BUDGET_EXCEEDED"),)
+                    if note_lookup_budget_exceeded
+                    else ()
+                )
+            ),
             qualitative_times=source_bound_qualitative_times(
                 interpretation, route_context, domain, timezone=context_timezone
             ),
@@ -879,24 +943,6 @@ def execute_candidate_routed_message(
             else None
         )
         if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
-            # The new structural port enables actual E2 enrichment; legacy
-            # factories do not perform a second, redundant vault lookup.
-            # These are untrusted exact-name candidates, NEVER Core identity
-            # decisions. The canonical Planner/Writer contracts stay intact.
-            from odyssey_core.execution_context import run_context_stage
-            from odyssey_core.note_lookup_batch import (
-                ParallelExactNoteLookup,
-                note_lookup_requests_from_source_roles,
-            )
-
-            requests = note_lookup_requests_from_source_roles(route_context)
-            if requests:
-                execution_context = run_context_stage(
-                    execution_context,
-                    ParallelExactNoteLookup(
-                        requests=requests, repository=repository, schema=schema
-                    ),
-                )
             planner = core_planner_factory.create_for_context(execution_context)
         else:
             planner = core_planner_factory(route_context, domain)
@@ -905,7 +951,18 @@ def execute_candidate_routed_message(
             from odyssey_core.experimental_luna_planning import OpenAILunaExperimentalPlanner
 
             if isinstance(planner, OpenAILunaExperimentalPlanner):
-                names = matching_canonical_source_names(route_context, repository, schema)
+                if isinstance(core_planner_factory, ContextAwareCorePlannerFactory):
+                    # Normal E2 path: this evidence was gathered during the
+                    # same canonical Note batch, concurrently with Temporal.
+                    # On budget overflow, retain the historic bounded hint
+                    # lookup rather than silently changing planner prompts.
+                    names = (
+                        matching_canonical_source_names(route_context, repository, schema)
+                        if note_lookup_budget_exceeded
+                        else execution_context.source_note_hints
+                    )
+                else:
+                    names = matching_canonical_source_names(route_context, repository, schema)
                 if names:
                     planner.bind_verified_source_note_names(names)
         if not callable(getattr(planner, "plan", None)):

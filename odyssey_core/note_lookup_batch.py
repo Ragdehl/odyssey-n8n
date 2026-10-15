@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .candidate_context import CoreCandidateContext
-from .canonical_source_context import source_note_role_spans
+from .canonical_source_context import CanonicalSourceNameHint, source_note_role_spans
 from .execution_context import (
     ContextContractError,
     ContextPort,
@@ -89,7 +89,7 @@ class ParallelExactNoteLookup:
     spec = StageSpec(
         "core.note_lookup_exact",
         frozenset({ContextPort.SOURCE}),
-        frozenset({ContextPort.NOTE_MENTIONS, ContextPort.PENDING}),
+        frozenset({ContextPort.NOTE_MENTIONS, ContextPort.SOURCE_NOTE_HINTS, ContextPort.PENDING}),
     )
 
     def __init__(
@@ -184,6 +184,11 @@ class ParallelExactNoteLookup:
                 )
             return mention, None
 
+        # Reuse Core canonical evidence to prepare the SAME exact-name prompt
+        # hints that Luna previously assembled in a SECOND full-vault scan.
+        # Aliases and ambiguous matches never become unique source-name hints.
+        hints_by_name: dict[str, CanonicalSourceNameHint] = {}
+
         # Ordinary Core lookup needs only ONE vault scan, not one scan per
         # mention. The real batch has the same canonical exact/alias rules.
         # Optional custom lookups retain a concurrent test/adaptor port; the
@@ -210,7 +215,22 @@ class ParallelExactNoteLookup:
             def from_scan(request: NoteLookupRequest):
                 if request.note_type is not None and request.note_type not in referenceable:
                     return find(request)  # returns pending with no vault read
-                return find(request, next(iterator))
+                outcome = next(iterator)
+                if (
+                    len(outcome.candidates) == 1
+                    and outcome.candidates[0].primary_name.casefold() == request.text.casefold()
+                ):
+                    candidate = outcome.candidates[0]
+                    hints_by_name.setdefault(
+                        request.text.casefold(),
+                        CanonicalSourceNameHint(
+                            request.text,
+                            candidate.primary_name,
+                            candidate.type,
+                            candidate.content_excerpt,
+                        ),
+                    )
+                return find(request, outcome)
 
             results = tuple(from_scan(request) for request in self._requests)
         else:
@@ -222,5 +242,6 @@ class ParallelExactNoteLookup:
                 results = tuple(pool.map(find, self._requests))
         return StageOutput(
             note_mentions=tuple(item for item, _ in results),
+            source_note_hints=tuple(hints_by_name.values())[:16],
             pending=tuple(reason for _, reason in results if reason is not None),
         )

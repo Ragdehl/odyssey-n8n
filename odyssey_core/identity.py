@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
@@ -51,6 +51,9 @@ class ExactEntityCandidate:
     primary_name: str
     match_kind: MatchKind
     matched_value: str
+    # Core-only prompt hint: excluded from identity comparisons and repr so
+    # normal exact resolution and public identifiers have unchanged semantics.
+    content_excerpt: str = field(default="", compare=False, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +218,7 @@ def find_exact_entity_candidates_batch(
                     primary_name=primary_name,
                     match_kind=kind,
                     matched_value=value,
+                    content_excerpt=note.content.strip()[:320],
                 )
             )
     return tuple(
