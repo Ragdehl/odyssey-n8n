@@ -45,8 +45,9 @@ def project_execution_ledger(
             "error_category": stage.error_category,
             "provider_call_count": len(stage.provider_calls),
             "stage_view": stage_view_for(stage.name).to_response(),
-            # No invented route assignment for a stage with no explicit route ID.
-            "route_index": None,
+            # The real route-result aggregator supplies this exact owner. A
+            # standalone Core stage or Router boundary keeps None.
+            "route_index": stage.route_index,
         }
         for stage in result.operational.stages[:_MAX]
     )

@@ -107,3 +107,44 @@ def test_ambiguous_qualitative_context_does_not_write_activity_or_advance_revisi
         )
         == 1
     )
+
+
+def test_task_selected_session_uses_same_verified_activity_context_and_date(tmp_path):
+    from odyssey_apps.tasks.work_sessions import WorkSessionError
+
+    repo, service = _build(tmp_path)
+    revision, source_hash = _task_tokens(repo)
+    started = service.start(
+        task_id="task-odyssey",
+        started_at="2026-10-16T09:00:00+02:00",
+        expected_task_revision=revision,
+        expected_task_source_hash=source_hash,
+        request_id="start-scoped-activity",
+        actor="test",
+        now="2026-10-16T09:00:00+02:00",
+    )
+    written = service.add_activity_for_task(
+        task_id="task-odyssey",
+        text="Trabajé en Odyssey.",
+        session_date="2026-10-16",
+        qualitative_context=verified_context(),
+        request_id="activity-scoped",
+        actor="test",
+        now="2026-10-16T18:00:00+02:00",
+    )
+    assert written.session.id == started.session.id
+    assert written.session.activity[0].text == "Trabajé en Odyssey (por la tarde)."
+    before = repo.read_text(written.path)
+    with pytest.raises(
+        WorkSessionError, match="WORK_SESSION_UNAVAILABLE|WORK_SESSION_TEMPORAL_INVALID"
+    ):
+        service.add_activity_for_task(
+            task_id="task-odyssey",
+            text="Trabajé en Odyssey.",
+            session_date="2026-10-15",
+            qualitative_context=verified_context(),
+            request_id="activity-wrong-date",
+            actor="test",
+            now="2026-10-16T18:02:00+02:00",
+        )
+    assert repo.read_text(written.path) == before

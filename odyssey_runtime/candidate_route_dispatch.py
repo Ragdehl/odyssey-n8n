@@ -340,7 +340,15 @@ def execute_candidate_routed_message(
         if not isinstance(core_candidate_attributor, OpenAICoreCandidateAttributor):
             raise ValueError("Use the existing Core fact graph reviewer")
 
-        def coverage(text, context, plan, *, canonical_binding=None, verified_temporal=None):
+        def coverage(
+            text,
+            context,
+            plan,
+            *,
+            canonical_binding=None,
+            verified_temporal=None,
+            qualitative_context=None,
+        ):
             return review_model_candidate_fact_coverage(
                 text,
                 context,
@@ -348,6 +356,7 @@ def execute_candidate_routed_message(
                 core_candidate_attributor,
                 canonical_binding=canonical_binding,
                 verified_temporal=verified_temporal,
+                qualitative_context=qualitative_context,
             )
     else:
         coverage = candidate_coverage_factory
@@ -996,12 +1005,57 @@ def execute_candidate_routed_message(
                             preserve_qualitative_day_facts,
                         )
 
-                        result = preserve_qualitative_day_facts(result, context=execution_context)
+                        # Different verified dates have unique Day owners. Same-day
+                        # multi-facts require the EXISTING Core attributor first;
+                        # it prepares a final plan+manifest in its single call.
+                        dates = [q.date for q in execution_context.qualitative_times]
+                        if len(dates) == len(set(dates)):
+                            result = preserve_qualitative_day_facts(
+                                result, context=execution_context
+                            )
                     captured["plan"] = result
                 return result
 
             def __getattr__(self, name):
                 return getattr(planner, name)
+
+        from odyssey_core.candidate_coverage import PreparedCoreCandidateCoverage
+
+        def reviewed_coverage(text, candidate_ctx, core_plan):
+            """Use the existing Core review once; record the FINAL validated plan.
+
+            The Core prewrite path will validate its reviewed manifest against
+            the exact enriched plan before any physical mutation. This callback
+            only observes that plan for the existing Markdown readback.
+            """
+            if core_candidate_attributor is not None:
+                reviewed = coverage(
+                    text,
+                    candidate_ctx,
+                    core_plan,
+                    canonical_binding=guard,
+                    verified_temporal=(
+                        domain
+                        if route_context.hybrid_interpretation_mode
+                        and domain is not None
+                        and domain.capability_id == "temporal"
+                        and domain.intent == "TEMPORAL_RESOLUTION"
+                        else None
+                    ),
+                    qualitative_context=(
+                        execution_context
+                        if len({q.date for q in execution_context.qualitative_times})
+                        != len(execution_context.qualitative_times)
+                        else None
+                    ),
+                )
+            elif guard is not None:
+                reviewed = coverage(text, candidate_ctx, core_plan, canonical_binding=guard)
+            else:
+                reviewed = coverage(text, candidate_ctx, core_plan)
+            if isinstance(reviewed, PreparedCoreCandidateCoverage):
+                captured["plan"] = reviewed.plan
+            return reviewed
 
         result = execute_request(
             unit_source,
@@ -1017,32 +1071,7 @@ def execute_candidate_routed_message(
             context_limit=context_limit,
             request_id_factory=lambda: locator,
             candidate_context=route_context,
-            candidate_coverage_factory=(
-                (
-                    lambda text, ctx, plan: coverage(
-                        text,
-                        ctx,
-                        plan,
-                        canonical_binding=guard,
-                        verified_temporal=(
-                            domain
-                            if (
-                                route_context.hybrid_interpretation_mode
-                                and domain is not None
-                                and domain.capability_id == "temporal"
-                                and domain.intent == "TEMPORAL_RESOLUTION"
-                            )
-                            else None
-                        ),
-                    )
-                )
-                if core_candidate_attributor is not None
-                else (
-                    (lambda text, ctx, plan: coverage(text, ctx, plan, canonical_binding=guard))
-                    if guard is not None
-                    else coverage
-                )
-            ),
+            candidate_coverage_factory=reviewed_coverage,
             candidate_pending_recorder=candidate_pending_recorder,
             history_recorder=history_recorder,
             progress_callback=progress_callback,

@@ -340,7 +340,8 @@ export function validateExecutionLedger(value, requestId, changes) {
         (st.start_offset_ms === null || validMs(st.start_offset_ms)) &&
         (st.error_category === null || typeof st.error_category === "string" && st.error_category.length <= 120) &&
         Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
-        st.route_index === null) ||
+        (st.route_index === null || Number.isSafeInteger(st.route_index) &&
+          st.route_index >= 0 && st.route_index < value.routes.length)) ||
       !value.routes.every((rt,i) => rt && rt.route_index === i && typeof rt.capability === "string" &&
         rt.capability.length <= 40 && typeof rt.status === "string" && rt.status.length <= 40 &&
         (rt.depends_on === null || Number.isSafeInteger(rt.depends_on) && rt.depends_on >= 0 && rt.depends_on < i)) ||
@@ -358,7 +359,7 @@ export function validateExecutionLedger(value, requestId, changes) {
     stages: value.stages.map(st => ({name: st.name, outcome: st.outcome,
       duration_ms: st.duration_ms, start_offset_ms: st.start_offset_ms,
       error_category: st.error_category, provider_call_count: st.provider_call_count,
-      route_index: null})),
+      route_index: st.route_index})),
     routes: value.routes.map(rt => ({route_index: rt.route_index,
       capability: rt.capability, status: rt.status, depends_on: rt.depends_on})),
     write_receipts: value.write_receipts.map(item => ({action_index: item.action_index,

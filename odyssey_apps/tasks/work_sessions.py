@@ -517,6 +517,7 @@ class TaskWorkSessionService:
         request_id: str,
         actor: ActorInput,
         now: str,
+        qualitative_context: ExecutionContext | None = None,
     ) -> WorkSessionMutationResult:
         """Append activity to one safely selected active or date-scoped Work Session."""
         if task_id is not None:
@@ -544,9 +545,22 @@ class TaskWorkSessionService:
         if len(sessions) != 1:
             raise WorkSessionError("WORK_SESSION_AMBIGUOUS")
         current = sessions[0]
+        if qualitative_context is not None and qualitative_context.qualitative_times:
+            # A date-scoped activity must not copy an unrelated daypart onto
+            # a session of another day. For an active explicitly selected
+            # session, the same source-bound date check still applies.
+            if (
+                len(qualitative_context.qualitative_times) != 1
+                or self._validate_datetime(current.started_at, "WORK_SESSION_TIME_INVALID")
+                .date()
+                .isoformat()
+                != qualitative_context.qualitative_times[0].date
+            ):
+                raise WorkSessionError("WORK_SESSION_TEMPORAL_INVALID")
         return self.add_activity(
             session_id=current.id,
             text=text,
+            qualitative_context=qualitative_context,
             expected_revision=current.revision,
             expected_source_hash=current.source_hash,
             request_id=request_id,

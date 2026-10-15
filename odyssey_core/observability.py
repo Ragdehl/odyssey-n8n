@@ -161,6 +161,9 @@ class OperationalStage:
     provider_calls: tuple[ProviderCallEvidence, ...] = ()
     start_offset_ms: float | None = None
     substeps: tuple[OperationalSpan, ...] = ()
+    # Set ONLY at the actual route-result aggregation boundary, not inferred
+    # from stage names, elapsed intervals or current frontend diagram order.
+    route_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

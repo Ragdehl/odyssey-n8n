@@ -3319,7 +3319,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         ),
                     ),
                 ),
-                (mutation.task_id,),
+                # The physical write touched the Work Session Note, NOT its
+                # parent Task. Keep this canonical affected ID aligned with
+                # the already returned UnitResult receipt and actual Markdown.
+                (mutation.session.id,),
                 history=mutation.history,
                 operational=OperationalEvidence(total_duration, tuple(stages)),
                 execution_flow=_task_flow(task),

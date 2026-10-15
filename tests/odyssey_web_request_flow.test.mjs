@@ -342,7 +342,7 @@ test("validated E2 joined execution ledger is rendered without changing the exis
       {sequence: 2, stage: "core.notes.ready", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:02+02:00"},
     ],
     stages: [{name: "planner", outcome: "failed", duration_ms: 11,
-      start_offset_ms: null, error_category: "ProviderError", provider_call_count: 1, route_index: null}],
+      start_offset_ms: null, error_category: "ProviderError", provider_call_count: 1, route_index: 0}],
     routes: [{route_index: 0, capability: "tasks", status: "partial", depends_on: null}],
     write_receipts: [{action_index: 0, unit_index: 0, stable_note_id: "date:2026-10-09",
       operation: "UPDATED", status: "succeeded"}],

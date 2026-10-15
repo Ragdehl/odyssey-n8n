@@ -68,6 +68,76 @@ class CoreCandidateCoverageManifest:
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedCoreCandidateCoverage:
+    """Core-reviewed prewrite fact-text enrichment plus its FINAL coverage manifest.
+
+    A reviewer may return this only when it has tied original source candidates
+    to exact original fact ordinals. Core revalidates the final plan and every
+    candidate before the first mutation. This is NOT an executable proposal.
+    """
+
+    plan: RequestPlan
+    manifest: CoreCandidateCoverageManifest
+    original_plan_digest: str
+
+
+def validate_prewrite_fact_text_enrichment(
+    original: RequestPlan,
+    amended: RequestPlan,
+    source_context: CoreCandidateContext | None = None,
+) -> None:
+    """Disallow all semantic plan/target/reference/property changes by a reviewer.
+
+    The only allowed difference is the literal of existing fact(s) at their
+    exact old ordinal; count, destination, references and temporal anchors stay.
+    """
+    if not isinstance(original, RequestPlan) or not isinstance(amended, RequestPlan):
+        raise ValueError("Core prewrite enrichment needs typed request plans")
+    # The reviewer cannot supply arbitrary newly written sentences. Only an
+    # exact source-anchored qualitative span is allowed to be appended, and
+    # the separately verified Temporal evidence must include that quotation.
+    from .qualitative_fact_preservation import _qualified_day_fact
+
+    permitted: set[str] = set()
+    if source_context is not None and source_context.verified_route_temporal is not None:
+        for role in (
+            role
+            for candidate in source_context.candidates
+            for role in candidate.roles
+            if role.role == "time_approx"
+        ):
+            if any(
+                role.span.text in item.source_text
+                for item in source_context.verified_route_temporal.temporal_references()
+            ):
+                permitted.add(role.span.text)
+    if (
+        len(original.actions) != len(amended.actions)
+        or original.limitations != amended.limitations
+        or original.presentation_intent != amended.presentation_intent
+    ):
+        raise ValueError("Core reviewer changed plan topology")
+    for before, after in zip(original.actions, amended.actions, strict=True):
+        if isinstance(before, WriteAction) and isinstance(after, WriteAction):
+            if len(before.units) != len(after.units):
+                raise ValueError("Core reviewer changed write-unit cardinality")
+            for original_unit, updated_unit in zip(before.units, after.units, strict=True):
+                if (
+                    len(original_unit.facts) != len(updated_unit.facts)
+                    or replace(updated_unit, facts=original_unit.facts) != original_unit
+                ):
+                    raise ValueError("Core reviewer changed non-fact mutation authority")
+                for old_fact, new_fact in zip(original_unit.facts, updated_unit.facts, strict=True):
+                    if old_fact != new_fact and not any(
+                        _qualified_day_fact(old_fact, qualifier) == new_fact
+                        for qualifier in permitted
+                    ):
+                        raise ValueError("Core reviewer injected a non-source fact change")
+        elif before != after:
+            raise ValueError("Core reviewer changed non-write plan action")
+
+
+@dataclass(frozen=True, slots=True)
 class CoreCandidateCoverageItem:
     """State structural mapping and independently observed persistence only."""
 

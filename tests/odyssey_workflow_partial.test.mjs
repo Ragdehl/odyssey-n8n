@@ -350,7 +350,7 @@ const ledgerFixture = {
   ],
   stages: [
     {name: "planner", outcome: "failed", duration_ms: 10, start_offset_ms: null,
-      error_category: "ProviderError", provider_call_count: 1, route_index: null},
+      error_category: "ProviderError", provider_call_count: 1, route_index: 1},
   ],
   routes: [
     {route_index: 0, capability: "temporal", status: "completed", depends_on: null},

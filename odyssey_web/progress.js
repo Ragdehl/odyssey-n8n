@@ -557,6 +557,10 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
       section.append(element(doc, "p", "flow-ledger-event",
         `${event.sequence} · ${stageTitle(event.stage)} · ${event.outcome}`));
     }
+    for (const stage of ledger.stages) {
+      if (stage.outcome === "failed") section.append(element(doc, "p", "flow-ledger-stage-error",
+        `${stage.route_index === null ? "Etapa general" : `Ruta ${stage.route_index + 1}`} · ${stage.name} · ${stage.error_category || "Error sin categoría"}`));
+    }
     for (const receipt of ledger.write_receipts) {
       section.append(element(doc, "p", "flow-ledger-receipt",
         `Recibo · ${receipt.operation} · ${receipt.stable_note_id}`));

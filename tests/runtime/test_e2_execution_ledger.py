@@ -181,3 +181,29 @@ def test_future_app_checkpoint_uses_same_safe_names_without_new_allowlist(tmp_pa
         store.record(
             "future-1", "private user name.started", CheckpointOutcome.MILESTONE_OBSERVED, NOW
         )
+
+
+def test_route_aggregate_attaches_actual_owner_to_each_stage_without_guessing():
+    from odyssey_runtime.routing import _aggregate, _prepend_router_stage
+
+    a = replace(
+        partial_result(),
+        request_id="route-1",
+        operational=OperationalEvidence(
+            stages=(OperationalStage("temporal.interpretation", OperationalOutcome.COMPLETED, 13),)
+        ),
+    )
+    b = replace(
+        partial_result(),
+        request_id="route-2",
+        operational=OperationalEvidence(
+            stages=(OperationalStage("planner", OperationalOutcome.FAILED, 18),)
+        ),
+    )
+    aggregate = _aggregate("one-delivery", (a, b))
+    router = _prepend_router_stage(
+        aggregate, OperationalStage("application.router", OperationalOutcome.COMPLETED, 11)
+    )
+    assert [st.route_index for st in router.operational.stages] == [None, 0, 1]
+    summary = project_execution_ledger(router)
+    assert [st["route_index"] for st in summary["stages"]] == [None, 0, 1]

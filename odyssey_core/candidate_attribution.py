@@ -1013,6 +1013,7 @@ def review_model_candidate_fact_coverage(
     *,
     canonical_binding: object | None = None,
     verified_temporal: object | None = None,
+    qualitative_context: object | None = None,
 ):
     """Pass an independent model proposal through existing Core prewrite authority.
 
@@ -1076,6 +1077,32 @@ def review_model_candidate_fact_coverage(
         for link in graph.links
         if link.speaker_source_quote is not None
     )
+    reviewed_plan = plan
+    if qualitative_context is not None:
+        from .candidate_coverage import PreparedCoreCandidateCoverage
+        from .execution_context import ExecutionContext
+        from .fact_temporal_ownership import proposed_fact_temporal_ownership
+        from .qualitative_fact_preservation import preserve_qualitative_day_facts
+
+        if not isinstance(qualitative_context, ExecutionContext):
+            raise CandidateAttributionError("Core qualitative context is invalid")
+        if qualitative_context.qualitative_times:
+            owners = proposed_fact_temporal_ownership(qualitative_context, context, plan, graph)
+            reviewed_plan = preserve_qualitative_day_facts(
+                plan, context=qualitative_context, reviewed_ownership=owners
+            )
+        if reviewed_plan != plan:
+            manifest = build_candidate_coverage_manifest(
+                source,
+                context,
+                reviewed_plan,
+                claims,
+                canonical_binding=canonical_binding,
+                speaker_evidence=speaker_evidence,
+            )
+            return PreparedCoreCandidateCoverage(
+                reviewed_plan, manifest, hashlib.sha256(repr(plan).encode()).hexdigest()
+            )
     return build_candidate_coverage_manifest(
         source,
         context,

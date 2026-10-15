@@ -835,7 +835,11 @@ def _aggregate(outer_request_id: str, subresults: Sequence[ApplicationResult]) -
         pending_work=_aggregate_pending(subresults),
         history=_aggregate_history(subresults),
         operational=OperationalEvidence(
-            stages=tuple(stage for result in subresults for stage in result.operational.stages)
+            stages=tuple(
+                replace(stage, route_index=route_ordinal)
+                for route_ordinal, result in enumerate(subresults)
+                for stage in result.operational.stages
+            )
         ),
     )
 

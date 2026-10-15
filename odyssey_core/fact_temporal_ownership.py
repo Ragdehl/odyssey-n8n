@@ -8,13 +8,14 @@ infer a fact owner from its list position or date alone.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from hashlib import sha256
 
 from .candidate_context import CoreCandidateContext
 from .candidate_coverage import CoreCandidateCoverageManifest, validate_candidate_coverage_manifest
 from .execution_context import ContextContractError, ExecutionContext
-from .request_planning import RequestPlan, plan_fact_ordinals
+from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,3 +79,139 @@ def reviewed_fact_temporal_ownership(
     if len({edge.fact_ordinal for edge in result}) != len(result):
         raise ContextContractError("Two source qualifiers claim the same fact")
     return tuple(result)
+
+
+_DISTINCTIVE_SOURCE_ROLES = frozenset(
+    {"predicate", "participants", "object", "location", "transaction"}
+)
+
+
+def _source_role_fits_original_fact(
+    plan: RequestPlan,
+    source_context: CoreCandidateContext,
+    candidate_index: int,
+    fact_ordinal: int,
+) -> bool:
+    """Reject a swapped graph BEFORE appending daypart evidence to its fact.
+
+    Candidate graph semantic claims aren't proof: require an independently
+    quoted, discriminating lexical predicate/participant/object/location role
+    in the ORIGINAL fact, before the qualifier could conceal an error. The
+    candidate-role text must not fit any sibling fact either. This is a safe
+    lower bound, not a multilingual semantic equivalence algorithm.
+    """
+    rendered: dict[int, str] = {}
+    index = 0
+    for action in plan.actions:
+        if not isinstance(action, WriteAction):
+            continue
+        for unit in action.units:
+            for fact in unit.facts:
+                value = fact
+                for ref_index, ref in enumerate(unit.references):
+                    value = value.replace(f"{{{{ref:{ref_index}}}}}", ref.mention)
+                rendered[index] = value.casefold()
+                index += 1
+    if fact_ordinal not in rendered:
+        return False
+    candidates = source_context.candidates
+    own = candidates[candidate_index]
+    siblings = {
+        role.span.text.casefold()
+        for other_index, other in enumerate(candidates)
+        if other_index != candidate_index
+        for role in other.roles
+        if role.role in _DISTINCTIVE_SOURCE_ROLES
+    }
+    evidence = [
+        role.span.text.casefold()
+        for role in own.roles
+        if role.role in _DISTINCTIVE_SOURCE_ROLES and role.span.text.casefold() not in siblings
+    ]
+    if not evidence:
+        return False
+
+    def exact_piece(piece: str, text: str) -> bool:
+        return re.search(r"(?<!\w)" + re.escape(piece) + r"(?!\w)", text) is not None
+
+    # Require at least one original distinctive semantic role in exactly ONE
+    # of the facts. Any repeated signal or missing signal leaves ownership
+    # ambiguous. This intentionally refuses paraphrases rather than guessing.
+    return any(
+        exact_piece(piece, rendered[fact_ordinal])
+        and all(not exact_piece(piece, other) for i, other in rendered.items() if i != fact_ordinal)
+        for piece in evidence
+    )
+
+
+def proposed_fact_temporal_ownership(
+    context: ExecutionContext,
+    source_context: CoreCandidateContext,
+    plan: RequestPlan,
+    graph: object,
+) -> tuple[CoreFactTemporalOwnership, ...]:
+    """Bind untrusted but schema-checked candidate graph edges for prewrite review.
+
+    This is specifically a *proposal*, not semantic certification. It can only
+    be used as INPUT to immutable text enrichment; Core must then validate the
+    FINAL plan through full coverage and normal preflight before any write.
+    """
+    from .candidate_attribution import CandidateFactGraph
+
+    if (
+        not isinstance(graph, CandidateFactGraph)
+        or not graph.matches_original_plan(context.source, plan)
+        or graph.may_authorize_writes
+        or context.candidates != source_context
+        or context.source != source_context.source
+    ):
+        raise ContextContractError("Unverified candidate graph cannot bind a temporal owner")
+    source_context.validate(context.source)
+    pairs: list[CoreFactTemporalOwnership] = []
+    for i, qualifier in enumerate(context.qualitative_times):
+        found: list[int] = []
+        for candidate_index, (candidate, link) in enumerate(
+            zip(source_context.candidates, graph.links, strict=True)
+        ):
+            if not link.fact_ordinals:
+                continue
+            for role in candidate.roles:
+                if (
+                    role.role == "time_approx"
+                    and role.span.text == qualifier.qualifier
+                    and context.source[role.span.start : role.span.end] == qualifier.qualifier
+                ):
+                    # Temporal quote must contain the *same physical span*,
+                    # not just a common substring elsewhere in the message.
+                    start = context.source.find(qualifier.source_text)
+                    if start < 0 or context.source.find(qualifier.source_text, start + 1) >= 0:
+                        raise ContextContractError("Temporal quote is not uniquely source-bound")
+                    if (
+                        not start
+                        <= role.span.start
+                        < role.span.end
+                        <= start + len(qualifier.source_text)
+                    ):
+                        continue
+                    if len(link.fact_ordinals) != 1:
+                        raise ContextContractError("Several facts claim one temporal qualifier")
+                    if not _source_role_fits_original_fact(
+                        plan, source_context, candidate_index, link.fact_ordinals[0]
+                    ):
+                        raise ContextContractError(
+                            "Source fact has no independent discriminating role proof"
+                        )
+                    found.append(link.fact_ordinals[0])
+        if len(found) != 1:
+            raise ContextContractError("No unique reviewed temporal fact owner")
+        pairs.append(
+            CoreFactTemporalOwnership(
+                i,
+                found[0],
+                sha256(context.source.encode()).hexdigest(),
+                sha256(repr(plan).encode()).hexdigest(),
+            )
+        )
+    if len({p.fact_ordinal for p in pairs}) != len(pairs):
+        raise ContextContractError("Several temporal phrases claim one fact")
+    return tuple(pairs)

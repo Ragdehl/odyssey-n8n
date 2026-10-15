@@ -206,7 +206,9 @@ const safeLedger = value => {
       (st.duration_ms === null || (typeof st.duration_ms === 'number' && Number.isFinite(st.duration_ms) && st.duration_ms >= 0)) &&
       (st.start_offset_ms === null || (typeof st.start_offset_ms === 'number' && Number.isFinite(st.start_offset_ms) && st.start_offset_ms >= 0)) &&
       (st.error_category === null || (typeof st.error_category === 'string' && st.error_category.length <= 120)) &&
-      Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 && st.route_index === null)) return undefined;
+      Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
+      (st.route_index === null || (Number.isInteger(st.route_index) &&
+        st.route_index >= 0 && st.route_index < value.routes.length)))) return undefined;
   if (!value.routes.every((route,i) => route && route.route_index === i &&
       typeof route.capability === 'string' && route.capability.length <= 40 &&
       typeof route.status === 'string' && route.status.length <= 40 &&
@@ -222,7 +224,7 @@ const safeLedger = value => {
     event_sequence:seq, events_truncated:value.events_truncated,
     stages:value.stages.map(st => ({name:st.name,outcome:st.outcome,duration_ms:st.duration_ms,
       start_offset_ms:st.start_offset_ms,error_category:st.error_category,
-      provider_call_count:st.provider_call_count,route_index:null})),
+      provider_call_count:st.provider_call_count,route_index:st.route_index})),
     routes:value.routes.map(rt => ({route_index:rt.route_index,capability:rt.capability,status:rt.status,depends_on:rt.depends_on})),
     write_receipts:value.write_receipts.map(item => ({action_index:item.action_index,unit_index:item.unit_index,
       stable_note_id:item.stable_note_id,operation:item.operation,status:item.status})),
