@@ -543,6 +543,26 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
   }
   end.append(stats);
   root.append(end);
+  if (detail.execution_ledger?.version === 1) {
+    const ledger = detail.execution_ledger;
+    const section = element(doc, "details", "flow-execution-ledger");
+    section.append(element(doc, "summary", "", "Historial unificado de ejecución"));
+    const receipts = ledger.write_receipts.length;
+    const failedStages = ledger.stages.filter(stage => stage.outcome === "failed").length;
+    section.append(element(doc, "p", "flow-ledger-summary",
+      `${ledger.events.length} hitos · ${ledger.routes.length} rutas · ${ledger.stages.length} etapas · ${receipts} recibos de escritura · ${failedStages} etapas fallidas`));
+    if (ledger.events_truncated) section.append(element(doc, "p", "flow-diagnostic-warning",
+      "Historial parcial: los hitos más antiguos no están disponibles."));
+    for (const event of ledger.events) {
+      section.append(element(doc, "p", "flow-ledger-event",
+        `${event.sequence} · ${stageTitle(event.stage)} · ${event.outcome}`));
+    }
+    for (const receipt of ledger.write_receipts) {
+      section.append(element(doc, "p", "flow-ledger-receipt",
+        `Recibo · ${receipt.operation} · ${receipt.stable_note_id}`));
+    }
+    root.append(section);
+  }
   if (checkpoint !== undefined) root.append(renderCheckpointHistory(doc, checkpoint, detail.request_id));
   return root;
 }
@@ -580,7 +600,10 @@ function validateCheckpointEvent(event, expectedSequence) {
   if (!event || typeof event !== "object" || Array.isArray(event) ||
       !exactKeys(event, ["sequence", "stage", "outcome", "observed_at"]) ||
       !Number.isInteger(event.sequence) || event.sequence !== expectedSequence ||
-      !CHECKPOINT_STAGES.has(event.stage) || !CHECKPOINT_OUTCOMES.has(event.outcome) ||
+      !(CHECKPOINT_STAGES.has(event.stage) ||
+        typeof event.stage === "string" && event.stage.length <= 80 &&
+        /^(?:[a-z][a-z0-9_]*\.)+[a-z][a-z0-9_]*\.(?:started|ready|failed|required)$/u.test(event.stage)) ||
+      !CHECKPOINT_OUTCOMES.has(event.outcome) ||
       !validTimestamp(event.observed_at)) {
     throw new DiagnosticPreviewError("Invalid execution checkpoint event.");
   }

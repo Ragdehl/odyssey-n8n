@@ -332,3 +332,47 @@ test("unknown Apps render from the stage_view contract without a client name cat
   "events-2");
   assert.match(renderExecutionFlow(doc, oldDetail).textContent, /events · classify occurrence/);
 });
+
+test("validated E2 joined execution ledger is rendered without changing the existing flow graph", () => {
+  const joined = {
+    version: 1, request_id: "flow-1", status: "partial", event_sequence: 2,
+    events_truncated: false,
+    events: [
+      {sequence: 1, stage: "starting", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:00+02:00"},
+      {sequence: 2, stage: "core.notes.ready", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:02+02:00"},
+    ],
+    stages: [{name: "planner", outcome: "failed", duration_ms: 11,
+      start_offset_ms: null, error_category: "ProviderError", provider_call_count: 1, route_index: null}],
+    routes: [{route_index: 0, capability: "tasks", status: "partial", depends_on: null}],
+    write_receipts: [{action_index: 0, unit_index: 0, stable_note_id: "date:2026-10-09",
+      operation: "UPDATED", status: "succeeded"}],
+    affected_stable_note_ids: ["date:2026-10-09"],
+  };
+  const detail = validateRequestDetail({request_id: "flow-1", operational, flow,
+    changes: {affected_stable_note_ids: ["date:2026-10-09"], units: []},
+    execution_ledger: joined}, "flow-1");
+  const graph = renderExecutionFlow(doc, detail);
+  assert.equal(graph.findAll("flow-lane").length, 2);
+  assert.match(graph.textContent, /Historial unificado de ejecución/);
+  assert.match(graph.textContent, /2 hitos/);
+  assert.match(graph.textContent, /1 recibos de escritura/);
+  assert.match(graph.textContent, /Recibo · UPDATED · date:2026-10-09/);
+  const tampered = {...joined, affected_stable_note_ids: ["fabricated"]};
+  const dropped = validateRequestDetail({request_id: "flow-1", operational, flow,
+    changes: {affected_stable_note_ids: ["date:2026-10-09"], units: []},
+    execution_ledger: tampered}, "flow-1");
+  assert.equal(dropped.execution_ledger, undefined);
+  assert.equal(renderExecutionFlow(doc, dropped).findAll("flow-lane").length, 2);
+});
+
+test("future App checkpoint stage is accepted only with bounded source-free lifecycle name", () => {
+  const events = [{sequence: 1, stage: "events.classify_occurrence.started",
+    outcome: "milestone_observed", observed_at: "2026-10-15T15:00:00+02:00"}];
+  const checkpoint = {version: 1, request_id: "future-app", stage: events[0].stage,
+    outcome: events[0].outcome, sequence: 1, observed_at: events[0].observed_at,
+    events, truncated: false};
+  assert.equal(validateExecutionCheckpoint(checkpoint).events[0].stage, events[0].stage);
+  assert.throws(() => validateExecutionCheckpoint({...checkpoint,
+    stage: "private user name.started", events:[{...events[0],stage:"private user name.started"}]}),
+  DiagnosticPreviewError);
+});

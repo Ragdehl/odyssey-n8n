@@ -11,9 +11,11 @@ from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
+from odyssey_core.execution_context import ExecutionContext
 from odyssey_core.git_history import GitHistoryResult, HistoryRecorder, HistoryStatus
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.persistence import ActorInput, create_entity, soft_delete_entity, update_entity
+from odyssey_core.qualitative_fact_preservation import preserve_qualitative_activity_text
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 
 from .schema import TASK_TYPE, WORK_SESSION_TYPE
@@ -396,6 +398,7 @@ class TaskWorkSessionService:
         request_id: str,
         actor: ActorInput,
         now: str,
+        qualitative_context: ExecutionContext | None = None,
     ) -> WorkSessionMutationResult:
         """Append one stable timestamped activity entry to an existing Work Session."""
         path, note, raw = self._load_session(
@@ -403,7 +406,11 @@ class TaskWorkSessionService:
             expected_revision=expected_revision,
             expected_source_hash=expected_source_hash,
         )
-        normalized = self._normalize_activity_text(text)
+        normalized = self._normalize_activity_text(
+            preserve_qualitative_activity_text(text, context=qualitative_context)
+            if qualitative_context is not None
+            else text
+        )
         self._validate_datetime(now, "WORK_SESSION_TIME_INVALID")
         entry_id = self.activity_id_allocator()
         if (
@@ -438,6 +445,7 @@ class TaskWorkSessionService:
         request_id: str,
         actor: ActorInput,
         now: str,
+        qualitative_context: ExecutionContext | None = None,
     ) -> WorkSessionMutationResult:
         """Correct one exact activity entry while preserving its original trace timestamp."""
         path, note, raw = self._load_session(
@@ -445,7 +453,11 @@ class TaskWorkSessionService:
             expected_revision=expected_revision,
             expected_source_hash=expected_source_hash,
         )
-        normalized = self._normalize_activity_text(text)
+        normalized = self._normalize_activity_text(
+            preserve_qualitative_activity_text(text, context=qualitative_context)
+            if qualitative_context is not None
+            else text
+        )
         entries = list(self._parse_activity(note.content))
         matches = [index for index, item in enumerate(entries) if item.id == activity_id]
         if len(matches) != 1:

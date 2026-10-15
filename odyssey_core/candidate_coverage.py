@@ -327,7 +327,7 @@ def validate_candidate_coverage_manifest(
             temporal = context.verified_route_temporal
 
             def proven_approximate_span(
-                span, lexical=lexical, temporal=temporal, unit=unit
+                span, lexical=lexical, temporal=temporal, unit=unit, fact_index=fact_index
             ) -> bool:
                 if span.text not in lexical or temporal is None:
                     return False
@@ -340,7 +340,11 @@ def validate_candidate_coverage_manifest(
                 # exact-date source phrase without becoming an exact hour.
                 # It must be inside that same original Temporal quote and
                 # attached to a matching, exclusively dated Day fact.
-                if unit.target.type != "calendar_day" or len(unit.fact_temporal_anchors) != 1:
+                if (
+                    unit.target.type != "calendar_day"
+                    or len(unit.fact_temporal_anchors) != len(unit.facts)
+                    or fact_index >= len(unit.fact_temporal_anchors)
+                ):
                     return False
                 for item in temporal.temporal_references():
                     anchor = item.temporal_anchor()
@@ -350,9 +354,9 @@ def validate_candidate_coverage_manifest(
                         and unit.target.query == anchor.date
                         and start >= 0
                         and start <= span.start < span.end <= start + len(item.source_text)
-                        and len(unit.fact_temporal_anchors[0]) == 1
-                        and unit.fact_temporal_anchors[0][0].date == anchor.date
-                        and unit.fact_temporal_anchors[0][0].time is None
+                        and len(unit.fact_temporal_anchors[fact_index]) == 1
+                        and unit.fact_temporal_anchors[fact_index][0].date == anchor.date
+                        and unit.fact_temporal_anchors[fact_index][0].time is None
                     ):
                         return True
                 return False

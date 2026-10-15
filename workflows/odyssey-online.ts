@@ -186,9 +186,52 @@ const flowMatchesStages = (flow, stages) => {
   return true;
 };
 if (!id || !r || r.request_id !== id) return [{ json: error }]; const hasOperationalEvidence = r.operational && typeof r.operational === 'object'; const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions); const request_detail_base = hasOperationalEvidence || hasChangeEvidence ? { request_id: id, operational: hasOperationalEvidence ? safeOperational(r.operational) : { total_duration_ms: null, stages: [] }, changes: { affected_stable_note_ids: Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter((item) => typeof item === 'string' && item.length <= 128).slice(0, 64) : [], units: Array.isArray(r.actions) ? r.actions.flatMap(a => Array.isArray(a.units) ? a.units.map(u => ({ stable_note_id: typeof u.stable_note_id === 'string' && u.stable_note_id.length <= 128 ? u.stable_note_id : null, operation: typeof u.operation === 'string' && u.operation.length <= 80 ? u.operation : null, status: typeof u.status === 'string' && u.status.length <= 80 ? u.status : 'unknown' })) : []).slice(0, 64) : [] } } : undefined; const routeFlow = safeFlow(r.execution_flow);
+// The optional E2 ledger joins only already-observed checkpoints, stages and Core receipts.
+// Malformed diagnostics cannot invalidate the authoritative delivery result.
+const safeLedger = value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 1 ||
+      value.request_id !== id || !['completed','failed','partial','needs_attention'].includes(value.status) ||
+      !Array.isArray(value.events) || value.events.length > 64 ||
+      !Array.isArray(value.stages) || value.stages.length > 64 ||
+      !Array.isArray(value.routes) || value.routes.length > 32 ||
+      !Array.isArray(value.write_receipts) || value.write_receipts.length > 64 ||
+      !Array.isArray(value.affected_stable_note_ids) || value.affected_stable_note_ids.length > 64) return undefined;
+  const safeId = v => typeof v === 'string' && v.length > 0 && v.length <= 128;
+  const affected = Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter(safeId).slice(0,64) : [];
+  if (JSON.stringify(affected) !== JSON.stringify(value.affected_stable_note_ids)) return undefined;
+  if (!value.events.every(e => e && Number.isInteger(e.sequence) && e.sequence >= 1 && safeId(e.stage) &&
+      ['milestone_observed','result_persisted','processing_returned','failed_or_unknown'].includes(e.outcome) &&
+      typeof e.observed_at === 'string' && e.observed_at.length <= 40)) return undefined;
+  if (!value.stages.every(st => st && safeId(st.name) && ['completed','failed','skipped','not_called','unavailable'].includes(st.outcome) &&
+      (st.duration_ms === null || (typeof st.duration_ms === 'number' && Number.isFinite(st.duration_ms) && st.duration_ms >= 0)) &&
+      (st.start_offset_ms === null || (typeof st.start_offset_ms === 'number' && Number.isFinite(st.start_offset_ms) && st.start_offset_ms >= 0)) &&
+      (st.error_category === null || (typeof st.error_category === 'string' && st.error_category.length <= 120)) &&
+      Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 && st.route_index === null)) return undefined;
+  if (!value.routes.every((route,i) => route && route.route_index === i &&
+      typeof route.capability === 'string' && route.capability.length <= 40 &&
+      typeof route.status === 'string' && route.status.length <= 40 &&
+      (route.depends_on === null || (Number.isInteger(route.depends_on) && route.depends_on >= 0 && route.depends_on < i)))) return undefined;
+  if (!value.write_receipts.every(item => item && Number.isInteger(item.action_index) && item.action_index >= 0 &&
+      Number.isInteger(item.unit_index) && item.unit_index >= 0 && item.status === 'succeeded' &&
+      safeId(item.stable_note_id) && affected.includes(item.stable_note_id) &&
+      typeof item.operation === 'string' && item.operation.length <= 48)) return undefined;
+  const seq = value.event_sequence;
+  if ((seq !== null && (!Number.isInteger(seq) || seq < value.events.length)) || typeof value.events_truncated !== 'boolean') return undefined;
+  return {version:1, request_id:id, status:value.status,
+    events:value.events.map(e => ({sequence:e.sequence,stage:e.stage,outcome:e.outcome,observed_at:e.observed_at})),
+    event_sequence:seq, events_truncated:value.events_truncated,
+    stages:value.stages.map(st => ({name:st.name,outcome:st.outcome,duration_ms:st.duration_ms,
+      start_offset_ms:st.start_offset_ms,error_category:st.error_category,
+      provider_call_count:st.provider_call_count,route_index:null})),
+    routes:value.routes.map(rt => ({route_index:rt.route_index,capability:rt.capability,status:rt.status,depends_on:rt.depends_on})),
+    write_receipts:value.write_receipts.map(item => ({action_index:item.action_index,unit_index:item.unit_index,
+      stable_note_id:item.stable_note_id,operation:item.operation,status:item.status})),
+    affected_stable_note_ids:affected};
+};
+const verifiedLedger = safeLedger(r.execution_ledger);
 const routedOperational = request_detail_base?.operational;
 const validatedFlow = routeFlow && flowMatchesStages(routeFlow, routedOperational?.stages) ? routeFlow : undefined;
-const request_detail = request_detail_base ? { ...request_detail_base, operational: { ...request_detail_base.operational, stages: request_detail_base.operational.stages.map(stage => ({ ...stage, provider_calls: stage.provider_calls.map(call => ({ ...call, estimated_cost: requestCost({ stages: [{ model: call.model, usage: call.usage }] }, pricing) })), estimated_cost: requestCost({ stages: [stage] }, pricing) })) }, estimated_cost: requestCost(request_detail_base.operational, pricing), ...(validatedFlow ? { flow: validatedFlow } : {}) } : undefined;
+const request_detail = request_detail_base ? { ...request_detail_base, operational: { ...request_detail_base.operational, stages: request_detail_base.operational.stages.map(stage => ({ ...stage, provider_calls: stage.provider_calls.map(call => ({ ...call, estimated_cost: requestCost({ stages: [{ model: call.model, usage: call.usage }] }, pricing) })), estimated_cost: requestCost({ stages: [stage] }, pricing) })) }, estimated_cost: requestCost(request_detail_base.operational, pricing), ...(validatedFlow ? { flow: validatedFlow } : {}), ...(verifiedLedger ? { execution_ledger: verifiedLedger } : {}) } : undefined;
 const reasons = { TEMPORAL_COHORT_UNRESOLVED: 'No he podido determinar todas las fechas con seguridad. No he guardado ningún hecho de esta solicitud. Indica el año y la fecha de cada uno para continuar.', TEMPORAL_COHORT_YEAR_CONFLICT: 'He detectado fechas de años incompatibles entre las partes de tu mensaje. No he guardado nada. Indica expresamente los años para continuar.', NO_RELEVANT_EVIDENCE: 'No encuentro información pertinente en tus notas.', AMBIGUOUS_REFERENCE: 'No he podido resolver con seguridad una referencia a una persona o nota. Indica a quién te refieres o reformula esa parte. No he guardado nada.', INCOMPLETE_EVIDENCE: 'La evidencia disponible no permite una respuesta completa y segura.', STALE_EVIDENCE: 'La información cambió durante la consulta; vuelve a intentarlo.', UNREPRESENTABLE_REQUEST: 'He entendido la solicitud, pero no puedo prepararla o completarla con seguridad todavía.', OPERATIONAL_FAILURE: 'No he podido completar la consulta por un problema operativo.', ROUTER_NEEDS_CAPABILITY: 'He entendido la solicitud, pero necesita una capacidad que todavía no está habilitada en DEV. No he guardado nada.', ROUTER_INVALID: 'No he podido decidir de forma segura qué aplicación debe gestionar la solicitud. No he guardado nada.', RANGE_REQUIRES_RANGE_AWARE_OPERATION: 'He entendido la referencia temporal como un intervalo, pero Calendar todavía no puede guardarla sin elegir una fecha concreta. No he guardado nada.', OUT_OF_SCOPE: 'Calendar ha recibido una solicitud que no pertenece a su ámbito. No he guardado nada.', CALENDAR_PLANNER_INVALID: 'Calendar no ha podido interpretar la solicitud de forma segura. No he guardado nada.', CALENDAR_EXECUTION_FAILED: 'Calendar ha entendido la solicitud, pero no ha podido convertirla en una escritura segura. No he guardado nada.', CALENDAR_PLAN_INVALID: 'Calendar ha producido un plan que no se puede ejecutar con seguridad. No he guardado nada.', WORK_SESSION_TASK_UNRESOLVED: 'No encuentro una única tarea para esa sesión de trabajo. Indica el nombre de la tarea con más precisión. No he guardado nada.', WORK_SESSION_TASK_AMBIGUOUS: 'Hay varias tareas que podrían ser esa. Indica con más precisión cuál quieres usar. No he guardado nada.', WORK_SESSION_ALREADY_ACTIVE: 'Ya hay una sesión de trabajo activa. Termínala antes de empezar otra. No he guardado otra sesión.', WORK_SESSION_NOT_ACTIVE: 'Esa tarea no tiene una sesión de trabajo activa.', WORK_SESSION_AMBIGUOUS: 'Hay varias sesiones de esa tarea en esa fecha. Indica una hora más concreta o edítala desde la propia tarea.', WORK_SESSION_END_BEFORE_START: 'La hora de fin no puede ser anterior a la hora de inicio.', WORK_SESSION_TASK_CLOSED: 'La tarea está completada o cancelada; no puedo iniciar una sesión de trabajo sobre ella.', WORK_SESSION_TEMPORAL_INVALID: 'No he podido interpretar con seguridad la hora de esa sesión de trabajo. No he guardado nada.', WORK_SESSION_RESOLUTION_FAILED: 'No he podido resolver la tarea de esa sesión de trabajo de forma segura. No he guardado nada.', WORK_SESSION_UNAVAILABLE: 'La sesión de trabajo ya no está disponible o ha cambiado. Vuelve a abrir la tarea antes de modificarla.', WORK_SESSION_ACTIVITY_INVALID: 'No he podido guardar esa actividad porque el texto no es válido.', WORK_SESSION_ACTIVITY_UNAVAILABLE: 'Esa actividad ya no está disponible o ha cambiado. Vuelve a abrir la sesión antes de modificarla.' };
 reasons.CONTINUATION_REVIEW_REQUIRED = 'He registrado tu elección, pero aún no he guardado el hecho pendiente: falta completar su comprobación semántica. Los hechos anteriores permanecen como estaban.';
 const outcome = ['ANSWER', 'CLARIFY', 'CANNOT_ANSWER'].includes(r.product_outcome) ? r.product_outcome : 'CANNOT_ANSWER';

@@ -791,6 +791,20 @@ class RuntimeComposition:
         exceptions never reach this method and therefore remain retryable.
         """
         response = application_result_to_response(result)
+        # One read-only ledger joins existing observed operational stages,
+        # route statuses, physical Core receipts and actor-root checkpoints.
+        # It never makes or retries a mutation decision.
+        from .execution_ledger import project_execution_ledger
+
+        checkpoint = None
+        if actor is not None:
+            diagnostic_store = self._checkpoint_store(actor)
+            if diagnostic_store is not None:
+                try:
+                    checkpoint = diagnostic_store.load(result.request_id)
+                except Exception:
+                    checkpoint = None
+        response["execution_ledger"] = project_execution_ledger(result, checkpoint)
         if response["product_outcome"] == "CLARIFY":
             candidate_view = self._candidate_pending_view(
                 actor,

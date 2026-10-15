@@ -339,3 +339,62 @@ test("invalid optional stage presentation is discarded, never clears stages or s
   assert.equal(validateProductResponse(result).status, "completed");
   assert.deepEqual(result.request_detail.changes.affected_stable_note_ids, ["date:2026-10-09"]);
 });
+
+const ledgerFixture = {
+  version: 1, request_id: "synthetic-partial", status: "partial",
+  event_sequence: 3, events_truncated: false,
+  events: [
+    {sequence: 1, stage: "starting", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:00+02:00"},
+    {sequence: 2, stage: "core.notes.started", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:01+02:00"},
+    {sequence: 3, stage: "core.notes.ready", outcome: "milestone_observed", observed_at: "2026-10-15T15:00:02+02:00"},
+  ],
+  stages: [
+    {name: "planner", outcome: "failed", duration_ms: 10, start_offset_ms: null,
+      error_category: "ProviderError", provider_call_count: 1, route_index: null},
+  ],
+  routes: [
+    {route_index: 0, capability: "temporal", status: "completed", depends_on: null},
+    {route_index: 1, capability: "tasks", status: "failed", depends_on: 0},
+  ],
+  write_receipts: [
+    {action_index: 0, unit_index: 0, stable_note_id: "date:2026-10-08",
+      operation: "UPDATED", status: "succeeded"},
+  ],
+  affected_stable_note_ids: ["date:2026-10-08"],
+};
+
+test("joined ledger survives actual n8n->browser trip even when later route fails after write", () => {
+  const result = execute({
+    request_id: "synthetic-partial", status: "partial", product_outcome: "CANNOT_ANSWER",
+    product_reason: "INCOMPLETE_EVIDENCE",
+    affected_stable_note_ids: ["date:2026-10-08"],
+    actions: [{units: [{status: "succeeded", operation: "UPDATED", stable_note_id: "date:2026-10-08"}]}],
+    operational: {total_duration_ms: 100, stages: []},
+    execution_ledger: ledgerFixture,
+  });
+  const validated = validateProductResponse(result);
+  assert.equal(validated.status, "partial");
+  assert.equal(validated.request_detail.execution_ledger.events.length, 3);
+  assert.equal(validated.request_detail.execution_ledger.routes[1].status, "failed");
+  assert.equal(validated.request_detail.execution_ledger.stages[0].error_category, "ProviderError");
+  assert.deepEqual(validated.request_detail.execution_ledger.write_receipts.map(x => x.stable_note_id),
+    ["date:2026-10-08"]);
+  assert.deepEqual(validated.request_detail.changes.affected_stable_note_ids, ["date:2026-10-08"]);
+});
+
+test("forged optional ledger cannot claim unconfirmed receipt or leak private route text", () => {
+  const tampered = {...ledgerFixture,
+    write_receipts: [{...ledgerFixture.write_receipts[0], stable_note_id: "unconfirmed-note"}],
+    routes: [{...ledgerFixture.routes[0], text: "Never expose this hidden route"}],
+  };
+  const result = execute({
+    request_id: "synthetic-partial", status: "partial", product_outcome: "CANNOT_ANSWER",
+    product_reason: "INCOMPLETE_EVIDENCE", affected_stable_note_ids: ["date:2026-10-08"],
+    actions: [{units: [{status: "succeeded", stable_note_id: "date:2026-10-08"}]}],
+    operational: {total_duration_ms: 100, stages: []}, execution_ledger: tampered,
+  });
+  const validated = validateProductResponse(result);
+  assert.equal(validated.request_detail.execution_ledger, undefined);
+  assert.deepEqual(validated.request_detail.changes.affected_stable_note_ids, ["date:2026-10-08"]);
+  assert.doesNotMatch(JSON.stringify(validated), /Never expose this hidden route/);
+});
