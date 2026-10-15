@@ -846,14 +846,20 @@ def execute_candidate_routed_message(
         # The context is a structural guard, not a second semantic authority.
         # It is intentionally assembled only after all Core-owned inheritance
         # and scoped evidence have already been independently verified.
+        from odyssey_core.temporal_qualifier_handoff import source_bound_qualitative_times
+
+        context_timezone = getattr(temporal, "timezone", None) or os.environ.get("TZ", "UTC")
         execution_context = ExecutionContext(
             request_id=locator,
             source=unit_source,
             captured_at=now,
-            timezone=os.environ.get("TZ", "UTC"),
+            timezone=context_timezone,
             authenticated_actor=routed_authenticated_actor,
             candidates=route_context,
             domains=(domain,) if domain is not None else (),
+            qualitative_times=source_bound_qualitative_times(
+                interpretation, route_context, domain, timezone=context_timezone
+            ),
         )
         # Subsequent stages consume the validated carrier, not new copies of
         # the original planner/actor arguments.

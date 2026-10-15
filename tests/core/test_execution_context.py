@@ -355,3 +355,24 @@ def test_dependency_missing_or_conflicting_parallel_capabilities_prevent_invocat
     with pytest.raises(ContextContractError, match="Concurrent stage specification"):
         run_independent_stages(initial_context(), (OtherTemporal(), OtherTemporal()))
     assert invoked == []
+
+
+def test_temporal_port_accepts_exact_date_even_without_daypart():
+    """Adding qualitative precision must never break ordinary today/tomorrow dates."""
+    context = initial_context()
+    date = DomainInterpretation(
+        "temporal",
+        SOURCE,
+        "TEMPORAL_RESOLUTION",
+        (DomainEvidence("temporal_reference", WHEN, DATE),),
+    )
+    no_daypart = replace(context, domains=(date,))
+    port = StageSpec(
+        "future.calendar", frozenset({ContextPort.TEMPORAL}), frozenset({ContextPort.PENDING})
+    )
+    info = stage_input(no_daypart, port)
+    assert len(info.temporal_references) == 1
+    assert info.temporal_references[0].value == DATE
+    assert info.qualitative_times == ()
+    assert info.actor is None
+    assert info.domains == ()

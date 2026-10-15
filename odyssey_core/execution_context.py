@@ -17,7 +17,7 @@ from typing import Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .candidate_context import CoreCandidateContext
-from .domain_interpretation import DomainInterpretation
+from .domain_interpretation import DomainEvidence, DomainInterpretation
 from .identity_boundary import AuthenticatedActorContext
 from .temporal_resolution import TemporalResolution, TemporalResolutionKind
 
@@ -77,6 +77,8 @@ class NoteMention:
 
     source_text: str
     candidates: tuple[NoteReferenceCandidate, ...]
+    start: int | None = None
+    end: int | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -87,6 +89,14 @@ class NoteMention:
             or len(self.candidates) > 8
             or any(not isinstance(item, NoteReferenceCandidate) for item in self.candidates)
             or len({item.stable_note_id for item in self.candidates}) != len(self.candidates)
+            or (self.start is None) != (self.end is None)
+            or self.start is not None
+            and (
+                type(self.start) is not int
+                or type(self.end) is not int
+                or self.start < 0
+                or self.end - self.start != len(self.source_text)
+            )
         ):
             raise ContextContractError("Note mentions must be bounded source proposals")
 
@@ -125,10 +135,13 @@ class QualitativeTime:
 
 @dataclass(frozen=True, slots=True)
 class PendingContext:
-    """A bounded unresolved observation that cannot be promoted into authority."""
+    """A bounded unresolved observation, optionally tied to one exact source span."""
 
     capability: str
     reason: str
+    source_text: str | None = None
+    start: int | None = None
+    end: int | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -137,6 +150,18 @@ class PendingContext:
             or not isinstance(self.reason, str)
             or not self.reason
             or len(self.reason) > 120
+            or (self.source_text is None) != (self.start is None)
+            or (self.start is None) != (self.end is None)
+            or self.source_text is not None
+            and (
+                not isinstance(self.source_text, str)
+                or not self.source_text.strip()
+                or len(self.source_text) > 240
+                or type(self.start) is not int
+                or type(self.end) is not int
+                or self.start < 0
+                or self.end - self.start != len(self.source_text)
+            )
         ):
             raise ContextContractError("Pending context is invalid")
 
@@ -205,7 +230,10 @@ class ExecutionContext:
             not isinstance(self.note_mentions, tuple)
             or len(self.note_mentions) > 24
             or any(
-                not isinstance(item, NoteMention) or item.source_text not in self.source
+                not isinstance(item, NoteMention)
+                or item.source_text not in self.source
+                or item.start is not None
+                and self.source[item.start : item.end] != item.source_text
                 for item in self.note_mentions
             )
         ):
@@ -221,7 +249,12 @@ class ExecutionContext:
             )
             or not isinstance(self.pending, tuple)
             or len(self.pending) > 16
-            or any(not isinstance(item, PendingContext) for item in self.pending)
+            or any(
+                not isinstance(item, PendingContext)
+                or item.start is not None
+                and self.source[item.start : item.end] != item.source_text
+                for item in self.pending
+            )
         ):
             raise ContextContractError("Execution temporal or pending evidence is inconsistent")
         date_sources = {
@@ -273,6 +306,7 @@ class StageInput:
     candidates: CoreCandidateContext | None = None
     domains: tuple[DomainInterpretation, ...] = ()
     note_mentions: tuple[NoteMention, ...] = ()
+    temporal_references: tuple[DomainEvidence, ...] = ()
     qualitative_times: tuple[QualitativeTime, ...] = ()
 
 
@@ -308,7 +342,10 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         missing.add(ContextPort.ACTOR)
     if ContextPort.DOMAIN in spec.requires and not context.domains:
         missing.add(ContextPort.DOMAIN)
-    if ContextPort.TEMPORAL in spec.requires and not context.qualitative_times:
+    verified_temporal = tuple(
+        evidence for domain in context.domains for evidence in domain.temporal_references()
+    )
+    if ContextPort.TEMPORAL in spec.requires and not verified_temporal:
         missing.add(ContextPort.TEMPORAL)
     if ContextPort.NOTE_MENTIONS in spec.requires and not context.note_mentions:
         missing.add(ContextPort.NOTE_MENTIONS)
@@ -322,6 +359,7 @@ def stage_input(context: ExecutionContext, spec: StageSpec) -> StageInput:
         candidates=context.candidates if ContextPort.CANDIDATES in spec.requires else None,
         domains=context.domains if ContextPort.DOMAIN in spec.requires else (),
         note_mentions=(context.note_mentions if ContextPort.NOTE_MENTIONS in spec.requires else ()),
+        temporal_references=(verified_temporal if ContextPort.TEMPORAL in spec.requires else ()),
         qualitative_times=(
             context.qualitative_times if ContextPort.TEMPORAL in spec.requires else ()
         ),
