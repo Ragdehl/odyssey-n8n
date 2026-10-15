@@ -3716,6 +3716,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         direct_task_mutations=direct_task_mutations,
         work_session_service=work_session_service,
         product_progress_store=ProductProgressStore(),
+        # The canonical environment factory must wire the SAME actor-root
+        # source-free checkpoints tested on standalone RuntimeComposition.
+        # Without this, DEV/PROD responses silently return an empty E2 ledger
+        # despite their live progress UI updating correctly.
+        execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
         notes_mutation_actor=notes_mutation_actor,
         hybrid_candidate_execute=execute_hybrid_candidate_route if hybrid_dev_enabled else None,
         hybrid_read_execute=execute_hybrid_proven_read if hybrid_dev_enabled else None,
