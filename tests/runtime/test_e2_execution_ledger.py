@@ -241,7 +241,9 @@ def test_same_id_replay_does_not_add_false_start_or_reset_live_progress(tmp_path
     assert second["delivery_replayed"] is True
     assert calls == ["replay-keep"]
     assert after is not None
+    assert after == old  # A replay is not another lifecycle milestone.
     assert [event["stage"] for event in after["events"]].count("starting") == 1
+    assert [event["stage"] for event in after["events"]].count("delivery.result_persisted") == 1
     assert after["events"][-1]["stage"] == "delivery.result_persisted"
     assert runtime.product_progress("replay-keep", identity) == first_progress
 

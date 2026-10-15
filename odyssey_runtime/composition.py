@@ -440,12 +440,10 @@ class RuntimeComposition:
                 replay = store.load(request_id, fingerprint)
                 if replay is not None:
                     replay["delivery_replayed"] = True
-                    self._record_checkpoint(
-                        checkpoint_store,
-                        request_id,
-                        "delivery.result_persisted",
-                        CheckpointOutcome.RESULT_PERSISTED,
-                    )
+                    # Replay only READS the previously committed delivery.
+                    # The original terminal checkpoint already records the
+                    # durable write; appending it again invents an event and
+                    # inflates the timeline on every n8n retry.
                     return replay
             self._record_checkpoint(
                 checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED

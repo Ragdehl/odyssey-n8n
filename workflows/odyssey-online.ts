@@ -175,9 +175,16 @@ const safeSnapshot = value => safeSearchSnapshot(value) || safeAffectedSnapshot(
 const safeFlow = value => value && typeof value === 'object' && !Array.isArray(value) && value.version === 1 && typeof value.input === 'string' && value.input.length <= 4096 && typeof value.parallel_preparation === 'boolean' && Array.isArray(value.routes) && value.routes.length >= 1 && value.routes.length <= 8 && value.routes.every(route => route && typeof route.capability === 'string' && route.capability.length >= 1 && route.capability.length <= 40 && typeof route.text === 'string' && route.text.length >= 1 && route.text.length <= 4096 && Number.isInteger(route.stage_count) && route.stage_count >= 0 && route.stage_count <= 16 && ['completed','failed','partial','needs_attention'].includes(route.status) && Array.isArray(route.temporal) && route.temporal.length <= 8 && route.temporal.every(item => item && typeof item.source === 'string' && item.source.length >= 1 && item.source.length <= 120 && typeof item.value === 'string' && item.value.length >= 1 && item.value.length <= 80 && route.text.includes(item.source)) && (!('steps' in route) || (Array.isArray(route.steps) && route.steps.length === route.stage_count && route.steps.every(step => step && typeof step === 'object' && !Array.isArray(step) && Object.keys(step).length === 3 && typeof step.name === 'string' && step.name.length >= 1 && step.name.length <= 80 && typeof step.input === 'string' && step.input.length <= 512 && typeof step.output === 'string' && step.output.length <= 768)))) ? value : undefined;
 const flowMatchesStages = (flow, stages) => {
   if (!flow || !Array.isArray(stages)) return false;
-  const router = stages.findIndex(stage => stage.name === 'application.router');
+  // Legacy application.router and hybrid v6 candidate.source_proposal are
+  // equally authentic observed router boundaries. The hybrid may include
+  // independently observed Core source reviews BEFORE its first route.
+  // Do not infer route ownership by order or accept an arbitrary prewrite stage.
+  const router = stages.findIndex(stage =>
+    ['application.router', 'candidate.source_proposal'].includes(stage.name));
   if (router < 0) return false;
   let cursor = router + 1;
+  const prewrite = new Set(['candidate.source_boundary_review', 'candidate.router_revision']);
+  while (prewrite.has(stages[cursor]?.name)) cursor++;
   for (const route of flow.routes) {
     if (cursor + route.stage_count > stages.length) return false;
     if (route.steps?.some((step, i) => step.name !== stages[cursor + i]?.name)) return false;

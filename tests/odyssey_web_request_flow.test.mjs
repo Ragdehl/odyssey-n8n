@@ -376,3 +376,31 @@ test("future App checkpoint stage is accepted only with bounded source-free life
     stage: "private user name.started", events:[{...events[0],stage:"private user name.started"}]}),
   DiagnosticPreviewError);
 });
+
+test("hybrid v6 real index-barrier and Core prewrite boundary render the single routed lane", () => {
+  const source = "Hoy por la tarde compré una silla ficticia.";
+  const steps = ["candidate.temporal_interpretation", "planner", "candidate_coverage",
+    "action.write", "git", "pending"].map(name => ({name, input: source, output: ""}));
+  const operational = {total_duration_ms: 2800, stages: [
+    stage("index_barrier", 100),
+    stage("candidate.source_proposal", 800),
+    stage("candidate.source_boundary_review", 500),
+    ...steps.map(item => stage(item.name, 200)),
+    stage("index_refresh.schedule", 50),
+  ]};
+  const detail = validateRequestDetail({
+    request_id: "e2-hybrid-app-1", operational,
+    flow: {version: 1, input: source, parallel_preparation: true,
+      routes: [{capability: "temporal", text: source, status: "completed",
+        stage_count: steps.length, temporal: [], steps}]},
+  }, "e2-hybrid-app-1");
+  const graph = renderExecutionFlow(doc, detail);
+  assert.equal(graph.findAll("flow-lane").length, 1);
+  assert.match(graph.textContent, /por la tarde/);
+  assert.match(graph.textContent, /Revisión previa/);
+  assert.match(graph.textContent, /Temporal/);
+  assert.match(graph.textContent, /Core/);
+  const broken = structuredClone(detail);
+  broken.flow.routes[0].steps[3].name = "invented.action";
+  assert.throws(() => validateRequestDetail(broken, "e2-hybrid-app-1"), ProductRequestError);
+});
