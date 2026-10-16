@@ -6,6 +6,9 @@
 
 ## Continuación P4: variabilidad del Planner/revisor y comprobación física (16-10)
 
+
+Checkpoint en rama `feat/light-router-poc-20261016`: commits `10e209a` y `483a276`, sin merge ni deploy. El gancho pytest del commit es conocido como bloqueado por diez fallos históricos; se ejecutó la suite completa de forma explícita antes del checkpoint (3428 PASS / 80 SKIP / 10 previos), con Ruff y validación de esquema correctos. El siguiente gate se mantiene en integración real de la nueva ruta sin importar módulos `benchmarks` desde el runtime productivo, pruebas n8n/browser en sandbox, seguridad de recuperación después de escritura y medidas Raspberry.
+
 La batería ampliada (17 entradas) descubrió variabilidad real incluso con el mismo mensaje: el Planner llegó a inventar día/franja de tarde para un pasado no fechado, o a crear un participante literal `user` para primera persona. La cobertura Core frenó esas variantes sin escritura. Otro rechazo intermitente confundió un plan futuro («compraré») con una ocurrencia garantizada. No es un problema de `request_id` ni evidencia de que la protección Core deba rebajarse.
 
 Se preservaron los prompts validados y se añadieron aclaraciones generales sobre actor gramatical ≠ entidad canónica, fecha no especificada = `null` y planes futuros ≠ hechos consumados. La última tanda fresca de cuatro escenarios dio 4/4 `completed` con 6 facts físicos nuevos; `p4_physical_readback.py` comprueba cada marcador canónico, propietario/fecha, persona por ID resuelto a través de la proyección Notes, SELF y backlinks. Cinco pruebas adversariales rechazan faltas de owner, identity link, cardinalidad o SELF. La matriz sin textos de usuario ni respuestas íntegras del proveedor se conserva en `p4_variability_summary_20261016.json`. **Una tanda correcta no demuestra estabilidad general**: hay negativas seguras y rechazos falsos en otras repeticiones. Ningún cambio en DEV.
