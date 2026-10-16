@@ -1,0 +1,174 @@
+{
+  "schema": "odyssey-user-invariant-ledger-v1",
+  "authority": "functional-roadmap.md",
+  "semantics": "Declarations point to evidence; selector existence is not a test run and NEVER grants deployment authority",
+  "required_product_gate": "real_authenticated_browser_n8n_gpt_markdown_ui",
+  "last_confirmed_dev_commit": "1474681",
+  "contracts": [
+    {
+      "id": "E2-SELF-SPEAKER",
+      "phase": "E2",
+      "invariant": "El sujeto en primera persona se enlaza con SELF solo cuando Core demuestra su participación.",
+      "max_evidence_level": "isolated_http",
+      "offline_test_selectors": [
+        "tests/runtime/test_whole_source_light_product_p4.py::test_full_source_preflight_prevents_earlier_core_write_when_last_task_unsupported",
+        "tests/core/test_whole_message_speaker_proof_p4.py::test_reviewer_disagreement_blocks_identity_promotion"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E2-CANONICAL-GROUP",
+      "phase": "E2",
+      "invariant": "Los grupos de personas se enlazan únicamente con miembros acreditados por un hecho actual de SELF.",
+      "max_evidence_level": "real_provider_isolated",
+      "offline_test_selectors": [
+        "tests/runtime/test_p4_verified_group_e2.py::test_core_verified_group_expands_only_existing_children_and_replays",
+        "tests/runtime/test_p4_verified_group_e2.py::test_relationship_mutation_during_real_review_never_promotes_stale_member_set"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E2-TEMPORAL-OWNERSHIP",
+      "phase": "E2",
+      "invariant": "Cada fecha y franja temporal pertenece a su hecho de origen sin inventar horarios.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_all_days_are_precompiled_without_hardcoded_number_of_facts"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E3-CANONICAL-WRITER",
+      "phase": "E3",
+      "invariant": "Core controla los planes, las referencias, la escritura Markdown y la lectura física posterior.",
+      "max_evidence_level": "isolated_http",
+      "offline_test_selectors": [
+        "tests/core/test_write_plan_enrichment_e2.py::test_reference_enrichment_is_generic_for_any_note_type",
+        "tests/runtime/test_p4_chat_to_ui_http_flow.py::test_real_http_chat_session_can_be_seen_modified_and_closed_from_ui_api"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E3-CLAIM-CRASH",
+      "phase": "E3",
+      "invariant": "Tras una caída incierta se impide repetir una escritura que quizá ya creó datos.",
+      "max_evidence_level": "isolated_http",
+      "offline_test_selectors": [
+        "tests/runtime/test_full_source_delivery_guard_p4.py::test_uncertain_crash_after_physical_task_create_blocks_repeat",
+        "tests/runtime/test_p4_e3_claim_forensics.py::test_unseen_then_claim_is_uncertain_and_inspection_has_zero_side_effects"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E3-CHAT-PERSIST",
+      "phase": "E3",
+      "invariant": "La respuesta del chat persiste antes de llegar al navegador y un reintento no la duplica.",
+      "max_evidence_level": "isolated_http",
+      "offline_test_selectors": [
+        "tests/runtime/test_conversation_reply_server_commit_p4.py::test_assistant_survives_navigation_without_browser_post",
+        "tests/runtime/test_conversation_reply_server_commit_p4.py::test_duplicate_server_delivery_is_idempotent"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-TASK-WORKSESSION",
+      "phase": "P4",
+      "invariant": "Tasks, subtareas y Work Sessions reutilizan el mismo servicio entre chat e interfaz.",
+      "max_evidence_level": "real_provider_isolated",
+      "offline_test_selectors": [
+        "tests/runtime/test_p4_taskonly_real_session_parity.py::test_taskonly_chat_then_actual_ui_activity_and_stop_same_canonical_session",
+        "tests/runtime/test_p4_chat_to_ui_http_flow.py::test_real_http_chat_session_can_be_seen_modified_and_closed_from_ui_api"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-MIXED-CORE-TASK",
+      "phase": "P4",
+      "invariant": "Un mensaje que mezcla hechos y Tasks conserva su fuente y exige cobertura completa.",
+      "max_evidence_level": "isolated_http",
+      "offline_test_selectors": [
+        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_day_self_and_task_plan_are_compiled_together_before_execution",
+        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_any_unsupported_later_fact_fails_before_compiling_any_write"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E4-LEGACY-QUARANTINE",
+      "phase": "E4",
+      "invariant": "Los validadores históricos de frases concretas no pueden volver a entrar en el Core nuevo.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/benchmarks/test_semantic_validator_isolation_p4.py::test_case_specific_validator_call_sites_are_strictly_quarantined"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-PERFORMANCE",
+      "phase": "P4",
+      "invariant": "Las escrituras con muchas notas evitan trabajos excesivos e indexan incrementalmente.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/core/test_scoped_note_decode_cache.py::test_updated_canonical_bytes_are_never_served_from_earlier_parse",
+        "tests/runtime/test_whole_source_light_product_p4.py::test_real_product_route_updates_context_and_graph_incrementally_without_full_rebuild"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-REAL-BROWSER",
+      "phase": "P4",
+      "invariant": "Navegador autenticado, n8n, GPT, Markdown, donut y grafo probados conjuntamente.",
+      "max_evidence_level": "none",
+      "offline_test_selectors": [],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-E3-RECOVERY",
+      "phase": "P4",
+      "invariant": "Recuperar una escritura interrumpida sin borrar hechos ni crear duplicados.",
+      "max_evidence_level": "none",
+      "offline_test_selectors": [],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-SESSION-MIXED",
+      "phase": "P4",
+      "invariant": "Permitir mezclar Work Sessions y hechos de Core en un mensaje con garantías comunes.",
+      "max_evidence_level": "none",
+      "offline_test_selectors": [],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E5-EVENTS",
+      "phase": "E5",
+      "invariant": "Events verifica que se puede crear otra aplicación sin duplicar Core ni el Writer.",
+      "max_evidence_level": "none",
+      "offline_test_selectors": [],
+      "blocks_p4_dev": false,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E6-INCREMENTAL-ARCH",
+      "phase": "E6",
+      "invariant": "Aplicar separación gradual de dependencias sin hacer una reescritura general.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/benchmarks/test_cross_surface_gate_contract.py::test_core_does_not_depend_on_any_app_or_runtime_implementation"
+      ],
+      "blocks_p4_dev": false,
+      "verified_real_browser_n8n": false
+    }
+  ]
+}

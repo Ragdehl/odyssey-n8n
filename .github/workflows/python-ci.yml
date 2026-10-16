@@ -34,6 +34,11 @@ jobs:
       - name: Check formatting
         run: ruff format --check odyssey_apps odyssey_core odyssey_runtime scripts tests
 
+      # User-approved invariants cannot vanish from refactors or get marked
+      # DEV-ready on the strength of local tests alone.
+      - name: Validate user invariant acceptance ledger
+        run: python scripts/odyssey_acceptance_contracts.py
+
       # Shared E2/E3/Tasks/Work Sessions contracts must pass independently of
       # historical frozen benchmark gates. No API credentials are forwarded.
       - name: Cross-surface mutation regression gate
