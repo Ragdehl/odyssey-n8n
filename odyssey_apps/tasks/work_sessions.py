@@ -12,9 +12,21 @@ from typing import Any
 from uuid import uuid4
 
 from odyssey_core.execution_context import ExecutionContext
-from odyssey_core.git_history import GitHistoryResult, HistoryRecorder, HistoryStatus
+from odyssey_core.git_history import GitHistoryResult, HistoryRecorder
+from odyssey_core.mutation_gate import (
+    CanonicalMutationError,
+    CanonicalMutationGate,
+    CreateMutationCommand,
+    MutationCommand,
+)
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
-from odyssey_core.persistence import ActorInput, create_entity, soft_delete_entity, update_entity
+from odyssey_core.persistence import (
+    ActorInput,
+    PersistenceOperation,
+    create_entity,
+    soft_delete_entity,
+    update_entity,
+)
 from odyssey_core.qualitative_fact_preservation import preserve_qualitative_activity_text
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
 
@@ -86,6 +98,7 @@ class TaskWorkSessionService:
         self.repository = repository
         self.schema = schema
         self.history = history
+        self._gate = CanonicalMutationGate(repository, schema, history)
         self.id_allocator = id_allocator
         self.activity_id_allocator = activity_id_allocator
 
@@ -133,34 +146,48 @@ class TaskWorkSessionService:
             raise WorkSessionError("WORK_SESSION_ID_INVALID")
         name = f"Work session · {task.metadata['name']} · {started_at}"
         path = f"{_WORK_SESSION_PATH_PREFIX}{session_id}.md"
-        snapshot = self._begin_history(request_id)
+        parent_command = MutationCommand(
+            "work_session_started",
+            task_id,
+            int(task.metadata["revision"]),
+            hashlib.sha256(_task_raw.encode()).hexdigest(),
+            request_id,
+            actor,
+            now,
+            TASK_TYPE,
+        )
         try:
-            create_entity(
-                self.repository,
-                self.schema,
-                path=path,
-                entity_id=session_id,
-                metadata={
-                    "name": name,
-                    "type": WORK_SESSION_TYPE,
-                    "task_id": task_id,
-                    "started_at": started_at,
-                },
-                content="",
-                actor=actor,
-                now=now,
+            receipt = self._gate.execute_create(
+                CreateMutationCommand(
+                    "work_session_started",
+                    session_id,
+                    path,
+                    WORK_SESSION_TYPE,
+                    request_id,
+                    actor,
+                    now,
+                    parent_command,
+                ),
+                lambda _parent: self._create_active_session(
+                    path, session_id, name, task_id, started_at, actor, now
+                ),
             )
-            raw = self.repository.read_text(path)
-            note = parse_note(raw)
-            validate_note(note, self.schema)
-        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+        except (
+            CanonicalMutationError,
+            ValueError,
+            OSError,
+            NoteFormatError,
+            NoteValidationError,
+        ) as error:
             raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
-        session = self._snapshot(raw, note)
+        if receipt.persistence.operation is not PersistenceOperation.CREATED:
+            raise WorkSessionError("WORK_SESSION_UNAVAILABLE")
+        session = self._snapshot(self.repository.read_text(path), receipt.readback)
         return WorkSessionMutationResult(
             "work_session_started",
             task_id,
             session,
-            self._record_history(request_id, snapshot, session_id),
+            receipt.history,
             path,
             None,
         )
@@ -185,31 +212,35 @@ class TaskWorkSessionService:
         if note.metadata.get("ended_at") is not None:
             raise WorkSessionError("WORK_SESSION_NOT_ACTIVE")
         self._validate_interval(str(note.metadata["started_at"]), ended_at)
-        snapshot = self._begin_history(request_id)
         try:
-            update_entity(
-                self.repository,
-                self.schema,
-                path=path,
-                expected_id=session_id,
-                expected_revision=expected_revision,
-                set_metadata={"ended_at": ended_at},
-                remove_metadata=(),
-                content=note.content,
-                actor=actor,
-                now=now,
+            receipt = self._update_session(
+                "work_session_stopped",
+                path,
+                note,
+                raw,
+                {"ended_at": ended_at},
+                (),
+                note.content,
+                request_id,
+                actor,
+                now,
             )
-            updated_raw = self.repository.read_text(path)
-            updated = parse_note(updated_raw)
-            validate_note(updated, self.schema)
-        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+        except (
+            CanonicalMutationError,
+            ValueError,
+            OSError,
+            NoteFormatError,
+            NoteValidationError,
+        ) as error:
             raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
+        updated_raw = self.repository.read_text(path)
+        updated = receipt.readback
         task_id = str(updated.metadata["task_id"])
         return WorkSessionMutationResult(
             "work_session_stopped",
             task_id,
             self._snapshot(updated_raw, updated),
-            self._record_history(request_id, snapshot, session_id),
+            receipt.history,
             path,
             hashlib.sha256(raw.encode()).hexdigest(),
         )
@@ -279,31 +310,35 @@ class TaskWorkSessionService:
             remove_metadata = ("ended_at",)
         else:
             set_metadata["ended_at"] = ended_at
-        snapshot = self._begin_history(request_id)
         try:
-            update_entity(
-                self.repository,
-                self.schema,
-                path=path,
-                expected_id=session_id,
-                expected_revision=expected_revision,
-                set_metadata=set_metadata,
-                remove_metadata=remove_metadata,
-                content=note.content,
-                actor=actor,
-                now=now,
+            receipt = self._update_session(
+                "work_session_edited",
+                path,
+                note,
+                raw,
+                set_metadata,
+                remove_metadata,
+                note.content,
+                request_id,
+                actor,
+                now,
             )
-            updated_raw = self.repository.read_text(path)
-            updated = parse_note(updated_raw)
-            validate_note(updated, self.schema)
-        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+        except (
+            CanonicalMutationError,
+            ValueError,
+            OSError,
+            NoteFormatError,
+            NoteValidationError,
+        ) as error:
             raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
+        updated_raw = self.repository.read_text(path)
+        updated = receipt.readback
         task_id = str(updated.metadata["task_id"])
         return WorkSessionMutationResult(
             "work_session_edited",
             task_id,
             self._snapshot(updated_raw, updated),
-            self._record_history(request_id, snapshot, session_id),
+            receipt.history,
             path,
             hashlib.sha256(raw.encode()).hexdigest(),
         )
@@ -366,24 +401,21 @@ class TaskWorkSessionService:
         )
         task_id = str(note.metadata["task_id"])
         prior = self._snapshot(raw, note)
-        history = self._begin_history(request_id)
         try:
-            soft_delete_entity(
-                self.repository,
-                self.schema,
-                path=path,
-                expected_id=session_id,
-                expected_revision=expected_revision,
-                actor=actor,
-                now=now,
-            )
-        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+            receipt = self._delete_session(path, note, raw, request_id, actor, now)
+        except (
+            CanonicalMutationError,
+            ValueError,
+            OSError,
+            NoteFormatError,
+            NoteValidationError,
+        ) as error:
             raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
         return WorkSessionMutationResult(
             "work_session_deleted",
             task_id,
             prior,
-            self._record_history(request_id, history, session_id),
+            receipt.history,
             path,
             hashlib.sha256(raw.encode()).hexdigest(),
         )
@@ -580,34 +612,152 @@ class TaskWorkSessionService:
         actor: ActorInput,
         now: str,
     ) -> WorkSessionMutationResult:
-        session_id = str(note.metadata["id"])
-        snapshot = self._begin_history(request_id)
         try:
-            update_entity(
-                self.repository,
-                self.schema,
-                path=path,
-                expected_id=session_id,
-                expected_revision=int(note.metadata["revision"]),
-                set_metadata={},
-                remove_metadata=(),
-                content=self._render_activity(entries),
-                actor=actor,
-                now=now,
+            receipt = self._update_session(
+                operation,
+                path,
+                note,
+                raw,
+                {},
+                (),
+                self._render_activity(entries),
+                request_id,
+                actor,
+                now,
             )
-            updated_raw = self.repository.read_text(path)
-            updated = parse_note(updated_raw)
-            validate_note(updated, self.schema)
-        except (ValueError, OSError, NoteFormatError, NoteValidationError) as error:
+        except (
+            CanonicalMutationError,
+            ValueError,
+            OSError,
+            NoteFormatError,
+            NoteValidationError,
+        ) as error:
             raise WorkSessionError("WORK_SESSION_UNAVAILABLE") from error
+        updated_raw = self.repository.read_text(path)
+        updated = receipt.readback
         task_id = str(updated.metadata["task_id"])
         return WorkSessionMutationResult(
             operation,
             task_id,
             self._snapshot(updated_raw, updated),
-            self._record_history(request_id, snapshot, session_id),
+            receipt.history,
             path,
             hashlib.sha256(raw.encode()).hexdigest(),
+        )
+
+    def _create_active_session(
+        self,
+        path: str,
+        session_id: str,
+        name: str,
+        task_id: str,
+        started_at: str,
+        actor: ActorInput,
+        now: str,
+    ) -> Any:
+        """Recheck the global lifecycle invariant immediately before CREATE.
+
+        The vault cannot atomically compare every Work Session and create a
+        new file, so simultaneous independent processes still require a
+        future repository transaction/lock to be fully serializable.
+        """
+        active = self._active_sessions()
+        if active:
+            raise WorkSessionError(
+                "WORK_SESSION_ALREADY_ACTIVE",
+                active_task_id=str(active[0][1].metadata["task_id"]),
+            )
+        return create_entity(
+            self.repository,
+            self.schema,
+            path=path,
+            entity_id=session_id,
+            metadata={
+                "name": name,
+                "type": WORK_SESSION_TYPE,
+                "task_id": task_id,
+                "started_at": started_at,
+            },
+            content="",
+            actor=actor,
+            now=now,
+        )
+
+    def _update_session(
+        self,
+        operation: str,
+        path: str,
+        note: Any,
+        raw: str,
+        set_metadata: dict[str, Any],
+        remove_metadata: tuple[str, ...],
+        content: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> Any:
+        session_id = str(note.metadata["id"])
+        command = MutationCommand(
+            operation,
+            session_id,
+            int(note.metadata["revision"]),
+            hashlib.sha256(raw.encode()).hexdigest(),
+            request_id,
+            actor,
+            now,
+            WORK_SESSION_TYPE,
+        )
+        target = self._gate.prepare(command)
+        return self._gate.execute_prepared(
+            command,
+            target,
+            lambda _target: update_entity(
+                self.repository,
+                self.schema,
+                path=path,
+                expected_id=session_id,
+                expected_revision=int(note.metadata["revision"]),
+                set_metadata=set_metadata,
+                remove_metadata=remove_metadata,
+                content=content,
+                actor=actor,
+                now=now,
+            ),
+        )
+
+    def _delete_session(
+        self,
+        path: str,
+        note: Any,
+        raw: str,
+        request_id: str,
+        actor: ActorInput,
+        now: str,
+    ) -> Any:
+        session_id = str(note.metadata["id"])
+        command = MutationCommand(
+            "work_session_deleted",
+            session_id,
+            int(note.metadata["revision"]),
+            hashlib.sha256(raw.encode()).hexdigest(),
+            request_id,
+            actor,
+            now,
+            WORK_SESSION_TYPE,
+        )
+        target = self._gate.prepare(command)
+        return self._gate.execute_prepared(
+            command,
+            target,
+            lambda _target: soft_delete_entity(
+                self.repository,
+                self.schema,
+                path=path,
+                expected_id=session_id,
+                expected_revision=int(note.metadata["revision"]),
+                actor=actor,
+                now=now,
+            ),
         )
 
     def _load_task(
@@ -802,29 +952,3 @@ class TaskWorkSessionService:
                 f"- {text} <!-- odyssey-work-session-entry:{entry.id}:{entry.created_at} -->"
             )
         return "\n".join(lines) + "\n"
-
-    def _begin_history(self, request_id: str) -> object | None:
-        if self.history is None:
-            return None
-        try:
-            return self.history.begin(request_id)
-        except Exception:
-            return None
-
-    def _record_history(
-        self, request_id: str, snapshot: object | None, note_id: str
-    ) -> GitHistoryResult:
-        if self.history is None:
-            return GitHistoryResult.disabled()
-        if snapshot is None:
-            return GitHistoryResult(HistoryStatus.FAILED, reason="history snapshot failed")
-        try:
-            return self.history.record(
-                request_id=request_id,
-                snapshot=snapshot,
-                affected_stable_note_ids=(note_id,),
-                repository=self.repository,
-                schema=self.schema,
-            )
-        except Exception:
-            return GitHistoryResult(HistoryStatus.FAILED, reason="history record failed")
