@@ -56,6 +56,9 @@ from odyssey_core.request_planning import (
 )
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import TemporalAnchor
+from odyssey_core.whole_message_coverage import validate_whole_message_coverage
+from odyssey_core.whole_message_identity_guard import reject_unproven_person_collisions
+from odyssey_core.whole_message_relationship_proof import VerifiedSelfRelationship
 from tests.core.test_reference_preflight import EmptyIndex, UnresolvedReasoner
 from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 
@@ -69,6 +72,11 @@ CASES = (
     "ana_luis",
     "maite_cross_app",
     "two_dates",
+    "children_subject",
+    "maite_variant",
+    "independent_apps",
+    "gender_disambiguated",
+    "ambiguous_two_males",
 )
 REVIEW_MODEL = "gpt-5.6-luna"
 REVIEW_SCHEMA = {
@@ -110,72 +118,22 @@ REF = re.compile(r"\{\{ref:(\d+)\}\}")
 
 
 def evidence_check(source: str, proposal: dict[str, Any], review: dict[str, Any]):
-    facts = proposal["facts"]
-    if (
-        not review["approved"]
-        or not review["complete"]
-        or len(review["facts"]) != len(facts)
-        or proposal["unresolved"]
-    ):
-        raise ValueError("Whole-message proof incomplete or ambiguous")
-    for index, (fact, check) in enumerate(zip(facts, review["facts"], strict=True)):
-        if (
-            check["ordinal"] != index
-            or fact["source_evidence"] not in check["source_quote"]
-            or check["source_quote"] not in source
-            or check["kind"] != fact["kind"]
-            or check["date"] != fact["date"]
-            or not check["supported"]
-        ):
-            raise ValueError("Source coverage mismatch")
-        names = check["reference_names"]
-        if len(names) != len(set(names)) or len(names) > 4:
-            raise ValueError("Invalid reference set")
-        valid = set(fact["participants"]) | {e["mention"] for e in proposal["entities"]}
-        if not set(names).issubset(valid):
-            raise ValueError("Unproven participant")
-        marks = [int(s) for s in REF.findall(check["reviewed_text"])]
-        if sorted(marks) != list(range(len(names))) or len(marks) != len(names):
-            raise ValueError("Each Core fact needs every typed reference once")
-        if any("[[" in check["reviewed_text"] or "]]" in check["reviewed_text"] for _ in (0,)):
-            raise ValueError("Model attempted raw canonical link")
-        if not check["reviewed_text"].strip() or len(check["reviewed_text"]) > 320:
-            raise ValueError("Invalid fact text")
-        if fact["needs_clarification"]:
-            raise ValueError("Ambiguous fact cannot write")
-        if fact["kind"] == "task" and "tasks" not in proposal.get(
-            "_allowed_capabilities", ("tasks",)
-        ):
-            raise ValueError("Task without routing scope")
-    return True
+    """Use Core's typed whole-source contract; this PoC has no write authority."""
+    checked = validate_whole_message_coverage(
+        source,
+        proposal,
+        review,
+        proposal.get("_allowed_capabilities", ()),
+        verified_relationship_members=proposal.get("_verified_family_names", ()),
+    )
+    assert checked.has_write_authority is False
+    return checked
 
 
-def reject_unproven_existing_name_collision(
-    repo: VaultRepository, schema: dict[str, Any], review: dict[str, Any]
-) -> None:
-    """Conservative PoC-only safety gate: partial name match is NOT identity proof.
-
-    There can be multiple Ana-like people or aliases. A synthetic no-candidates
-    embedding index is incapable of proving identity. Abstain BEFORE any write.
-    The real P2 contract will need Core-owned, evidence-backed resolution.
-    """
-    named_people: set[str] = set()
-    for fact in review["facts"]:
-        named_people.update(fact["reference_names"])
-    for name in named_people:
-        candidates = []
-        for path in repo.list_markdown_paths():
-            note = parse_note(repo.read_text(path))
-            validate_note(note, schema)
-            if note.metadata["type"] != "person" or note.metadata.get("deleted"):
-                continue
-            canonical = str(note.metadata["name"])
-            if canonical.casefold().startswith(name.casefold() + " ") or name.casefold().startswith(
-                canonical.casefold() + " "
-            ):
-                candidates.append(canonical)
-        if candidates:
-            raise ValueError("UNPROVEN_PARTIAL_CANONICAL_IDENTITY: " + name)
+def reject_unproven_existing_name_collision(repo, schema, review):
+    """Reuse Core's read-only collision check; never bind identity by model guess."""
+    names = tuple(sorted({name for fact in review["facts"] for name in fact["reference_names"]}))
+    reject_unproven_person_collisions(repo, schema, names)
 
 
 def verify_readback(
@@ -350,7 +308,13 @@ def plan_for_task(item: dict[str, Any]):
     return RequestPlan((make_action([item], date=item["date"], kind="task"),), ())
 
 
-def reviewed_semantics(client: Any, source: str, proposal: dict[str, Any]):
+def reviewed_semantics(
+    client: Any,
+    source: str,
+    proposal: dict[str, Any],
+    *,
+    verified_relationship: object | None = None,
+):
     instructions = (
         "INDEPENDENT conservative Core source-coverage reviewer. Input original unmodified "
         "message and untrusted atomic fact suggestions from a separate LLM. Inspect every "
@@ -369,13 +333,24 @@ def reviewed_semantics(client: Any, source: str, proposal: dict[str, Any]):
         "For tasks, write an actionable label (e.g. Llamar a {{ref:0}}.) but do NOT turn "
         "future indicative plans into obligations. Exact dates MUST equal proposed date. "
         "Preserve date=null when not specified. If the message has multiple facts, "
-        "review each separately; no raw markdown or note IDs. No execution authority."
+        "review each separately; no raw markdown or note IDs. No execution authority. "
+        "An optional independently Core-verified SELF relationship may include canonical "
+        "members even when their names are absent from the message. Only if that typed "
+        "evidence is supplied may you map a group mention to those specific members."
     )
     payload = {
         "source": source,
         "clock": {"date": "2026-10-16", "time": "11:00:00", "timezone": "Europe/Paris"},
         "proposed_facts": proposal["facts"],
         "proposed_entities": proposal["entities"],
+        "core_verified_self_relationship": (
+            {
+                "original_relation_span": verified_relationship.original_relation_span,
+                "members": [name for _id, name in verified_relationship.members],
+            }
+            if isinstance(verified_relationship, VerifiedSelfRelationship)
+            else None
+        ),
         "safety_notice": "This is ONLY a semantic opinion. Core later resolves IDs and writer changes.",
     }
     reply = client.responses.create(
@@ -452,12 +427,15 @@ def main():
     if not os.getenv("OPENAI_API_KEY"):
         raise SystemExit("Provider credentials required")
     fresh_models = "--fresh" in sys.argv
-    arguments = set(sys.argv[1:]) - {"--fresh"}
-    selected = arguments if arguments else set(CASES)
+    extended = "--extended" in sys.argv
+    arguments = set(sys.argv[1:]) - {"--fresh", "--extended"}
+    selected = arguments if arguments else set(CASES[6:] if extended else CASES[:6])
     if not selected.issubset(CASES):
         raise SystemExit("Unknown source case")
     base = json.loads((OUT / "observations.json").read_text())
     by = {case["case"]: case for case in base["cases"]}
+    other = json.loads((OUT / "observations_ambiguous_two_males_v1.json").read_text())
+    by.update({case["case"]: case for case in other["cases"]})
     schema = compose_application_schema(
         json.loads((ROOT / "config/note-schema.json").read_text()), (TASK_SCHEMA_EXTENSION,)
     )
@@ -637,7 +615,9 @@ def main():
             report["results"].append(run)
             report["total_estimated_usd"] = round(total_usd, 7)
             report_file = (
-                "p2_integration_receipts_fresh.json"
+                "p3_extended_receipts.json"
+                if extended
+                else "p2_integration_receipts_fresh.json"
                 if fresh_models
                 else "p2_integration_receipts.json"
             )
@@ -662,7 +642,11 @@ def main():
         round(live_semantic_provider.usd, 7) if live_semantic_provider else 0.0
     )
     report_file = (
-        "p2_integration_receipts_fresh.json" if fresh_models else "p2_integration_receipts.json"
+        "p3_extended_receipts.json"
+        if extended
+        else "p2_integration_receipts_fresh.json"
+        if fresh_models
+        else "p2_integration_receipts.json"
     )
     (OUT / report_file).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 

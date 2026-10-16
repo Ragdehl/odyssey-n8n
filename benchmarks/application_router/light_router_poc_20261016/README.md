@@ -1,5 +1,7 @@
 # PoC Router ligero: resultados observados, 16-10-2026
 
+**P3 MÁS RECIENTE:** [informe](../../../docs/architecture/light-router-p3-results-20261016.md). Nuevo contrato Core y pruebas reales aisladas: 5/6 Core+Task completos, 1 bloqueo Ana sin escritura, y escenario «mis hijos» 3 facts sin fecha almacenados en SELF con backlinks Cloe/Bruno verificados. 256 backend y 140 UI existentes OK, pero falta nueva ruta HTTP/n8n/UI; **no instalar DEV**. Artefactos `p3_core_contract_fresh_receipts.json`, `p3_extended_receipts.json` y `p3_children_real_write.json`.
+
 **ETAPA POSTERIOR P2 (16-10, reemplaza el antiguo gate de integración para la arquitectura NUEVA):** [informe P2 integrado](../../../docs/architecture/light-router-p2-results-20261016.md). PoC experimental con IA nueva Router+Planner+revisor de fuente, **5/6 escritores Core y Tasks correctos con readback y backlinks**, y abstención sin escritura para «Ana» vs «Ana López». Los **0/3** descritos más abajo corresponden a la integración antigua de Core sin el nuevo contrato de revisión íntegra; se preservan como comparativa histórica, no como estado del último prototipo. **Sin despliegue ni autorización de uso real**. Resultados: `p2_integration_receipts_fresh.json`, `p2_integrated_bridge.py` y 71 tests relevantes (nuevo módulo y regresiones).
 
 

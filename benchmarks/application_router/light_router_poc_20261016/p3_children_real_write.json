@@ -1,0 +1,79 @@
+{
+  "case": "children_subject",
+  "source": "Mis hijos fueron al parque, después comieron un helado y por la tarde vieron una película.",
+  "status": "completed",
+  "cloned_dev": true,
+  "fresh_independent_reviewer": true,
+  "review": {
+    "approved": true,
+    "complete": true,
+    "reason": null,
+    "facts": [
+      {
+        "ordinal": 0,
+        "source_quote": "Mis hijos fueron al parque",
+        "kind": "record",
+        "reviewed_text": "{{ref:0}} y {{ref:1}} fueron al parque.",
+        "date": null,
+        "reference_names": [
+          "Cloe",
+          "Bruno"
+        ],
+        "supported": true
+      },
+      {
+        "ordinal": 1,
+        "source_quote": "después comieron un helado",
+        "kind": "record",
+        "reviewed_text": "Después de ir al parque, {{ref:0}} y {{ref:1}} comieron un helado.",
+        "date": null,
+        "reference_names": [
+          "Cloe",
+          "Bruno"
+        ],
+        "supported": true
+      },
+      {
+        "ordinal": 2,
+        "source_quote": "por la tarde vieron una película",
+        "kind": "record",
+        "reviewed_text": "Por la tarde, {{ref:0}} y {{ref:1}} vieron una película.",
+        "date": null,
+        "reference_names": [
+          "Cloe",
+          "Bruno"
+        ],
+        "supported": true
+      }
+    ]
+  },
+  "review_tokens": {
+    "in": 931,
+    "out": 317
+  },
+  "writer_status": "completed",
+  "writer_units": [
+    {
+      "op": "UPDATED",
+      "id": "odyssey-dev-synthetic-person"
+    },
+    {
+      "op": "REFERENCE_BOUND",
+      "id": "39de1e51-bd41-4406-a8d0-d419f7833157"
+    },
+    {
+      "op": "REFERENCE_BOUND",
+      "id": "46c22b6e-daf7-41ed-99e5-6b6ba7c76577"
+    }
+  ],
+  "changed_notes": [
+    "people/odyssey-dev-synthetic-person.md"
+  ],
+  "facts_written": 3,
+  "backlinks": {
+    "Cloe": 5,
+    "Bruno": 4
+  },
+  "new_person_notes": 0,
+  "temp_vault_deleted": true
+}

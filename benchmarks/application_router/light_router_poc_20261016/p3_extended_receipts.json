@@ -1,0 +1,645 @@
+{
+  "purpose": "P2 source→independent semantic review→existing Core Writer and Tasks",
+  "fresh_semantic_route_and_plan": true,
+  "WARNING": "Experimental source-review gate; NOT production candidate_coverage",
+  "model": "gpt-5.6-luna",
+  "real_ai": true,
+  "provider_store": false,
+  "synthetic_embeddings": true,
+  "isolated_vault": true,
+  "results": [
+    {
+      "case": "children_subject",
+      "source": "Mis hijos fueron al parque, después comieron un helado y por la tarde vieron una película.",
+      "status": "failed",
+      "reason": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "review": {
+        "approved": false,
+        "complete": false,
+        "reason": "Las acciones y la secuencia están expresadas en la fuente, pero la identidad de los participantes no está especificada: «mis hijos» no permite concluir que sean Cloe y Bruno. Por tanto, las tres propuestas atribuyen indebidamente los hechos a personas concretas.",
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Mis hijos fueron al parque",
+            "kind": "record",
+            "reviewed_text": "Mis hijos fueron al parque.",
+            "date": null,
+            "reference_names": [],
+            "supported": false
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "después comieron un helado",
+            "kind": "record",
+            "reviewed_text": "Después, mis hijos comieron un helado.",
+            "date": null,
+            "reference_names": [],
+            "supported": false
+          },
+          {
+            "ordinal": 2,
+            "source_quote": "por la tarde vieron una película",
+            "kind": "record",
+            "reviewed_text": "Por la tarde, mis hijos vieron una película.",
+            "date": null,
+            "reference_names": [],
+            "supported": false
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the connected events about the user's children.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Mis hijos",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "inferred_unambiguous"
+          },
+          {
+            "mention": "Cloe",
+            "canonical_name": "Cloe",
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Bruno",
+            "canonical_name": "Bruno",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "Cloe y Bruno fueron al parque.",
+            "kind": "record",
+            "subject": "Cloe y Bruno",
+            "date": null,
+            "daypart": null,
+            "participants": [
+              "Cloe",
+              "Bruno"
+            ],
+            "source_evidence": "Mis hijos fueron al parque",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Después de ir al parque, Cloe y Bruno comieron un helado.",
+            "kind": "record",
+            "subject": "Cloe y Bruno",
+            "date": null,
+            "daypart": null,
+            "participants": [
+              "Cloe",
+              "Bruno"
+            ],
+            "source_evidence": "después comieron un helado",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Por la tarde, Cloe y Bruno vieron una película.",
+            "kind": "record",
+            "subject": "Cloe y Bruno",
+            "date": null,
+            "daypart": "tarde",
+            "participants": [
+              "Cloe",
+              "Bruno"
+            ],
+            "source_evidence": "por la tarde vieron una película",
+            "dependent_on_fact_index": 1,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 3.53,
+          "input_tokens": 303,
+          "output_tokens": 150,
+          "estimated_usd": 0.0001053,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 4.95,
+          "input_tokens": 712,
+          "output_tokens": 494,
+          "estimated_usd": 0.0007352,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 864,
+        "out": 344
+      },
+      "duration_s": 12.56
+    },
+    {
+      "case": "maite_variant",
+      "source": "He conocido a una chica llamada Nora. Tengo que enviarle un correo el lunes.",
+      "status": "failed",
+      "reason": "UnprovenPersonIdentityError: UNPROVEN_PARTIAL_CANONICAL_IDENTITY: Nora",
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "He conocido a una chica llamada Nora.",
+            "kind": "record",
+            "reviewed_text": "He conocido a una chica llamada {{ref:0}}.",
+            "date": null,
+            "reference_names": [
+              "Nora"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "Tengo que enviarle un correo el lunes.",
+            "kind": "task",
+            "reviewed_text": "Enviar un correo a {{ref:0}}.",
+            "date": "2026-10-19",
+            "reference_names": [
+              "Nora"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "tasks",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Note that the user met a girl named Nora.",
+            "depends_on_another_scope": false
+          },
+          {
+            "capability": "tasks",
+            "description": "Create a task to email Nora on Monday.",
+            "depends_on_another_scope": true
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Nora",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user met a girl named Nora.",
+            "kind": "record",
+            "subject": "Nora",
+            "date": null,
+            "daypart": null,
+            "participants": [
+              "Nora"
+            ],
+            "source_evidence": "He conocido a una chica llamada Nora",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Send Nora an email.",
+            "kind": "task",
+            "subject": "Nora",
+            "date": "2026-10-19",
+            "daypart": null,
+            "participants": [
+              "Nora"
+            ],
+            "source_evidence": "Tengo que enviarle un correo el lunes",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 2.54,
+          "input_tokens": 299,
+          "output_tokens": 152,
+          "estimated_usd": 0.0001059,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 3.15,
+          "input_tokens": 707,
+          "output_tokens": 289,
+          "estimated_usd": 0.0004882,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 699,
+        "out": 268
+      },
+      "duration_s": 8.9
+    },
+    {
+      "case": "independent_apps",
+      "source": "Tengo que llamar al banco mañana. Por cierto, me gusta el jazz.",
+      "status": "failed",
+      "reason": "ValueError: No validated owner for undated fact",
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Tengo que llamar al banco mañana.",
+            "kind": "task",
+            "reviewed_text": "Llamar al banco.",
+            "date": "2026-10-17",
+            "reference_names": [],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "Por cierto, me gusta el jazz.",
+            "kind": "record",
+            "reviewed_text": "Al usuario le gusta el jazz.",
+            "date": null,
+            "reference_names": [],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "tasks",
+          "temporal",
+          "core"
+        ],
+        "interpretation": "separable",
+        "reason": "independent",
+        "app_scopes": [
+          {
+            "capability": "tasks",
+            "description": "Record a task to call the bank tomorrow.",
+            "depends_on_another_scope": false
+          },
+          {
+            "capability": "core",
+            "description": "Record that the user likes jazz.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [],
+        "facts": [
+          {
+            "meaning": "The user must call the bank.",
+            "kind": "task",
+            "subject": "the user",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "the bank"
+            ],
+            "source_evidence": "Tengo que llamar al banco mañana",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "The user likes jazz.",
+            "kind": "record",
+            "subject": "the user",
+            "date": null,
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "me gusta el jazz",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 3.03,
+          "input_tokens": 297,
+          "output_tokens": 151,
+          "estimated_usd": 0.0001052,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 2.66,
+          "input_tokens": 658,
+          "output_tokens": 204,
+          "estimated_usd": 0.0003764,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 661,
+        "out": 199
+      },
+      "duration_s": 9.11
+    },
+    {
+      "case": "gender_disambiguated",
+      "source": "Ayer vi a Ana y Luis; mañana iré con él al cine.",
+      "status": "failed",
+      "reason": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "review": {
+        "approved": false,
+        "complete": false,
+        "reason": "La segunda propuesta es incorrecta: “él” tiene un antecedente masculino único entre las personas mencionadas, Luis, por lo que no es ambiguo ni puede referirse a Ana.",
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Ayer vi a Ana y Luis",
+            "kind": "record",
+            "reviewed_text": "Ayer vi a {{ref:0}} y {{ref:1}}.",
+            "date": "2026-10-15",
+            "reference_names": [
+              "Ana",
+              "Luis"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "mañana iré con él al cine",
+            "kind": "record",
+            "reviewed_text": "Mañana iré al cine con {{ref:1}}.",
+            "date": "2026-10-17",
+            "reference_names": [
+              "Luis"
+            ],
+            "supported": false
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_reference",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Personal note about seeing Ana and Luis and going to the cinema with him.",
+            "depends_on_another_scope": true
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Ana",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Luis",
+            "canonical_name": "Luis",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user saw Ana and Luis.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-15",
+            "daypart": null,
+            "participants": [
+              "Ana",
+              "Luis"
+            ],
+            "source_evidence": "Ayer vi a Ana y Luis",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "The user will go to the cinema tomorrow with an unspecified male person; “él” could refer to Ana or Luis, so the participant is ambiguous.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Ana",
+              "Luis"
+            ],
+            "source_evidence": "mañana iré con él al cine",
+            "dependent_on_fact_index": null,
+            "needs_clarification": true
+          }
+        ],
+        "unresolved": [
+          "The antecedent of “él” is ambiguous between Ana and Luis."
+        ]
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 3.47,
+          "input_tokens": 298,
+          "output_tokens": 190,
+          "estimated_usd": 0.0001248,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 4.74,
+          "input_tokens": 714,
+          "output_tokens": 493,
+          "estimated_usd": 0.0007344,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 754,
+        "out": 343
+      },
+      "duration_s": 12.51
+    },
+    {
+      "case": "ambiguous_two_males",
+      "source": "Ayer vi a Eric y Luis; mañana iré con él al cine.",
+      "status": "failed",
+      "reason": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Ayer vi a Eric y Luis",
+            "kind": "record",
+            "reviewed_text": "El 15 de octubre de 2026, vi a {{ref:0}} y {{ref:1}}.",
+            "date": "2026-10-15",
+            "reference_names": [
+              "Eric",
+              "Luis"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "mañana iré con él al cine",
+            "kind": "record",
+            "reviewed_text": "El 17 de octubre de 2026, iré con él al cine; su antecedente es ambiguo entre {{ref:0}} y {{ref:1}}.",
+            "date": "2026-10-17",
+            "reference_names": [
+              "Eric",
+              "Luis"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_reference",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the personal event information, preserving the reference across clauses.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Eric",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Luis",
+            "canonical_name": "Luis",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user saw Eric and Luis.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-15",
+            "daypart": null,
+            "participants": [
+              "Eric",
+              "Luis"
+            ],
+            "source_evidence": "Ayer vi a Eric y Luis",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "The user will go to the cinema with one male person referred to as “él”; the antecedent is ambiguous between Eric and Luis.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Eric",
+              "Luis"
+            ],
+            "source_evidence": "mañana iré con él al cine",
+            "dependent_on_fact_index": null,
+            "needs_clarification": true
+          }
+        ],
+        "unresolved": [
+          "The pronoun “él” could refer to either Eric or Luis; no identity was chosen."
+        ]
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 3.08,
+          "input_tokens": 298,
+          "output_tokens": 159,
+          "estimated_usd": 0.0001093,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 5.14,
+          "input_tokens": 715,
+          "output_tokens": 476,
+          "estimated_usd": 0.0007142,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 751,
+        "out": 399
+      },
+      "duration_s": 15.77
+    }
+  ],
+  "total_estimated_usd": 0.0026094,
+  "temporary_vaults_discarded": true,
+  "fresh_semantic_estimated_usd": 0.0035989
+}
