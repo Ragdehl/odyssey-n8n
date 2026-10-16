@@ -672,7 +672,10 @@ async function sendSubmission(submission, isRetry = false, activeRecoveryControl
       result,
       renderResult: renderProductResult,
       persistAssistantTurn: async ({withoutDiagnostics = false} = {}) => {
-        if (!conversationId) return;
+        // Server-side n8n->runtime persistence is the authority: do not
+        // issue a conflicting second browser append after a confirmed save.
+        if (result.conversation_persisted === true) return;
+        if (!conversationId) throw new Error("Conversation was not initialized");
         await requestConversation({
           endpoint: conversationEndpoint,
           operation: "turn",

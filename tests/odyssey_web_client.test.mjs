@@ -960,3 +960,19 @@ test("conversation diagnostics mismatch retries only a text-only assistant turn,
   ]);
   assert.deepEqual(notifications, ["diagnostics"]);
 });
+
+
+test("n8n HTTP 200 containing a runtime error cannot silently claim a turn persisted", async () => {
+  await assert.rejects(requestConversation({operation:"turn",payload:{request_id:"r",role:"assistant",text:"done"},
+    fetchImpl:async()=>response({payload:{error:"invalid conversation request"}})}),ProductRequestError);
+  await assert.rejects(requestConversation({operation:"main",
+    fetchImpl:async()=>response({payload:{conversation_id:"main"}})}),ProductRequestError);
+});
+
+test("only explicit server confirmation lets a browser skip its own assistant append", () => {
+  const received=validateProductResponse({request_id:"chat-1",status:"completed",
+    kind:"acknowledgement",message:"Guardado.",conversation_persisted:true});
+  assert.equal(received.conversation_persisted,true);
+  assert.throws(()=>validateProductResponse({request_id:"chat-1",status:"completed",
+    kind:"acknowledgement",message:"Guardado.",conversation_persisted:"true"}),ProductRequestError);
+});

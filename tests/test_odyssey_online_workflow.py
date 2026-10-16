@@ -292,7 +292,11 @@ def test_invalid_browser_request_bypasses_runtime_and_answerer() -> None:
     source = SOURCE.read_text(encoding="utf-8")
     assert "Validate browser request" in source
     assert "La solicitud no es válida." in source
-    assert "valid.output(1).to(direct).to(respond)" in source
+    # Malformed input must not reach runtime, answerer OR the new server-side
+    # assistant-turn writer: without a persisted user request there is no
+    # authenticated response turn to correlate.
+    assert "valid.output(1).to(invalidDirect).to(respond)" in source
+    assert "Return invalid request without creating a transcript turn" in source
 
 
 def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> None:

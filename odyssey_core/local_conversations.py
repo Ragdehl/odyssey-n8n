@@ -106,6 +106,13 @@ class LocalConversationStore:
             "before": self._encode_cursor(start) if start else None,
         }
 
+    def has_turn(self, request_id: str, role: str) -> bool:
+        """Read-only idempotent correlation for transcript continuations."""
+        _validate_id(request_id, "request_id")
+        if role not in {"user", "assistant"}:
+            raise ConversationError("turn role is invalid")
+        return self._request_entry(request_id, role) is not None
+
     def append_turn(
         self,
         *,

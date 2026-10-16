@@ -89,6 +89,15 @@ export async function requestConversation({endpoint = "/api/conversation", opera
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
   }
+  // n8n can return HTTP 200 containing a private-runtime 4xx JSON body.
+  // Treat that as a failed append, NEVER as persisted conversation state.
+  if (typeof value.error === "string" && value.error) {
+    throw new ProductRequestError("Odyssey no ha confirmado el guardado de la conversación.", false);
+  }
+  if ((operation === "main" || operation === "turn") &&
+      (value.conversation_id !== "main" || !Array.isArray(value.turns))) {
+    throw new ProductRequestError("Odyssey devolvió una conversación incompleta.", false);
+  }
   if (value.turns === undefined) return value;
   if (!Array.isArray(value.turns)) {
     throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
@@ -156,7 +165,12 @@ export function validateProductResponse(value) {
     throw new ProductRequestError("Odyssey returned an empty message.");
   }
 
+  if (value.conversation_persisted !== undefined &&
+      value.conversation_persisted !== true) {
+    throw new ProductRequestError("Odyssey returned invalid conversation persistence evidence.");
+  }
   const result = {request_id, status, kind, message};
+  if (value.conversation_persisted === true) result.conversation_persisted = true;
   if (value.request_detail !== undefined) {
     try {
       result.request_detail = validateRequestDetail(value.request_detail, request_id);

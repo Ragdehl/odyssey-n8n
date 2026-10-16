@@ -2207,6 +2207,93 @@ class RuntimeComposition:
         with self._conversation_lock:
             return self._conversation_store(actor).load_main_page()
 
+    def persist_product_assistant_response(
+        self,
+        response: dict[str, object],
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Persist the EXACT n8n-rendered assistant text before HTTP response.
+
+        The browser must no longer be the only component responsible for
+        persisting a visible reply. Only an already persisted user delivery
+        under the same authenticated actor and request_id can be answered.
+        Core Markdown remains untouched; this stores transcript state only.
+        """
+        from odyssey_core.conversations import ConversationError
+
+        if not isinstance(response, dict) or not set(response) <= {
+            "request_id",
+            "status",
+            "kind",
+            "message",
+            "request_detail",
+            "note_result_snapshot",
+            "collection_members",
+            "clarification",
+        }:
+            raise ConversationError("assistant product response is invalid")
+        request_id = response.get("request_id")
+        status = response.get("status")
+        message = response.get("message")
+        if (
+            not isinstance(request_id, str)
+            or not isinstance(status, str)
+            or status not in {"completed", "partial", "needs_attention", "failed"}
+            or response.get("kind")
+            not in {
+                "answer",
+                "acknowledgement",
+                "clarification",
+                "cannot_answer",
+                "empty",
+                "error",
+                "note_set",
+            }
+            or not isinstance(message, str)
+            or not message.strip()
+        ):
+            raise ConversationError("assistant product response is invalid")
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        with self._conversation_lock:
+            store = self._conversation_store(actor)
+            store.load_or_create_main(now=_current_time()["timestamp"])
+            if not store.has_turn(request_id, "user"):
+                raise ConversationError("assistant without a matching user delivery")
+            optional = {
+                "request_detail": response.get("request_detail"),
+                "note_result_snapshot": response.get("note_result_snapshot"),
+            }
+            try:
+                store.append_turn(
+                    request_id=request_id,
+                    role="assistant",
+                    text=message,
+                    status=status,
+                    created_at=_current_time()["timestamp"],
+                    **optional,
+                )
+                diagnostics_preserved = True
+            except ConversationError:
+                # The original content must survive a diagnostic mismatch,
+                # but a conflicting already-persisted response must still
+                # fail; never overwrite an immutable turn.
+                if store.has_turn(request_id, "assistant"):
+                    raise
+                store.append_turn(
+                    request_id=request_id,
+                    role="assistant",
+                    text=message,
+                    status=status,
+                    created_at=_current_time()["timestamp"],
+                )
+                diagnostics_preserved = False
+        return {
+            **response,
+            "conversation_persisted": True,
+            "conversation_diagnostics_preserved": diagnostics_preserved,
+        }
+
     def append_conversation_turn(
         self,
         conversation_id: str,

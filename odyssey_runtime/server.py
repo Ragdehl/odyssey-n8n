@@ -157,6 +157,26 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
                     )
                 return
+            if parsed.path == "/conversation/assistant-response":
+                try:
+                    payload = self._read_payload()
+                    if (
+                        not {"response"} <= set(payload)
+                        or set(payload) - {"response", "authenticated_actor", "external_principal"}
+                        or ("authenticated_actor" in payload and "external_principal" in payload)
+                    ):
+                        raise ValueError("invalid assistant response envelope")
+                    self._write_json(
+                        HTTPStatus.OK,
+                        runtime.persist_product_assistant_response(
+                            payload["response"], *self._identity_from_payload(payload)
+                        ),
+                    )
+                except (ConversationError, IdentityBoundaryError, TypeError, ValueError):
+                    self._write_json(
+                        HTTPStatus.BAD_REQUEST, {"error": "invalid assistant response"}
+                    )
+                return
             if parsed.path == "/conversation/turn":
                 try:
                     payload = self._read_payload()

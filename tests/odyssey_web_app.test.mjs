@@ -290,6 +290,28 @@ async function flush() {
   await Promise.resolve();
 }
 
+test("server-confirmed assistant survives a new page without any browser persistence call", async () => {
+  const answer={request_id:"web-guillem-1",status:"completed",kind:"acknowledgement",
+    message:"Guardado.",conversation_persisted:true};
+  const page=await mountApp({turns:[],
+    createSubmission:(request)=>({request,requestId:"web-guillem-1"}),
+    requestProductResult:async()=>answer,
+  });
+  page.elements.input.value="Hoy he conocido a Guillem";
+  page.elements.form.emit("submit",{preventDefault(){}});
+  await flush();
+  assert.equal(page.persisted.length,0,"the durable server receipt replaces fragile browser append");
+  assert.match(conversationMessages(page.elements.conversation).at(-1).textContent,/Guardado/);
+  const reloaded=await mountApp({turns:[
+    {request_id:"web-guillem-1",role:"user",text:"Hoy he conocido a Guillem"},
+    {request_id:"web-guillem-1",role:"assistant",text:"Guardado.",status:"completed"},
+  ],requestProductResult:async()=>{throw new Error("No resend after navigation");}});
+  assert.deepEqual(conversationMessages(reloaded.elements.conversation).map(x=>x.className),[
+    "message message-user","message message-odyssey",
+  ]);
+  assert.equal(reloaded.elements.conversation.querySelector(".recovery-control"),null);
+});
+
 test("broken visual progress never prevents sending a request or rendering its answer", async () => {
   const submissions = [];
   const page = await mountApp({
