@@ -208,7 +208,15 @@ PLANNER_INSTRUCTIONS = (
     "supported by speaker evidence. Do not guess identity from role. Preserve the first-person "
     "voice and verb aspect in meaning. An explicitly stated first-person future intention is a "
     "PLAN or EXPECTATION, not a completed event or guaranteed future outcome; do not nominalize "
-    "it as an impersonal fact such as a purchase that WILL occur."
+    "it as an impersonal fact such as a purchase that WILL occur. "
+    "If the optional prior_independent_coverage_rejected flag is true, a "
+    "separate Core reviewer found an omission in an earlier NONEXECUTED "
+    "hypothesis. Independently re-read the COMPLETE ORIGINAL source and "
+    "account for every explicit participant, predicate and separately "
+    "asserted fact. Do not guess a missing participant, change the source, "
+    "invent a date or downgrade uncertainties merely to get approval. "
+    "The same independent Core reviewer and Core preflight will still judge "
+    "the entire revised plan, with no special identities or write privileges."
 )
 
 PROMPT_SPEAKER_A = (

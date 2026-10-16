@@ -17,17 +17,21 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
+from json import JSONDecodeError
 from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from openai import OpenAIError
 
 from odyssey_apps.tasks import (
     TaskLifecycleGuard,
     TaskOperation,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
+from odyssey_core.context import ContextIndexError
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
-from odyssey_core.notes import parse_note, scoped_note_decode_cache
+from odyssey_core.notes import scoped_note_decode_cache
 from odyssey_core.storage import VaultRepository
 from odyssey_core.whole_message_coverage import (
     WholeMessageCoverageError,
@@ -69,7 +73,6 @@ from odyssey_runtime.whole_source_model_contract import (
 
 ROUTER_MODEL = "gpt-6-luna"
 PLANNER_MODEL = "gpt-5.6-luna"
-MAX_SOURCE_NOTES = 5000
 
 
 class WholeSourceLightError(ValueError):
@@ -93,49 +96,49 @@ class WholeSourceLightExecutor:
     now: Callable[[], datetime] | None = None
 
     def _ask(self, model: str, instructions: str, payload: dict, schema: dict, name: str) -> dict:
-        answer = self.client.responses.create(
-            model=model,
-            reasoning={"effort": "low"},
-            store=False,
-            max_output_tokens=1700,
-            input=[
-                {"role": "system", "content": instructions},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-            ],
-            text={
-                "format": {"type": "json_schema", "name": name, "strict": True, "schema": schema}
-            },
-        )
+        try:
+            answer = self.client.responses.create(
+                model=model,
+                reasoning={"effort": "low"},
+                store=False,
+                max_output_tokens=1700,
+                input=[
+                    {"role": "system", "content": instructions},
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": name,
+                        "strict": True,
+                        "schema": schema,
+                    }
+                },
+            )
+        except (OpenAIError, TimeoutError, ConnectionError, OSError) as error:
+            raise WholeSourceLightError("Bounded P4 provider is unavailable") from error
         if answer.status != "completed":
             raise WholeSourceLightError("Provider response was not complete")
-        result = json.loads(answer.output_text)
+        try:
+            result = json.loads(answer.output_text)
+        except (JSONDecodeError, TypeError, ValueError) as error:
+            raise WholeSourceLightError("Bounded P4 provider response is invalid") from error
         if not isinstance(result, dict):
             raise WholeSourceLightError("Provider response shape is invalid")
         return result
 
     def _note_hints(self, source: str) -> list[dict]:
-        # Source hints are NEVER canonical ID selections. Bound cost; no fixed
-        # entity names, no DEV-only IDs or relationship inference from words.
-        words = set(re.findall(r"[\wÀ-ÿ]+", source.casefold()))
-        paths = self.repository.list_markdown_paths()
-        if len(paths) > MAX_SOURCE_NOTES:
-            raise WholeSourceLightError("Canonical hint scan budget exceeded")
-        hints = []
-        for path in paths:
-            note = parse_note(self.repository.read_text(path))
-            if note.metadata.get("type") not in {"person", "project"} or note.metadata.get(
-                "deleted"
-            ):
-                continue
-            name = str(note.metadata["name"])
-            parts = re.findall(r"[\wÀ-ÿ]+", name.casefold())
-            if parts and len(parts[0]) >= 3 and parts[0] in words:
-                hints.append(
-                    {"name": name, "type": note.metadata["type"], "id": str(note.metadata["id"])}
+        # The existing derived context index is only a bounded hint source.
+        # Core subsequently resolves ALL identities against live Markdown.
+        words = frozenset(re.findall(r"[\wÀ-ÿ]+", source.casefold()))
+        try:
+            return list(
+                self.context_index.source_name_hint_candidates(
+                    self.repository, source_words=words, limit=24
                 )
-            if len(hints) > 24:
-                raise WholeSourceLightError("Source hint budget exceeded")
-        return hints
+            )
+        except ContextIndexError as error:
+            raise WholeSourceLightError("Canonical hints are unavailable or stale") from error
 
     def __call__(
         self, source: str, delivery: str, actor: AuthenticatedActorContext, conversation_id: str
@@ -143,7 +146,14 @@ class WholeSourceLightExecutor:
         # No trust caching: only parsed representations of byte-for-byte
         # identical canonical Markdown, and only within this one delivery.
         with scoped_note_decode_cache():
-            return self._execute_source(source, delivery, actor, conversation_id)
+            try:
+                return self._execute_source(source, delivery, actor, conversation_id)
+            except WholeSourceLightError:
+                # The P4-specific error class is raised only by model and
+                # source-hint PREWRITE steps. Core/Tasks mutations use their
+                # own typed failures, which must still propagate and retain
+                # the E3 claim if a physical write may have happened.
+                return self._abstain(delivery, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
 
     def _execute_source(
         self, source: str, delivery: str, actor: AuthenticatedActorContext, conversation_id: str
@@ -227,50 +237,74 @@ class WholeSourceLightExecutor:
             return self._abstain(delivery)
         if self.progress is not None:
             self.progress("planner.started", {})
-        proposed = self._ask(
-            PLANNER_MODEL,
-            PLANNER_INSTRUCTIONS,
-            {
-                "original_source": source,
-                "clock": clock,
-                "routing_hint": route,
-                "known_notes": self._note_hints(source),
-                "verified_family": group_members,
-            },
-            PLAN_SCHEMA,
-            "odyssey_light_shared_semantic_plan_v1",
-        )
-        proposed["_allowed_capabilities"] = capabilities
-        if any(
-            isinstance(item, dict) and item.get("kind") == "task"
-            for item in proposed.get("facts", ())
-        ):
-            mixed_task_review = self._ask(
+        # One bounded, PREWRITE re-evaluation only if an independent source
+        # reviewer explicitly finds an omission, the proposal had no known
+        # ambiguities, and nothing has been mutated. Never retry a genuinely
+        # unresolved identity, unsupported Task operation, speaker conflict or
+        # any delivery after Core could already have persisted a note.
+        reviewed_ok = False
+        known_notes = self._note_hints(source)
+        for attempt in range(2):
+            proposed = self._ask(
                 PLANNER_MODEL,
-                MIXED_TASK_CREATE_PROMPT,
-                {"original_source": source, "suggested_facts": proposed.get("facts", [])},
-                MIXED_TASK_CREATE_SCHEMA,
-                "odyssey_mixed_task_create_v1",
+                PLANNER_INSTRUCTIONS,
+                {
+                    "original_source": source,
+                    "clock": clock,
+                    "routing_hint": route,
+                    "known_notes": known_notes,
+                    "verified_family": group_members,
+                    "prior_independent_coverage_rejected": bool(attempt),
+                },
+                PLAN_SCHEMA,
+                "odyssey_light_shared_semantic_plan_v1",
             )
+            proposed["_allowed_capabilities"] = capabilities
+            if any(
+                isinstance(item, dict) and item.get("kind") == "task"
+                for item in proposed.get("facts", ())
+            ):
+                mixed_task_review = self._ask(
+                    PLANNER_MODEL,
+                    MIXED_TASK_CREATE_PROMPT,
+                    {"original_source": source, "suggested_facts": proposed.get("facts", [])},
+                    MIXED_TASK_CREATE_SCHEMA,
+                    "odyssey_mixed_task_create_v1",
+                )
+                if (
+                    mixed_task_review.get("only_new_task_creations") is not True
+                    or mixed_task_review.get("no_work_session_or_lifecycle_transition") is not True
+                    or mixed_task_review.get("source_quote") != source
+                ):
+                    return self._abstain(delivery)
+            review = self._ask(
+                PLANNER_MODEL,
+                PROMPT_SOURCE_REVIEW,
+                {
+                    "source": source,
+                    "clock": clock,
+                    "proposed_facts": proposed.get("facts"),
+                    "proposed_entities": proposed.get("entities"),
+                    "core_verified_self_relationship": group_members or None,
+                },
+                REVIEW_SCHEMA,
+                "odyssey_p2_source_coverage_v1",
+            )
+            if review.get("approved") is True and review.get("complete") is True:
+                reviewed_ok = True
+                break
             if (
-                mixed_task_review.get("only_new_task_creations") is not True
-                or mixed_task_review.get("no_work_session_or_lifecycle_transition") is not True
-                or mixed_task_review.get("source_quote") != source
+                attempt != 0
+                or proposed.get("unresolved")
+                or any(
+                    f.get("needs_clarification") is True
+                    for f in proposed.get("facts", ())
+                    if isinstance(f, dict)
+                )
             ):
                 return self._abstain(delivery)
-        review = self._ask(
-            PLANNER_MODEL,
-            PROMPT_SOURCE_REVIEW,
-            {
-                "source": source,
-                "clock": clock,
-                "proposed_facts": proposed.get("facts"),
-                "proposed_entities": proposed.get("entities"),
-                "core_verified_self_relationship": group_members or None,
-            },
-            REVIEW_SCHEMA,
-            "odyssey_p2_source_coverage_v1",
-        )
+        if not reviewed_ok:
+            return self._abstain(delivery)
         try:
             validate_whole_message_coverage(
                 source,
@@ -422,13 +456,15 @@ class WholeSourceLightExecutor:
         return candidate
 
     @staticmethod
-    def _abstain(delivery: str) -> ApplicationResult:
+    def _abstain(
+        delivery: str, code: str = "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED"
+    ) -> ApplicationResult:
         return ApplicationResult(
             delivery,
             ApplicationStatus.NEEDS_ATTENTION,
             (),
             (),
-            clarification_code="FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+            clarification_code=code,
         )
 
     @staticmethod

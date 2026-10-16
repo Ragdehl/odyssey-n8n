@@ -79,6 +79,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/apps/tasks/test_work_session_runtime.py",
         "tests/runtime/test_cross_surface_notes_http_p4.py",
         "tests/runtime/test_whole_source_light_product_p4.py",
+        "tests/runtime/test_p4_model_contract_strict_schema.py",
         "tests/runtime/test_p4_verified_group_e2.py",
         "tests/runtime/test_p4_taskonly_real_session_parity.py",
         "tests/runtime/test_p4_chat_to_ui_http_flow.py",
@@ -90,6 +91,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "performance_and_indexes": (
         "tests/benchmarks/test_performance_p1_budget.py",
         "tests/core/test_scoped_note_decode_cache.py",
+        "tests/core/test_p4_indexed_name_hints.py",
         "tests/apps/tasks/test_incremental_indexes.py",
         "tests/core/test_parallel_note_lookup.py",
         "tests/runtime/test_runtime_boundary.py",

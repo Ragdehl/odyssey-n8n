@@ -426,3 +426,171 @@ def test_real_product_route_updates_context_and_graph_incrementally_without_full
     assert dated.body_blocks and dated.note.type == "calendar_day"
     backlinks = query.backlinks("self-note")
     assert any(item.source.id == "date:2026-10-15" for item in backlinks.items)
+
+
+def test_independent_coverage_can_request_one_generic_replan_before_any_write(tmp_path):
+    source, route, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    initial = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    rejected = {**review, "approved": False, "complete": False, "reason": "missing participant"}
+
+    class PrewriteProofClient(RecordedClient):
+        def create(self, **kwargs):
+            if kwargs["text"]["format"]["name"] == "odyssey_light_shared_semantic_plan_v1":
+                assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == initial
+            return super().create(**kwargs)
+
+    service.client = PrewriteProofClient(
+        [
+            route,
+            plan,
+            rejected,
+            plan,
+            review,
+            _speaker(source, plan, base=1),
+            _speaker(source, plan),
+        ]
+    )
+    result = runtime.execute_product(source, "repaired-only-prewrite", "main", actor)
+    assert result["status"] == "completed", result
+    assert service.client.calls.count("odyssey_light_shared_semantic_plan_v1") == 2
+    assert service.client.calls.count("odyssey_p2_source_coverage_v1") == 2
+    assert any(
+        "odyssey:fact request=repaired-only-prewrite" in repo.read_text(p)
+        for p in repo.list_markdown_paths()
+    )
+    saved = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    assert runtime.execute_product(source, "repaired-only-prewrite", "main", actor)[
+        "delivery_replayed"
+    ]
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == saved
+
+
+def test_second_independent_coverage_rejection_never_writes_and_cannot_loop(tmp_path):
+    source, route, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    rejected = {**review, "approved": False, "complete": False, "reason": "missing person"}
+    service.client = RecordedClient([route, plan, rejected, plan, rejected])
+    old = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "double-rejection", "main", actor)
+    assert result["status"] == "needs_attention" and not service.client.rows
+    assert service.client.calls.count("odyssey_light_shared_semantic_plan_v1") == 2
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == old
+
+
+def test_real_ambiguity_never_uses_repair_to_override_model_uncertainty(tmp_path):
+    source, route, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    uncertainty = {**plan, "unresolved": ["person role cannot be proved"]}
+    rejected = {**review, "approved": False, "complete": False, "reason": "ambiguity"}
+    service.client = RecordedClient([route, uncertainty, rejected])
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "uncertainty-no-replan", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert service.client.calls == [
+        "odyssey_light_capability_route_v1",
+        "odyssey_light_shared_semantic_plan_v1",
+        "odyssey_p2_source_coverage_v1",
+    ]
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_mixed_task_lifecycle_veto_is_not_retried_as_task_creation(tmp_path):
+    source, router, plan, _ = _actual_snapshot("maite_cross_app")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    service.client = RecordedClient(
+        [
+            router,
+            plan,
+            {
+                "only_new_task_creations": False,
+                "no_work_session_or_lifecycle_transition": False,
+                "source_quote": source,
+            },
+        ]
+    )
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "mixed-veto-no-replan", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert service.client.calls.count("odyssey_light_shared_semantic_plan_v1") == 1
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_stale_index_is_bounded_no_write_receipt_instead_of_permanent_e3_claim(tmp_path):
+    """An external edit to a matched hint cannot strand chat on a no-write 500."""
+    from dataclasses import replace as dataclass_replace
+
+    from odyssey_core.notes import serialize_note
+
+    source, route, _plan, _review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    create_entity(
+        repo,
+        SCHEMA,
+        path="maya.md",
+        entity_id="maya-test",
+        metadata={"name": "Maya", "type": "person"},
+        content="",
+        actor="fixture",
+        now="2026-10-16T09:00:00+02:00",
+    )
+    service.context_index.rebuild(repo, SCHEMA, service.embedder)
+    original = parse_note(repo.read_text("maya.md"))
+    repo.replace_text(
+        "maya.md", serialize_note(dataclass_replace(original, content="- edited externally.\n"))
+    )
+    service.client = RecordedClient([route])
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    first = runtime.execute_product(source, "p4-stale-hint", "main", actor)
+    assert first["status"] == "needs_attention"
+    assert first["clarification_code"] == "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE"
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    again = runtime.execute_product(source, "p4-stale-hint", "main", actor)
+    assert again["delivery_replayed"] is True
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_prewrite_model_service_failure_is_durable_no_write_not_uncertain_claim(tmp_path):
+    from openai import OpenAIError
+
+    source, route, _plan, _review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+
+    class OutageClient(RecordedClient):
+        def create(self, **kwargs):
+            if kwargs["text"]["format"]["name"] == "odyssey_light_shared_semantic_plan_v1":
+                raise OpenAIError("simulated provider outage")
+            return super().create(**kwargs)
+
+    service.client = OutageClient([route])
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "p4-model-outage", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert result["clarification_code"] == "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE"
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    assert runtime.execute_product(source, "p4-model-outage", "main", actor)["delivery_replayed"]
+
+
+def test_postwrite_failure_cannot_be_reclassified_as_prewrite_provider_abstention(tmp_path):
+    from odyssey_runtime.delivery_results import DeliveryResultError
+
+    source, route, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    service.client = RecordedClient(
+        [route, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
+    )
+
+    def fail_after_actual_write(_ids):
+        raise RuntimeError("index transaction failed after physical write")
+
+    service.refresh_affected_indexes = fail_after_actual_write
+    with pytest.raises(RuntimeError, match="after physical write"):
+        runtime.execute_product(source, "p4-failed-after-write", "main", actor)
+    assert any(
+        "odyssey:fact request=p4-failed-after-write" in repo.read_text(p)
+        for p in repo.list_markdown_paths()
+    )
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
+        runtime.execute_product(source, "p4-failed-after-write", "main", actor)
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before

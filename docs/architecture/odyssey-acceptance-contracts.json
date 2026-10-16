@@ -118,7 +118,9 @@
       "max_evidence_level": "deterministic",
       "offline_test_selectors": [
         "tests/core/test_scoped_note_decode_cache.py::test_updated_canonical_bytes_are_never_served_from_earlier_parse",
-        "tests/runtime/test_whole_source_light_product_p4.py::test_real_product_route_updates_context_and_graph_incrementally_without_full_rebuild"
+        "tests/runtime/test_whole_source_light_product_p4.py::test_real_product_route_updates_context_and_graph_incrementally_without_full_rebuild",
+        "tests/core/test_p4_indexed_name_hints.py::test_large_derived_index_no_longer_has_arbitrary_5000_row_note_limit",
+        "tests/core/test_p4_indexed_name_hints.py::test_indexed_hints_only_match_source_and_recheck_current_canonical_bytes"
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false

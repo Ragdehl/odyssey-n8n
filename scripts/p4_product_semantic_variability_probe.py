@@ -21,6 +21,9 @@ from tests.runtime.test_whole_source_light_product_p4 import _fixture
 SOURCES = {
     "two_dates": "Hoy compré pan y mañana compraré leche.",
     "cross_app": "Hoy he conocido a Maite Solis, mañana tengo que llamarla.",
+    "third_person": "Hoy Bruno Prototipo ha conocido a Carla Prototipo.",
+    "negated": "No he conocido a Bruno Prototipo.",
+    "conditional": "Si mañana conociera a Bruno Prototipo, lo llamaría.",
 }
 
 

@@ -1087,6 +1087,76 @@ class ContextIndex:
         except (OSError, sqlite3.Error) as error:
             raise ContextIndexError("Refusing to delete an unverified context index") from error
 
+    def source_name_hint_candidates(
+        self,
+        repository: VaultRepository,
+        *,
+        source_words: frozenset[str],
+        types: frozenset[str] = frozenset({"person", "project"}),
+        limit: int = 24,
+    ) -> tuple[dict[str, str], ...]:
+        """Read-only *speculative* hints from an existing index, not identity proof.
+
+        Unlike a full-vault Markdown scan, scans only lightweight derived names;
+        EVERY returned row is re-grounded against the latest physical bytes.
+        Missing derived hits do not prove a canonical identity is missing: the
+        ordinary Core writer must independently resolve and preflight all IDs.
+        No first-N truncation: an overfull match set fails closed.
+        """
+        if (
+            not isinstance(source_words, frozenset)
+            or not all(isinstance(word, str) and word for word in source_words)
+            or not isinstance(types, frozenset)
+            or not types
+            or not types.issubset({"person", "project"})
+            or type(limit) is not int
+            or not 1 <= limit <= 32
+        ):
+            raise ValueError("Invalid bounded canonical name hint request")
+        try:
+            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise ContextIndexError("Canonical hint index markers are incompatible")
+                rows = connection.execute(
+                    "SELECT id, path, type, primary_name, source_hash FROM notes "
+                    "WHERE type IN ('person','project')"
+                )
+                matched = []
+                for note_id, path, note_type, name, source_hash in rows:
+                    if note_type not in types:
+                        continue
+                    words = re.findall(r"[\wÀ-ÿ]+", name.casefold())
+                    if not words or len(words[0]) < 3 or words[0] not in source_words:
+                        continue
+                    matched.append((note_id, path, note_type, name, source_hash))
+                    if len(matched) > limit:
+                        raise ContextIndexError("Canonical hint count exceeds bounded budget")
+        except ContextIndexError:
+            raise
+        except (sqlite3.Error, OSError, TypeError) as error:
+            raise ContextIndexError(
+                "Canonical name hints require compatible derived index"
+            ) from error
+        validated = []
+        for note_id, path, note_type, name, source_hash in matched:
+            try:
+                raw = repository.read_text(path)
+                if hashlib.sha256(raw.encode("utf-8")).hexdigest() != source_hash:
+                    raise ContextIndexError("Canonical hint index is stale")
+                note = parse_note(raw)
+                if (
+                    note.metadata.get("id") != note_id
+                    or note.metadata.get("name") != name
+                    or note.metadata.get("type") != note_type
+                    or note.metadata.get("deleted") is True
+                ):
+                    raise ContextIndexError("Canonical hint identity has changed")
+            except (OSError, ValueError, NoteFormatError) as error:
+                raise ContextIndexError("Canonical hint cannot be physically verified") from error
+            validated.append({"id": note_id, "name": name, "type": note_type})
+        return tuple(validated)
+
     def find_candidates(
         self,
         schema: dict[str, Any],
