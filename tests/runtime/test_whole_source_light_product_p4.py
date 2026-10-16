@@ -407,3 +407,22 @@ def test_full_source_preflight_prevents_earlier_core_write_when_last_task_unsupp
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
     replay = runtime.execute_product(source, "late-unsupported-task", "main", actor)
     assert replay["delivery_replayed"] is True
+
+
+def test_real_product_route_updates_context_and_graph_incrementally_without_full_rebuild(tmp_path):
+    """Once indexed, one Core mutation never needs a global index rebuild."""
+    from odyssey_core.note_queries import NotesQueryService
+
+    source, router, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path, incremental_indexes=True)
+    service.client = RecordedClient(
+        [router, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
+    )
+    result = runtime.execute_product(source, "incremental-real-writer", "main", actor)
+    assert result["status"] == "completed"
+    assert service.refresh_stats == {"incremental": 1, "rebuild": 0}
+    query = NotesQueryService(repo, SCHEMA, service.context_index)
+    dated = query.detail("date:2026-10-15")
+    assert dated.body_blocks and dated.note.type == "calendar_day"
+    backlinks = query.backlinks("self-note")
+    assert any(item.source.id == "date:2026-10-15" for item in backlinks.items)

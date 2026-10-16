@@ -116,6 +116,50 @@ class LocalDeliveryResultStore:
             # Retain the claim on uncertain write/fsync, fail closed.
             raise DeliveryResultError("mutation reservation is unavailable") from error
 
+    def inspect_mutation_claim(self, request_id: str, fingerprint: str) -> dict[str, object]:
+        """Read-only E3 forensic status: never replay, release or repair a claim.
+
+        A claim without a result cannot prove if a worker died before or after
+        writing Markdown. It must remain blocked pending external reconciliation.
+        No personal request, fingerprint or Note contents are returned.
+        """
+        self._validate_request_id(request_id)
+        if not isinstance(fingerprint, str) or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None:
+            raise DeliveryResultError("mutation fingerprint is invalid")
+        result_path = self._path(request_id)
+        claim_path = result_path.with_suffix(".claim")
+        receipt = self.load(request_id, fingerprint)  # validate immutable receipt
+        if not claim_path.exists():
+            return {
+                "state": "receipt_confirmed" if receipt is not None else "unseen",
+                "receipt_verified": receipt is not None,
+                "claim_pending": False,
+                "replay_permitted": receipt is not None,
+            }
+        try:
+            raw = claim_path.read_bytes()
+            if len(raw) > 4096:
+                raise ValueError("claim exceeds budget")
+            claim = json.loads(raw)
+        except (OSError, ValueError, TypeError) as error:
+            raise DeliveryResultError("mutation claim is unavailable or invalid") from error
+        if (
+            not isinstance(claim, dict)
+            or set(claim) != {"version", "request_id", "fingerprint"}
+            or claim.get("version") != 1
+            or claim.get("request_id") != request_id
+            or claim.get("fingerprint") != fingerprint
+        ):
+            raise DeliveryResultError("mutation claim is conflicting or invalid")
+        return {
+            "state": "receipt_confirmed_with_stale_claim"
+            if receipt is not None
+            else "unresolved_attempt",
+            "receipt_verified": receipt is not None,
+            "claim_pending": True,
+            "replay_permitted": receipt is not None,
+        }
+
     def finish_mutation_claim(self, request_id: str) -> None:
         """Best-effort cleanup only after the immutable receipt exists."""
         if not self._path(request_id).exists():

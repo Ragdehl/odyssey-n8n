@@ -5,12 +5,51 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any
 
 from .model import MetadataScalar, Note
 
 _KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 _NUMBER_PATTERN = re.compile(r"^[+-]?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
+
+
+# Per-request, opt-in parse reuse. Canonical Markdown is always re-read from
+# disk by the caller; identical raw text is the key, so any on-disk change
+# naturally invalidates the match. Copies prevent shared mutable metadata.
+# ContextVar keeps concurrent HTTP actors and requests wholly isolated.
+_MAX_SCOPED_CACHE_BYTES = 1_000_000
+_MAX_SCOPED_CACHE_NOTES = 1024
+
+
+@dataclass(slots=True)
+class _ScopedDecodeCache:
+    entries: dict[str, Note] = field(default_factory=dict)
+    bytes_used: int = 0
+
+
+_SCOPED_NOTE_CACHE: ContextVar[_ScopedDecodeCache | None] = ContextVar(
+    "odyssey_scoped_markdown_parse_cache", default=None
+)
+
+
+@contextmanager
+def scoped_note_decode_cache() -> Iterator[None]:
+    """Reuse identical raw Markdown parsing only inside one serial Core request.
+
+    This is NOT a durable or path-based cache: caller still opens current
+    physical bytes for every read, and every returned Note has independently
+    owned metadata. Malformed Markdown never receives cached validity.
+    """
+    token = _SCOPED_NOTE_CACHE.set(_ScopedDecodeCache())
+    try:
+        yield
+    finally:
+        _SCOPED_NOTE_CACHE.reset(token)
 
 
 class NoteFormatError(ValueError):
@@ -294,6 +333,11 @@ def parse_note(markdown: str) -> Note:
     """
     if not isinstance(markdown, str):
         raise NoteFormatError("Markdown note must be text")
+    scope = _SCOPED_NOTE_CACHE.get()
+    if scope is not None:
+        hit = scope.entries.get(markdown)
+        if hit is not None:
+            return Note(metadata=deepcopy(hit.metadata), content=hit.content)
     opening = re.match(r"\A---(\r\n|\n)", markdown)
     if opening is None:
         raise NoteFormatError("Markdown note is missing opening frontmatter")
@@ -308,4 +352,10 @@ def parse_note(markdown: str) -> Note:
     # The first newline separates frontmatter from the body; it is not note content.
     if closing_newline and content.startswith(closing_newline):
         content = content[len(closing_newline) :]
-    return Note(metadata=_parse_frontmatter(metadata_source), content=content)
+    note = Note(metadata=_parse_frontmatter(metadata_source), content=content)
+    if scope is not None and len(scope.entries) < _MAX_SCOPED_CACHE_NOTES:
+        size = len(markdown.encode("utf-8"))
+        if size + scope.bytes_used <= _MAX_SCOPED_CACHE_BYTES:
+            scope.entries[markdown] = Note(metadata=deepcopy(note.metadata), content=content)
+            scope.bytes_used += size
+    return note

@@ -18,7 +18,10 @@ from openai import OpenAI
 import odyssey_runtime.whole_source_light as p4
 from tests.runtime.test_whole_source_light_product_p4 import _fixture
 
-SOURCE = "Hoy compré pan y mañana compraré leche."
+SOURCES = {
+    "two_dates": "Hoy compré pan y mañana compraré leche.",
+    "cross_app": "Hoy he conocido a Maite Solis, mañana tengo que llamarla.",
+}
 
 
 def run():
@@ -26,12 +29,16 @@ def run():
         raise SystemExit("Synthetic genuine GPT run needs explicit opt-in")
     if not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("No real provider authorization")
+    case = os.environ.get("ODYSSEY_P4_CASE", "two_dates")
+    if case not in SOURCES:
+        raise ValueError("Unknown bounded synthetic scenario")
+    source = SOURCES[case]
     count = int(os.environ.get("ODYSSEY_P4_REPEAT", "4"))
     if not 1 <= count <= 8:
         raise ValueError("Safe run budget 1–8")
     results = []
     for index in range(count):
-        evidence = {"run": index + 1, "model_steps": [], "validator_errors": []}
+        evidence = {"run": index + 1, "case": case, "model_steps": [], "validator_errors": []}
         with tempfile.TemporaryDirectory(prefix="p4-source-var-") as tmp:
             repo, actor, service, runtime = _fixture(Path(tmp))
             service.client = OpenAI(max_retries=0, timeout=80)
@@ -57,6 +64,12 @@ def run():
                         for f in response.get("facts", [])
                     ]
                     item["unresolved_count"] = len(response.get("unresolved", []))
+                elif name == "odyssey_mixed_task_create_v1":
+                    item["only_new_task_creations"] = response.get("only_new_task_creations")
+                    item["no_work_session_or_lifecycle_transition"] = response.get(
+                        "no_work_session_or_lifecycle_transition"
+                    )
+                    item["same_source_quote"] = response.get("source_quote") == source
                 elif name == "odyssey_p2_source_coverage_v1":
                     item["approved"] = response.get("approved")
                     item["complete"] = response.get("complete")
@@ -91,14 +104,32 @@ def run():
                     try:
                         return _base(*args, **kwargs)
                     except Exception as error:
+                        static_coverage_errors = {
+                            "Whole message not completely accounted for",
+                            "Atomic source evidence mismatch",
+                            "Source quote is ambiguous or absent",
+                            "Source reviewer invented a participant",
+                            "Participant absent from original source",
+                            "Cross-operation identity handoff has no shared person",
+                            "Fact evidence order differs from source order",
+                            "Symbolic Core references missing or repeated",
+                        }
+                        reason = str(error)
                         _ev["validator_errors"].append(
-                            {"boundary": _label, "error_type": type(error).__name__}
+                            {
+                                "boundary": _label,
+                                "error_type": type(error).__name__,
+                                "fixed_reason": reason
+                                if _label == "validate_whole_message_coverage"
+                                and reason in static_coverage_errors
+                                else "other",
+                            }
                         )
                         raise
 
                 setattr(p4, label, intercept)
             try:
-                response = runtime.execute_product(SOURCE, f"variance-{index}", "main", actor)
+                response = runtime.execute_product(source, f"variance-{index}", "main", actor)
                 evidence["status"] = response.get("status")
                 evidence["physical_fact_count"] = sum(
                     repo.read_text(path).count("odyssey:fact request=variance-")
@@ -112,7 +143,7 @@ def run():
                     setattr(p4, label, base)
             results.append(evidence)
             print(json.dumps(evidence, ensure_ascii=False), flush=True)
-    path = Path("/tmp/odyssey-p4-source-variance.json")
+    path = Path("/tmp/odyssey-p4-source-variance-" + case + ".json")
     path.write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
     print(
         f"SYNTHETIC_RUNS={count} COMPLETED={sum(r.get('status') == 'completed' for r in results)}"

@@ -58,6 +58,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "e3_retry_and_crashes": (
         "tests/core/test_mutation_gate.py",
         "tests/runtime/test_full_source_delivery_guard_p4.py",
+        "tests/runtime/test_p4_e3_claim_forensics.py",
         "tests/runtime/test_runtime_process_safety.py",
         "tests/runtime/test_hybrid_postwrite_safety.py",
         "tests/runtime/test_conversation_reply_server_commit_p4.py",
@@ -78,11 +79,15 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/apps/tasks/test_work_session_runtime.py",
         "tests/runtime/test_cross_surface_notes_http_p4.py",
         "tests/runtime/test_whole_source_light_product_p4.py",
+        "tests/runtime/test_p4_verified_group_e2.py",
+        "tests/runtime/test_p4_taskonly_real_session_parity.py",
+        "tests/runtime/test_p4_chat_to_ui_http_flow.py",
         "tests/benchmarks/test_cross_surface_gate_contract.py",
         "tests/benchmarks/test_semantic_validator_isolation_p4.py",
     ),
     "performance_and_indexes": (
         "tests/benchmarks/test_performance_p1_budget.py",
+        "tests/core/test_scoped_note_decode_cache.py",
         "tests/apps/tasks/test_incremental_indexes.py",
         "tests/core/test_parallel_note_lookup.py",
         "tests/runtime/test_runtime_boundary.py",

@@ -27,7 +27,7 @@ from odyssey_apps.tasks import (
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
-from odyssey_core.notes import parse_note
+from odyssey_core.notes import parse_note, scoped_note_decode_cache
 from odyssey_core.storage import VaultRepository
 from odyssey_core.whole_message_coverage import (
     WholeMessageCoverageError,
@@ -36,6 +36,11 @@ from odyssey_core.whole_message_coverage import (
 from odyssey_core.whole_message_identity_guard import (
     UnprovenPersonIdentityError,
     reject_unproven_person_collisions,
+)
+from odyssey_core.whole_message_relationship_proof import (
+    WholeSourceRelationshipError,
+    recheck_self_relationship,
+    verify_self_relationship,
 )
 from odyssey_core.whole_message_speaker_proof import (
     WholeMessageSpeakerError,
@@ -135,6 +140,14 @@ class WholeSourceLightExecutor:
     def __call__(
         self, source: str, delivery: str, actor: AuthenticatedActorContext, conversation_id: str
     ) -> ApplicationResult:
+        # No trust caching: only parsed representations of byte-for-byte
+        # identical canonical Markdown, and only within this one delivery.
+        with scoped_note_decode_cache():
+            return self._execute_source(source, delivery, actor, conversation_id)
+
+    def _execute_source(
+        self, source: str, delivery: str, actor: AuthenticatedActorContext, conversation_id: str
+    ) -> ApplicationResult:
         if not isinstance(actor, AuthenticatedActorContext) or conversation_id != "main":
             raise WholeSourceLightError("Authenticated main conversation required")
         if not isinstance(source, str) or not source.strip() or len(source) > 4096:
@@ -165,6 +178,27 @@ class WholeSourceLightExecutor:
             or not set(capabilities) <= {"core", "tasks", "temporal"}
         ):
             return self._abstain(delivery)
+        # Router can only propose an exact source span, never relationship
+        # membership or a Note ID. Core re-grounds the group in CURRENT SELF.
+        relationship = None
+        relation_span = route.get("self_relation_span")
+        if relation_span is not None:
+            try:
+                relationship = verify_self_relationship(
+                    source,
+                    relation_span,
+                    repository=self.repository,
+                    schema=self.schema,
+                    actor=actor,
+                    bindings=self.bindings,
+                )
+            except (WholeSourceRelationshipError, ValueError):
+                return self._abstain(delivery)
+        group_members = (
+            [{"name": name} for _id, name in relationship.members]
+            if relationship is not None
+            else []
+        )
         if self.progress is not None:
             self.progress("routing.ready", {"route_count": 1})
         if "tasks" in capabilities and "core" not in capabilities:
@@ -201,7 +235,7 @@ class WholeSourceLightExecutor:
                 "clock": clock,
                 "routing_hint": route,
                 "known_notes": self._note_hints(source),
-                "verified_family": [],
+                "verified_family": group_members,
             },
             PLAN_SCHEMA,
             "odyssey_light_shared_semantic_plan_v1",
@@ -232,13 +266,21 @@ class WholeSourceLightExecutor:
                 "clock": clock,
                 "proposed_facts": proposed.get("facts"),
                 "proposed_entities": proposed.get("entities"),
-                "core_verified_self_relationship": None,
+                "core_verified_self_relationship": group_members or None,
             },
             REVIEW_SCHEMA,
             "odyssey_p2_source_coverage_v1",
         )
         try:
-            validate_whole_message_coverage(source, proposed, review, capabilities)
+            validate_whole_message_coverage(
+                source,
+                proposed,
+                review,
+                capabilities,
+                verified_relationship_members=tuple(name for _id, name in relationship.members)
+                if relationship is not None
+                else (),
+            )
             names = tuple(
                 sorted({name for fact in review["facts"] for name in fact["reference_names"]})
             )
@@ -308,9 +350,34 @@ class WholeSourceLightExecutor:
                 request_id_factory=lambda: locator,
             )
 
+        # A SELF fact/member set might change while GPT is reasoning or between
+        # source preflight and a delayed write. Never convert stale members to
+        # fresh references, even when the prior reviewer was satisfied.
+        if relationship is not None:
+            try:
+                recheck_self_relationship(
+                    relationship,
+                    repository=self.repository,
+                    schema=self.schema,
+                    actor=actor,
+                    bindings=self.bindings,
+                )
+            except (WholeSourceRelationshipError, ValueError):
+                return self._abstain(delivery)
         # The existing Core Writer and E3 guard remain the ONLY write path;
         # no app-specific plan rewrites or per-example validators execute.
         for operation in operations:
+            if relationship is not None:
+                try:
+                    recheck_self_relationship(
+                        relationship,
+                        repository=self.repository,
+                        schema=self.schema,
+                        actor=actor,
+                        bindings=self.bindings,
+                    )
+                except (WholeSourceRelationshipError, ValueError):
+                    return self._partial(delivery, results) if results else self._abstain(delivery)
             result = execute_one(
                 operation.plan,
                 f"{delivery}-{operation.locator_suffix}",

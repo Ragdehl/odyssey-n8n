@@ -13,6 +13,7 @@ ROUTE_SCHEMA = {
             "type": "array",
             "items": {"type": "string", "enum": ["core", "tasks", "temporal"]},
         },
+        "self_relation_span": {"type": ["string", "null"]},
         "interpretation": {"type": "string", "enum": ["joint", "separable"]},
         "reason": {
             "type": "string",
@@ -32,7 +33,7 @@ ROUTE_SCHEMA = {
             },
         },
     },
-    "required": ["capabilities", "interpretation", "reason", "app_scopes"],
+    "required": ["capabilities", "interpretation", "reason", "app_scopes", "self_relation_span"],
     "additionalProperties": False,
 }
 
@@ -158,8 +159,24 @@ ROUTER_INSTRUCTIONS = (
     "pronoun, place, entity or fact refers across clauses or a task depends on a just-mentioned "
     "entity. Separate only truly independent actions when this is useful. Determine "
     "capabilities, not facts, identities or writes. Temporal is needed for relative times or "
-    "dates. Core handles ordinary personal notes, Tasks handles to-do operations; both may be "
-    "used. Preserve full message context."
+    "dates. Core handles ordinary personal notes; the Tasks domain handles "
+    "to-dos, parent/subtasks, task lifecycle, Task queries, Work Session "
+    "start/stop/edit AND work activity recorded within a Work Session. "
+    "A progress report explicitly attached to a session is Tasks-domain even "
+    "when narrated in past tense; an independent personal journal event outside "
+    "the work session is Core. Do not classify an ongoing Work Session activity "
+    "as ordinary Core just because it describes past actions. Do not create an "
+    "extra Core capability for Tasks-only activity, unless a DISTINCT durable "
+    "fact outside the session is requested. Both domains may be used. "
+    "Preserve full message context. Source may contain an anaphoric reference "
+    "to a collective personally RELATED group, such as a family, team or "
+    "household. If and ONLY if an exact contiguous multi-word span of the "
+    "original source describes a SELF-owned relationship group rather than a "
+    "specific name or a past action, return it byte-for-byte as self_relation_span. "
+    "This is merely a suggestion: Core independently proves any actual "
+    "membership against the CURRENT canonical SELF-owned fact, including all "
+    "existing members; never guess relationships, labels, IDs or people. "
+    "Return null if no unambiguous collective relation reference is present."
 )
 
 PLANNER_INSTRUCTIONS = (
@@ -245,8 +262,10 @@ TASK_ONLY_SCOPE_PROMPT = (
     "Return only_task_semantics=true ONLY if every independent assertion in the "
     "message is about ONE Tasks lifecycle operation (create, complete, reopen, "
     "update, query, start/stop/edit a work session or log one activity). "
-    "A factual event, personal preference, new person, project, date-journal "
-    "entry, multiple different tasks, or another assertion makes it FALSE. "
+    "A session-scoped description of work performed can constitute ONE "
+    "ADD_WORK_SESSION_ACTIVITY operation, not an independent journal fact. "
+    "Only an INDEPENDENT factual event, preference, new person, project, "
+    "journal entry or multiple Task operations makes it FALSE. "
     "Exactly_one_operation must be false for combinations of operations, "
     "including start a work session AND note a second event. "
     "The source_quote must reproduce the entire input original_source exactly, "
@@ -269,15 +288,26 @@ MIXED_TASK_CREATE_SCHEMA = {
     "additionalProperties": False,
 }
 MIXED_TASK_CREATE_PROMPT = (
-    "Independent source-to-App safety auditor. The provided proposal is untrusted. "
-    "Return only_new_task_creations TRUE only when EVERY proposed task fact "
-    "is an explicit user commitment to CREATE a new to-do Task, not to update, "
-    "complete, reopen, cancel or start an existing task, start/stop/edit a "
-    "Work Session, or record activity in it. Return "
-    "no_work_session_or_lifecycle_transition TRUE only if NO proposed task "
-    "would change Work Session or Task lifecycle. If the utterance contains "
-    "facts and a Work Session operation, both booleans must be FALSE even "
-    "if another model calls the operation CREATE. "
-    "Source_quote must be the exact original_source unmodified. "
-    "Err on false for ambiguous or unsupported behavior. No note selection or writing."
+    "Independent conservative semantic safety reviewer. Input contains the "
+    "original whole user message and a UNTRUSTED proposal with facts of "
+    "kinds record and task. Review only facts proposed as kind=task and "
+    "the exact source evidence that those task facts came from. Do not "
+    "penalize valid independent kind=record assertions: Core will check them. "
+    "Set only_new_task_creations=true if and only if EVERY proposed task "
+    "fact genuinely expresses a NEW actionable personal obligation, todo, "
+    "reminder or explicit command to do something in the future. An obligation "
+    "does not need the literal words task, todo or reminder; first-person "
+    "need/obligation to do work is enough. Mere future prediction or "
+    "narration is NOT a Task CREATE. A new task may depend on a named "
+    "person or recent factual event recorded by Core. "
+    "Set no_work_session_or_lifecycle_transition=true if and only if NONE of "
+    "the proposed Task facts describes a mutation of an EXISTING Task, "
+    "completion, reopening, cancellation, update, status change, Work "
+    "Session start/stop/edit or work activity logging. Creation of a NEW "
+    "task is NOT a mutation of an existing task and MUST NOT make this flag "
+    "false. If any of those unsupported operations appears in a proposed "
+    "Task fact, set both flags false. Never invent a new Task to avoid such "
+    "a restriction. If uncertain, return false. "
+    "source_quote must exactly reproduce original_source byte for byte. "
+    "You have NO write authority and NO identity authority."
 )
