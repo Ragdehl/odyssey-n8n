@@ -175,6 +175,7 @@ class WholeSourceLightExecutor:
         *,
         independent_scope: str | None = None,
         delivery_instant: datetime | None = None,
+        prechecked_task_scope: dict[str, object] | None = None,
     ) -> ApplicationResult:
         if not isinstance(actor, AuthenticatedActorContext) or conversation_id != "main":
             raise WholeSourceLightError("Authenticated main conversation required")
@@ -276,13 +277,15 @@ class WholeSourceLightExecutor:
             # The router is a fallible hypothesis, NOT source coverage proof.
             # An independent model must attest this is exactly one Tasks-only
             # operation; otherwise no semantic unit may be silently dropped.
-            scope = self._ask(
-                PLANNER_MODEL,
-                TASK_ONLY_SCOPE_PROMPT,
-                {"original_source": source},
-                TASK_ONLY_SCOPE_SCHEMA,
-                "odyssey_task_only_scope_v1",
-            )
+            scope = prechecked_task_scope
+            if scope is None:
+                scope = self._ask(
+                    PLANNER_MODEL,
+                    TASK_ONLY_SCOPE_PROMPT,
+                    {"original_source": source},
+                    TASK_ONLY_SCOPE_SCHEMA,
+                    "odyssey_task_only_scope_v1",
+                )
             if (
                 scope.get("only_task_semantics") is not True
                 or scope.get("exactly_one_operation") is not True
@@ -513,6 +516,7 @@ class WholeSourceLightExecutor:
                 candidate,
                 status=ApplicationStatus.PARTIAL,
                 clarification_code="FULL_SOURCE_PHYSICAL_READBACK_UNVERIFIED",
+                canonical_reference_evidence=(),
             )
         return candidate
 
@@ -556,6 +560,28 @@ class WholeSourceLightExecutor:
         locators = [f"{delivery}-independent-{part.index}" for part in verified]
         if any(len(locator) > 110 for locator in locators):
             return self._abstain(delivery)
+        # E2/E3 prewrite contract: audit EVERY Tasks-owned standalone span
+        # before any earlier Core fact is persisted. Otherwise a false Tasks
+        # classification for a narrated future plan can leave an avoidable
+        # first-Core-write + later failure/uncertain E3 claim.
+        task_scopes: dict[int, dict[str, object]] = {}
+        for part in verified:
+            if part.capability != "tasks":
+                continue
+            scope = self._ask(
+                PLANNER_MODEL,
+                TASK_ONLY_SCOPE_PROMPT,
+                {"original_source": part.source.strip()},
+                TASK_ONLY_SCOPE_SCHEMA,
+                "odyssey_task_only_scope_v1",
+            )
+            if (
+                scope.get("only_task_semantics") is not True
+                or scope.get("exactly_one_operation") is not True
+                or scope.get("source_quote") != part.source.strip()
+            ):
+                return self._abstain(delivery)
+            task_scopes[part.index] = scope
         router_duration_ms = max(0.0, (perf_counter() - router_started) * 1000)
         outcomes: list[ApplicationResult] = []
         for part, locator in zip(verified, locators, strict=True):
@@ -570,6 +596,7 @@ class WholeSourceLightExecutor:
                     conversation_id,
                     independent_scope=part.capability,
                     delivery_instant=delivery_instant,
+                    prechecked_task_scope=task_scopes.get(part.index),
                 )
             except WholeSourceLightError:
                 # A per-scope provider failure is prewrite for THAT scope,
@@ -645,13 +672,16 @@ class WholeSourceLightExecutor:
     def _partial(delivery: str, results: list[ApplicationResult]) -> ApplicationResult:
         if not results:
             return WholeSourceLightExecutor._abstain(delivery)
-        complete = all(r.status is ApplicationStatus.COMPLETED for r in results)
+        aggregate = aggregate_verified_application_results(delivery, results)
+        # Never inherit whichever identity happened to be returned by the
+        # *last* operation. Only a single Core-authored carrier across EVERY
+        # completed suboperation may be considered for a later handoff. Any
+        # duplicate link (even to the same Note) is ambiguous about which
+        # source occurrence established the dependent pronoun.
+        proofs = tuple(proof for result in results for proof in result.canonical_reference_evidence)
         return replace(
-            results[-1],
-            request_id=delivery,
-            status=ApplicationStatus.COMPLETED if complete else ApplicationStatus.PARTIAL,
-            action_results=tuple(action for r in results for action in r.action_results),
-            affected_stable_note_ids=tuple(
-                dict.fromkeys(n for r in results for n in r.affected_stable_note_ids)
-            ),
+            aggregate,
+            canonical_reference_evidence=proofs
+            if aggregate.status is ApplicationStatus.COMPLETED and len(proofs) == 1
+            else (),
         )

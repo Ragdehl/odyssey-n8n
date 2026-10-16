@@ -77,6 +77,7 @@ def _provider_rows():
         _outer_route(),
         _partitions(),
         _audit(),
+        {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": TASK},
         {
             "capabilities": ["core"],
             "interpretation": "joint",
@@ -144,7 +145,6 @@ def _provider_rows():
             "self_relation_span": None,
             "app_scopes": [],
         },
-        {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": TASK},
     ]
 
 
@@ -291,14 +291,14 @@ def test_independent_semantic_review_veto_never_modifies_vault(tmp_path, audit):
     assert calls == [] and _snapshot(repo) == prior
 
 
-def test_partitioned_tasks_only_scope_veto_must_return_partial_not_falsely_completed(tmp_path):
+def test_partitioned_tasks_only_scope_veto_blocks_all_writes_in_preflight(tmp_path):
     repo, actor, executor, runtime, calls = _runtime(tmp_path)
     rows = _provider_rows()
-    rows[-1] = {**rows[-1], "only_task_semantics": False}
+    rows[3] = {**rows[3], "only_task_semantics": False}
     executor.client = RecordedClient(rows)
     response = runtime.execute_product(SOURCE, "independent-partial-1", "main", actor)
-    assert response["status"] == "partial"
-    assert "Me gusta correr por la tarde." in repo.read_text("self.md")
+    assert response["status"] == "needs_attention"
+    assert "Me gusta correr por la tarde." not in repo.read_text("self.md")
     assert calls == []
     before = _snapshot(repo)
     assert runtime.execute_product(SOURCE, "independent-partial-1", "main", actor)[
@@ -328,11 +328,11 @@ def test_independent_second_scope_provider_outage_returns_durable_partial(tmp_pa
     class FailSecondScopedRouter(RecordedClient):
         def create(self, **kwargs):
             schema = kwargs["text"]["format"]["name"]
-            if schema == "odyssey_light_capability_route_v1" and len(self.calls) == 8:
+            if schema == "odyssey_light_capability_route_v1" and len(self.calls) == 9:
                 raise OpenAIError("synthetic provider outage after first canonical fact")
             return super().create(**kwargs)
 
-    executor.client = FailSecondScopedRouter(_provider_rows()[:-2])
+    executor.client = FailSecondScopedRouter(_provider_rows()[:-1])
     response = runtime.execute_product(SOURCE, "mixed-p4-second-provider-down", "main", actor)
     assert response["status"] == "partial"
     assert "Me gusta correr por la tarde." in repo.read_text("self.md")
@@ -347,8 +347,8 @@ def test_independent_second_scope_provider_outage_returns_durable_partial(tmp_pa
 def test_second_scoped_router_cannot_smuggle_core_into_tasks_source(tmp_path):
     repo, actor, executor, runtime, calls = _runtime(tmp_path)
     rows = _provider_rows()
-    rows[-2] = {**rows[-2], "capabilities": ["tasks", "core"]}
-    executor.client = RecordedClient(rows[:-1])
+    rows[-1] = {**rows[-1], "capabilities": ["tasks", "core"]}
+    executor.client = RecordedClient(rows)
     response = runtime.execute_product(SOURCE, "mixed-p4-router-scope-mismatch", "main", actor)
     assert response["status"] == "partial"
     assert calls == [] and "Me gusta correr por la tarde." in repo.read_text("self.md")
@@ -365,7 +365,7 @@ def test_independent_first_scope_provider_outage_does_not_claim_physical_partial
                 raise OpenAIError("synthetic no-write planner outage")
             return super().create(**kwargs)
 
-    executor.client = FailFirstScopedPlanner(_provider_rows()[:4])
+    executor.client = FailFirstScopedPlanner(_provider_rows()[:5])
     before = _snapshot(repo)
     result = runtime.execute_product(SOURCE, "mixed-p4-first-provider-down", "main", actor)
     assert result["status"] == "needs_attention"
@@ -496,3 +496,74 @@ def test_independent_scope_execution_ledger_uses_only_actual_stages_and_route_in
     assert all(stage["route_index"] == 0 for stage in report["stages"][1:])
     assert len(calls) == 1
     assert "Me gusta correr por la tarde." in repo.read_text("self.md")
+
+
+def test_misrouted_future_indicative_task_is_rejected_before_any_core_write(tmp_path):
+    """Even two mistaken model classifications cannot turn a future plan into a Task.
+
+    The independent Task scope audit must run BEFORE the first Core write.
+    The false classification itself is injected as untrusted provider output;
+    this fixture intentionally does not assert that real GPT always agrees.
+    """
+    repo, actor, executor, runtime, calls = _runtime(tmp_path)
+    source = "Hoy compré pan y mañana compraré leche."
+    first = "Hoy compré pan y "
+    second = "mañana compraré leche."
+    assert first + second == source
+    proposal = {
+        "full_source_quote": source,
+        "parts": [
+            {"capability": "core", "source_quote": first},
+            {"capability": "tasks", "source_quote": second},
+        ],
+    }
+    audit = {
+        "full_source_quote": source,
+        "complete": True,
+        "independent": True,
+        "no_cross_scope_referents": True,
+    }
+    executor.client = RecordedClient(
+        [
+            _outer_route(),
+            proposal,
+            audit,
+            {"only_task_semantics": False, "exactly_one_operation": False, "source_quote": second},
+        ]
+    )
+    prior = _snapshot(repo)
+    result = runtime.execute_product(source, "misrouted-future-preflight", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert result["affected_stable_note_ids"] == []
+    assert _snapshot(repo) == prior and calls == []
+    assert executor.client.rows == []
+    assert executor.client.calls == [
+        "odyssey_light_capability_route_v1",
+        "odyssey_independent_source_scopes_v1",
+        "odyssey_independent_source_scopes_audit_v1",
+        "odyssey_task_only_scope_v1",
+    ]
+    replay = runtime.execute_product(source, "misrouted-future-preflight", "main", actor)
+    assert replay["delivery_replayed"] is True and _snapshot(repo) == prior
+
+
+def test_task_scope_provider_outage_before_any_core_fact_keeps_e3_consistent(tmp_path):
+    from openai import OpenAIError
+
+    repo, actor, executor, runtime, calls = _runtime(tmp_path)
+
+    class PreflightTaskAuditOutage(RecordedClient):
+        def create(self, **kwargs):
+            if kwargs["text"]["format"]["name"] == "odyssey_task_only_scope_v1":
+                raise OpenAIError("synthetic prewrite Task scope outage")
+            return super().create(**kwargs)
+
+    executor.client = PreflightTaskAuditOutage(_provider_rows()[:3])
+    prior = _snapshot(repo)
+    result = runtime.execute_product(SOURCE, "p4-task-preflight-outage", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert result["clarification_code"] == "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE"
+    assert _snapshot(repo) == prior and calls == []
+    assert runtime.execute_product(SOURCE, "p4-task-preflight-outage", "main", actor)[
+        "delivery_replayed"
+    ]

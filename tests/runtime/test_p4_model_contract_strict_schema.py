@@ -75,3 +75,15 @@ def test_core_review_prompt_keeps_first_person_voice_in_live_contract():
     """Prevent accidentally placing a new prompt instruction in dead syntax."""
     assert "For first-person input" in contract.PROMPT_SOURCE_REVIEW
     assert "canonical SELF" in contract.PROMPT_SOURCE_REVIEW
+
+
+def test_future_indicative_is_not_a_task_across_actual_product_prompts():
+    for prompt in (
+        contract.ROUTER_INSTRUCTIONS,
+        contract.TASK_ONLY_SCOPE_PROMPT,
+        contract.INDEPENDENT_SCOPE_PARTITION_PROMPT,
+        contract.INDEPENDENT_SCOPE_REVIEW_PROMPT,
+        contract.PLANNER_INSTRUCTIONS,
+    ):
+        assert "future" in prompt.lower()
+        assert "Task" in prompt or "task" in prompt
