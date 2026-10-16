@@ -28,6 +28,11 @@ EXPECTED = {
     "two_dates": ("completed", 2, False),
     "third_person": ("completed", 1, False),
     "negative": ("needs_attention", 0, False),
+    "implicit_undated_self": ("completed", 1, False),
+    "pronoun_two_dates": ("completed", 2, False),
+    "conditional": ("needs_attention", 0, False),
+    "self_preference": ("completed", 1, False),
+    "undated_third": ("needs_attention", 0, False),
 }
 
 INPUTS = (
@@ -36,6 +41,11 @@ INPUTS = (
     ("two_dates", "Hoy compré pan y mañana compraré leche."),
     ("third_person", "Hoy Bruno Prototipo ha conocido a Carla Prototipo."),
     ("negative", "No he conocido a Pedro Prototipo."),
+    ("implicit_undated_self", "He conocido a Nerea Ensayo."),
+    ("pronoun_two_dates", "Ayer hablé con Rebeca Ensayo y hoy he vuelto a hablar con ella."),
+    ("conditional", "Si mañana conociera a Nuria Ensayo, la llamaría."),
+    ("self_preference", "A mí me gusta pasear por el monte."),
+    ("undated_third", "Raúl Ensayo vive en Zaragoza."),
 )
 
 

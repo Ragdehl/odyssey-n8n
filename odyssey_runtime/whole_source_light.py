@@ -39,10 +39,12 @@ from odyssey_core.whole_message_identity_guard import (
 )
 from odyssey_core.whole_message_speaker_proof import (
     WholeMessageSpeakerError,
-    attach_speaker_to_day_action,
     validate_dual_speaker_review,
 )
-from odyssey_core.whole_source_compiler import plan_for_record, plan_for_task, undated_self_record
+from odyssey_core.whole_source_compiler import (
+    WholeSourceCompilationError,
+    compile_reviewed_operations,
+)
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
 from odyssey_runtime.whole_source_model_contract import (
     MIXED_TASK_CREATE_PROMPT,
@@ -267,6 +269,15 @@ class WholeSourceLightExecutor:
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
         except (WholeMessageCoverageError, UnprovenPersonIdentityError, WholeMessageSpeakerError):
             return self._abstain(delivery)
+        # Compile ALL actions before ANY write. A missing owner, unsupported
+        # Task lifecycle or invalid last fact cannot leave a partially
+        # persisted multi-capability message behind.
+        try:
+            operations = compile_reviewed_operations(
+                review, tuple(attested.requires_self_link(i) for i in range(len(attested.facts)))
+            )
+        except WholeSourceCompilationError:
+            return self._abstain(delivery)
         if self.progress is not None:
             self.progress("planner.ready", {})
             self.progress("action.write.started", {})
@@ -297,61 +308,19 @@ class WholeSourceLightExecutor:
                 request_id_factory=lambda: locator,
             )
 
-        # Full original source and reviewed references stay available to every
-        # action. Stop at the first unsafe/partial write; E3 blocks blind retry.
-        dated = sorted(
-            {
-                fact["date"]
-                for fact in review["facts"]
-                if fact["kind"] == "record" and fact["date"] is not None
-            }
-        )
-        for day in dated:
-            plan = plan_for_record(review, day)
-            positions = [
-                i
-                for i, fact in enumerate(review["facts"])
-                if fact["kind"] == "record" and fact["date"] == day
-            ]
-            fixed = attach_speaker_to_day_action(
-                plan.actions[0], [attested.requires_self_link(i) for i in positions]
+        # The existing Core Writer and E3 guard remain the ONLY write path;
+        # no app-specific plan rewrites or per-example validators execute.
+        for operation in operations:
+            result = execute_one(
+                operation.plan,
+                f"{delivery}-{operation.locator_suffix}",
+                task=operation.task_create,
             )
-            result = execute_one(replace(plan, actions=(fixed,)), f"{delivery}-day-{day}")
             results.append(result)
             if result.status is not ApplicationStatus.COMPLETED:
                 break
             if result.affected_stable_note_ids:
                 self.refresh_affected_indexes(result.affected_stable_note_ids)
-        else:
-            undated = [
-                (i, fact)
-                for i, fact in enumerate(review["facts"])
-                if fact["kind"] == "record" and fact["date"] is None
-            ]
-            if undated:
-                if not all(attested.requires_self_link(i) for i, _ in undated):
-                    return self._partial(delivery, results) if results else self._abstain(delivery)
-                result = execute_one(
-                    undated_self_record([f for _, f in undated]), f"{delivery}-self"
-                )
-                results.append(result)
-                if result.status is not ApplicationStatus.COMPLETED:
-                    return self._partial(delivery, results)
-                if result.affected_stable_note_ids:
-                    self.refresh_affected_indexes(result.affected_stable_note_ids)
-            for position, item in enumerate(review["facts"]):
-                if item["kind"] != "task":
-                    continue
-                # V1 whole-message schema can only create tasks; existing
-                # lifecycle operations go through Task-only delegation.
-                if item["date"] is None:
-                    return self._partial(delivery, results) if results else self._abstain(delivery)
-                result = execute_one(plan_for_task(item), f"{delivery}-task-{position}", task=True)
-                results.append(result)
-                if result.status is not ApplicationStatus.COMPLETED:
-                    break
-                if result.affected_stable_note_ids:
-                    self.refresh_affected_indexes(result.affected_stable_note_ids)
         candidate = self._partial(delivery, results)
         if candidate.status is not ApplicationStatus.COMPLETED:
             return candidate

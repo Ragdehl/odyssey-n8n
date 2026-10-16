@@ -377,3 +377,33 @@ def test_p4_reports_only_existing_bounded_browser_progress_stages(tmp_path):
         parse_note(repo.read_text(path)).metadata["type"] == "calendar_day"
         for path in repo.list_markdown_paths()
     )
+
+
+def test_full_source_preflight_prevents_earlier_core_write_when_last_task_unsupported(tmp_path):
+    """A late Task with no date must not leave the earlier dated event persisted."""
+    source, route, plan, review = _actual_snapshot("maite_cross_app")
+    plan, review = copy.deepcopy(plan), copy.deepcopy(review)
+    assert plan["facts"][-1]["kind"] == "task"
+    plan["facts"][-1]["date"] = None
+    review["facts"][-1]["date"] = None
+    repo, actor, service, runtime = _fixture(tmp_path)
+    service.client = RecordedClient(
+        [
+            route,
+            plan,
+            {
+                "only_new_task_creations": True,
+                "no_work_session_or_lifecycle_transition": True,
+                "source_quote": source,
+            },
+            review,
+            _speaker(source, plan, base=1),
+            _speaker(source, plan),
+        ]
+    )
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    response = runtime.execute_product(source, "late-unsupported-task", "main", actor)
+    assert response["status"] == "needs_attention", response
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    replay = runtime.execute_product(source, "late-unsupported-task", "main", actor)
+    assert replay["delivery_replayed"] is True

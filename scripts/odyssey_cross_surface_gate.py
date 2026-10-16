@@ -28,6 +28,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e2_fact_temporal_ownership.py",
         "tests/core/test_whole_message_coverage_p3.py",
         "tests/core/test_whole_message_speaker_proof_p4.py",
+        "tests/core/test_whole_source_compilation_prewrite_p4.py",
+        "tests/core/test_write_plan_enrichment_e2.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",
     ),
@@ -66,6 +68,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_atomic_facts.py",
         "tests/runtime/test_hybrid_independent_linked_events_real_core_replay.py",
         "tests/benchmarks/test_p4_physical_readback_checks.py",
+        "tests/core/test_whole_source_task_readback_p4.py",
         "tests/runtime/test_general_source_fact_graph_e2e.py",
     ),
     "runtime_http_and_isolation": (
@@ -76,6 +79,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_cross_surface_notes_http_p4.py",
         "tests/runtime/test_whole_source_light_product_p4.py",
         "tests/benchmarks/test_cross_surface_gate_contract.py",
+        "tests/benchmarks/test_semantic_validator_isolation_p4.py",
     ),
     "performance_and_indexes": (
         "tests/benchmarks/test_performance_p1_budget.py",

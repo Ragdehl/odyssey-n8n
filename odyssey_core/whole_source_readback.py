@@ -172,7 +172,7 @@ def assert_reviewed_markdown(
         if row["source_kind"] == "record" and row["source_date"] is not None
         else (row["owner_id"], f"{request_id}-self")
         if row["source_kind"] == "record"
-        else (row["owner_id"], f"{request_id}-task")
+        else (row["owner_id"], f"{request_id}-task-{row['source_position']}")
         for row in readback
     }:
         new_atoms = [

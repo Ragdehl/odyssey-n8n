@@ -62,6 +62,11 @@ Para trabajo sobre la arquitectura híbrida y nuevas aplicaciones, **antes de im
 
 ## Development principles
 
+### 2026-10-16 — P4 legacy validator audit / Core generic write-plan enrichment (NO DEV)
+
+Before editing hybrid/P4 validators, consult `docs/architecture/p4-validator-boundary-audit-20261016.md` and `scripts/audit_semantic_validator_boundaries.py`: five identified narrow legacy/experimental adapters have explicit bounded consumers, **not** blanket authority for new Core Apps. Tasks' generic plan enrichment now belongs to `odyssey_core/write_plan_enrichment.py`; App adapters retain lifecycle/role meaning, no generic `KnowledgeUnit`/reference mechanics. Whole-source P4 compiles *every* operation before starting a mutation and verifies Task subrequest readbacks by exact source position. These are new branch changes, not deployed, and do not complete mixed Work Sessions, n8n/browser E2E, parent task NL capture or claim-crash reconciliation. Cross-surface 574 Python/168 Node PASS, full 3499 PASS/80 SKIP/same 10 historical, model variability still blocks DEV. Keep DEV `1474681` and PROD unchanged until comprehensive real E2E acceptance.
+
+
 ### 2026-10-16 — P4 HTTP aislado: hallazgo de duplicación Task y gate de producto bloqueado
 
 Antes de cualquier cambio de Router, leer `docs/architecture/light-router-p4-http-evidence-20261016.md`. La prueba HTTP local auténtica con 5 mensajes y nuevas llamadas GPT+Core+Tasks (3 completos, 2 bloqueados, 5/5 replay, 97 Notes clonadas) NO atraviesa n8n ni DOM ni embeddings productivos. Se descubrió que Task force_create reejecutado tras un fallo posterior a escritura DUPLICA tareas; el opt-in `RuntimeComposition.full_source_mutation_guard=False` (por defecto inactivo) reserva un claim duradero E3 ANTES del write y lo libera tras el recibo. Ante caída → HTTP 500 inicial, retry HTTP 409 sin nueva escritura; no hay aún reconciliación automática. 208 backend + 143 Node focalizados y suite completa 3395 Python PASS/80 SKIP/mismos 10 fallos históricos; 165 Node PASS, pero mapeo n8n sin opciones de aclaración y falta observabilidad UI. NO desplegar ni pedir pruebas manuales hasta E2E **real** navegador→n8n→runtime→IA→Markdown→n8n→UI con vault aislado y múltiples escenarios variando el proveedor, validación de parciales y fallos. DEV sigue 1474681 y PROD no tocado.

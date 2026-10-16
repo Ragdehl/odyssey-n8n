@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
 from typing import Any
 
 from odyssey_core.request_planning import (
-    KnowledgeReference,
-    KnowledgeUnit,
     PlannerClarification,
     RequestPlan,
     RequestPlanningError,
-    SelectionCriteria,
     WriteAction,
+)
+from odyssey_core.write_plan_enrichment import (
+    CoreLinkFactSpec,
+    add_core_reference_facts,
+    ensure_visible_core_action_fact,
 )
 
 from .interpretation import TaskInterpretation, TaskOperation, TaskRelationshipRole
@@ -95,94 +96,24 @@ class TaskCorePlanner:
                 )
 
     def _ensure_visible_action(self, plan: RequestPlan) -> RequestPlan:
-        """Guarantee a newly created Task has one human-readable action fact in its body."""
+        """Delegate shared plan mechanics to Core, preserve Tasks CREATE policy."""
         if self._interpretation.operation is not TaskOperation.CREATE:
             return plan
-        action = plan.actions[0]
-        assert isinstance(action, WriteAction)
-        units = list(action.units)
-        primary_index = next(
-            index for index, unit in enumerate(units) if not unit.reference_lookup_only
-        )
-        unit = replace(units[primary_index], force_create=True)
-        label = (unit.target.entity or unit.target.query).strip()
-        if not label:
-            raise RequestPlanningError("Task create target has no visible action wording")
-        if label[-1] not in ".!?":
-            label += "."
-        facts = list(unit.facts)
-        anchors = list(unit.fact_temporal_anchors)
-        if not anchors and facts:
-            anchors = [() for _ in facts]
-        elif len(anchors) != len(facts):
-            raise RequestPlanningError("Task facts and temporal anchors are misaligned")
-        normalized_label = label.rstrip(".!?").strip().casefold()
-
-        # A linked fact is already visible after Core substitutes its
-        # canonical helpers. Do not add a competing plain-text duplicate.
-        def visible_source_fact(fact: str) -> str:
-            rendered = fact
-            for index, reference in enumerate(unit.references):
-                rendered = rendered.replace(f"{{{{ref:{index}}}}}", reference.mention)
-            return rendered.strip().rstrip(".!?").strip().casefold()
-
-        has_visible_action = any(visible_source_fact(fact) == normalized_label for fact in facts)
-        if not has_visible_action:
-            facts.insert(0, label)
-            anchors.insert(0, ())
-        units[primary_index] = replace(
-            unit,
-            facts=tuple(facts),
-            fact_temporal_anchors=tuple(anchors),
-        )
-        return replace(plan, actions=(replace(action, units=tuple(units)),))
+        return ensure_visible_core_action_fact(plan)
 
     def _ensure_relationship_facts(self, plan: RequestPlan) -> RequestPlan:
-        """Lower Tasks role wording to ordinary Core-resolved canonical references."""
-        if not self._interpretation.relationship_mentions:
-            return plan
-        action = plan.actions[0]
-        assert isinstance(action, WriteAction)
-        units = list(action.units)
-        primary_index = next(
-            index for index, unit in enumerate(units) if not unit.reference_lookup_only
-        )
-        unit = units[primary_index]
-        facts = list(unit.facts)
-        anchors = list(unit.fact_temporal_anchors)
-        references = list(unit.references)
-        synthetic: list[KnowledgeUnit] = []
+        """Tasks owns roles; Core owns references, helpers and fact construction."""
+        specs = []
         for mention in self._interpretation.relationship_mentions:
             if mention.role is TaskRelationshipRole.ASSIGNEE:
-                label, target_type, role = "Responsable", "person", "assignee"
-            else:
-                label, target_type, role = "Tarea superior", TASK_TYPE, "parent_task"
-            selection = SelectionCriteria(None, mention.text, target_type, (), None)
-            target_index = len(units) + len(synthetic)
-            synthetic.append(
-                KnowledgeUnit(
-                    target=selection,
-                    intent="record",
-                    properties=(),
-                    tag_changes=(),
-                    facts=(),
-                    references=(),
-                    cardinality="one",
-                    destination_type=None,
-                    reference_lookup_only=True,
+                specs.append(CoreLinkFactSpec("Responsable", mention.text, "person", "assignee"))
+            elif mention.role is TaskRelationshipRole.PARENT_TASK:
+                specs.append(
+                    CoreLinkFactSpec("Tarea superior", mention.text, TASK_TYPE, "parent_task")
                 )
-            )
-            reference_index = len(references)
-            references.append(KnowledgeReference(target_index, role, mention.text))
-            facts.append(f"{label}: {{{{ref:{reference_index}}}}}.")
-            anchors.append(())
-        units[primary_index] = replace(
-            unit,
-            facts=tuple(facts),
-            references=tuple(references),
-            fact_temporal_anchors=tuple(anchors),
-        )
-        return replace(plan, actions=(replace(action, units=tuple((*units, *synthetic))),))
+            else:
+                raise RequestPlanningError("Unsupported Tasks relationship role")
+        return add_core_reference_facts(plan, tuple(specs))
 
     def _validate(self, plan: RequestPlan) -> None:
         if self._interpretation.operation is TaskOperation.QUERY:
