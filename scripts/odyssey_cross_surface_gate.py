@@ -74,6 +74,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_conversation_reply_server_commit_p4.py",
         "tests/apps/tasks/test_work_session_runtime.py",
         "tests/runtime/test_cross_surface_notes_http_p4.py",
+        "tests/runtime/test_whole_source_light_product_p4.py",
         "tests/benchmarks/test_cross_surface_gate_contract.py",
     ),
     "performance_and_indexes": (

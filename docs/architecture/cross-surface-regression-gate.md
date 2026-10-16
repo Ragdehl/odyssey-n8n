@@ -46,6 +46,12 @@ Before asking the user to manually test the new route: introduce the whole-sourc
 
 **Safety:** Never deploy or mutate DEV/PROD data as a side effect of running this gate. The archived chat recovery dry-run operates only on a clone and is NOT permission to restore personal conversations.
 
+## Product P4 opt-in regression (16 October 2026)
+
+`tests/runtime/test_whole_source_light_product_p4.py` is now part of the offline cross-surface CI gate. Product source is `odyssey_runtime/whole_source_light.py`, its model contract and Core compiler/readback are product-owned; for P4 Task CREATE, `RequestPlan` construction now stays strictly in `odyssey_core/whole_source_compiler.py` rather than calling legacy App `TaskCorePlanner`, with the Task-specific `TaskLifecycleGuard` still applied and have NO import of the PoC `benchmarks` package. The product path has a strict default-off flag, trusted SELF, mixed Task CREATE / Task-only source-scope reviewers, E3 at-most-once claim, canonical Writer, independent speaker reviews, bounded progress stages and full physical readback. The test corpus uses frozen genuine past provider outputs; real fresh-model proof is separate through explicitly opted-in `scripts/p4_product_live_isolated.py`, which uses disposable Notes and real localhost HTTP.
+
+Release blockers remain explicit: P4 does not yet support general Work Session + Core mixed execution, genuine Task/subtask equivalence in every chat route, relationship-bound family facts in the new planner, semantic paraphrase no-ops, real n8n+authenticated browser coverage, CPU latency on real embeddings or interrupted-claim automatic reconciliation. No result of the offline gate or isolated product HTTP is treated as a passing complete product E2E. Python synthetic-scale measurements that rebuild indexes completely are upper bounds for those fixtures, NOT claims about production incremental refresh.
+
 ## 16-10-2026 concrete exercise results
 
 Separate, user-authorized read-only model check: `ODYSSEY_APPROVE_LIGHT_POC=1 python -m benchmarks.application_router.light_router_poc_20261016.p4_tasks_nl_intent_live_probe` executes 10 safe synthetic Task/Work Session utterances on the actual model (GPT-6 low) without any Writer or vault. Last result **10/10 correct operation classification** including one PARENT_TASK; this **does not close** the chat light-router scoped Work Session support gap. This paid probe is explicitly excluded from ordinary offline CI.
@@ -57,3 +63,9 @@ Separate, user-authorized read-only model check: `ODYSSEY_APPROVE_LIGHT_POC=1 py
 - 12 distinct subtask titles and the alternate chat-domain service path preserve the same canonical Work Session lifecycle. This proves shared domain mechanics, not the independent model's interpretation.
 
 The gate should run after every architectural change and before promoting a branch to DEV, **followed by separate fresh-model and authenticated browser/n8n tests**. If a case is genuinely ambiguous, document `needs_attention` rather than forcing a write. Never allow an unrelated test update to suppress a required failure.
+
+Scale caveat: after switching the synthetic benchmark to the same incremental-index refresh boundary as production, one 1000-note request (fake model output and ConstantEmbedder) still took approximately 5.23 seconds locally, without full index rebuild. At 250 notes it took 1.33 seconds, at 20 notes 0.13 seconds. This suggests an O(N) read/validation bottleneck that must be measured and improved against larger real vaults BEFORE DEV, not explained away by 'index only' or hidden from the user. Results in `/tmp/odyssey-p4-product-scale-productionlike.log` on the Pi.
+
+Post-P4 offline evidence: **545 Python + 168 Node PASS**, global **3470 Python PASS, 80 SKIP, same ten historical failures** (52 subtests pass). Tool output is on the Pi under `/tmp/odyssey-p4-final-offline-gate.log`, `/tmp/odyssey-p4-final-global.log` and `/tmp/odyssey-p4-final-strict-live.log`.
+
+After strengthening the REAL-model live evaluator, success now requires the expected status (not just HTTP 200), exact per-delivery physical fact count, a Task created only in Task-creation scenarios, no mutation for negative sources, and byte-identical replay. A safe but overblocking `needs_attention` is **a failed positive case**. One fresh Core+Task execution did overblock, although subsequent strict fresh run passed all 5 cases. Model variance remains a deployment blocker. This is not a cumulative '100% success' claim.

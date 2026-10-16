@@ -117,3 +117,13 @@ def test_ci_runs_cross_surface_gate_on_every_pull_request():
     assert "pull_request:" in ci and "push:" in ci
     assert "python scripts/odyssey_cross_surface_gate.py --output" in ci
     assert ci.index("Cross-surface mutation regression gate") < ci.index("- name: Run tests")
+
+
+def test_new_product_p4_compiler_keeps_task_plan_ownership_in_core():
+    executor = (ROOT / "odyssey_runtime/whole_source_light.py").read_text()
+    compiler = (ROOT / "odyssey_core/whole_source_compiler.py").read_text()
+    assert "TaskCorePlanner" not in executor
+    assert "from odyssey_core.whole_source_compiler import" in executor
+    assert "TaskLifecycleGuard" in executor
+    assert "RequestPlan" in compiler
+    assert "odyssey_apps" not in compiler

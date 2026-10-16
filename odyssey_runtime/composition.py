@@ -2452,12 +2452,22 @@ def build_runtime_from_environment() -> RuntimeComposition:
     runtime_root = _path_env("ODYSSEY_RUNTIME_ROOT", "/data/odyssey/runtime")
     pending_root = _path_env("ODYSSEY_PENDING_ROOT", "/data/odyssey/state/pending")
     state_root = _path_env("ODYSSEY_STATE_ROOT", str(pending_root.parent))
+    light_source_enabled = os.environ.get("ODYSSEY_LIGHT_SOURCE_V1") == "1"
+    if light_source_enabled:
+        protected = Path("/data/odyssey").resolve()
+        if any(
+            path.resolve().is_relative_to(protected)
+            for path in (vault_root, runtime_root, pending_root, state_root)
+        ):
+            raise ValueError("Experimental full-source route cannot access PROD storage")
     pending_root.mkdir(parents=True, exist_ok=True)
     schema_path = _path_env("ODYSSEY_SCHEMA_PATH", str(project_root / "config/note-schema.json"))
     embedding_cache = _path_env(
         "ODYSSEY_EMBEDDING_CACHE",
         "/data/odyssey/runtime/phase11a-benchmark/embedding-cache",
     )
+    if light_source_enabled and embedding_cache.resolve().is_relative_to(Path("/data/odyssey")):
+        raise ValueError("Experimental full-source route cannot access PROD embedding cache")
     with schema_path.open("r", encoding="utf-8") as schema_file:
         base_schema = json.load(schema_file)
     application_schema_extensions = (TASK_SCHEMA_EXTENSION,)
@@ -3942,6 +3952,30 @@ def build_runtime_from_environment() -> RuntimeComposition:
         if "tasks" in enabled_application_ids:
             route_preparers["tasks"] = prepare_tasks_route
 
+    light_source_execute = None
+    if light_source_enabled:
+        if self_binding_repository is None:
+            raise ValueError("P4 requires authenticated canonical SELF binding")
+        from openai import OpenAI
+
+        from odyssey_runtime.whole_source_light import WholeSourceLightExecutor
+
+        light_source_execute = WholeSourceLightExecutor(
+            repository=repository,
+            schema=schema,
+            context_index=context_index,
+            semantic_index=semantic_index,
+            embedder=embedder,
+            reasoner=contextual_reasoner,
+            bindings=self_binding_repository,
+            refresh_affected_indexes=refresh_affected_indexes,
+            task_delegate=lambda source, locator, identity: execute_tasks(
+                source, locator, identity, ()
+            ),
+            client=OpenAI(max_retries=0, timeout=70),
+            progress=_emit_progress,
+        )
+
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
@@ -3976,8 +4010,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
         # despite their live progress UI updating correctly.
         execution_checkpoint_store_factory=LocalExecutionCheckpointStore,
         notes_mutation_actor=notes_mutation_actor,
-        hybrid_candidate_execute=execute_hybrid_candidate_route if hybrid_dev_enabled else None,
-        hybrid_read_execute=execute_hybrid_proven_read if hybrid_dev_enabled else None,
+        hybrid_candidate_execute=(
+            light_source_execute
+            if light_source_enabled
+            else execute_hybrid_candidate_route
+            if hybrid_dev_enabled
+            else None
+        ),
+        # Core READ_ONLY remains on the proven Core path. This is a bounded
+        # additional planner call on mutating messages: measure before adoption.
+        hybrid_read_execute=(
+            execute_hybrid_proven_read if light_source_enabled or hybrid_dev_enabled else None
+        ),
+        full_source_mutation_guard=light_source_enabled,
     )
 
 
