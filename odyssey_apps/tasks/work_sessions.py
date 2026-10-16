@@ -16,6 +16,7 @@ from odyssey_core.git_history import GitHistoryResult, HistoryRecorder
 from odyssey_core.mutation_gate import (
     CanonicalMutationError,
     CanonicalMutationGate,
+    CanonicalPostwriteError,
     CreateMutationCommand,
     MutationCommand,
 )
@@ -43,10 +44,19 @@ _MAX_ACTIVITY_TEXT = 2_000
 class WorkSessionError(ValueError):
     """Reject unavailable, stale, ambiguous, or invalid Work Session mutations."""
 
-    def __init__(self, code: str, *, active_task_id: str | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        *,
+        active_task_id: str | None = None,
+        physical_write: bool = False,
+        target_id: str | None = None,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.active_task_id = active_task_id
+        self.physical_write = physical_write
+        self.target_id = target_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +182,10 @@ class TaskWorkSessionService:
                     path, session_id, name, task_id, started_at, actor, now
                 ),
             )
+        except CanonicalPostwriteError as error:
+            raise WorkSessionError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (
             CanonicalMutationError,
             ValueError,
@@ -225,6 +239,10 @@ class TaskWorkSessionService:
                 actor,
                 now,
             )
+        except CanonicalPostwriteError as error:
+            raise WorkSessionError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (
             CanonicalMutationError,
             ValueError,
@@ -323,6 +341,10 @@ class TaskWorkSessionService:
                 actor,
                 now,
             )
+        except CanonicalPostwriteError as error:
+            raise WorkSessionError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (
             CanonicalMutationError,
             ValueError,
@@ -403,6 +425,10 @@ class TaskWorkSessionService:
         prior = self._snapshot(raw, note)
         try:
             receipt = self._delete_session(path, note, raw, request_id, actor, now)
+        except CanonicalPostwriteError as error:
+            raise WorkSessionError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (
             CanonicalMutationError,
             ValueError,
@@ -625,6 +651,10 @@ class TaskWorkSessionService:
                 actor,
                 now,
             )
+        except CanonicalPostwriteError as error:
+            raise WorkSessionError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (
             CanonicalMutationError,
             ValueError,

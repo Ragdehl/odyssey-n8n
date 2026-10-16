@@ -11,6 +11,7 @@ import pytest
 from odyssey_core.mutation_gate import (
     CanonicalMutationError,
     CanonicalMutationGate,
+    CanonicalPostwriteError,
     CreateMutationCommand,
     MutationCommand,
 )
@@ -124,6 +125,61 @@ def test_gate_can_recover_a_readback_receipt_after_a_known_write(tmp_path: Path)
     )
     receipt = gate.receipt_after_write(_command(raw), target, result)
     assert receipt.readback.content == "Written before later failure."
+
+
+def test_gate_marks_a_readback_failure_after_one_physical_write(tmp_path: Path) -> None:
+    repository, schema, raw = _build(tmp_path)
+    gate = CanonicalMutationGate(repository, schema, None)
+    command = _command(raw)
+    writes = 0
+
+    def write_then_corrupt(target):
+        nonlocal writes
+        writes += 1
+        result = update_entity(
+            repository,
+            schema,
+            path=target.path,
+            expected_id=target.id,
+            expected_revision=1,
+            set_metadata={},
+            content="The physical write happened.",
+            actor="test",
+            now=NOW,
+        )
+        repository.replace_text(target.path, "not canonical Markdown")
+        return result
+
+    with pytest.raises(CanonicalPostwriteError, match="POSTWRITE_READBACK_FAILED") as error:
+        gate.execute(command, write_then_corrupt)
+    assert writes == 1
+    assert error.value.target_id == "person-a"
+    assert error.value.operation == "person_amended"
+    assert error.value.physical_write is True
+    assert error.value.persistence.revision == 2
+
+
+def test_gate_revalidates_exact_prepared_path_before_executor(tmp_path: Path) -> None:
+    repository, schema, raw = _build(tmp_path)
+    gate = CanonicalMutationGate(repository, schema, None)
+    command = _command(raw)
+    target = gate.prepare(command)
+    # This models a malformed competing writer which changes the body without
+    # advancing revision. The source hash, not revision alone, must block it.
+    repository.replace_text(
+        target.path,
+        serialize_note(Note(dict(target.note.metadata), "Changed behind the domain guard.")),
+    )
+    called = False
+
+    def should_not_write(_target):
+        nonlocal called
+        called = True
+        raise AssertionError("stale target reached executor")
+
+    with pytest.raises(CanonicalMutationError, match="STALE_TARGET"):
+        gate.execute_prepared(command, target, should_not_write)
+    assert not called
 
 
 def test_gate_create_rechecks_parent_and_returns_a_physical_receipt(tmp_path: Path) -> None:

@@ -28,6 +28,28 @@ class CanonicalMutationError(ValueError):
         self.code = code
 
 
+class CanonicalPostwriteError(CanonicalMutationError):
+    """A canonical write occurred, but its required post-write proof failed.
+
+    The persistence result is intentionally retained so outer boundaries can
+    report a partial outcome and must not retry as though no Markdown changed.
+    """
+
+    def __init__(
+        self,
+        code: str,
+        *,
+        target_id: str,
+        operation: str,
+        persistence: EntityPersistenceResult,
+    ) -> None:
+        super().__init__(code)
+        self.target_id = target_id
+        self.operation = operation
+        self.persistence = persistence
+        self.physical_write = True
+
+
 @dataclass(frozen=True, slots=True)
 class MutationCommand:
     """Trusted runtime command tokens; source text is intentionally absent."""
@@ -157,6 +179,11 @@ class CanonicalMutationGate:
         self, command: MutationCommand, target: MutationTarget, executor: MutationExecutor
     ) -> CanonicalMutationReceipt:
         """Execute after a caller's domain guard inspected this prepared target."""
+        # Domain guards can legitimately do non-trivial work after ``prepare``.
+        # Re-read only this exact canonical path before mutation: another actor
+        # may have changed it meanwhile, including a body-only change that did
+        # not advance a malformed/forged revision.  Do not rescan the vault.
+        self._revalidate_prepared(command, target)
         snapshot = self._begin_history(command.request_id)
         result = executor(target)
         return self._receipt(command, target, result, snapshot)
@@ -192,18 +219,33 @@ class CanonicalMutationGate:
             parent = self.prepare(command.parent)
         result = executor(parent)
         if result.id != command.target_id or result.path != command.target_path:
-            raise CanonicalMutationError("UNEXPECTED_PERSISTENCE_RESULT")
+            raise CanonicalPostwriteError(
+                "UNEXPECTED_PERSISTENCE_RESULT",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            )
         try:
             raw = self.repository.read_text(command.target_path)
             note = parse_note(raw)
             validate_note(note, self.schema)
         except (NoteUnavailableError, NoteFormatError, ValueError) as error:
-            raise CanonicalMutationError("POSTWRITE_READBACK_FAILED") from error
+            raise CanonicalPostwriteError(
+                "POSTWRITE_READBACK_FAILED",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            ) from error
         if (
             note.metadata.get("id") != command.target_id
             or note.metadata.get("type") != command.expected_type
         ):
-            raise CanonicalMutationError("POSTWRITE_IDENTITY_MISMATCH")
+            raise CanonicalPostwriteError(
+                "POSTWRITE_IDENTITY_MISMATCH",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            )
         ids = affected_ids or (command.target_id,)
         if not ids or len(set(ids)) != len(ids) or command.target_id not in ids:
             raise CanonicalMutationError("INVALID_AFFECTED_IDS")
@@ -226,18 +268,38 @@ class CanonicalMutationGate:
         snapshot: object | None,
     ) -> CanonicalMutationReceipt:
         if result.id != command.target_id or result.path != target.path:
-            raise CanonicalMutationError("UNEXPECTED_PERSISTENCE_RESULT")
+            raise CanonicalPostwriteError(
+                "UNEXPECTED_PERSISTENCE_RESULT",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            )
         try:
             raw = self.repository.read_text(target.path)
             note = parse_note(raw)
             validate_note(note, self.schema)
         except (NoteUnavailableError, NoteFormatError, ValueError) as error:
-            raise CanonicalMutationError("POSTWRITE_READBACK_FAILED") from error
+            raise CanonicalPostwriteError(
+                "POSTWRITE_READBACK_FAILED",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            ) from error
         if note.metadata.get("id") != command.target_id:
-            raise CanonicalMutationError("POSTWRITE_IDENTITY_MISMATCH")
+            raise CanonicalPostwriteError(
+                "POSTWRITE_IDENTITY_MISMATCH",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            )
         revision = note.metadata.get("revision")
         if not isinstance(revision, int) or revision != result.revision:
-            raise CanonicalMutationError("POSTWRITE_REVISION_MISMATCH")
+            raise CanonicalPostwriteError(
+                "POSTWRITE_REVISION_MISMATCH",
+                target_id=command.target_id,
+                operation=command.operation,
+                persistence=result,
+            )
         return CanonicalMutationReceipt(
             command.operation,
             command.target_id,
@@ -257,6 +319,24 @@ class CanonicalMutationGate:
             return self.history.begin(request_id)
         except Exception:
             return None
+
+    def _revalidate_prepared(self, command: MutationCommand, target: MutationTarget) -> None:
+        """Fail closed if an exact prepared target drifted before execution."""
+        try:
+            raw = self.repository.read_text(target.path)
+            note = parse_note(raw)
+            validate_note(note, self.schema)
+        except (NoteUnavailableError, NoteFormatError, ValueError) as error:
+            raise CanonicalMutationError("TARGET_UNAVAILABLE") from error
+        if (
+            note.metadata.get("id") != command.target_id
+            or note.metadata.get("deleted") is True
+            or note.metadata.get("revision") != command.expected_revision
+            or self._hash(raw) != command.expected_source_hash
+            or command.expected_type is not None
+            and note.metadata.get("type") != command.expected_type
+        ):
+            raise CanonicalMutationError("STALE_TARGET")
 
     def _record_history(
         self, request_id: str, snapshot: object | None, target_ids: tuple[str, ...] | str

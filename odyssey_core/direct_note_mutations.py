@@ -16,6 +16,7 @@ from odyssey_core.materialization import (
 from odyssey_core.mutation_gate import (
     CanonicalMutationError,
     CanonicalMutationGate,
+    CanonicalPostwriteError,
     MutationCommand,
 )
 from odyssey_core.note_queries import NotesQueryError, NotesQueryService
@@ -28,9 +29,13 @@ from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
 class DirectNoteMutationError(ValueError):
     """Indicate a bounded direct Notes mutation that cannot safely proceed."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(
+        self, code: str, *, physical_write: bool = False, target_id: str | None = None
+    ) -> None:
         super().__init__(code)
         self.code = code
+        self.physical_write = physical_write
+        self.target_id = target_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +144,10 @@ class DirectNoteMutationService:
                     fact_selector=_ExactLocatorSelector(fact_locator),
                 ),
             )
+        except CanonicalPostwriteError as error:
+            raise DirectNoteMutationError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (MaterializationError, ValueError, CanonicalMutationError) as error:
             raise DirectNoteMutationError("FACT_UNAVAILABLE") from error
         if receipt.persistence.operation is not PersistenceOperation.UPDATED:
@@ -204,6 +213,10 @@ class DirectNoteMutationService:
                     now=now,
                 ),
             )
+        except CanonicalPostwriteError as error:
+            raise DirectNoteMutationError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (MaterializationError, ValueError, CanonicalMutationError) as error:
             raise DirectNoteMutationError("NOTE_UNAVAILABLE") from error
         if receipt.persistence.operation is not PersistenceOperation.DELETED:

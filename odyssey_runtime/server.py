@@ -259,7 +259,13 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     TaskDirectMutationError,
                     WorkSessionError,
                 ) as error:
-                    self._write_json(HTTPStatus.CONFLICT, {"error": error.code})
+                    response: dict[str, object] = {"error": error.code}
+                    if getattr(error, "physical_write", False):
+                        response["partial"] = {
+                            "physical_write": True,
+                            "target_id": getattr(error, "target_id", None),
+                        }
+                    self._write_json(HTTPStatus.CONFLICT, response)
                 except NotesTelemetryError as error:
                     self._write_json(
                         HTTPStatus.BAD_REQUEST

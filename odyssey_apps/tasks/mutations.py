@@ -15,6 +15,7 @@ from odyssey_core.materialization import (
 from odyssey_core.mutation_gate import (
     CanonicalMutationError,
     CanonicalMutationGate,
+    CanonicalPostwriteError,
     CreateMutationCommand,
     MutationCommand,
 )
@@ -41,9 +42,13 @@ from .schema import TASK_TYPE
 class TaskDirectMutationError(ValueError):
     """Reject a stale, invalid, or unsupported direct Task lifecycle mutation."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(
+        self, code: str, *, physical_write: bool = False, target_id: str | None = None
+    ) -> None:
         super().__init__(code)
         self.code = code
+        self.physical_write = physical_write
+        self.target_id = target_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +169,10 @@ class TaskDirectMutationService:
                     fact_ordinals=(),
                 ),
             )
+        except CanonicalPostwriteError as error:
+            raise TaskDirectMutationError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (MaterializationError, ValueError, CanonicalMutationError) as error:
             raise TaskDirectMutationError("TASK_UNAVAILABLE") from error
         if receipt.persistence.operation is not PersistenceOperation.UPDATED:
@@ -343,6 +352,10 @@ class TaskDirectMutationService:
                     fact_ordinals=(0,),
                 ),
             )
+        except CanonicalPostwriteError as error:
+            raise TaskDirectMutationError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (MaterializationError, ValueError, CanonicalMutationError) as error:
             raise TaskDirectMutationError("TASK_SUBTASK_TARGET_UNAVAILABLE") from error
         if receipt.persistence.operation is not PersistenceOperation.CREATED:

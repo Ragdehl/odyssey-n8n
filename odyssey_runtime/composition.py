@@ -11,7 +11,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from threading import Condition, Lock, RLock, Thread
+from threading import Condition, RLock, Thread
 from time import perf_counter
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -140,7 +140,7 @@ from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
-from .delivery_results import LocalDeliveryResultStore
+from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
 from .hybrid_group_compiler import compile_hybrid_candidate_bundle
 from .progress import ProductProgressStore
@@ -394,7 +394,7 @@ class RuntimeComposition:
         Callable[[str, str, AuthenticatedActorContext, str], ApplicationResult | None] | None
     ) = None
     monotonic: Callable[[], float] = perf_counter
-    _execute_lock: Lock = field(default_factory=Lock, init=False, repr=False)
+    _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def execute_product(
@@ -1393,12 +1393,34 @@ class RuntimeComposition:
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
     ) -> dict[str, object]:
-        """Execute one typed read-only Notes operation for the authenticated actor boundary.
+        """Serialize the entire delivery/replay handshake for direct mutations.
+
+        Do not hold the writer lock for ordinary Notes reads.  Every direct
+        mutation has a mandatory request_id: this general envelope guard also
+        covers new registered operations without extending a capability switch.
+        Use a reentrant lock because the established domain execution blocks
+        already coordinate through the same writer boundary.
+        """
+        if isinstance(payload, dict) and "request_id" in payload:
+            with self._execute_lock:
+                return self._notes_unlocked(
+                    operation, payload, authenticated_actor, external_principal
+                )
+        return self._notes_unlocked(operation, payload, authenticated_actor, external_principal)
+
+    def _notes_unlocked(
+        self,
+        operation: str,
+        payload: dict[str, object],
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Execute one typed Notes operation for the authenticated actor boundary.
 
         Actor resolution occurs even though current local-first Notes storage is root-bound. This
         preserves the existing outer isolation contract and prevents a route from bypassing it.
         """
-        self._resolve_actor(authenticated_actor, external_principal)
+        resolved_actor = self._resolve_actor(authenticated_actor, external_principal)
         if self.notes_service is None:
             raise ValueError("Notes service is unavailable")
         if (
@@ -1460,6 +1482,11 @@ class RuntimeComposition:
             request_id = payload.get("request_id")
             if not isinstance(request_id, str) or not request_id:
                 raise ValueError("Work Session request ID is invalid")
+            replay = self._load_notes_mutation_replay(
+                resolved_actor, operation, payload, request_id
+            )
+            if replay is not None:
+                return replay
             actor = self.notes_mutation_actor(authenticated_actor, external_principal)
             now = _current_time()["timestamp"]
             with self._execute_lock:
@@ -1614,16 +1641,32 @@ class RuntimeComposition:
                         actor=actor,
                         now=now,
                     )
-            return {
+            # Session list projection is AFTER the canonical mutation. A
+            # broken optional read must preserve the physically written ID.
+            try:
+                work_sessions = [
+                    _work_session_to_response(item)
+                    for item in self.work_session_service.list_for_task(result.task_id)
+                ]
+                projection_failed = False
+            except Exception:
+                work_sessions = []
+                projection_failed = True
+            response = {
                 "kind": "mutation",
                 "operation": result.operation,
                 "note_id": result.task_id,
                 "history": {"status": result.history.status.value},
-                "work_sessions": [
-                    _work_session_to_response(item)
-                    for item in self.work_session_service.list_for_task(result.task_id)
-                ],
+                "work_sessions": work_sessions,
             }
+            if projection_failed:
+                response["partial"] = {
+                    "physical_write": True,
+                    "reason": "POSTWRITE_PROJECTION_UNAVAILABLE",
+                }
+            return self._save_notes_mutation_replay(
+                resolved_actor, operation, payload, request_id, response
+            )
         if operation in {"delete_fact", "delete_note", "task_status", "task_subtask_create"}:
             if self.direct_notes_mutations is None or self.notes_mutation_actor is None:
                 raise ValueError("Notes mutation service is unavailable")
@@ -1632,6 +1675,11 @@ class RuntimeComposition:
             request_id = payload.get("request_id")
             if not isinstance(request_id, str) or not request_id:
                 raise ValueError("Notes mutation request ID is invalid")
+            replay = self._load_notes_mutation_replay(
+                resolved_actor, operation, payload, request_id
+            )
+            if replay is not None:
+                return replay
             common = {
                 "note_id": payload.get("note_id"),
                 "expected_revision": payload.get("expected_revision"),
@@ -1711,19 +1759,28 @@ class RuntimeComposition:
                         )
                 except (DirectNoteMutationError, TaskDirectMutationError, WorkSessionError):
                     raise
-                if self.schedule_index_refresh is not None:
-                    self.schedule_index_refresh((result.note_id,))
-                elif operation == "task_status" and self.refresh_task_lifecycle_indexes is not None:
-                    try:
-                        self.refresh_task_lifecycle_indexes(
-                            result.path, cast(str, payload["expected_source_hash"])
-                        )
-                    except (ContextIndexError, SemanticIndexError, ValueError):
+                index_refresh_failed = False
+                try:
+                    if self.schedule_index_refresh is not None:
+                        self.schedule_index_refresh((result.note_id,))
+                    elif (
+                        operation == "task_status"
+                        and self.refresh_task_lifecycle_indexes is not None
+                    ):
+                        try:
+                            self.refresh_task_lifecycle_indexes(
+                                result.path, cast(str, payload["expected_source_hash"])
+                            )
+                        except (ContextIndexError, SemanticIndexError, ValueError):
+                            self.refresh_indexes()
+                    elif self.refresh_affected_indexes is not None:
+                        self.refresh_affected_indexes((result.note_id,))
+                    else:
                         self.refresh_indexes()
-                elif self.refresh_affected_indexes is not None:
-                    self.refresh_affected_indexes((result.note_id,))
-                else:
-                    self.refresh_indexes()
+                except Exception:
+                    # The original Core receipt remains valid; the index is
+                    # rebuildable and must never make a real WRITE vanish.
+                    index_refresh_failed = True
             response = {
                 "kind": "mutation",
                 "operation": result.operation,
@@ -1751,7 +1808,14 @@ class RuntimeComposition:
                         }
                     }
                 )
-            return response
+            if index_refresh_failed:
+                response["partial"] = {
+                    "physical_write": True,
+                    "reason": "INDEX_REFRESH_UNAVAILABLE",
+                }
+            return self._save_notes_mutation_replay(
+                resolved_actor, operation, payload, request_id, response
+            )
         if operation == "intelligent":
             if (
                 self.intelligent_notes_execute is None
@@ -2168,6 +2232,81 @@ class RuntimeComposition:
         if self.conversation_root_resolver is None:
             raise ValueError("conversation root resolver is unavailable")
         return LocalConversationStore(self.conversation_root_resolver.resolve(actor))
+
+    def _notes_mutation_result_store(
+        self, actor: str
+    ) -> tuple[LocalDeliveryResultStore, Path] | None:
+        """Return actor-isolated replay state for direct Notes mutations.
+
+        Lightweight/disposable compositions intentionally omit a conversation
+        root resolver; those retain their existing functional behavior without
+        pretending a durable replay guarantee exists.
+        """
+        if self.conversation_root_resolver is None:
+            return None
+        root = self.conversation_root_resolver.resolve(actor)
+        return LocalDeliveryResultStore(root / "notes-mutation-results"), root
+
+    def _load_notes_mutation_replay(
+        self, actor: str, operation: str, payload: Mapping[str, object], request_id: str
+    ) -> dict[str, object] | None:
+        store_root = self._notes_mutation_result_store(actor)
+        if store_root is None:
+            return None
+        store, root = store_root
+        try:
+            record = store.load(request_id, store.mutation_fingerprint(operation, payload, root))
+        except DeliveryResultError as error:
+            raise ValueError("Notes mutation replay is unavailable") from error
+        if record is None:
+            # Create a durable actor-local reservation BEFORE executing the
+            # mutation. A crash after the Markdown write but before the final
+            # result can no longer cause a blind second write.
+            try:
+                store.claim_mutation(
+                    request_id, store.mutation_fingerprint(operation, payload, root)
+                )
+            except DeliveryResultError as error:
+                raise ValueError("Notes mutation has an unresolved previous attempt") from error
+            return None
+        response = record.get("notes_response")
+        if set(record) != {"request_id", "notes_response"} or not isinstance(response, dict):
+            raise ValueError("Notes mutation replay is invalid")
+        return dict(response)
+
+    def _save_notes_mutation_replay(
+        self,
+        actor: str,
+        operation: str,
+        payload: Mapping[str, object],
+        request_id: str,
+        response: dict[str, object],
+    ) -> dict[str, object]:
+        store_root = self._notes_mutation_result_store(actor)
+        if store_root is None:
+            return response
+        store, root = store_root
+        try:
+            store.save(
+                request_id,
+                store.mutation_fingerprint(operation, payload, root),
+                {"request_id": request_id, "notes_response": response},
+                _current_time()["timestamp"],
+            )
+            store.finish_mutation_claim(request_id)
+        except (DeliveryResultError, OSError, ValueError, TypeError):
+            # A physical mutation has already completed; the optional index
+            # refresh may also have failed, but the Markdown write is known. Do
+            # not flatten that fact into an apparent no-write error, and never
+            # claim this response is replay-safe when its durable receipt failed.
+            return {
+                **response,
+                "partial": {
+                    "physical_write": True,
+                    "reason": "MUTATION_REPLAY_RESULT_UNAVAILABLE",
+                },
+            }
+        return response
 
     def _resolve_actor(
         self,

@@ -48,6 +48,84 @@ class LocalDeliveryResultStore:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    @staticmethod
+    def mutation_fingerprint(
+        operation: str, payload: Mapping[str, Any], actor_state_root: Path
+    ) -> str:
+        """Bind a direct UI command to its canonical operation, payload and actor root.
+
+        This deliberately stores a digest only.  The root is already the store
+        namespace, but including it in the immutable binding makes a copied
+        record unusable across actor roots as well.
+        """
+        if not isinstance(operation, str) or not operation:
+            raise DeliveryResultError("mutation operation is invalid")
+        if not isinstance(payload, Mapping):
+            raise DeliveryResultError("mutation payload is invalid")
+        if not isinstance(actor_state_root, Path):
+            raise DeliveryResultError("mutation actor root is invalid")
+        try:
+            encoded = json.dumps(
+                {
+                    "actor_state_root": str(actor_state_root.resolve()),
+                    "operation": operation,
+                    "payload": dict(payload),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        except (TypeError, ValueError, OSError) as error:
+            raise DeliveryResultError("mutation payload is invalid") from error
+        return hashlib.sha256(encoded).hexdigest()
+
+    def claim_mutation(self, request_id: str, fingerprint: str) -> None:
+        """Atomically reserve a direct mutation ID before any physical effects.
+
+        When a worker dies after writing Markdown but before its final result
+        is persisted, the durable claim remains. The next worker must NOT
+        execute that delivery again: it needs explicit reconciliation. This
+        uses the same actor-local delivery state, not another knowledge store.
+        """
+        self._validate_request_id(request_id)
+        if not isinstance(fingerprint, str) or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None:
+            raise DeliveryResultError("mutation fingerprint is invalid")
+        claim_path = self._path(request_id).with_suffix(".claim")
+        claim_path.parent.mkdir(parents=True, exist_ok=True)
+        data = json.dumps(
+            {"version": 1, "request_id": request_id, "fingerprint": fingerprint},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        try:
+            descriptor = os.open(claim_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError as error:
+            # Even an identical pending request cannot be replayed until the
+            # authoritative final receipt has been found or reconciled.
+            raise DeliveryResultError(
+                "mutation delivery has an unresolved prior attempt"
+            ) from error
+        except OSError as error:
+            raise DeliveryResultError("mutation reservation is unavailable") from error
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except OSError as error:
+            # Retain the claim on uncertain write/fsync, fail closed.
+            raise DeliveryResultError("mutation reservation is unavailable") from error
+
+    def finish_mutation_claim(self, request_id: str) -> None:
+        """Best-effort cleanup only after the immutable receipt exists."""
+        if not self._path(request_id).exists():
+            raise DeliveryResultError("mutation cannot finish before receipt")
+        try:
+            self._path(request_id).with_suffix(".claim").unlink(missing_ok=True)
+        except OSError:
+            # Completed receipt takes precedence on all later replay checks.
+            pass
+
     def load(self, request_id: str, fingerprint: str) -> dict[str, Any] | None:
         """Load a completed result or reject reuse/corruption of its request identity."""
         path = self._path(request_id)
