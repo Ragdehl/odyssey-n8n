@@ -1,19 +1,41 @@
-"""Independent P4 acceptance: prove every reviewed assertion exists in Markdown.
+"""Physical P4 acceptance: prove each reviewed meaning is newly saved OR already exact.
 
-A completed HTTP status and Writer action count are not evidence of complete
-physical mutation. Inspect actual marked facts, identities and source backlinks
-on the disposable vault, without treating the model review as a note authority.
+Completed status alone is never proof: all source assertions must have an exact
+canonical marker in the correct owner with grounded resolved links. A previously
+identical marked fact can justify a no-op; unmarked plain text or merely similar
+meaning cannot. Only read disposable-vault Markdown; never repair it here.
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
-from odyssey_core.atomic_facts import parse_atomic_facts
+from odyssey_core.atomic_facts import AtomicFact, parse_atomic_facts
 from odyssey_core.note_queries import NotesQueryService
 from odyssey_core.notes import parse_note
+
+_INLINE_LINK = re.compile(r"\[\[(?:[^|\]\n]+\|)?([^\]\n]+)\]\]")
+
+
+def _exact_text(fact: AtomicFact, reviewed: Mapping[str, Any], speaker: bool) -> bool:
+    """Compare literal reviewed fact text against canonical visible link labels.
+
+    The source-attested SELF annotation is an explicit Core rendering suffix
+    on a dated Day fact; remove only this known suffix when verifying its
+    separate authenticated source role. Never use fuzzy semantic matching.
+    """
+    expected = reviewed["reviewed_text"]
+    if not isinstance(expected, str) or not expected.strip():
+        return False
+    for index, name in enumerate(reviewed["reference_names"]):
+        expected = expected.replace("{{ref:" + str(index) + "}}", name)
+    visible = _INLINE_LINK.sub(lambda match: match.group(1), fact.text)
+    if speaker and reviewed["kind"] == "record" and reviewed["date"] is not None:
+        visible = re.sub(r" \(yo: [^\n)]+\)(?=\.$)", "", visible)
+    return visible.strip() == expected.strip()
 
 
 def assert_reviewed_markdown(
@@ -28,15 +50,16 @@ def assert_reviewed_markdown(
     self_roles: tuple[bool, ...],
     self_id: str,
 ) -> dict[str, Any]:
-    """Validate per-fact owner, reference ID, SELF presence, and backlinks.
+    """Prove each assertion's exact owner/text/links and new-or-existing receipt.
 
-    Raises AssertionError if an approved claim did not materialize exactly once
-    or linked another identity. Never repairs or mutates canonical Markdown.
+    Existing matches must come from the BEFORE snapshot and must have a
+    canonical atomic marker: a response cannot claim success by echoing its
+    text or by finding an unrelated similar statement. Duplicate current
+    markers, absent references and invented SELF links always fail.
     """
     reviewed = review["facts"]
     assert len(reviewed) == len(self_roles) and reviewed
     changed = {p: content for p, content in after.items() if before.get(p) != content}
-    assert changed, "Completed source had no physical canonical changes"
     parsed = {path: parse_note(text) for path, text in after.items()}
     assert len({note.metadata["id"] for note in parsed.values()}) == len(parsed)
     by_id = {note.metadata["id"]: (path, note) for path, note in parsed.items()}
@@ -52,7 +75,8 @@ def assert_reviewed_markdown(
             assert len(matches) == 1, "A referenced name is not a unique canonical person"
             references_by_name[name] = str(matches[0].metadata["id"])
 
-    expected_per_delivery = Counter()
+    used: set[tuple[str, str, int]] = set()
+    expected_new = Counter()
     readback = []
     notes_query = NotesQueryService(repository, schema, context_index)
     for position, item in enumerate(reviewed):
@@ -66,50 +90,70 @@ def assert_reviewed_markdown(
             subrequest = f"{request_id}-self"
         elif kind == "task":
             subrequest = f"{request_id}-task"
-            matches = []
-            for note in parsed.values():
-                if note.metadata.get("type") == "task" and any(
-                    fact.request_id == subrequest for fact in parse_atomic_facts(note.content)
-                ):
-                    matches.append(note)
-            assert len(matches) == 1, "Task request is not a unique canonical Task"
+            matches = [
+                note
+                for note in parsed.values()
+                if note.metadata.get("type") == "task"
+                and any(fact.request_id == subrequest for fact in parse_atomic_facts(note.content))
+            ]
+            assert len(matches) == 1, "Task request is not one unique canonical Task"
             owner_id = str(matches[0].metadata["id"])
             assert matches[0].metadata["status"] == "pending"
             assert matches[0].metadata["target_date"] == date
         else:
             raise AssertionError("Unknown reviewed operation")
-
         assert owner_id in by_id, "Reviewed fact owner is physically absent"
         path, note = by_id[owner_id]
-        assert path in changed, "Reviewed fact was not newly written"
-        expected_per_delivery[(owner_id, subrequest)] += 1
-        atoms = [fact for fact in parse_atomic_facts(note.content) if fact.request_id == subrequest]
-        ordinal = expected_per_delivery[(owner_id, subrequest)] - 1
-        assert len(atoms) >= ordinal + 1, "Missing ordered physical atomic fact"
-        fact = atoms[ordinal]
-        assert fact.ordinal == ordinal, "Physical fact ordinal differs from review"
-        # Markdown links use paths, not stable IDs: resolve them through Core's
-        # real Notes projection, rather than pretending the raw path is the ID.
+        now_atoms = parse_atomic_facts(note.content)
+        previous = before.get(path)
+        before_atoms = (
+            parse_atomic_facts(parse_note(previous).content) if previous is not None else ()
+        )
+        if previous is not None:
+            assert parse_note(previous).metadata["id"] == owner_id
+        # Prefer this delivery's physical write; an exact pre-existing
+        # canonical match is the ONLY supported no-op proof.
+        eligible = [("new", fact) for fact in now_atoms if fact.request_id == subrequest] + [
+            ("existing", fact) for fact in before_atoms
+        ]
+        chosen = None
         detail = notes_query.detail(owner_id)
-        blocks = [block for block in detail.body_blocks if block.fact_locator == fact.locator]
-        assert len(blocks) == 1, "Physical fact is absent from Notes presentation"
-        resolved_ids = {
-            segment.target_id for segment in blocks[0].segments if segment.target_id is not None
-        }
+        for origin, fact in eligible:
+            key = (owner_id, fact.request_id, fact.ordinal)
+            if key in used or not _exact_text(fact, item, self_roles[position]):
+                continue
+            blocks = [b for b in detail.body_blocks if b.fact_locator == fact.locator]
+            if len(blocks) != 1:
+                continue
+            resolved_ids = {
+                segment.target_id for segment in blocks[0].segments if segment.target_id is not None
+            }
+            expected_names = {references_by_name[n] for n in item["reference_names"]}
+            if not expected_names.issubset(resolved_ids):
+                continue
+            if (
+                kind == "record"
+                and date is not None
+                and ((self_id in resolved_ids) != self_roles[position])
+            ):
+                continue
+            chosen = (origin, fact, resolved_ids)
+            used.add(key)
+            break
+        assert chosen is not None, "No exact new or pre-existing canonical fact proves source"
+        origin, fact, _resolved = chosen
+        if origin == "new":
+            assert path in changed, "New fact did not mutate its canonical owner"
+            expected_new[(owner_id, subrequest)] += 1
         for name in item["reference_names"]:
             person_id = references_by_name[name]
-            assert person_id in resolved_ids, "Reviewed named participant lost its canonical link"
             backlinks = notes_query.backlinks(person_id)
             assert any(entry.source.id == owner_id for entry in backlinks.items), (
-                "Physical reference is missing its graph backlink"
+                "Physical reference lacks a graph backlink"
             )
-        if kind == "record" and date is not None:
-            assert (self_id in resolved_ids) == self_roles[position], (
-                "SELF participation is missing or invented in physical Day fact"
-            )
-            if self_roles[position]:
-                backlinks = notes_query.backlinks(self_id)
-                assert any(entry.source.id == owner_id for entry in backlinks.items)
+        if kind == "record" and date is not None and self_roles[position]:
+            backlinks = notes_query.backlinks(self_id)
+            assert any(entry.source.id == owner_id for entry in backlinks.items)
         readback.append(
             {
                 "owner_id": owner_id,
@@ -118,18 +162,33 @@ def assert_reviewed_markdown(
                 "fact_ordinal": fact.ordinal,
                 "named_reference_count": len(item["reference_names"]),
                 "verified_self": self_roles[position],
+                "evidence": origin,
             }
         )
 
-    for (owner_id, subrequest), expected_count in expected_per_delivery.items():
-        atoms = [
+    for owner_id, subrequest in {
+        (row["owner_id"], f"{request_id}-day-{row['source_date']}")
+        if row["source_kind"] == "record" and row["source_date"] is not None
+        else (row["owner_id"], f"{request_id}-self")
+        if row["source_kind"] == "record"
+        else (row["owner_id"], f"{request_id}-task")
+        for row in readback
+    }:
+        new_atoms = [
             fact
             for fact in parse_atomic_facts(by_id[owner_id][1].content)
             if fact.request_id == subrequest
         ]
-        assert len(atoms) == expected_count, "Canonical fact count disagrees with source review"
+        assert len(new_atoms) == expected_new[(owner_id, subrequest)], (
+            "Unreviewed or duplicate new physical fact is present"
+        )
+        assert [f.ordinal for f in new_atoms] == list(range(len(new_atoms))), (
+            "New physical fact ordinals are not canonical"
+        )
     return {
         "physical_fact_count": len(readback),
+        "new_facts": sum(row["evidence"] == "new" for row in readback),
+        "reused_facts": sum(row["evidence"] == "existing" for row in readback),
         "physical_facts": readback,
         "changed_canonical_note_count": len(changed),
     }

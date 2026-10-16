@@ -565,6 +565,20 @@ def run():
                     "product_outcome": result.get("product_outcome"),
                     "notes": result.get("affected_stable_note_ids"),
                     "action_count": len(result.get("actions", [])),
+                    "action_unit_outcomes": [
+                        {
+                            "status": action.get("status"),
+                            "units": [
+                                {
+                                    "status": u.get("status"),
+                                    "operation": u.get("operation"),
+                                    "reason": u.get("reason"),
+                                }
+                                for u in action.get("units", [])
+                            ],
+                        }
+                        for action in result.get("actions", [])
+                    ],
                     "duration_s": elapsed,
                     "replay_http_status": status_replay,
                     "replay_marked": replayed.get("delivery_replayed", False),
