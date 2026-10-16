@@ -1,0 +1,90 @@
+{
+  "name": "full-source existing Core/Writer baseline on copied live DEV Markdown",
+  "not_light_router_implementation": true,
+  "uses_real_model": true,
+  "provider_store": false,
+  "mock_embeddings": true,
+  "can_write_to_actual_dev": false,
+  "cases": [
+    {
+      "case": "maya_simple",
+      "original_source": "Ayer hablé con Maya.",
+      "source_note_count": 97,
+      "status": "needs_attention",
+      "reason": "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+      "error": null,
+      "changes": [],
+      "readback": false,
+      "coverage_exception": "Graph attribution evidence is invalid",
+      "coverage_cause": "Every planned Core fact needs explicit source evidence",
+      "plan_facts": [
+        "('Hablé con {{ref:0}}.',)",
+        "()"
+      ],
+      "plan_unit_guards": [
+        {
+          "type": "calendar_day",
+          "query": "2026-10-15",
+          "force_create": false,
+          "reference_only": false,
+          "ref_count": 1,
+          "facts": 1
+        },
+        {
+          "type": "person",
+          "query": "Maya",
+          "force_create": false,
+          "reference_only": true,
+          "ref_count": 0,
+          "facts": 0
+        }
+      ],
+      "stages": [
+        {
+          "name": "planner",
+          "outcome": "completed",
+          "error_category": null
+        },
+        {
+          "name": "candidate_coverage",
+          "outcome": "failed",
+          "error_category": "ValueError"
+        }
+      ],
+      "affected_stable_note_ids": [],
+      "duration_s": 13.12,
+      "model_calls": [
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 1773,
+          "output_tokens": 229,
+          "usd": 0.0002918,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 694,
+          "output_tokens": 100,
+          "usd": 0.0001194,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "input_tokens": 11032,
+          "output_tokens": 321,
+          "usd": 0.0025916,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "input_tokens": 1691,
+          "output_tokens": 338,
+          "usd": 0.0007438,
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "estimated_total_usd": 0.0037466,
+  "temporary_vaults_discarded": true
+}

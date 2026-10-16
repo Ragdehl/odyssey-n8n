@@ -1,0 +1,868 @@
+{
+  "name": "light_router_poc_20261016",
+  "utc_now": "2026-10-16T11:47:13.545270+00:00",
+  "code_commit": "10b9ddf",
+  "model_router": "gpt-6-luna",
+  "model_shared_planner": "gpt-5.6-luna",
+  "max_usd": 0.085,
+  "has_real_write_readback": false,
+  "has_n8n_ui_e2e": false,
+  "cases": [
+    {
+      "case": "maya_simple",
+      "original_source": "Ayer hablé con Maya.",
+      "known_relevant_notes": [],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "single",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the personal note that the user spoke with Maya yesterday.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Maya",
+            "canonical_name": "Maya",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "El usuario habló con Maya.",
+            "kind": "record",
+            "subject": "Maya",
+            "date": "2026-10-15",
+            "daypart": null,
+            "participants": [
+              "usuario",
+              "Maya"
+            ],
+            "source_evidence": "Ayer hablé con Maya.",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 7.06
+    },
+    {
+      "case": "guillermo_control",
+      "original_source": "Hoy he conocido a Guillermo.",
+      "known_relevant_notes": [
+        {
+          "name": "Guillermo",
+          "type": "person",
+          "id": "4eee8c7c-7870-48e8-b2ec-db92011dfde9"
+        }
+      ],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "single",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Personal note about meeting Guillermo today.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Guillermo",
+            "canonical_name": "Guillermo",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "El usuario conoció a Guillermo.",
+            "kind": "record",
+            "subject": "Guillermo",
+            "date": "2026-10-16",
+            "daypart": "morning",
+            "participants": [
+              "Guillermo"
+            ],
+            "source_evidence": "Hoy he conocido a Guillermo.",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 7.97
+    },
+    {
+      "case": "children_subject",
+      "original_source": "Mis hijos fueron al parque, después comieron un helado y por la tarde vieron una película.",
+      "known_relevant_notes": [],
+      "verified_family": [
+        {
+          "name": "Cloe",
+          "verified_link": "Cloe - 39de1e51-bd41-4406-a8d0-d419f7833157"
+        },
+        {
+          "name": "Bruno",
+          "verified_link": "Bruno - 46c22b6e-daf7-41ed-99e5-6b6ba7c76577"
+        }
+      ],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the events about the user's children and their sequence.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Cloe",
+            "canonical_name": "Cloe",
+            "note_type": "person",
+            "confidence": "inferred_unambiguous"
+          },
+          {
+            "mention": "Bruno",
+            "canonical_name": "Bruno",
+            "note_type": "person",
+            "confidence": "inferred_unambiguous"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "Fueron al parque.",
+            "kind": "record",
+            "subject": "Cloe y Bruno",
+            "date": null,
+            "daypart": null,
+            "participants": [
+              "Cloe",
+              "Bruno"
+            ],
+            "source_evidence": "Mis hijos fueron al parque",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Comieron un helado después de ir al parque.",
+            "kind": "record",
+            "subject": "Cloe y Bruno",
+            "date": null,
+            "daypart": null,
+            "participants": [
+              "Cloe",
+              "Bruno"
+            ],
+            "source_evidence": "después comieron un helado",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Vieron una película por la tarde, después de comer un helado.",
+            "kind": "record",
+            "subject": "Cloe y Bruno",
+            "date": null,
+            "daypart": "tarde",
+            "participants": [
+              "Cloe",
+              "Bruno"
+            ],
+            "source_evidence": "por la tarde vieron una película",
+            "dependent_on_fact_index": 1,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 8.38
+    },
+    {
+      "case": "two_dates",
+      "original_source": "Hoy he comprado pan y mañana compraré leche.",
+      "known_relevant_notes": [],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the reported purchases of bread today and milk tomorrow.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [],
+        "facts": [
+          {
+            "meaning": "Purchased bread",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "Hoy he comprado pan",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Will purchase milk",
+            "kind": "task",
+            "subject": "user",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "mañana compraré leche",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 5.98
+    },
+    {
+      "case": "maya_pronoun",
+      "original_source": "Ayer cené con Maya y hoy he vuelto a hablar con ella.",
+      "known_relevant_notes": [],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the related events involving Maya.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Maya",
+            "canonical_name": "Maya",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "Had dinner with Maya.",
+            "kind": "record",
+            "subject": "Maya",
+            "date": "2026-10-15",
+            "daypart": "evening",
+            "participants": [
+              "Maya"
+            ],
+            "source_evidence": "Ayer cené con Maya",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Spoke with Maya again.",
+            "kind": "record",
+            "subject": "Maya",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Maya"
+            ],
+            "source_evidence": "hoy he vuelto a hablar con ella",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 7.42
+    },
+    {
+      "case": "ana_luis",
+      "original_source": "Hoy he hablado con Ana y Luis. Ana se va a París mañana y Luis vuelve el domingo.",
+      "known_relevant_notes": [
+        {
+          "name": "Ana López",
+          "type": "person",
+          "id": "ff7b6cf9-c02e-4f78-ada8-69c36d202f77"
+        },
+        {
+          "name": "Luis",
+          "type": "person",
+          "id": "3859aff1-805c-4e73-bdba-8ee344fa7882"
+        }
+      ],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Save a personal note about speaking with Ana and Luis and their plans.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Ana",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Luis",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "Spoke with Ana and Luis.",
+            "kind": "record",
+            "subject": "Conversation with Ana and Luis",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Ana",
+              "Luis"
+            ],
+            "source_evidence": "Hoy he hablado con Ana y Luis",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Ana is leaving for Paris.",
+            "kind": "record",
+            "subject": "Ana",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Ana"
+            ],
+            "source_evidence": "Ana se va a París mañana",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Luis is returning.",
+            "kind": "record",
+            "subject": "Luis",
+            "date": "2026-10-18",
+            "daypart": null,
+            "participants": [
+              "Luis"
+            ],
+            "source_evidence": "Luis vuelve el domingo",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 8.64
+    },
+    {
+      "case": "maite_cross_app",
+      "original_source": "Hoy he conocido a Maite, mañana tengo que llamarla.",
+      "known_relevant_notes": [],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "tasks",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_reference",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Note that the user met Maite today.",
+            "depends_on_another_scope": false
+          },
+          {
+            "capability": "tasks",
+            "description": "Create a task to call Maite tomorrow.",
+            "depends_on_another_scope": true
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Maite",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "User met Maite.",
+            "kind": "record",
+            "subject": "Maite",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Maite"
+            ],
+            "source_evidence": "Hoy he conocido a Maite",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Call Maite.",
+            "kind": "task",
+            "subject": "Maite",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Maite"
+            ],
+            "source_evidence": "mañana tengo que llamarla",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 6.68
+    },
+    {
+      "case": "maite_variant",
+      "original_source": "He conocido a una chica llamada Nora. Tengo que enviarle un correo el lunes.",
+      "known_relevant_notes": [
+        {
+          "name": "Nora Test",
+          "type": "person",
+          "id": "793e6c7e-9831-462f-8e03-8c5a66a16b73"
+        }
+      ],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "tasks",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record that the user met a girl named Nora.",
+            "depends_on_another_scope": false
+          },
+          {
+            "capability": "tasks",
+            "description": "Create a task to email Nora on Monday.",
+            "depends_on_another_scope": true
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Nora",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "El usuario ha conocido a Nora.",
+            "kind": "record",
+            "subject": "Nora",
+            "date": null,
+            "daypart": null,
+            "participants": [
+              "Nora"
+            ],
+            "source_evidence": "He conocido a una chica llamada Nora.",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Enviar un correo a Nora.",
+            "kind": "task",
+            "subject": "Nora",
+            "date": "2026-10-19",
+            "daypart": null,
+            "participants": [
+              "Nora"
+            ],
+            "source_evidence": "Tengo que enviarle un correo el lunes.",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 6.46
+    },
+    {
+      "case": "independent_apps",
+      "original_source": "Tengo que llamar al banco mañana. Por cierto, me gusta el jazz.",
+      "known_relevant_notes": [],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "tasks",
+          "temporal"
+        ],
+        "interpretation": "separable",
+        "reason": "independent",
+        "app_scopes": [
+          {
+            "capability": "tasks",
+            "description": "Record a task to call the bank tomorrow.",
+            "depends_on_another_scope": false
+          },
+          {
+            "capability": "core",
+            "description": "Record that the user likes jazz.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [],
+        "facts": [
+          {
+            "meaning": "Llamar al banco",
+            "kind": "task",
+            "subject": "usuario",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "Tengo que llamar al banco mañana",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Al usuario le gusta el jazz",
+            "kind": "record",
+            "subject": "usuario",
+            "date": null,
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "me gusta el jazz",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 5.6
+    },
+    {
+      "case": "ambiguous",
+      "original_source": "Ayer vi a Ana y Luis; mañana iré con él al cine.",
+      "known_relevant_notes": [
+        {
+          "name": "Ana López",
+          "type": "person",
+          "id": "ff7b6cf9-c02e-4f78-ada8-69c36d202f77"
+        },
+        {
+          "name": "Luis",
+          "type": "person",
+          "id": "3859aff1-805c-4e73-bdba-8ee344fa7882"
+        }
+      ],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_reference",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the personal note about seeing Ana and Luis and going to the cinema with him.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Ana",
+            "canonical_name": "Ana",
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Luis",
+            "canonical_name": "Luis",
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "él",
+            "canonical_name": "Luis",
+            "note_type": "person",
+            "confidence": "inferred_unambiguous"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user saw Ana and Luis.",
+            "kind": "record",
+            "subject": "Ana and Luis",
+            "date": "2026-10-15",
+            "daypart": null,
+            "participants": [
+              "Ana",
+              "Luis"
+            ],
+            "source_evidence": "Ayer vi a Ana y Luis",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "The user will go to the cinema with Luis.",
+            "kind": "task",
+            "subject": "Go to the cinema with Luis",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Luis"
+            ],
+            "source_evidence": "mañana iré con él al cine",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "error": null,
+      "duration_s": 11.03
+    }
+  ],
+  "real_dev_vault_clone_count": 97,
+  "calls": 20,
+  "estimated_total_usd": 0.0061137,
+  "provider_calls": [
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 4.12,
+      "input_tokens": 289,
+      "output_tokens": 128,
+      "estimated_usd": 9.29e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.93,
+      "input_tokens": 546,
+      "output_tokens": 177,
+      "estimated_usd": 0.0003216,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.49,
+      "input_tokens": 288,
+      "output_tokens": 126,
+      "estimated_usd": 9.18e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.46,
+      "input_tokens": 581,
+      "output_tokens": 232,
+      "estimated_usd": 0.0003946,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.49,
+      "input_tokens": 303,
+      "output_tokens": 145,
+      "estimated_usd": 0.0001028,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.84,
+      "input_tokens": 639,
+      "output_tokens": 467,
+      "estimated_usd": 0.0006882,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.23,
+      "input_tokens": 292,
+      "output_tokens": 162,
+      "estimated_usd": 0.0001102,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.73,
+      "input_tokens": 549,
+      "output_tokens": 198,
+      "estimated_usd": 0.0003474,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 4.35,
+      "input_tokens": 297,
+      "output_tokens": 142,
+      "estimated_usd": 0.0001007,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.06,
+      "input_tokens": 550,
+      "output_tokens": 266,
+      "estimated_usd": 0.0004292,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.51,
+      "input_tokens": 302,
+      "output_tokens": 173,
+      "estimated_usd": 0.0001167,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 5.1,
+      "input_tokens": 642,
+      "output_tokens": 487,
+      "estimated_usd": 0.0007128,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.77,
+      "input_tokens": 295,
+      "output_tokens": 188,
+      "estimated_usd": 0.0001235,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.88,
+      "input_tokens": 582,
+      "output_tokens": 222,
+      "estimated_usd": 0.0003828,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.07,
+      "input_tokens": 299,
+      "output_tokens": 166,
+      "estimated_usd": 0.0001129,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.37,
+      "input_tokens": 632,
+      "output_tokens": 243,
+      "estimated_usd": 0.000418,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.9,
+      "input_tokens": 297,
+      "output_tokens": 148,
+      "estimated_usd": 0.0001037,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.68,
+      "input_tokens": 583,
+      "output_tokens": 198,
+      "estimated_usd": 0.0003542,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.55,
+      "input_tokens": 298,
+      "output_tokens": 185,
+      "estimated_usd": 0.0001223,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 7.46,
+      "input_tokens": 641,
+      "output_tokens": 716,
+      "estimated_usd": 0.0009874,
+      "status": "completed"
+    }
+  ],
+  "total_duration_s": 75.27,
+  "clone_discarded": true
+}

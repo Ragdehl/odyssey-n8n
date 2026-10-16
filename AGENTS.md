@@ -62,6 +62,11 @@ Para trabajo sobre la arquitectura híbrida y nuevas aplicaciones, **antes de im
 
 ## Development principles
 
+### 2026-10-16 — Override activo: Router ligero y gate de IA real (NO DEV)
+
+La aceptación manual real del 16-10 falló gravemente: 16 mensajes en DEV, 5 completed, 1 partial y 10 needs_attention; los muchos tests aislados, frozen-provider y del Writer NO equivalían al comportamiento live con el vault, el estado y la UI. El usuario ha aprobado **investigar/probar** un Router ligero y un contexto original íntegro; NO ha aprobado la implementación ni el deploy. La PoC semántica real del 16-10 es prometedora (11 ejemplos), PERO Core/Writer actual en copia de DEV falló 0/3; la arquitectura sigue NO validada E2E. Leer antes de cualquier código [el diagnóstico/contrato/gates](docs/architecture/light-router-poc-20261016.md) y [los receipts PoC](benchmarks/application_router/light_router_poc_20261016/README.md), prevalecen sobre los recuentos históricos de 25/27. Próximo paso P2: puente de contexto íntegro/identidad/facts/Tasks/Writer probado contra vault descartable, con IA REAL y readback, sin bypass de validaciones ni apuntes genéricos. Solo después P3 implementación y gates n8n/UI/CPU/RAM antes de pruebas del usuario. No tocar PROD, ni instalar DEV, ni presuponer que ejemplos que funcionaron en fixture funcionarán en Notes reales.
+
+
 ### 2026-10-13 — LATEST hybrid status: 25 completed + 2 safe pending
 
 Older 23/27 and 24/27 counts below are historical. F09 now passes:

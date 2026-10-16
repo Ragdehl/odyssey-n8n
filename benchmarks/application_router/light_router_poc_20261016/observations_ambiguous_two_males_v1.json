@@ -1,0 +1,118 @@
+{
+  "name": "light_router_poc_20261016",
+  "utc_now": "2026-10-16T11:50:12.993761+00:00",
+  "code_commit": "10b9ddf",
+  "model_router": "gpt-6-luna",
+  "model_shared_planner": "gpt-5.6-luna",
+  "max_usd": 0.085,
+  "has_real_write_readback": false,
+  "has_n8n_ui_e2e": false,
+  "cases": [
+    {
+      "case": "ambiguous_two_males",
+      "original_source": "Ayer vi a Eric y Luis; mañana iré con él al cine.",
+      "known_relevant_notes": [
+        {
+          "name": "Eric de Prueba",
+          "type": "person",
+          "id": "a8d56a50-c4e7-4bac-bfb7-e00cdd3e4a4f"
+        },
+        {
+          "name": "Luis",
+          "type": "person",
+          "id": "3859aff1-805c-4e73-bdba-8ee344fa7882"
+        }
+      ],
+      "verified_family": [],
+      "router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Personal note about seeing Eric and Luis and a plan to go to the cinema with him.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "shared_plan": {
+        "entities": [
+          {
+            "mention": "Eric",
+            "canonical_name": "Eric",
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Luis",
+            "canonical_name": "Luis",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "Saw Eric and Luis.",
+            "kind": "record",
+            "subject": "Eric and Luis",
+            "date": "2026-10-15",
+            "daypart": null,
+            "participants": [
+              "Eric",
+              "Luis"
+            ],
+            "source_evidence": "Ayer vi a Eric y Luis",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Go to the cinema with him; “él” has two plausible antecedents, Eric and Luis, so the companion is unresolved.",
+            "kind": "task",
+            "subject": "Go to the cinema",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Eric",
+              "Luis"
+            ],
+            "source_evidence": "mañana iré con él al cine",
+            "dependent_on_fact_index": null,
+            "needs_clarification": true
+          }
+        ],
+        "unresolved": [
+          "Whether “él” refers to Eric or Luis."
+        ]
+      },
+      "error": null,
+      "duration_s": 8.04
+    }
+  ],
+  "real_dev_vault_clone_count": 97,
+  "calls": 2,
+  "estimated_total_usd": 0.0007006,
+  "provider_calls": [
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.74,
+      "input_tokens": 298,
+      "output_tokens": 152,
+      "estimated_usd": 0.0001058,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.29,
+      "input_tokens": 646,
+      "output_tokens": 388,
+      "estimated_usd": 0.0005948,
+      "status": "completed"
+    }
+  ],
+  "total_duration_s": 8.07,
+  "clone_discarded": true
+}

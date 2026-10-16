@@ -78,9 +78,17 @@ Base: 16 entregas reales en `/data/odyssey-dev/state/conversations/*/delivery-re
 
 **Puertas**: (P0) documento de decisión y diagnóstico; (P1) PoC aislada con IA; (P2) evaluar evidencias/contratos y decidir si adaptar Core o arquitectura; (P3) implementación incremental solo tras decisión; (P4) gate de IA genuina + readback + n8n/UI + rendimiento antes de DEV; (P5) aceptación manual usuario. **No declarar que P2-P5 están hechos por aprobar P0/P1.**
 
-## 5. Evidencia / estado de campaña
+## 5. PoC ejecutada: RESULTADO MIXTO; no apto para DEV (16-10-2026)
 
-El informe de la PoC se adjuntará en `benchmarks/application_router/light_router_poc_20261016/` con entradas, entorno, resultados, discrepancias y costes. **Esta sección se actualizará tras ejecutar el PoC real, sin anticipar resultados.**
+**P0 registrado:** commit inicial `10b9ddf`. **P1 SEMÁNTICO:** 2 tandas nuevas de IA real, GPT-6 para capacidades y GPT-5.6 para interpretación completa. V1 10 mensajes/20 llamadas (0,0061137 USD), más caso ambiguo real Eric/Luis 2 llamadas (0,0007006 USD). V2 11 mensajes/22 llamadas (0,0071436 USD). Proveedor con `store=false`, caps locales, sin datos DEV completos enviados a modelo. Se clonaron/validaron las 97 Notes del DEV incluyendo esquema Task; después se descartaron. Los oráculos del PoC verificaron 11/11 conteos de hechos, Cloe+Bruno 3 veces, fechas por separado, Maya/ella, Ana/Luis, 2 casos de dependencia inter-App y ambigüedad Eric/Luis sin alucinación. Esto **no** implica que cada resultado de modelo sea correcto bajo cualquier reformulación.
+
+**Problemas v1 resueltos en v2 solamente a nivel semántico:** el planificador tomaba futuro simple como Task y proponía `canonical_name` de Maya sin respaldo. Regla genérica v2: futuro no es obligación; identidad solo propuesta hasta respaldo canónico. **Problema aún presente:** Router marca Tasks en «mañana compraré leche» pero Planner elige correctamente un hecho futuro; estas decisiones deben reconciliarse en un contrato tipado. Parte del texto generado en inglés cuando el usuario habló español; el texto persistido debe preservar el idioma.
+
+**P1 INTEGRACIÓN con infraestructura actual:** 3 casos con IA real y Core/Writer ACTUALES sobre copias desechables de DEV, resultado **0/3 escrituras/readbacks**: Maya → `CANDIDATE_COVERAGE_REVIEW_REQUIRED`, Guillermo existente → mismo rechazo, «mis hijos» → Temporal exige fecha exacta para «tarde». Embeddings del clon eran sintéticos; no es un smoke n8n+UI. Un cuarto control detallado de Maya muestra `Graph attribution evidence is invalid` ← `Every planned Core fact needs explicit source evidence`; Planner propuso Day 15/10 + helper Maya `reference_lookup_only=True`, insuficiente para garantizar que se cree la persona. **Este bloqueo sigue abierto.** No se ha desactivado ni relajado la cobertura para inventar éxitos.
+
+**Coste total de estas llamadas PoC:** ~0,0255870 USD (estimación sin otros cargos). La interpretación aislada tarda ~7 s por caso, pero **NO es comparable** con DEV end-to-end ~19 s porque faltan Writer real, indexación productiva, n8n y UI.
+
+**Decisión:** PoC favorable para **capacidad de comprender sin trocear** y dependencias Core↔Task; **NO demuestra aún escritura segura de extremo a extremo**. Gate siguiente **P2 imprescindible**: puente experimental, solo en sandbox, entre plan íntegro tipado y cobertura/autorización de Core; resolver identidad nueva o existente y orquestación Core→Tasks con readback, sin saltarse invariantes. Si falla, no migrar arquitectura. P3–P5 (implementación/despliegue DEV/UI/usuario) siguen BLOQUEADOS. Ver diagnóstico y artefactos exactos en `benchmarks/application_router/light_router_poc_20261016/README.md`.
 
 ## 6. Referencias vivas
 

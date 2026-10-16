@@ -1,0 +1,147 @@
+{
+  "name": "full-source existing Core/Writer baseline on copied live DEV Markdown",
+  "not_light_router_implementation": true,
+  "uses_real_model": true,
+  "provider_store": false,
+  "mock_embeddings": true,
+  "can_write_to_actual_dev": false,
+  "cases": [
+    {
+      "case": "maya_simple",
+      "original_source": "Ayer hablé con Maya.",
+      "source_note_count": 97,
+      "status": "needs_attention",
+      "reason": "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+      "error": null,
+      "changes": [],
+      "readback": false,
+      "stages": [
+        {
+          "name": "planner",
+          "outcome": "completed",
+          "error_category": null
+        },
+        {
+          "name": "candidate_coverage",
+          "outcome": "failed",
+          "error_category": "ValueError"
+        }
+      ],
+      "affected_stable_note_ids": [],
+      "duration_s": 13.82,
+      "model_calls": [
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 1773,
+          "output_tokens": 218,
+          "usd": 0.0002863,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 694,
+          "output_tokens": 90,
+          "usd": 0.0001144,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "input_tokens": 11032,
+          "output_tokens": 320,
+          "usd": 0.0025904,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "input_tokens": 1691,
+          "output_tokens": 378,
+          "usd": 0.0007918,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "case": "guillermo_existing",
+      "original_source": "Hoy he conocido a Guillermo.",
+      "source_note_count": 97,
+      "status": "needs_attention",
+      "reason": "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+      "error": null,
+      "changes": [],
+      "readback": false,
+      "stages": [
+        {
+          "name": "planner",
+          "outcome": "completed",
+          "error_category": null
+        },
+        {
+          "name": "candidate_coverage",
+          "outcome": "failed",
+          "error_category": "ValueError"
+        }
+      ],
+      "affected_stable_note_ids": [],
+      "duration_s": 13.36,
+      "model_calls": [
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 1772,
+          "output_tokens": 317,
+          "usd": 0.0003357,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 693,
+          "output_tokens": 100,
+          "usd": 0.0001193,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "input_tokens": 11031,
+          "output_tokens": 282,
+          "usd": 0.0025446,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "input_tokens": 1690,
+          "output_tokens": 110,
+          "usd": 0.00047,
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "case": "children_shared",
+      "original_source": "Mis hijos fueron al parque, después comieron un helado y por la tarde vieron una película.",
+      "source_note_count": 97,
+      "status": "exception",
+      "reason": null,
+      "error": "TemporalInterpreterError: Temporal resolution is not an exact Core anchor",
+      "changes": [],
+      "readback": false,
+      "duration_s": 8.73,
+      "model_calls": [
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 1787,
+          "output_tokens": 643,
+          "usd": 0.0005002,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-6-luna",
+          "input_tokens": 708,
+          "output_tokens": 118,
+          "usd": 0.0001298,
+          "status": "completed"
+        }
+      ]
+    }
+  ],
+  "estimated_total_usd": 0.0078825,
+  "temporary_vaults_discarded": true
+}
