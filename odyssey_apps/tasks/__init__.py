@@ -1,5 +1,10 @@
 """Tasks application domain package."""
 
+from .dependent_target import (
+    TaskDependentTarget,
+    TaskDependentTargetError,
+    prove_dependent_task_target,
+)
 from .interpretation import (
     OpenAITaskInterpreter,
     TaskActivityTarget,
@@ -44,6 +49,9 @@ from .work_sessions import (
 )
 
 __all__ = [
+    "TaskDependentTarget",
+    "TaskDependentTargetError",
+    "prove_dependent_task_target",
     "TASK_SCHEMA_EXTENSION",
     "TASK_STATUS_VALUES",
     "TASK_TYPE",

@@ -82,6 +82,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_whole_source_light_product_p4.py",
         "tests/runtime/test_p4_model_contract_strict_schema.py",
         "tests/runtime/test_p4_independent_mixed_scopes.py",
+        "tests/runtime/test_p4_dependent_task_target.py",
+        "tests/runtime/test_p4_production_composition_task_ui.py",
         "tests/runtime/test_p4_verified_group_e2.py",
         "tests/runtime/test_p4_taskonly_real_session_parity.py",
         "tests/runtime/test_p4_chat_to_ui_http_flow.py",

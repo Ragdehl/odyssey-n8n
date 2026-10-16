@@ -19,6 +19,7 @@ SCHEMAS = (
     contract.MIXED_TASK_CREATE_SCHEMA,
     contract.INDEPENDENT_SCOPE_PARTITION_SCHEMA,
     contract.INDEPENDENT_SCOPE_REVIEW_SCHEMA,
+    contract.DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
 )
 
 
@@ -54,6 +55,7 @@ def _check(schema, depth=0):
         "mixed-task-lifecycle-audit",
         "independent-scope-partition",
         "independent-scope-audit",
+        "dependent-task-target-audit",
     ),
 )
 def test_product_model_schema_requires_every_declared_field_and_forbids_extra(schema):
@@ -87,3 +89,40 @@ def test_future_indicative_is_not_a_task_across_actual_product_prompts():
     ):
         assert "future" in prompt.lower()
         assert "Task" in prompt or "task" in prompt
+
+
+def test_task_dependency_review_requires_whole_source_and_never_exposes_identity_ids():
+    schema = contract.DEPENDENT_TASK_TARGET_REVIEW_SCHEMA
+    assert {
+        "full_source_quote",
+        "antecedent_quote",
+        "dependent_quote",
+        "dependent_mention",
+        "target_type",
+        "one_target",
+        "same_target",
+        "operation",
+        "operation_supported",
+    } == set(schema["required"])
+    assert not any("id" in name for name in schema["properties"])
+    for prompt in (
+        contract.DEPENDENT_TASK_TARGET_REVIEW_A,
+        contract.DEPENDENT_TASK_TARGET_REVIEW_B,
+    ):
+        assert "Task" in prompt and "ID" in prompt
+        assert "write" in prompt or "mutation" in prompt
+
+
+def test_one_bounded_task_target_review_supports_work_sessions_and_subtask_parent_only():
+    schema = contract.DEPENDENT_TASK_TARGET_REVIEW_SCHEMA
+    names = set(schema["properties"]["operation"]["enum"])
+    assert names == {
+        "START_WORK_SESSION",
+        "STOP_WORK_SESSION",
+        "EDIT_WORK_SESSION",
+        "ADD_WORK_SESSION_ACTIVITY",
+        "CREATE_SUBTASK",
+        "UNKNOWN",
+    }
+    assert "CREATE_SUBTASK" in contract.DEPENDENT_TASK_TARGET_REVIEW_A
+    assert "subtask" in contract.DEPENDENT_TASK_TARGET_REVIEW_B.lower()

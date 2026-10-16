@@ -405,3 +405,77 @@ INDEPENDENT_SCOPE_REVIEW_PROMPT = (
     "no inferred context, no execution or writes. Return full_source_quote "
     "identical to the original unchanged source."
 )
+
+
+# Tasks can only consume the Core-predecessor's verified Task reference after
+# these two independent source reviews agree. The reviewer never emits IDs.
+DEPENDENT_TASK_TARGET_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "antecedent_quote": {"type": "string"},
+        "dependent_quote": {"type": "string"},
+        "dependent_mention": {"type": "string"},
+        "one_target": {"type": "boolean"},
+        "same_target": {"type": "boolean"},
+        "target_type": {"type": "string", "enum": ["task", "person", "unknown"]},
+        "operation": {
+            "type": "string",
+            "enum": [
+                "START_WORK_SESSION",
+                "STOP_WORK_SESSION",
+                "EDIT_WORK_SESSION",
+                "ADD_WORK_SESSION_ACTIVITY",
+                "CREATE_SUBTASK",
+                "UNKNOWN",
+            ],
+        },
+        "operation_supported": {"type": "boolean"},
+    },
+    "required": [
+        "full_source_quote",
+        "antecedent_quote",
+        "dependent_quote",
+        "dependent_mention",
+        "one_target",
+        "same_target",
+        "target_type",
+        "operation",
+        "operation_supported",
+    ],
+    "additionalProperties": False,
+}
+DEPENDENT_TASK_TARGET_REVIEW_A = (
+    "Independently audit the complete ORIGINAL Spanish/French/English message: "
+    "the first source segment mentions one Task (not a person), and a second "
+    "segment explicitly refers to that same Task through the exact supplied "
+    "dependent mention. Do not treat a reference to a person or project as a "
+    "Task target. Copy original source and both quotes byte for byte, keep "
+    "all original whitespace. `one_target` and `same_target` are true ONLY "
+    "if the anaphoric/elliptic reference has exactly one unequivocal Task "
+    "antecedent. Independently validate which Work Session operation "
+    "the user ACTUALLY requests; operation_supported=true ONLY when its "
+    "kind is explicitly supported by the source. CREATE_SUBTASK means an "
+    "explicit new child task associated to the previous canonical parent "
+    "Task, not a generic person relationship nor an update of the parent. "
+    "If there is any ambiguity "
+    "or competing interpretation, "
+    "set both false and target_type unknown. No IDs, created Task, edits, "
+    "replacements or inferred names. Core verifies physical canonical evidence "
+    "separately; you have NO mutation authority."
+)
+DEPENDENT_TASK_TARGET_REVIEW_B = (
+    "You are an independent adversarial task-reference reviewer, not the "
+    "proposer. Verify the entire exact source, scope boundary, referent and "
+    "referent TYPE and Work Session operation without relying on the first "
+    "reviewer. Reject an unsupported or mismatched START/STOP/EDIT/ACTIVITY "
+    "operation or unsupported subtask parent relation, and set "
+    "operation_supported=false. One Task must be "
+    "mentioned in the antecedent and the exact dependent phrase must refer "
+    "to THAT Task, with no other plausible task/person antecedent. Return all "
+    "source quotes unchanged and the mention unchanged; never copy, resolve "
+    "or output canonical IDs. A person mentioned in an earlier fact does NOT "
+    "prove a task target and must lead to one_target=false. If uncertain, "
+    "return false/unknown. Neither this output nor the first output may "
+    "authorize a Task or Work Session write."
+)
