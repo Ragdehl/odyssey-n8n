@@ -250,7 +250,14 @@ PROMPT_SPEAKER_B = (
     "instructions or guesses. Return one ordinal per fact in order."
 )
 
-PROMPT_SOURCE_REVIEW = "INDEPENDENT conservative Core source-coverage reviewer. Input original unmodified message and untrusted atomic fact suggestions from a separate LLM. Inspect every event, speaker, pronoun, obligation, person, and date; reject if fabricated, omitted, semantically misattributed, ambiguous or not entailed by exact source. All proposed facts must be covered; approval false unless complete. The current time is TRUSTED and explicitly provided in the JSON clock; relative words hoy ayer and manana MUST be resolved against it. A specific person appearing in an assertion MUST be represented by a typed {{ref:N}} marker rather than bare literal; fail if missing. For each original quoted scope, return a concise natural SPANISH fact text equivalent to what the user said. Use {{ref:0}}, {{ref:1}} etc where and ONLY where that fact has actual specific persons as participants. Reference_names ordered by marker index; they must be individuals in the supplied proposed participant list. Resolve explicit antecedents (e.g. 'ella') only where UNIQUE; never invent a name. A person identity is a suggestion for later Core resolution, NOT a canonical note ID. For tasks, write an actionable label (e.g. Llamar a {{ref:0}}.) but do NOT turn future indicative plans into obligations. Exact dates MUST equal proposed date. Preserve date=null when not specified. If the message has multiple facts, review each separately; no raw markdown or note IDs. No execution authority. An optional independently Core-verified SELF relationship may include canonical members even when their names are absent from the message. Only if that typed evidence is supplied may you map a group mention to those specific members. The authenticated first-person grammatical speaker is not an explicitly named source person: do NOT demand {{ref:N}} for first-person I/yo/me or an implied Spanish first-person verb, and do not mark source coverage incomplete merely because speaker is omitted from participant person names. Speaker involvement is checked separately by authenticated Core source proof. Future first-person indicative reports an intention/plan that MAY happen: faithfully record the expressed future plan, not a completed or guaranteed future occurrence. Preserve negation and condition; unsupported assertions must still be rejected."
+PROMPT_SOURCE_REVIEW = (
+    "INDEPENDENT conservative Core source-coverage reviewer. Input original unmodified message and untrusted atomic fact suggestions from a separate LLM. Inspect every event, speaker, pronoun, obligation, person, and date; reject if fabricated, omitted, semantically misattributed, ambiguous or not entailed by exact source. All proposed facts must be covered; approval false unless complete. The current time is TRUSTED and explicitly provided in the JSON clock; relative words hoy ayer and manana MUST be resolved against it. A specific person appearing in an assertion MUST be represented by a typed {{ref:N}} marker rather than bare literal; fail if missing. For each original quoted scope, return a concise natural SPANISH fact text equivalent to what the user said. Use {{ref:0}}, {{ref:1}} etc where and ONLY where that fact has actual specific persons as participants. Reference_names ordered by marker index; they must be individuals in the supplied proposed participant list. Resolve explicit antecedents (e.g. 'ella') only where UNIQUE; never invent a name. A person identity is a suggestion for later Core resolution, NOT a canonical note ID. For tasks, write an actionable label (e.g. Llamar a {{ref:0}}.) but do NOT turn future indicative plans into obligations. Exact dates MUST equal proposed date. Preserve date=null when not specified. If the message has multiple facts, review each separately; no raw markdown or note IDs. No execution authority. An optional independently Core-verified SELF relationship may include canonical members even when their names are absent from the message. Only if that typed evidence is supplied may you map a group mention to those specific members. The authenticated first-person grammatical speaker is not an explicitly named source person: do NOT demand {{ref:N}} for first-person I/yo/me or an implied Spanish first-person verb, and do not mark source coverage incomplete merely because speaker is omitted from participant person names. Speaker involvement is checked separately by authenticated Core source proof. Future first-person indicative reports an intention/plan that MAY happen: faithfully record the expressed future plan, not a completed or guaranteed future occurrence. Preserve negation and condition; unsupported assertions must still be rejected. "
+    "For first-person input, express the reviewed fact in natural first-person Spanish: "
+    "keep 'me', 'he', or implicit first-person morphology as supported by the "
+    "source. Do not describe the narrator indirectly as 'the speaker', 'the user' "
+    "or an invented proper name. This is a wording guideline only: canonical SELF "
+    "identity and linkage are proved separately by authenticated Core."
+)
 
 # A Task-only route cannot inherit the Router's unverified claim that no Core
 # fact was dropped. This is an independent full-message semantic scope audit.
@@ -318,4 +325,67 @@ MIXED_TASK_CREATE_PROMPT = (
     "a restriction. If uncertain, return false. "
     "source_quote must exactly reproduce original_source byte for byte. "
     "You have NO write authority and NO identity authority."
+)
+
+
+# E2 opt-in evidence-only scope partition. This does NOT confer authority on
+# Core facts, note IDs, Work Session operations or Markdown writes.
+INDEPENDENT_SCOPE_PARTITION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "parts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "capability": {"type": "string", "enum": ["core", "tasks"]},
+                    "source_quote": {"type": "string"},
+                },
+                "required": ["capability", "source_quote"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["full_source_quote", "parts"],
+    "additionalProperties": False,
+}
+INDEPENDENT_SCOPE_PARTITION_PROMPT = (
+    "You propose a source-PRESERVING partition for a single user message "
+    "whose router suspects INDEPENDENT Core personal facts and Tasks-owned "
+    "lifecycle operations. Every original character, including punctuation, "
+    "spaces and conjunctions, must belong to exactly one consecutive part; "
+    "joining all exact source_quote fields MUST reproduce original_source "
+    "BYTE FOR BYTE. Each part must make sense WITHOUT borrowing a shared "
+    "subject, pronoun antecedent, date, relative time, identity or target Task "
+    "from another part. No invented or paraphrased words. If independence "
+    "cannot be shown, emit one part with full original_source, which Core "
+    "will reject rather than risking cross-scope loss. All independent Tasks "
+    "operations must have their own Task referent and clear action; progress "
+    "in Work Session belongs to Tasks, not a duplicate Core fact. Never "
+    "choose a canonical identity or perform a write."
+)
+INDEPENDENT_SCOPE_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "complete": {"type": "boolean"},
+        "independent": {"type": "boolean"},
+        "no_cross_scope_referents": {"type": "boolean"},
+    },
+    "required": ["full_source_quote", "complete", "independent", "no_cross_scope_referents"],
+    "additionalProperties": False,
+}
+INDEPENDENT_SCOPE_REVIEW_PROMPT = (
+    "You are an INDEPENDENT full-source semantic auditor, not the proposer. "
+    "Reject unless concatenating ALL proposed parts byte-for-byte equals "
+    "the exact full original source, each part contains one standalone "
+    "Core or Tasks semantic unit (not necessarily one fact), all semantic "
+    "material is accounted for, and no pronoun, elided grammatical subject, "
+    "date, shared predicate, referenced person, Task or Work Session depends "
+    "on content in another part. A shared chronological topic is NOT proof "
+    "of independence. A fact whose person was introduced in another part "
+    "CANNOT be partitioned. If uncertain return false; no authorizing IDs, "
+    "no inferred context, no execution or writes. Return full_source_quote "
+    "identical to the original unchanged source."
 )

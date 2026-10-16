@@ -35,7 +35,8 @@
       "invariant": "Cada fecha y franja temporal pertenece a su hecho de origen sin inventar horarios.",
       "max_evidence_level": "deterministic",
       "offline_test_selectors": [
-        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_all_days_are_precompiled_without_hardcoded_number_of_facts"
+        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_all_days_are_precompiled_without_hardcoded_number_of_facts",
+        "tests/runtime/test_p4_independent_mixed_scopes.py::test_all_independent_scopes_share_one_frozen_delivery_clock_across_midnight"
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false
@@ -95,7 +96,11 @@
       "max_evidence_level": "isolated_http",
       "offline_test_selectors": [
         "tests/core/test_whole_source_compilation_prewrite_p4.py::test_day_self_and_task_plan_are_compiled_together_before_execution",
-        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_any_unsupported_later_fact_fails_before_compiling_any_write"
+        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_any_unsupported_later_fact_fails_before_compiling_any_write",
+        "tests/runtime/test_p4_independent_mixed_scopes.py::test_mixed_independent_core_and_work_session_share_authored_notes_ui_and_e3",
+        "tests/runtime/test_p4_independent_mixed_scopes.py::test_independent_semantic_review_veto_never_modifies_vault",
+        "tests/runtime/test_p4_independent_mixed_scopes.py::test_independent_second_scope_provider_outage_returns_durable_partial",
+        "tests/runtime/test_p4_independent_mixed_scopes.py::test_mixed_full_source_then_ui_mutation_over_actual_localhost_http"
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false

@@ -17,6 +17,8 @@ SCHEMAS = (
     contract.SPEAKER_SCHEMA,
     contract.TASK_ONLY_SCOPE_SCHEMA,
     contract.MIXED_TASK_CREATE_SCHEMA,
+    contract.INDEPENDENT_SCOPE_PARTITION_SCHEMA,
+    contract.INDEPENDENT_SCOPE_REVIEW_SCHEMA,
 )
 
 
@@ -50,6 +52,8 @@ def _check(schema, depth=0):
         "speaker-proof",
         "tasks-only-scope",
         "mixed-task-lifecycle-audit",
+        "independent-scope-partition",
+        "independent-scope-audit",
     ),
 )
 def test_product_model_schema_requires_every_declared_field_and_forbids_extra(schema):
@@ -65,3 +69,9 @@ def test_product_never_exports_dynamic_codes_or_raw_source_as_mutation_authority
         in contract.PLAN_SCHEMA["properties"]["facts"]["items"]["required"]
     )
     assert "supported" in contract.REVIEW_SCHEMA["properties"]["facts"]["items"]["required"]
+
+
+def test_core_review_prompt_keeps_first_person_voice_in_live_contract():
+    """Prevent accidentally placing a new prompt instruction in dead syntax."""
+    assert "For first-person input" in contract.PROMPT_SOURCE_REVIEW
+    assert "canonical SELF" in contract.PROMPT_SOURCE_REVIEW

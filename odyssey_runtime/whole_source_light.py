@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from json import JSONDecodeError
+from time import perf_counter
 from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -31,7 +32,12 @@ from odyssey_apps.tasks import (
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
 from odyssey_core.context import ContextIndexError
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
+from odyssey_core.independent_source_scopes import (
+    IndependentSourceScopesError,
+    verify_independent_source_scopes,
+)
 from odyssey_core.notes import scoped_note_decode_cache
+from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
 from odyssey_core.storage import VaultRepository
 from odyssey_core.whole_message_coverage import (
     WholeMessageCoverageError,
@@ -55,7 +61,12 @@ from odyssey_core.whole_source_compiler import (
     compile_reviewed_operations,
 )
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
+from odyssey_runtime.routing import _aggregate as aggregate_verified_application_results
 from odyssey_runtime.whole_source_model_contract import (
+    INDEPENDENT_SCOPE_PARTITION_PROMPT,
+    INDEPENDENT_SCOPE_PARTITION_SCHEMA,
+    INDEPENDENT_SCOPE_REVIEW_PROMPT,
+    INDEPENDENT_SCOPE_REVIEW_SCHEMA,
     MIXED_TASK_CREATE_PROMPT,
     MIXED_TASK_CREATE_SCHEMA,
     PLAN_SCHEMA,
@@ -156,13 +167,26 @@ class WholeSourceLightExecutor:
                 return self._abstain(delivery, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
 
     def _execute_source(
-        self, source: str, delivery: str, actor: AuthenticatedActorContext, conversation_id: str
+        self,
+        source: str,
+        delivery: str,
+        actor: AuthenticatedActorContext,
+        conversation_id: str,
+        *,
+        independent_scope: str | None = None,
+        delivery_instant: datetime | None = None,
     ) -> ApplicationResult:
         if not isinstance(actor, AuthenticatedActorContext) or conversation_id != "main":
             raise WholeSourceLightError("Authenticated main conversation required")
         if not isinstance(source, str) or not source.strip() or len(source) > 4096:
             raise WholeSourceLightError("Invalid original source")
-        instant = self.now() if self.now is not None else datetime.now(ZoneInfo(self.timezone))
+        instant = (
+            delivery_instant
+            if delivery_instant is not None
+            else self.now()
+            if self.now is not None
+            else datetime.now(ZoneInfo(self.timezone))
+        )
         clock = {
             "date": instant.date().isoformat(),
             "time": instant.time().isoformat(timespec="seconds"),
@@ -174,6 +198,7 @@ class WholeSourceLightExecutor:
         self.bindings.resolve(actor.stable_user_id)
         if self.progress is not None:
             self.progress("routing.started", {})
+        router_started = perf_counter()
         route = self._ask(
             ROUTER_MODEL,
             ROUTER_INSTRUCTIONS,
@@ -186,6 +211,12 @@ class WholeSourceLightExecutor:
             not isinstance(capabilities, list)
             or not capabilities
             or not set(capabilities) <= {"core", "tasks", "temporal"}
+        ):
+            return self._abstain(delivery)
+        if independent_scope is not None and (
+            independent_scope not in {"core", "tasks"}
+            or independent_scope not in capabilities
+            or not set(capabilities) <= {independent_scope, "temporal"}
         ):
             return self._abstain(delivery)
         # Router can only propose an exact source span, never relationship
@@ -211,6 +242,36 @@ class WholeSourceLightExecutor:
         )
         if self.progress is not None:
             self.progress("routing.ready", {"route_count": 1})
+        # Only a fully source-partitioned and independently attested set of
+        # standalone app scopes can use the existing per-App semantic pathway.
+        # No dependency, common antecedent or date may be inherited across it.
+        # Mixed dependent Task CREATE continues through whole-source Core.
+        scopes = route.get("app_scopes")
+        independent_route = (
+            not independent_scope
+            and "core" in capabilities
+            and "tasks" in capabilities
+            and route.get("interpretation") == "separable"
+            and isinstance(scopes, list)
+            and len(scopes) >= 2
+            and all(
+                isinstance(item, dict)
+                and isinstance(item.get("capability"), str)
+                and item["capability"] in {"core", "tasks"}
+                and item.get("depends_on_another_scope") is False
+                for item in scopes
+            )
+            and {item["capability"] for item in scopes} == {"core", "tasks"}
+        )
+        if independent_route:
+            return self._execute_independent_scopes(
+                source,
+                delivery,
+                actor,
+                conversation_id,
+                delivery_instant=instant,
+                router_started=router_started,
+            )
         if "tasks" in capabilities and "core" not in capabilities:
             # The router is a fallible hypothesis, NOT source coverage proof.
             # An independent model must attest this is exactly one Tasks-only
@@ -454,6 +515,119 @@ class WholeSourceLightExecutor:
                 clarification_code="FULL_SOURCE_PHYSICAL_READBACK_UNVERIFIED",
             )
         return candidate
+
+    def _execute_independent_scopes(
+        self,
+        source: str,
+        delivery: str,
+        actor: AuthenticatedActorContext,
+        conversation_id: str,
+        *,
+        delivery_instant: datetime,
+        router_started: float,
+    ) -> ApplicationResult:
+        # Proposed scopes are non-authoritative byte ranges. No trimming,
+        # deletion, or LLM-authored canonical identities in this boundary.
+        proposal = self._ask(
+            PLANNER_MODEL,
+            INDEPENDENT_SCOPE_PARTITION_PROMPT,
+            {"original_source": source},
+            INDEPENDENT_SCOPE_PARTITION_SCHEMA,
+            "odyssey_independent_source_scopes_v1",
+        )
+        review = self._ask(
+            ROUTER_MODEL,
+            INDEPENDENT_SCOPE_REVIEW_PROMPT,
+            {"original_source": source, "proposed_scopes": proposal},
+            INDEPENDENT_SCOPE_REVIEW_SCHEMA,
+            "odyssey_independent_source_scopes_audit_v1",
+        )
+        try:
+            verified = verify_independent_source_scopes(
+                source,
+                proposal,
+                review,
+                permitted_capabilities=frozenset({"core", "tasks"}),
+            )
+        except IndependentSourceScopesError:
+            return self._abstain(delivery)
+        # Reject overlong derived locators BEFORE writing anything. This keeps
+        # the outer E3 claim responsible for the full logical request.
+        locators = [f"{delivery}-independent-{part.index}" for part in verified]
+        if any(len(locator) > 110 for locator in locators):
+            return self._abstain(delivery)
+        router_duration_ms = max(0.0, (perf_counter() - router_started) * 1000)
+        outcomes: list[ApplicationResult] = []
+        for part, locator in zip(verified, locators, strict=True):
+            # This re-enters the EXACT usual Core/Tasks app path and guards,
+            # with only the independently source-verified span as its scope.
+            # No alternate Work Session or Task writer is introduced.
+            try:
+                outcome = self._execute_source(
+                    part.source.strip(),
+                    locator,
+                    actor,
+                    conversation_id,
+                    independent_scope=part.capability,
+                    delivery_instant=delivery_instant,
+                )
+            except WholeSourceLightError:
+                # A per-scope provider failure is prewrite for THAT scope,
+                # but earlier independent scopes may already be durable.
+                outcome = self._abstain(locator, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+            if outcome.status is not ApplicationStatus.COMPLETED and not outcomes:
+                return replace(outcome, request_id=delivery)
+            outcomes.append(outcome)
+            if outcome.status is not ApplicationStatus.COMPLETED:
+                break
+        # Preserve actual Core/Task stages for donut + execution ledger instead
+        # of inheriting only the final App's telemetry. These are observed
+        # stages, not synthetic claims of semantic/model success.
+        outer_stage = OperationalStage(
+            "application.router",
+            OperationalOutcome.COMPLETED,
+            router_duration_ms,
+        )
+        flattened_stages = [outer_stage]
+        route_rows = []
+        complete_flow = len(outcomes) <= 8
+        for part, outcome in zip(verified, outcomes, strict=False):
+            stages = outcome.operational.stages
+            if len(stages) > 16:
+                complete_flow = False
+            flattened_stages.extend(replace(stage, route_index=part.index) for stage in stages)
+            route_rows.append(
+                {
+                    "capability": part.capability,
+                    "text": part.source,
+                    "stage_count": len(stages),
+                    "status": outcome.status.value,
+                    "temporal": [],
+                    "steps": [
+                        {"name": stage.name[:80], "input": part.source[:512], "output": ""}
+                        for stage in stages
+                    ],
+                }
+            )
+        # Reuse the established, Core-result-only multi-App aggregator: it
+        # renumbers action IDs and retains pending work, history, statuses,
+        # and affected notes instead of letting the last App overwrite them.
+        aggregate = aggregate_verified_application_results(delivery, outcomes)
+        return replace(
+            aggregate,
+            operational=OperationalEvidence(
+                max(0.0, (perf_counter() - router_started) * 1000),
+                tuple(flattened_stages),
+            ),
+            execution_flow={
+                "version": 1,
+                "input": source,
+                "parallel_preparation": False,
+                "routes": route_rows,
+            }
+            if complete_flow and route_rows
+            else None,
+        )
 
     @staticmethod
     def _abstain(
