@@ -139,11 +139,16 @@ class CandidateCoverageErrorCategory(StrEnum):
 
 def _candidate_coverage_error_category(error: Exception) -> CandidateCoverageErrorCategory:
     """Map an untrusted coverage exception to the small public allowlist."""
-    return {
-        ValueError: CandidateCoverageErrorCategory.VALUE_ERROR,
-        TypeError: CandidateCoverageErrorCategory.TYPE_ERROR,
-        RuntimeError: CandidateCoverageErrorCategory.RUNTIME_ERROR,
-    }.get(type(error), CandidateCoverageErrorCategory.UNEXPECTED_ERROR)
+    # Core's specialized, source-safe coverage guards subclass ValueError.
+    # Exact type(...) hid legitimate fail-closed semantic rejection as
+    # UnexpectedError, preventing DEV diagnosis while disclosing no details.
+    if isinstance(error, ValueError):
+        return CandidateCoverageErrorCategory.VALUE_ERROR
+    if isinstance(error, TypeError):
+        return CandidateCoverageErrorCategory.TYPE_ERROR
+    if isinstance(error, RuntimeError):
+        return CandidateCoverageErrorCategory.RUNTIME_ERROR
+    return CandidateCoverageErrorCategory.UNEXPECTED_ERROR
 
 
 @dataclass(frozen=True, slots=True)

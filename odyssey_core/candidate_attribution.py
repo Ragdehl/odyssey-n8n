@@ -28,6 +28,7 @@ from .candidate_sequential_contacts import (
 )
 from .candidate_speaker_evidence import (
     CoreSpeakerEvidence,
+    direct_self_property_fact_ordinals,
     speaker_fact_references,
     validate_speaker_evidence,
 )
@@ -471,7 +472,9 @@ class OpenAICoreCandidateAttributor:
         ):
             raise CandidateAttributionError("Reviewer Temporal proof differs from current source")
         facts = _graph_plan_fact_texts(plan, context)
-        speaker_requested = bool(speaker_fact_references(plan))
+        speaker_requested = bool(
+            speaker_fact_references(plan) or direct_self_property_fact_ordinals(plan, context)
+        )
         canonical_proof = None
         if canonical_binding is not None:
             from .application import CanonicalReferenceEvidence, DependentReferenceGuard
@@ -506,6 +509,11 @@ class OpenAICoreCandidateAttributor:
                                 "entity": unit.target.entity,
                                 "query": unit.target.query,
                                 "type": unit.target.type,
+                                **(
+                                    {"self_target": unit.target.self_target}
+                                    if unit.target.self_target is not None
+                                    else {}
+                                ),
                             },
                         }
                     )
@@ -633,6 +641,22 @@ class OpenAICoreCandidateAttributor:
                             "identity claim is supported; never invent a user, "
                             "treat write provenance as the grammatical subject, "
                             "or misattribute another named or collective subject. "
+                            "Separately, when Core proposes self_target=self "
+                            "for a DIRECT Person property, independent "
+                            "speaker_source_quote must be an exact unambiguous "
+                            "FIRST-PERSON owner/experiencer span from the CURRENT "
+                            "source's subject/participant/object roles. Some "
+                            "languages express an experiencer as a grammatical "
+                            "indirect object, rather than the main subject: "
+                            "do not require subject grammar when the source "
+                            "unambiguously assigns this preference to the "
+                            "first-person experiencer. Never attest the "
+                            "generic verb, thing liked, another person, "
+                            "quoted speaker or authenticated sender metadata. "
+                            "The self target is a proposal, not proof of "
+                            "who experienced the property: if no original "
+                            "first-person owner span exists return null and "
+                            "let Core reject the write. "
                             "Inside the CURRENT complete selected source group, "
                             "independently analyze COORDINATION and GRAMMATICAL ELLIPSIS: "
                             "a predicate stated once can govern several separate people, "
@@ -958,7 +982,9 @@ def validate_candidate_fact_graph_proposal(
     The result is not authority to write until that validator passes.
     """
     facts = _graph_plan_fact_texts(plan, context)
-    with_speaker = bool(speaker_fact_references(plan))
+    with_speaker = bool(
+        speaker_fact_references(plan) or direct_self_property_fact_ordinals(plan, context)
+    )
     if not isinstance(payload, dict) or set(payload) != {"candidates"}:
         raise CandidateAttributionError("Closed graph proposal required")
     entries = payload["candidates"]

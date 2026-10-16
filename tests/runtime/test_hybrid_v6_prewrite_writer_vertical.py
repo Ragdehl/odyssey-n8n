@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from odyssey_apps.fact_candidates import validate_semantic_fact_candidate_proposal
 from odyssey_core.application import ApplicationStatus
 from odyssey_core.source_boundary_review import CoreSourceBoundaryReview
+from odyssey_core.temporal import materialized_day_link_index_ids
 from odyssey_runtime.candidate_route_dispatch import execute_candidate_routed_message
 from odyssey_runtime.hybrid_group_compiler import compile_hybrid_candidate_bundle
 from tests.core.test_application_history import FakeHistoryRecorder
@@ -83,6 +84,20 @@ def test_v6_core_review_preserves_two_day_facts_through_real_writer(tmp_path):
     temporal = Temporal()
     core_sources = []
     progress = []
+    incremental_batches = []
+
+    def refresh_between_siblings(ids):
+        expanded = tuple(
+            dict.fromkeys(
+                (
+                    *ids,
+                    *materialized_day_link_index_ids(vault, SCHEMA, tuple(ids)),
+                )
+            )
+        )
+        context.refresh_notes(vault, SCHEMA, embedder, note_ids=expanded)
+        semantic.refresh_notes(vault, SCHEMA, embedder, note_ids=expanded)
+        incremental_batches.append(expanded)
 
     def planner_factory(context, domain):
         def plan(text):
@@ -115,8 +130,16 @@ def test_v6_core_review_preserves_two_day_facts_through_real_writer(tmp_path):
         source_boundary_reviewer=reviewer,
         history_recorder=FakeHistoryRecorder(),
         progress_callback=lambda stage, payload: progress.append(stage),
+        postwrite_index_refresh=refresh_between_siblings,
     )
-    assert result.status is ApplicationStatus.COMPLETED
+    assert result.status is ApplicationStatus.COMPLETED, (
+        result.planning_error,
+        [(x.name, x.error_category) for x in result.operational.stages],
+    )
+    assert len(incremental_batches) == 1
+    assert set(incremental_batches[0]) == {"date:2026-10-03", "date:2026-10-04"}, (
+        "Core's automatically materialized Added Day must join incremental refresh"
+    )
     assert len(reviewer.requests) == 1
     assert router.requests == [SOURCE]
     assert "routing.boundary_review_started" in progress

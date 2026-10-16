@@ -274,6 +274,7 @@ def execute_candidate_routed_message(
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
     task_route_executor: object | None = None,
     progress_callback: Callable[[str, dict[str, object]], None] | None = None,
+    postwrite_index_refresh: Callable[[Sequence[str]], None] | None = None,
     source_boundary_reviewer: object | None = None,
     authenticated_actor: AuthenticatedActorContext | None = None,
     self_binding_repository: SelfBindingRepository | None = None,
@@ -1123,10 +1124,19 @@ def execute_candidate_routed_message(
                         for item in evidence.persisted_facts
                     ):
                         raise ValueError("Core's routed physical Markdown readback failed")
-                    # Rebuild only derived indexes, after the authoritative writer.
-                    # This test-only composition uses a disposable canonical vault.
-                    context_index.rebuild(repository, schema, embedder)
-                    semantic_index.rebuild(repository, schema, embedder)
+                    # Only a later sibling route might read derived indexes
+                    # inside THIS same request. Preserve that read-after-write
+                    # barrier using the existing incremental maintainer;
+                    # the last route is refreshed ONCE by Runtime's ordinary
+                    # asynchronous post-request coordinator. No full vault
+                    # embeddings on the critical path for a one-note message.
+                    # The provider-free standalone dispatcher keeps its prior
+                    # index refresh contract when no coordinator is injected.
+                    if postwrite_index_refresh is None:
+                        context_index.rebuild(repository, schema, embedder)
+                        semantic_index.rebuild(repository, schema, embedder)
+                    elif ordinal + 1 < len(bundle.units):
+                        postwrite_index_refresh(result.affected_stable_note_ids)
                     event_handoff.remember(
                         context=route_context,
                         plan=plan,

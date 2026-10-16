@@ -24,7 +24,11 @@ from .candidate_mutual_relation import validate_one_mutual_relationship_fact
 from .candidate_property_evidence import validate_subject_property_fact
 from .candidate_semantic_veto import veto_unsafe_literal_match
 from .candidate_sequential_contacts import validate_two_sequential_contacts
-from .candidate_speaker_evidence import CoreSpeakerEvidence, validate_speaker_evidence
+from .candidate_speaker_evidence import (
+    CoreSpeakerEvidence,
+    direct_self_property_fact_ordinals,
+    validate_speaker_evidence,
+)
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 
 MAX_COVERAGE_CLAIMS = 26
@@ -253,6 +257,7 @@ def validate_candidate_coverage_manifest(
     if len(fact_ordinals) > MAX_COVERAGE_FACTS:
         raise ValueError("Fact coverage exceeds review budget")
     speaker_refs = validate_speaker_evidence(source, context, plan, manifest.speaker_evidence)
+    self_property_ordinals = direct_self_property_fact_ordinals(plan, context)
     speaker_proofs = {proof.fact_ordinal: proof for proof in manifest.speaker_evidence}
     facts_by_ordinal: dict[int, str] = {}
     write_unit_ordinals = iter(ordinals)
@@ -511,6 +516,11 @@ def validate_candidate_coverage_manifest(
                 lexical,
                 other_source_subjects=other_subjects,
                 inherited_subject=context.verified_inherited_subject,
+                self_owner_quote=(
+                    speaker_proofs[ordinal].source_quote
+                    if ordinal in self_property_ordinals
+                    else None
+                ),
             )
         independent_actor_helper: int | None = None
         if (

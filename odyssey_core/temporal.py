@@ -430,6 +430,42 @@ class CalendarDayRepository:
         return self.resolve(current.date)
 
 
+def materialized_day_link_index_ids(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    affected_note_ids: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Identify already-materialized Day targets of canonical changed notes.
+
+    Core materialization eagerly creates empty Calendar Days for newly linked
+    dates (including the created-at Day). They are physical Notes, even when
+    only the fact-bearing source Note appears in the Writer's primary receipt.
+    A derived-index refresh must include these deterministic link targets or
+    the strict incremental index correctly flags unrelated drift and falls
+    back to a CPU-heavy full-vault re-embedding.
+
+    Never create a Day here; read and revalidate canonical source Notes only.
+    Other, unrelated vault drift remains a fail-closed indexer concern.
+    """
+    if not affected_note_ids or any(
+        not isinstance(note_id, str) or not note_id for note_id in affected_note_ids
+    ):
+        raise ValueError("Affected Notes must be identified by stable IDs")
+    requested = frozenset(affected_note_ids)
+    discovered: set[str] = set()
+    days = CalendarDayRepository(repository, schema)
+    for path in repository.list_markdown_paths():
+        note = parse_note(repository.read_text(path))
+        if note.metadata.get("id") not in requested:
+            continue
+        validate_note(note, schema)
+        for date_value in calendar_day_link_dates(note.content):
+            day = days.resolve(date_value)
+            if day.materialized and day.id not in requested:
+                discovered.add(day.id)
+    return tuple(sorted(discovered))
+
+
 def materialize_calendar_day_links(
     markdown: str,
     *,

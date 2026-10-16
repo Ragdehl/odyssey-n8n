@@ -92,8 +92,12 @@ def _execute(
     repository_hook=None,
     progress_callback=None,
     conversation_context=(),
+    index_initialized=None,
+    postwrite_index_refresh=None,
 ):
     repo, context_index, semantic_index, embedder = fresh_corpus_vault(tmp_path)
+    if index_initialized is not None:
+        index_initialized(context_index, semantic_index)
     original_bea = repo.read_text("Bea.md")
     if repository_hook is not None:
         repository_hook(repo)
@@ -117,6 +121,7 @@ def _execute(
         source_boundary_reviewer=Reviewer(),
         progress_callback=progress_callback,
         conversation_context=conversation_context,
+        postwrite_index_refresh=postwrite_index_refresh,
     )
     assert result.status is ApplicationStatus.COMPLETED, (
         result.planning_error,
@@ -191,3 +196,31 @@ def test_e2_hybrid_with_real_prior_turns_survives_core_adapter(tmp_path):
     result = _execute(tmp_path, ContextFactory(), conversation_context=prior)
     assert result.status is ApplicationStatus.COMPLETED
     assert result.execution_flow["routes"][0]["status"] == "completed"
+
+
+def test_core_hybrid_writer_never_reembeds_full_vault_before_background_refresh(
+    tmp_path, monkeypatch
+):
+    """Physical readback remains synchronous, index upkeep is owned by Runtime.
+
+    A prior bug performed TWO full synchronous rebuilds for each route write,
+    then scheduled the runtime's independent incremental refresh. This test
+    forbids resurrecting that expensive duplicate within hybrid dispatch.
+    """
+
+    def forbid_rebuild_after_seed(context_index, semantic_index):
+        def unplanned_full_rebuild(*_args, **_kwargs):
+            raise AssertionError("Core route cannot rebuild the full vault synchronously")
+
+        monkeypatch.setattr(context_index, "rebuild", unplanned_full_rebuild)
+        monkeypatch.setattr(semantic_index, "rebuild", unplanned_full_rebuild)
+
+    callback_calls = []
+    result = _execute(
+        tmp_path,
+        ContextFactory(),
+        index_initialized=forbid_rebuild_after_seed,
+        postwrite_index_refresh=lambda ids: callback_calls.append(tuple(ids)),
+    )
+    assert result.affected_stable_note_ids
+    assert callback_calls == []  # Last route: runtime owns the async refresh.

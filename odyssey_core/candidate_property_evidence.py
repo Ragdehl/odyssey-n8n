@@ -25,6 +25,7 @@ def validate_subject_property_fact(
     *,
     other_source_subjects: tuple[str, ...] = (),
     inherited_subject: CoreVerifiedInheritedSubject | None = None,
+    self_owner_quote: str | None = None,
 ) -> str:
     """Return source-grounded lexical evidence including a verified target name.
 
@@ -97,39 +98,73 @@ def validate_subject_property_fact(
         if not words <= permitted:
             raise CandidatePropertyEvidenceError("Inherited property adds unknown lexical material")
         return inherited_subject.source_text + " " + fact
-    if (
-        len(subjects) != 1
-        or subjects[0] not in candidate.anchors
-        or any(
-            anchor
-            not in {
-                role.span
-                for role in candidate.roles
-                if role.role in {"subject", "object", "location", "predicate", "transaction"}
-            }
-            for anchor in candidate.anchors
-        )
-        or any(role.role in {"reference", "condition", "polarity"} for role in candidate.roles)
+    direct_self = unit.target.self_target == "self"
+    supported_anchors = {
+        role.span
+        for role in candidate.roles
+        if role.role
+        in {"subject", "participants", "object", "location", "predicate", "transaction"}
+    }
+    if any(anchor not in supported_anchors for anchor in candidate.anchors) or any(
+        role.role in {"reference", "condition", "polarity"} for role in candidate.roles
     ):
         raise CandidatePropertyEvidenceError("Property subject is not individually grounded")
-    subject = subjects[0]
-    if (
-        source[subject.start : subject.end] != subject.text
-        or (
-            unit.target.entity != subject.text
-            and not (
-                isinstance(unit.target.entity, str)
-                and unit.target.entity.strip()
-                and subject.text.casefold().endswith(" " + unit.target.entity.casefold())
+    if direct_self:
+        # Experiencers can be indirect objects, not grammatical subjects.
+        # The INDEPENDENT Core source review chooses exactly one source span,
+        # and it must be present as an original role on this very candidate.
+        owners = tuple(
+            dict.fromkeys(
+                role.span
+                for role in candidate.roles
+                if role.role in {"subject", "participants", "object"}
+                and role.span.text == self_owner_quote
             )
         )
-        or unit.target.query != subject.text
+        if len(owners) != 1 or not any(
+            anchor.start <= owners[0].start and owners[0].end <= anchor.end
+            for anchor in candidate.anchors
+        ):
+            raise CandidatePropertyEvidenceError(
+                "SELF experiencer source is not independently grounded"
+            )
+        subject = owners[0]
+    else:
+        if len(subjects) != 1 or subjects[0] not in candidate.anchors:
+            raise CandidatePropertyEvidenceError("Property subject is not individually grounded")
+        subject = subjects[0]
+    if direct_self:
+        # The independently reviewed Core speaker/experiencer attestation is
+        # required for a direct Person target. Router's lexical subject role
+        # or the authenticated write actor alone can NEVER select SELF.
+        target_owned_by_source = (
+            unit.target.entity is None
+            and unit.target.type == "person"
+            and isinstance(self_owner_quote, str)
+            and self_owner_quote == subject.text
+        )
+    else:
+        target_owned_by_source = (
+            self_owner_quote is None
+            and (
+                unit.target.entity == subject.text
+                or (
+                    isinstance(unit.target.entity, str)
+                    and unit.target.entity.strip()
+                    and subject.text.casefold().endswith(" " + unit.target.entity.casefold())
+                )
+            )
+            and unit.target.query == subject.text
+            and unit.target.self_target is None
+        )
+    if (
+        source[subject.start : subject.end] != subject.text
+        or not target_owned_by_source
         or not unit.target.type
         or unit.target.filters
         or unit.target.link_scope is not None
         or unit.target.semantic_set is not None
         or unit.target.relational_reference is not None
-        or unit.target.self_target is not None
         or unit.reference_lookup_only
         or unit.force_create
         or unit.intent != "record"
@@ -144,6 +179,12 @@ def validate_subject_property_fact(
     # A name alone must not launder "Marta vive en París" from "Marta vive
     # en Lyon." Exact explicit location/object content must still agree.
     words = normalized_words(fact)
+    if direct_self and any(
+        not normalized_words(role.span.text) <= words
+        for role in candidate.roles
+        if role.role == "subject" and role.span != subject
+    ):
+        raise CandidatePropertyEvidenceError("SELF property drops the original grammatical subject")
     if any(normalized_words(other) & words for other in other_source_subjects):
         raise CandidatePropertyEvidenceError(
             "Independent property fact contains another source candidate's subject"
@@ -156,6 +197,11 @@ def validate_subject_property_fact(
     if not supported:
         raise CandidatePropertyEvidenceError("Property lacks independent predicate evidence")
     for role in supported:
+        if direct_self and role.role == "object" and role.span == subject:
+            # The independently attested first-person EXPERIENCER may be
+            # grammatical indirect object, which the fact can inflect (mí→me).
+            # Other object/location roles still require exact source coverage.
+            continue
         if role.role in {"location", "object"} and not normalized_words(role.span.text) <= words:
             raise CandidatePropertyEvidenceError("Property changed its original location/object")
     if not any(

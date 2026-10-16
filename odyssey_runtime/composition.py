@@ -130,7 +130,7 @@ from odyssey_core.semantic import FastEmbedTextEmbedder, SemanticEntityIndex, Se
 from odyssey_core.semantic_sets import OpenAILunaSemanticSetSelector
 from odyssey_core.source_boundary_review import OpenAICoreSourceBoundaryReviewer
 from odyssey_core.storage import VaultRepository
-from odyssey_core.temporal import calendar_day_link_dates
+from odyssey_core.temporal import calendar_day_link_dates, materialized_day_link_index_ids
 from odyssey_core.temporal_interpretation import (
     OpenAITemporalInterpreter,
     TemporalInterpretation,
@@ -2479,21 +2479,29 @@ def build_runtime_from_environment() -> RuntimeComposition:
             )
 
     def refresh_affected_indexes(note_ids: Sequence[str]) -> None:
-        """Incrementally reconcile exactly the notes changed by one serialized mutation.
+        """Refresh changed notes plus their deterministic, already-created Day links.
 
-        Incremental refresh verifies unrelated rows before changing derived state. Any contract
-        mismatch, unrelated drift, or unsupported edge case falls back to the established atomic
-        full rebuild so correctness remains the authority over latency.
+        Core can materialize linked blank Calendar Days as verified side effects
+        of one fact-bearing mutation. Preserve strict index drift checks for
+        unrelated Notes without rebuilding all embeddings on ordinary writes.
         """
+        expanded = tuple(
+            dict.fromkeys(
+                (
+                    *note_ids,
+                    *materialized_day_link_index_ids(repository, schema, tuple(note_ids)),
+                )
+            )
+        )
         try:
-            context_index.refresh_notes(repository, schema, embedder, note_ids=note_ids)
-            semantic_index.refresh_notes(repository, schema, embedder, note_ids=note_ids)
+            context_index.refresh_notes(repository, schema, embedder, note_ids=expanded)
+            semantic_index.refresh_notes(repository, schema, embedder, note_ids=expanded)
             for capability_id, index in application_semantic_indexes.items():
                 index.refresh_notes(
                     repository,
                     planning_schema_for_capability(schema, capability_id),
                     embedder,
-                    note_ids=note_ids,
+                    note_ids=expanded,
                 )
         except (ContextIndexError, SemanticIndexError, ValueError):
             refresh_indexes()
@@ -2718,6 +2726,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 ),
                 task_route_executor=_ScopedTaskRouteExecutor(execute_scoped_tasks),
                 progress_callback=_emit_progress,
+                postwrite_index_refresh=refresh_affected_indexes,
                 source_boundary_reviewer=(
                     OpenAICoreSourceBoundaryReviewer(client)
                     if hybrid_source_review_enabled
