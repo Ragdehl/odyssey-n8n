@@ -393,6 +393,10 @@ class RuntimeComposition:
     hybrid_read_execute: (
         Callable[[str, str, AuthenticatedActorContext, str], ApplicationResult | None] | None
     ) = None
+    # Off by default, even on DEV. Enable only after opt-in complete-source
+    # multi-mutation acceptance: a crash after a Task CREATE and before the
+    # HTTP receipt must never re-run the same logical request automatically.
+    full_source_mutation_guard: bool = False
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -572,6 +576,18 @@ class RuntimeComposition:
                         force_replay=True,
                     )
                     return response
+            if self.full_source_mutation_guard:
+                if (
+                    store is None
+                    or fingerprint is None
+                    or request_id is None
+                    or self.hybrid_candidate_execute is None
+                ):
+                    raise ValueError("Guarded full-source mutation requires an isolated delivery")
+                # Atomic durable claim before ANY semantic model or physical
+                # Core/Tasks write. A later uncertain crash leaves the claim
+                # until explicit reconciliation, never a blind second CREATE.
+                store.claim_mutation(request_id, fingerprint)
             result = self._execute_with_progress(
                 actor,
                 request_id,
@@ -591,6 +607,11 @@ class RuntimeComposition:
                 actor=actor,
                 conversation_id=conversation_id,
             )
+            if self.full_source_mutation_guard:
+                assert store is not None and request_id is not None
+                # Never remove the claim until a durable immutable replay
+                # receipt exists; on readback/save failure keep it locked.
+                store.finish_mutation_claim(request_id)
             self._record_terminal_checkpoint(
                 checkpoint_store, request_id, response, store, fingerprint
             )

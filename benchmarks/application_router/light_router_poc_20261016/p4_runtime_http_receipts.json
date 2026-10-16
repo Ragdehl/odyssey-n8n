@@ -1,0 +1,236 @@
+{
+  "test": "isolated product HTTP runtime with genuine live LLM Router Planner Reviewer",
+  "transport": "real TCP HTTP via odyssey_runtime.server._handler_for on ephemeral loopback",
+  "n8n_traversed": false,
+  "browser_traversed": false,
+  "full_prod_embeddings": false,
+  "isolated_dev_clone": true,
+  "source_note_count": 97,
+  "cases": [
+    {
+      "id": "http-maya-1",
+      "source": "Ayer hablé con Maya.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-15",
+        "527e8e39-a58f-4c20-a300-51638a1b4e1e"
+      ],
+      "action_count": 1,
+      "duration_s": 9.45,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 1,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {
+        "fact_receipts": 1,
+        "unique_person_id": "527e8e39-a58f-4c20-a300-51638a1b4e1e",
+        "backlink_source_ids": [
+          "date:2026-10-15"
+        ],
+        "changed_note_paths": [
+          "Maya - 527e8e39-a58f-4c20-a300-51638a1b4e1e.md",
+          "calendar/days/2026-10-15.md"
+        ]
+      }
+    },
+    {
+      "id": "http-maya-2",
+      "source": "Ayer cené con Maya y hoy he vuelto a hablar con ella.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-15",
+        "date:2026-10-16"
+      ],
+      "action_count": 2,
+      "duration_s": 9.85,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {
+        "fact_receipts": 2,
+        "unique_person_id": "527e8e39-a58f-4c20-a300-51638a1b4e1e",
+        "backlink_source_ids": [
+          "date:2026-10-15",
+          "date:2026-10-16"
+        ],
+        "changed_note_paths": [
+          "calendar/days/2026-10-15.md",
+          "calendar/days/2026-10-16.md"
+        ]
+      }
+    },
+    {
+      "id": "http-maite-3",
+      "source": "Hoy he conocido a Maite, mañana tengo que llamarla.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16",
+        "56db8471-9282-4f70-8ca4-367dde3ad365",
+        "80b83bde-d8c6-4977-9e96-c196a125aac6"
+      ],
+      "action_count": 2,
+      "duration_s": 8.97,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 2,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {
+        "fact_receipts": 2,
+        "unique_person_id": "56db8471-9282-4f70-8ca4-367dde3ad365",
+        "backlink_source_ids": [
+          "80b83bde-d8c6-4977-9e96-c196a125aac6",
+          "date:2026-10-16"
+        ],
+        "changed_note_paths": [
+          "Llamar a Maite - 80b83bde-d8c6-4977-9e96-c196a125aac6.md",
+          "Maite - 56db8471-9282-4f70-8ca4-367dde3ad365.md",
+          "calendar/days/2026-10-16.md"
+        ],
+        "task_id": "80b83bde-d8c6-4977-9e96-c196a125aac6"
+      }
+    },
+    {
+      "id": "http-ana-4",
+      "source": "Hoy he hablado con Ana y Luis. Ana se va a París mañana y Luis vuelve el domingo.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 14.1,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {}
+    },
+    {
+      "id": "http-ambig-5",
+      "source": "Ayer vi a Eric y Luis; mañana iré con él al cine.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 13.34,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {}
+    }
+  ],
+  "replay_survived_new_runtime_composition": true,
+  "llm_route_planner_calls": [
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.33,
+      "input_tokens": 289,
+      "output_tokens": 172,
+      "estimated_usd": 0.0001149,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.1,
+      "input_tokens": 620,
+      "output_tokens": 168,
+      "estimated_usd": 0.0003256,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.39,
+      "input_tokens": 297,
+      "output_tokens": 130,
+      "estimated_usd": 9.47e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.51,
+      "input_tokens": 667,
+      "output_tokens": 305,
+      "estimated_usd": 0.0004994,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.67,
+      "input_tokens": 295,
+      "output_tokens": 165,
+      "estimated_usd": 0.000112,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.9,
+      "input_tokens": 657,
+      "output_tokens": 237,
+      "estimated_usd": 0.0004158,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.99,
+      "input_tokens": 302,
+      "output_tokens": 297,
+      "estimated_usd": 0.0001787,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.87,
+      "input_tokens": 714,
+      "output_tokens": 502,
+      "estimated_usd": 0.0007452,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.7,
+      "input_tokens": 298,
+      "output_tokens": 165,
+      "estimated_usd": 0.0001123,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.96,
+      "input_tokens": 713,
+      "output_tokens": 388,
+      "estimated_usd": 0.0006082,
+      "status": "completed"
+    }
+  ],
+  "llm_estimated_usd_route_planner": 0.0032068,
+  "temporary_vault_deleted": true,
+  "outcome": "PASS"
+}
