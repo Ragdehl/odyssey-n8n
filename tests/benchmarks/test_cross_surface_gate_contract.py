@@ -110,3 +110,10 @@ def test_p4_plan_schema_is_not_misrepresented_as_full_tasks_lifecycle():
     # its physical CREATE receipts are not proof of chat session/subtask support.
     assert "operation" not in FACT["properties"]
     assert "parent_task" not in FACT["properties"]
+
+
+def test_ci_runs_cross_surface_gate_on_every_pull_request():
+    ci = (ROOT / ".github/workflows/python-ci.yml").read_text()
+    assert "pull_request:" in ci and "push:" in ci
+    assert "python scripts/odyssey_cross_surface_gate.py --output" in ci
+    assert ci.index("Cross-surface mutation regression gate") < ci.index("- name: Run tests")

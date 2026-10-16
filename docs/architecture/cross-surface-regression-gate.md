@@ -1,6 +1,6 @@
 # Cross-surface regression gate — Core / Tasks / Work Sessions / UI / chat
 
-Current check: **529 pytest PASS over 42 unique files / 9 contract groups and 168 Node PASS**, and full Python suite **3454 PASS / 80 SKIP / same 10 historical failures**, with no provider credentials forwarded. It is a reusable *deterministic* safety gate; the fresh live-model battery of 17 still has a false-negative Core/Planner review. The gate deliberately cannot certify natural-language Work Session/subtask routing, real browser-to-n8n, mixed multi-App crash recovery or semantic near-duplicate facts.
+Current check: **530 pytest PASS over 42 unique files / 9 contract groups and 168 Node PASS**, and full Python suite **3455 PASS / 80 SKIP / same 10 historical failures**, with no provider credentials forwarded. It is a reusable *deterministic* safety gate; the fresh live-model battery of 17 still has a false-negative Core/Planner review. The gate deliberately cannot certify natural-language Work Session/subtask routing, real browser-to-n8n, mixed multi-App crash recovery or semantic near-duplicate facts.
 
 Status: **experimental adoption gate, NOT product E2E approval**. Maintainer entry point: `scripts/odyssey_cross_surface_gate.py`. Evidence remains reproducible and isolated; do not use personal DEV/PROD notes.
 
@@ -12,6 +12,8 @@ From the repository root, with the development virtualenv available:
 PYTHONPATH=. .venv/bin/python scripts/odyssey_cross_surface_gate.py \
   --output /tmp/odyssey-cross-surface-regression.json
 ```
+
+GitHub CI now executes this gate on PRs and pushes to main **before** the full Python suite, so historic frozen benchmark failures cannot conceal a new E2/E3 regression.
 
 Use `--list` to see exact tests, or `--group work_sessions_shared` / `--group task_chat_core` for fast diagnosis. The default executes every group with real pytest, then the actual JavaScript/Node client and n8n-source tests. A missing file, failed pytest/Node test, or absent test summary is **BLOCKED**, not a misleading PASS. A report includes source groups, collected test files, counts, exit codes, and an explicit `real_full_product_e2e: false`. Do not commit user data or test transcripts; do not infer a successful production deployment from this JSON.
 
@@ -45,6 +47,9 @@ Before asking the user to manually test the new route: introduce the whole-sourc
 **Safety:** Never deploy or mutate DEV/PROD data as a side effect of running this gate. The archived chat recovery dry-run operates only on a clone and is NOT permission to restore personal conversations.
 
 ## 16-10-2026 concrete exercise results
+
+Separate, user-authorized read-only model check: `ODYSSEY_APPROVE_LIGHT_POC=1 python -m benchmarks.application_router.light_router_poc_20261016.p4_tasks_nl_intent_live_probe` executes 10 safe synthetic Task/Work Session utterances on the actual model (GPT-6 low) without any Writer or vault. Last result **10/10 correct operation classification** including one PARENT_TASK; this **does not close** the chat light-router scoped Work Session support gap. This paid probe is explicitly excluded from ordinary offline CI.
+
 
 - Repeated 17 fresh messages through isolated real HTTP/GPT: 11 completed, 6 needs_attention (5 conservative expected, one genuinely overblocked third-person statement). Replay and Markdown inspected; **not a passing P4 acceptance**.
 - `NO_CHANGE` on an existing Day with a newly created Task is a valid mixed result. An existing SELF preference with unchanged Markdown is also valid **only** when its prior marked fact, owner, exact text and links are read back. The new P4 physical oracle refuses arbitrary `completed` without those proofs. Paraphrased near-duplicates may still be introduced and remain a release blocker.

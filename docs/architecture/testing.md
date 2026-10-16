@@ -35,6 +35,16 @@ python3 scripts/validate_note_schema.py
 
 The repository pre-commit configuration groups the complete local deterministic checks; `pre-commit run --all-files` is the normal final local gate when working through Codex.
 
+## Shared cross-surface mutation regressions (P4 onward)
+
+For a substantial Router/E2/Core/E3/Tasks/Work Sessions/UI refactor, run the same offline command used in GitHub CI:
+
+```bash
+python scripts/odyssey_cross_surface_gate.py --output /tmp/odyssey-cross-surface.json
+```
+
+This gate is [defined and versioned here](cross-surface-regression-gate.md). It runs 9 groups of deterministic/isolated service/HTTP tests plus all Node web/workflow contracts, explicitly withholding OpenAI credentials. Missing tests or any failed case **block** the branch. Add a test group for each new App capability and fresh regression examples for any newly observed real-chat failure; do not duplicate domain mechanics in an App test. A green gate proves shared mechanics, **not** fresh model correctness or real browser/n8n integration. These remain separate manual approval gates and must not be inferred from the CI job.
+
 ## Browser/workflow checks
 
 The minimal `odyssey_web/` client has deterministic JavaScript tests in addition to Python static/contract coverage. GitHub CI runs the checked-in web JavaScript gate together with the Python/schema checks.

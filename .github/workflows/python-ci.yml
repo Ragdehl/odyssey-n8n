@@ -34,6 +34,11 @@ jobs:
       - name: Check formatting
         run: ruff format --check odyssey_apps odyssey_core odyssey_runtime scripts tests
 
+      # Shared E2/E3/Tasks/Work Sessions contracts must pass independently of
+      # historical frozen benchmark gates. No API credentials are forwarded.
+      - name: Cross-surface mutation regression gate
+        run: python scripts/odyssey_cross_surface_gate.py --output /tmp/odyssey-cross-surface-ci.json
+
       - name: Run tests
         run: pytest --cov=odyssey_apps --cov=odyssey_core --cov=odyssey_runtime --cov-report=xml:coverage.xml
 
