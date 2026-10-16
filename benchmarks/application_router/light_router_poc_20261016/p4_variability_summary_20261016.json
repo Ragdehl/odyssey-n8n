@@ -1,0 +1,300 @@
+{
+  "purpose": "Non-sensitive variability evidence from REAL model runs; no raw private notes or provider outputs",
+  "date": "2026-10-16",
+  "latest_battery": "planner_and_reviewer_four",
+  "n8n_tested": false,
+  "authenticated_browser_tested": false,
+  "production_embedders_tested": false,
+  "dev_vault_modified": false,
+  "model_variance_persists": true,
+  "series": [
+    {
+      "phase": "initial_seventeen",
+      "n": 17,
+      "completed": 9,
+      "needs_attention": 6,
+      "cases": [
+        {
+          "case_id": "http-maya-1",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-maya-2",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-maite-3",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-ana-4",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-ambig-5",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillem-short-6",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "UnprovenPersonIdentityError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillem-exact-7",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillem-undated-8",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-third-guillem-9",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-two-days-10",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillermo-11",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillem-pronoun-12",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-negative-13",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-conditional-14",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-experiencer-15",
+          "status": null,
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-elided-16",
+          "status": null,
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-new-guillem-17",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        }
+      ]
+    },
+    {
+      "phase": "preprompt_repetition_one",
+      "n": 2,
+      "completed": 1,
+      "needs_attention": 1,
+      "cases": [
+        {
+          "case_id": "http-guillem-undated-8",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-two-days-10",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        }
+      ]
+    },
+    {
+      "phase": "preprompt_repetition_two",
+      "n": 2,
+      "completed": 1,
+      "needs_attention": 1,
+      "cases": [
+        {
+          "case_id": "http-guillem-undated-8",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-two-days-10",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        }
+      ]
+    },
+    {
+      "phase": "planner_clarification_six",
+      "n": 6,
+      "completed": 4,
+      "needs_attention": 2,
+      "cases": [
+        {
+          "case_id": "http-maya-2",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-maite-3",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillem-undated-8",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-third-guillem-9",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageCoverageError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-two-days-10",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-conditional-14",
+          "status": "needs_attention",
+          "prewrite_rejection_type": "WholeMessageSpeakerError",
+          "physical_facts_verified": null,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        }
+      ]
+    },
+    {
+      "phase": "planner_and_reviewer_four",
+      "n": 4,
+      "completed": 4,
+      "needs_attention": 0,
+      "cases": [
+        {
+          "case_id": "http-maya-2",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": 2,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-guillem-undated-8",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": 1,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-third-guillem-9",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": 1,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        },
+        {
+          "case_id": "http-two-days-10",
+          "status": "completed",
+          "prewrite_rejection_type": null,
+          "physical_facts_verified": 2,
+          "readback_failure": null,
+          "replay_bytes_preserved": true
+        }
+      ]
+    }
+  ]
+}

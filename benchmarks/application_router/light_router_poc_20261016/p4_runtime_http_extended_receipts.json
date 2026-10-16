@@ -1,0 +1,872 @@
+{
+  "test": "isolated product HTTP runtime with genuine live LLM Router Planner Reviewer",
+  "transport": "real TCP HTTP via odyssey_runtime.server._handler_for on ephemeral loopback",
+  "n8n_traversed": false,
+  "browser_traversed": false,
+  "full_prod_embeddings": false,
+  "isolated_dev_clone": true,
+  "source_note_count": 97,
+  "cases": [
+    {
+      "id": "http-maya-1",
+      "source": "Ayer hablé con Maya.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-15",
+        "1339b270-4b3b-4711-a918-94e499b307dd"
+      ],
+      "action_count": 1,
+      "duration_s": 12.81,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 1,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-maya-2",
+      "source": "Ayer cené con Maya y hoy he vuelto a hablar con ella.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-15",
+        "date:2026-10-16"
+      ],
+      "action_count": 2,
+      "duration_s": 13.69,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-maite-3",
+      "source": "Hoy he conocido a Maite, mañana tengo que llamarla.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16",
+        "fafca116-0237-415e-a091-06411cd8835d",
+        "249fba02-37e1-4198-8765-9e555a5f5d25"
+      ],
+      "action_count": 2,
+      "duration_s": 23.03,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 2,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-ana-4",
+      "source": "Hoy he hablado con Ana y Luis. Ana se va a París mañana y Luis vuelve el domingo.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 12.42,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-ambig-5",
+      "source": "Ayer vi a Eric y Luis; mañana iré con él al cine.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 14.8,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-guillem-short-6",
+      "source": "Hoy he conocido a Guillem.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 8.63,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-guillem-exact-7",
+      "source": "Hoy he conocido a Guillem Valls.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16"
+      ],
+      "action_count": 1,
+      "duration_s": 11.6,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-guillem-undated-8",
+      "source": "He conocido a Guillem Valls.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 8.17,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-third-guillem-9",
+      "source": "Hoy Guillem Valls ha conocido a Sergio.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16",
+        "58ebab0c-7dfa-4b94-8e8a-a12d6f312662"
+      ],
+      "action_count": 1,
+      "duration_s": 11.59,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 1,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-two-days-10",
+      "source": "Hoy compré pan y mañana compraré leche.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 11.37,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageCoverageError: Whole message not completely accounted for",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-guillermo-11",
+      "source": "Hoy he conocido a Guillermo.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16"
+      ],
+      "action_count": 1,
+      "duration_s": 18.26,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-guillem-pronoun-12",
+      "source": "Hoy he conocido a Guillem Valls, mañana tengo que llamarlo.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16",
+        "ca989938-f7ce-4d97-96c3-d3fa313e8c90"
+      ],
+      "action_count": 2,
+      "duration_s": 16.09,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 1,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-negative-13",
+      "source": "No he conocido a Guillem Valls.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 14.64,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageCoverageError: Conditional/negated event cannot be promoted",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-conditional-14",
+      "source": "Si mañana conociera a Guillem Valls, lo llamaría.",
+      "http_status": 200,
+      "product_status": "needs_attention",
+      "product_outcome": "CLARIFY",
+      "notes": [],
+      "action_count": 0,
+      "duration_s": 16.56,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": true,
+      "safe_no_write": true,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": "WholeMessageSpeakerError: Independent source review count changed",
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-experiencer-15",
+      "source": "A mí me gusta la subida.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "odyssey-dev-synthetic-person"
+      ],
+      "action_count": 1,
+      "duration_s": 10.17,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-elided-16",
+      "source": "Me encanta pasear por la montaña.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "odyssey-dev-synthetic-person"
+      ],
+      "action_count": 1,
+      "duration_s": 25.41,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 0,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    },
+    {
+      "id": "http-new-guillem-17",
+      "source": "Hoy he conocido a Guillem Prueba.",
+      "http_status": 200,
+      "product_status": "completed",
+      "product_outcome": "ANSWER",
+      "notes": [
+        "date:2026-10-16",
+        "a32f52e8-a0a6-42f3-968d-9cb3cccf5be3"
+      ],
+      "action_count": 1,
+      "duration_s": 11.33,
+      "replay_http_status": 200,
+      "replay_marked": true,
+      "replay_preserved_all_note_bytes": true,
+      "notes_added": 1,
+      "network_errors": null,
+      "real_model_runs": 1,
+      "expected_safe_abstention": false,
+      "safe_no_write": false,
+      "validated_canonical_readback": {},
+      "prewrite_rejection": null,
+      "unexpected_exception": null
+    }
+  ],
+  "replay_survived_new_runtime_composition": true,
+  "llm_route_planner_calls": [
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 4.17,
+      "input_tokens": 289,
+      "output_tokens": 138,
+      "estimated_usd": 9.79e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.48,
+      "input_tokens": 625,
+      "output_tokens": 168,
+      "estimated_usd": 0.0003266,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.61,
+      "input_tokens": 297,
+      "output_tokens": 135,
+      "estimated_usd": 9.72e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.86,
+      "input_tokens": 674,
+      "output_tokens": 336,
+      "estimated_usd": 0.000538,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.38,
+      "input_tokens": 295,
+      "output_tokens": 188,
+      "estimated_usd": 0.0001235,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 3.4,
+      "input_tokens": 668,
+      "output_tokens": 252,
+      "estimated_usd": 0.000436,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.7,
+      "input_tokens": 302,
+      "output_tokens": 140,
+      "estimated_usd": 0.0001002,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.73,
+      "input_tokens": 726,
+      "output_tokens": 480,
+      "estimated_usd": 0.0007212,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.59,
+      "input_tokens": 298,
+      "output_tokens": 180,
+      "estimated_usd": 0.0001198,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.49,
+      "input_tokens": 723,
+      "output_tokens": 446,
+      "estimated_usd": 0.0006798,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.63,
+      "input_tokens": 289,
+      "output_tokens": 107,
+      "estimated_usd": 8.24e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.68,
+      "input_tokens": 659,
+      "output_tokens": 208,
+      "estimated_usd": 0.0003814,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.0,
+      "input_tokens": 291,
+      "output_tokens": 129,
+      "estimated_usd": 9.36e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.85,
+      "input_tokens": 664,
+      "output_tokens": 267,
+      "estimated_usd": 0.0004532,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.55,
+      "input_tokens": 290,
+      "output_tokens": 121,
+      "estimated_usd": 8.95e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.22,
+      "input_tokens": 658,
+      "output_tokens": 177,
+      "estimated_usd": 0.000344,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.72,
+      "input_tokens": 292,
+      "output_tokens": 135,
+      "estimated_usd": 9.67e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.66,
+      "input_tokens": 664,
+      "output_tokens": 209,
+      "estimated_usd": 0.0003836,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.12,
+      "input_tokens": 292,
+      "output_tokens": 179,
+      "estimated_usd": 0.0001187,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.5,
+      "input_tokens": 624,
+      "output_tokens": 229,
+      "estimated_usd": 0.0003996,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 9.76,
+      "input_tokens": 288,
+      "output_tokens": 122,
+      "estimated_usd": 8.98e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.51,
+      "input_tokens": 660,
+      "output_tokens": 230,
+      "estimated_usd": 0.000408,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.7,
+      "input_tokens": 297,
+      "output_tokens": 149,
+      "estimated_usd": 0.0001042,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 4.41,
+      "input_tokens": 704,
+      "output_tokens": 436,
+      "estimated_usd": 0.000664,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.7,
+      "input_tokens": 291,
+      "output_tokens": 119,
+      "estimated_usd": 8.86e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.04,
+      "input_tokens": 660,
+      "output_tokens": 165,
+      "estimated_usd": 0.00033,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 4.2,
+      "input_tokens": 296,
+      "output_tokens": 231,
+      "estimated_usd": 0.0001451,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 5.16,
+      "input_tokens": 673,
+      "output_tokens": 390,
+      "estimated_usd": 0.0006026,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.42,
+      "input_tokens": 289,
+      "output_tokens": 124,
+      "estimated_usd": 9.09e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.84,
+      "input_tokens": 613,
+      "output_tokens": 117,
+      "estimated_usd": 0.000263,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.12,
+      "input_tokens": 290,
+      "output_tokens": 114,
+      "estimated_usd": 8.6e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.0,
+      "input_tokens": 619,
+      "output_tokens": 119,
+      "estimated_usd": 0.0002666,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.83,
+      "input_tokens": 291,
+      "output_tokens": 151,
+      "estimated_usd": 0.0001046,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.23,
+      "input_tokens": 664,
+      "output_tokens": 162,
+      "estimated_usd": 0.0003272,
+      "status": "completed"
+    }
+  ],
+  "llm_estimated_usd_route_planner": 0.0092535,
+  "llm_speaker_calls": [
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.53,
+      "input_tokens": 385,
+      "output_tokens": 76,
+      "estimated_usd": 0.0001682,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 1.6,
+      "input_tokens": 382,
+      "output_tokens": 65,
+      "estimated_usd": 7.07e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.95,
+      "input_tokens": 408,
+      "output_tokens": 97,
+      "estimated_usd": 0.000198,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 1.7,
+      "input_tokens": 405,
+      "output_tokens": 102,
+      "estimated_usd": 9.15e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 2.28,
+      "input_tokens": 404,
+      "output_tokens": 112,
+      "estimated_usd": 0.0002152,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.99,
+      "input_tokens": 401,
+      "output_tokens": 106,
+      "estimated_usd": 9.31e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.54,
+      "input_tokens": 389,
+      "output_tokens": 71,
+      "estimated_usd": 0.000163,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 1.7,
+      "input_tokens": 386,
+      "output_tokens": 71,
+      "estimated_usd": 7.41e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.46,
+      "input_tokens": 391,
+      "output_tokens": 60,
+      "estimated_usd": 0.0001502,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.01,
+      "input_tokens": 388,
+      "output_tokens": 83,
+      "estimated_usd": 8.03e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.34,
+      "input_tokens": 383,
+      "output_tokens": 43,
+      "estimated_usd": 0.0001282,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.17,
+      "input_tokens": 380,
+      "output_tokens": 66,
+      "estimated_usd": 7.1e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.9,
+      "input_tokens": 408,
+      "output_tokens": 111,
+      "estimated_usd": 0.0002148,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 3.76,
+      "input_tokens": 405,
+      "output_tokens": 122,
+      "estimated_usd": 0.0001015,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.8,
+      "input_tokens": 389,
+      "output_tokens": 80,
+      "estimated_usd": 0.0001738,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.0,
+      "input_tokens": 386,
+      "output_tokens": 91,
+      "estimated_usd": 8.41e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.59,
+      "input_tokens": 399,
+      "output_tokens": 85,
+      "estimated_usd": 0.0001818,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 2.77,
+      "input_tokens": 396,
+      "output_tokens": 173,
+      "estimated_usd": 0.0001261,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.58,
+      "input_tokens": 385,
+      "output_tokens": 63,
+      "estimated_usd": 0.0001526,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 1.51,
+      "input_tokens": 382,
+      "output_tokens": 74,
+      "estimated_usd": 7.52e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.57,
+      "input_tokens": 387,
+      "output_tokens": 97,
+      "estimated_usd": 0.0001938,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 15.88,
+      "input_tokens": 384,
+      "output_tokens": 102,
+      "estimated_usd": 8.94e-05,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-5.6-luna",
+      "duration_s": 1.9,
+      "input_tokens": 389,
+      "output_tokens": 73,
+      "estimated_usd": 0.0001654,
+      "status": "completed"
+    },
+    {
+      "model": "gpt-6-luna",
+      "duration_s": 1.6,
+      "input_tokens": 386,
+      "output_tokens": 79,
+      "estimated_usd": 7.81e-05,
+      "status": "completed"
+    }
+  ],
+  "llm_estimated_usd_speaker": 0.0031401,
+  "temporary_vault_deleted": true,
+  "acceptance_failures": [
+    "http-guillem-undated-8",
+    "http-two-days-10"
+  ],
+  "outcome": "BLOCKED"
+}

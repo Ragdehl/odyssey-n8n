@@ -336,7 +336,17 @@ def reviewed_semantics(
         "review each separately; no raw markdown or note IDs. No execution authority. "
         "An optional independently Core-verified SELF relationship may include canonical "
         "members even when their names are absent from the message. Only if that typed "
-        "evidence is supplied may you map a group mention to those specific members."
+        "evidence is supplied may you map a group mention to those specific members. "
+        "The authenticated first-person grammatical speaker is not an explicitly "
+        "named source person: do NOT demand {{ref:N}} for first-person "
+        "I/yo/me or an implied Spanish first-person verb, and do not mark "
+        "source coverage incomplete merely because speaker is omitted "
+        "from participant person names. Speaker involvement is checked "
+        "separately by authenticated Core source proof. Future first-person "
+        "indicative reports an intention/plan that MAY happen: faithfully "
+        "record the expressed future plan, not a completed or guaranteed "
+        "future occurrence. Preserve negation and condition; unsupported "
+        "assertions must still be rejected."
     )
     payload = {
         "source": source,

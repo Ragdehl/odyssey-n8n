@@ -1,0 +1,520 @@
+{
+  "provider_inputs": "original P4 fresh AI responses from p4_speaker_live_matrix.json; validation rerun only, no new calls",
+  "reviewed_with": "odyssey_core.whole_message_speaker_proof.validate_dual_speaker_review",
+  "cases": [
+    {
+      "case": "guillem_implicit",
+      "source": "Hoy he conocido a Guillem.",
+      "spans": [
+        "Hoy he conocido a Guillem."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "guillem_undated",
+      "source": "He conocido a Guillem.",
+      "spans": [
+        "He conocido a Guillem."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "maya_implicit",
+      "source": "Ayer hablé con Maya.",
+      "spans": [
+        "Ayer hablé con Maya."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "guillermo_explicit",
+      "source": "Yo conocí a Guillermo.",
+      "spans": [
+        "Yo conocí a Guillermo."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "third_guillem",
+      "source": "Guillem ha conocido a Ana.",
+      "spans": [
+        "Guillem ha conocido a Ana."
+      ],
+      "expected_roles": [
+        "other"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "other"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "third_guillem_today",
+      "source": "Hoy Guillem ha conocido a Ana.",
+      "spans": [
+        "Hoy Guillem ha conocido a Ana."
+      ],
+      "expected_roles": [
+        "other"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "other"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "object_speaker",
+      "source": "María me presentó a Guillem.",
+      "spans": [
+        "María me presentó a Guillem."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "children_thrice",
+      "source": "Mis hijos fueron al parque, después comieron un helado y por la tarde vieron una película.",
+      "spans": [
+        "Mis hijos fueron al parque",
+        "después comieron un helado",
+        "por la tarde vieron una película"
+      ],
+      "expected_roles": [
+        "other",
+        "other",
+        "other"
+      ],
+      "expected_assertions": [
+        "asserted",
+        "asserted",
+        "asserted"
+      ],
+      "observed_roles": [
+        "other",
+        "other",
+        "other"
+      ],
+      "observed_assertions": [
+        "asserted",
+        "asserted",
+        "asserted"
+      ],
+      "self_link_flags": [
+        false,
+        false,
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "eric_continuity",
+      "source": "Hoy he visto a Eric y después hablé con él.",
+      "spans": [
+        "Hoy he visto a Eric",
+        "después hablé con él"
+      ],
+      "expected_roles": [
+        "self_participant",
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted",
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant",
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted",
+        "asserted"
+      ],
+      "self_link_flags": [
+        true,
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "guillem_future",
+      "source": "Mañana llamaré a Guillem.",
+      "spans": [
+        "Mañana llamaré a Guillem."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "planned"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "planned"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "conditional_guillem",
+      "source": "Si mañana conociera a Guillem, lo llamaría.",
+      "spans": [
+        "Si mañana conociera a Guillem",
+        "lo llamaría"
+      ],
+      "expected_roles": [
+        "self_participant",
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "conditional",
+        "conditional"
+      ],
+      "observed_roles": [
+        "self_participant",
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "conditional",
+        "conditional"
+      ],
+      "self_link_flags": [
+        false,
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "negated_guillem",
+      "source": "No he conocido a Guillem.",
+      "spans": [
+        "No he conocido a Guillem."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "negated"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "negated"
+      ],
+      "self_link_flags": [
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "ana_luis_third",
+      "source": "Ana y Luis hablaron con Guillem.",
+      "spans": [
+        "Ana y Luis hablaron con Guillem."
+      ],
+      "expected_roles": [
+        "other"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "other"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "children_with_me",
+      "source": "Hoy fui al parque con mis hijos.",
+      "spans": [
+        "Hoy fui al parque con mis hijos."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "experiencer_me",
+      "source": "A mí me gusta la subida.",
+      "spans": [
+        "A mí me gusta la subida."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "experiencer_elided",
+      "source": "Me encanta pasear por la montaña.",
+      "spans": [
+        "Me encanta pasear por la montaña."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "my_speaker_receiver",
+      "source": "Me contó Guillem que Ana vendrá mañana.",
+      "spans": [
+        "Me contó Guillem que Ana vendrá mañana."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "result": "safely_blocked",
+      "reason": "WholeMessageSpeakerError"
+    },
+    {
+      "case": "other_ambiguous",
+      "source": "Eric y Luis fueron al cine y luego él cenó fuera.",
+      "spans": [
+        "Eric y Luis fueron al cine",
+        "luego él cenó fuera"
+      ],
+      "expected_roles": [
+        "other",
+        "other"
+      ],
+      "expected_assertions": [
+        "asserted",
+        "asserted"
+      ],
+      "observed_roles": [
+        "other",
+        "other"
+      ],
+      "observed_assertions": [
+        "asserted",
+        "asserted"
+      ],
+      "self_link_flags": [
+        false,
+        false
+      ],
+      "result": "match"
+    },
+    {
+      "case": "two_days_implicit",
+      "source": "Hoy compré pan y mañana compraré leche.",
+      "spans": [
+        "Hoy compré pan",
+        "mañana compraré leche"
+      ],
+      "expected_roles": [
+        "self_participant",
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted",
+        "planned"
+      ],
+      "observed_roles": [
+        "self_participant",
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted",
+        "planned"
+      ],
+      "self_link_flags": [
+        true,
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "speaker_plural",
+      "source": "Vimos una película.",
+      "spans": [
+        "Vimos una película."
+      ],
+      "expected_roles": [
+        "self_participant"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "self_participant"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        true
+      ],
+      "result": "match"
+    },
+    {
+      "case": "two_third",
+      "source": "Se encontraron Guillem y Luis.",
+      "spans": [
+        "Se encontraron Guillem y Luis."
+      ],
+      "expected_roles": [
+        "other"
+      ],
+      "expected_assertions": [
+        "asserted"
+      ],
+      "observed_roles": [
+        "other"
+      ],
+      "observed_assertions": [
+        "asserted"
+      ],
+      "self_link_flags": [
+        false
+      ],
+      "result": "match"
+    }
+  ],
+  "match": 20,
+  "safely_blocked": 1,
+  "mismatch": 0
+}
