@@ -1,0 +1,907 @@
+{
+  "purpose": "P2 source→independent semantic review→existing Core Writer and Tasks",
+  "fresh_semantic_route_and_plan": true,
+  "WARNING": "Experimental source-review gate; NOT production candidate_coverage",
+  "model": "gpt-5.6-luna",
+  "real_ai": true,
+  "provider_store": false,
+  "synthetic_embeddings": true,
+  "isolated_vault": true,
+  "results": [
+    {
+      "case": "maya_simple",
+      "source": "Ayer hablé con Maya.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Ayer hablé con Maya.",
+            "kind": "record",
+            "reviewed_text": "Ayer hablé con {{ref:0}}.",
+            "date": "2026-10-15",
+            "reference_names": [
+              "Maya"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-15",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-15",
+              "reason": null
+            },
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "1cb5af7e-23d5-492d-8a26-c12bbc13c72e",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "Maya - 1cb5af7e-23d5-492d-8a26-c12bbc13c72e.md",
+        "calendar/days/2026-10-15.md"
+      ],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_event",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record that the user spoke with Maya yesterday.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Maya",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user spoke with Maya.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-15",
+            "daypart": null,
+            "participants": [
+              "user",
+              "Maya"
+            ],
+            "source_evidence": "Ayer hablé con Maya.",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 2.63,
+          "input_tokens": 289,
+          "output_tokens": 131,
+          "estimated_usd": 9.44e-05,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 2.51,
+          "input_tokens": 619,
+          "output_tokens": 187,
+          "estimated_usd": 0.0003482,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 616,
+        "out": 141
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-15.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-15:1",
+          "backlinks:Maya:1"
+        ],
+        "count": 2
+      },
+      "duration_s": 7.63
+    },
+    {
+      "case": "guillermo_control",
+      "source": "Hoy he conocido a Guillermo.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he conocido a Guillermo.",
+            "kind": "record",
+            "reviewed_text": "Hoy he conocido a {{ref:0}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Guillermo"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            },
+            {
+              "operation": "REFERENCE_BOUND",
+              "status": "succeeded",
+              "id": "4eee8c7c-7870-48e8-b2ec-db92011dfde9",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "calendar/days/2026-10-16.md"
+      ],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "single",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record a personal note that the user met Guillermo today.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Guillermo",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user met Guillermo.",
+            "kind": "record",
+            "subject": "Guillermo",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Guillermo"
+            ],
+            "source_evidence": "Hoy he conocido a Guillermo.",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 2.41,
+          "input_tokens": 288,
+          "output_tokens": 120,
+          "estimated_usd": 8.88e-05,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 2.38,
+          "input_tokens": 660,
+          "output_tokens": 195,
+          "estimated_usd": 0.000366,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 614,
+        "out": 145
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-16.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-16:1",
+          "backlinks:Guillermo:1"
+        ],
+        "count": 2
+      },
+      "duration_s": 7.16
+    },
+    {
+      "case": "maya_pronoun",
+      "source": "Ayer cené con Maya y hoy he vuelto a hablar con ella.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Ayer cené con Maya",
+            "kind": "record",
+            "reviewed_text": "Ayer cené con {{ref:0}}.",
+            "date": "2026-10-15",
+            "reference_names": [
+              "Maya"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "hoy he vuelto a hablar con ella",
+            "kind": "record",
+            "reviewed_text": "Hoy he vuelto a hablar con {{ref:0}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Maya"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-15",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-15",
+              "reason": null
+            },
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "90f4d0a5-3e1c-490e-b482-11757950b052",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            },
+            {
+              "operation": "REFERENCE_BOUND",
+              "status": "succeeded",
+              "id": "90f4d0a5-3e1c-490e-b482-11757950b052",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "Maya - 90f4d0a5-3e1c-490e-b482-11757950b052.md",
+        "calendar/days/2026-10-15.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the related personal note about yesterday’s dinner with Maya and today’s conversation with her.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Maya",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user had dinner with Maya.",
+            "kind": "record",
+            "subject": "Maya",
+            "date": "2026-10-15",
+            "daypart": "evening",
+            "participants": [
+              "Maya"
+            ],
+            "source_evidence": "Ayer cené con Maya",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "The user spoke with Maya again.",
+            "kind": "record",
+            "subject": "Maya",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Maya"
+            ],
+            "source_evidence": "hoy he vuelto a hablar con ella",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 2.51,
+          "input_tokens": 297,
+          "output_tokens": 122,
+          "estimated_usd": 9.07e-05,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 3.08,
+          "input_tokens": 636,
+          "output_tokens": 282,
+          "estimated_usd": 0.0004656,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 704,
+        "out": 228
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-15.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-15:1",
+          "day:2026-10-16:1",
+          "backlinks:Maya:2"
+        ],
+        "count": 3
+      },
+      "duration_s": 9.03
+    },
+    {
+      "case": "ana_luis",
+      "source": "Hoy he hablado con Ana y Luis. Ana se va a París mañana y Luis vuelve el domingo.",
+      "status": "failed",
+      "reason": "ValueError: Whole-message proof incomplete or ambiguous",
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he hablado con Ana y Luis",
+            "kind": "record",
+            "reviewed_text": "Hoy he hablado con {{ref:0}} y {{ref:1}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Ana",
+              "Luis"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "Ana se va a París mañana",
+            "kind": "record",
+            "reviewed_text": "{{ref:0}} se va a París mañana.",
+            "date": "2026-10-17",
+            "reference_names": [
+              "Ana"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 2,
+            "source_quote": "Luis vuelve el domingo",
+            "kind": "record",
+            "reviewed_text": "{{ref:0}} vuelve el domingo.",
+            "date": "2026-10-18",
+            "reference_names": [
+              "Luis"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_event",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the conversation and the two travel plans.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Ana",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          },
+          {
+            "mention": "Luis",
+            "canonical_name": "Luis",
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The speaker had a conversation with Ana and Luis.",
+            "kind": "record",
+            "subject": "conversation",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Ana",
+              "Luis"
+            ],
+            "source_evidence": "Hoy he hablado con Ana y Luis",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Ana is going to Paris.",
+            "kind": "record",
+            "subject": "Ana",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Ana"
+            ],
+            "source_evidence": "Ana se va a París mañana",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Luis returns.",
+            "kind": "record",
+            "subject": "Luis",
+            "date": "2026-10-18",
+            "daypart": null,
+            "participants": [
+              "Luis"
+            ],
+            "source_evidence": "Luis vuelve el domingo",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": [
+          "Ana's canonical identity is unresolved; the supplied hint for Ana López does not exactly match the mention Ana."
+        ]
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 3.69,
+          "input_tokens": 302,
+          "output_tokens": 256,
+          "estimated_usd": 0.0001582,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 3.86,
+          "input_tokens": 712,
+          "output_tokens": 425,
+          "estimated_usd": 0.0006524,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 801,
+        "out": 301
+      },
+      "duration_s": 11.13
+    },
+    {
+      "case": "maite_cross_app",
+      "source": "Hoy he conocido a Maite, mañana tengo que llamarla.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he conocido a Maite",
+            "kind": "record",
+            "reviewed_text": "Hoy he conocido a {{ref:0}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Maite"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "mañana tengo que llamarla",
+            "kind": "task",
+            "reviewed_text": "Llamar a {{ref:0}}.",
+            "date": "2026-10-17",
+            "reference_names": [
+              "Maite"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            },
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "098b4302-b35e-4de9-9fd6-1ad77008bba3",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "type": "task",
+          "date": "2026-10-17",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "f95b818a-043a-4681-82ff-732f5449451b",
+              "reason": null
+            },
+            {
+              "operation": "REFERENCE_BOUND",
+              "status": "succeeded",
+              "id": "098b4302-b35e-4de9-9fd6-1ad77008bba3",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "Llamar a Maite - f95b818a-043a-4681-82ff-732f5449451b.md",
+        "Maite - 098b4302-b35e-4de9-9fd6-1ad77008bba3.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "tasks",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_reference",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record that the user met Maite today.",
+            "depends_on_another_scope": false
+          },
+          {
+            "capability": "tasks",
+            "description": "Create a task to call Maite tomorrow.",
+            "depends_on_another_scope": true
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [
+          {
+            "mention": "Maite",
+            "canonical_name": null,
+            "note_type": "person",
+            "confidence": "explicit"
+          }
+        ],
+        "facts": [
+          {
+            "meaning": "The user met Maite.",
+            "kind": "record",
+            "subject": "Maite",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [
+              "Maite"
+            ],
+            "source_evidence": "Hoy he conocido a Maite",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "Call Maite.",
+            "kind": "task",
+            "subject": "Maite",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [
+              "Maite"
+            ],
+            "source_evidence": "mañana tengo que llamarla",
+            "dependent_on_fact_index": 0,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 2.73,
+          "input_tokens": 295,
+          "output_tokens": 190,
+          "estimated_usd": 0.0001245,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 2.97,
+          "input_tokens": 657,
+          "output_tokens": 255,
+          "estimated_usd": 0.0004374,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 695,
+        "out": 207
+      },
+      "verified_facts": [
+        "Llamar a Maite - f95b818a-043a-4681-82ff-732f5449451b.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-16:1",
+          "task:f95b818a-043a-4681-82ff-732f5449451b:2026-10-17",
+          "backlinks:Maite:2"
+        ],
+        "count": 3
+      },
+      "duration_s": 8.65
+    },
+    {
+      "case": "two_dates",
+      "source": "Hoy he comprado pan y mañana compraré leche.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he comprado pan",
+            "kind": "record",
+            "reviewed_text": "Hoy he comprado pan.",
+            "date": "2026-10-16",
+            "reference_names": [],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "mañana compraré leche",
+            "kind": "record",
+            "reviewed_text": "Mañana compraré leche.",
+            "date": "2026-10-17",
+            "reference_names": [],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "type": "core_day",
+          "date": "2026-10-17",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-17",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "calendar/days/2026-10-16.md",
+        "calendar/days/2026-10-17.md"
+      ],
+      "source_notes_count": 97,
+      "fresh_router": {
+        "capabilities": [
+          "core",
+          "temporal"
+        ],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [
+          {
+            "capability": "core",
+            "description": "Record the purchase of bread today and the intention to buy milk tomorrow.",
+            "depends_on_another_scope": false
+          }
+        ]
+      },
+      "fresh_semantic_plan": {
+        "entities": [],
+        "facts": [
+          {
+            "meaning": "The user bought bread.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-16",
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "Hoy he comprado pan",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          },
+          {
+            "meaning": "The user intends to buy milk.",
+            "kind": "record",
+            "subject": "user",
+            "date": "2026-10-17",
+            "daypart": null,
+            "participants": [],
+            "source_evidence": "mañana compraré leche",
+            "dependent_on_fact_index": null,
+            "needs_clarification": false
+          }
+        ],
+        "unresolved": []
+      },
+      "fresh_provider_calls": [
+        {
+          "model": "gpt-6-luna",
+          "duration_s": 2.97,
+          "input_tokens": 292,
+          "output_tokens": 195,
+          "estimated_usd": 0.0001267,
+          "status": "completed"
+        },
+        {
+          "model": "gpt-5.6-luna",
+          "duration_s": 3.16,
+          "input_tokens": 627,
+          "output_tokens": 220,
+          "estimated_usd": 0.0003894,
+          "status": "completed"
+        }
+      ],
+      "review_usage": {
+        "in": 656,
+        "out": 253
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-16.md",
+        "calendar/days/2026-10-17.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-16:1",
+          "day:2026-10-17:1"
+        ],
+        "count": 2
+      },
+      "duration_s": 9.96
+    }
+  ],
+  "total_estimated_usd": 0.0023472,
+  "temporary_vaults_discarded": true,
+  "fresh_semantic_estimated_usd": 0.0033423
+}

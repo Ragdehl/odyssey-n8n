@@ -20,6 +20,10 @@ from zoneinfo import ZoneInfo
 
 from openai import OpenAI
 
+from benchmarks.application_router.light_router_poc_20261016.prompt_contract import (
+    PLANNER_INSTRUCTIONS,
+    ROUTER_INSTRUCTIONS,
+)
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
 from odyssey_core.notes import parse_note, validate_note
@@ -260,36 +264,8 @@ def main():
             validate_note(parse_note(repo.read_text(path)), schema)
         output["real_dev_vault_clone_count"] = note_count
         clock = {"date": "2026-10-16", "time": "11:00:00", "timezone": "Europe/Paris"}
-        router_instructions = (
-            "You are a minimal *non-authoritative* capability router. "
-            "Never split semantic interpretation merely because there are multiple facts or dates. "
-            "Mark joint when a subject, pronoun, place, entity or fact refers across clauses "
-            "or a task depends on a just-mentioned entity. Separate only truly independent "
-            "actions when this is useful. Determine capabilities, not facts, identities or writes. "
-            "Temporal is needed for relative times or dates. Core handles ordinary personal notes, "
-            "Tasks handles to-do operations; both may be used. Preserve full message context."
-        )
-        planner_instructions = (
-            "You are a semantic-planning feasibility probe for Odyssey. "
-            "Interpret the ORIGINAL FULL user request once, NOT independent fragments. "
-            "Return exactly one ordered item for each independent durable assertion or task, "
-            "and explicitly resolve subjects, shared predicates, dates, reference pronouns and "
-            "participants, including references across Core and Tasks. "
-            "If one person is newly mentioned, propose the name as unverified until resolved by Core. "
-            "Set canonical_name only if the identical name appears in supplied verified note hints or "
-            "the verified family evidence; otherwise canonical_name MUST BE null. "
-            "NEVER fabricate canonical stable IDs. Pre-existing hints are non-authoritative. "
-            "Use available verified family relationship for 'mis hijos' and include their individual names. "
-            "For pronouns with multiple plausible antecedents, declare ambiguity, no chosen identity. "
-            "Date is absolute YYYY-MM-DD, null if unspecified. Today and tomorrow use clock. "
-            "Future tense alone describes a future occurrence, NOT a task; kind=task only with "
-            "a genuine obligation, explicit to-do, reminder or command to perform an action. "
-            "Do not infer a task merely because the verb describes a future action. "
-            "When one task refers to a person just known, point it to that person using its name "
-            "and dependent_on_fact_index (0-based), without inventing a Note ID or physical write. "
-            "Source evidence must be exact words copied contiguously from the original message. "
-            "Do not invent facts, do not write files; this is semantic inference only."
-        )
+        router_instructions = ROUTER_INSTRUCTIONS
+        planner_instructions = PLANNER_INSTRUCTIONS
         for ident, source in selected_cases:
             local_begin = time.perf_counter()
             notes, family = relevant_notes(repo, source)

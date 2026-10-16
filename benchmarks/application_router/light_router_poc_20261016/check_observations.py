@@ -84,6 +84,32 @@ integration = json.loads((ROOT / "integration_control.json").read_text())["cases
 assert len(integration) == 3
 assert all(not r["readback"] and not r["changes"] for r in integration)
 assert all(r["status"] != "completed" for r in integration)
+p2 = json.loads((ROOT / "p2_integration_receipts_fresh.json").read_text())
+assert p2["fresh_semantic_route_and_plan"] is True
+assert p2["real_ai"] is True and p2["isolated_vault"] is True
+assert p2["temporary_vaults_discarded"] is True
+outcomes = {x["case"]: x for x in p2["results"]}
+assert len(outcomes) == 6
+completed = {name for name, item in outcomes.items() if item["status"] == "completed"}
+assert completed == {
+    "maya_simple",
+    "guillermo_control",
+    "maya_pronoun",
+    "maite_cross_app",
+    "two_dates",
+}
+assert outcomes["ana_luis"]["status"] == "failed"
+assert outcomes["ana_luis"]["note_changes"] == []
+assert all(outcomes[name]["verified_readback"]["count"] >= 2 for name in completed)
+maite_receipts = outcomes["maite_cross_app"]["writes"]
+person_id = maite_receipts[0]["units"][1]["id"]
+assert maite_receipts[1]["units"][1]["id"] == person_id
+assert maite_receipts[0]["units"][1]["operation"] == "CREATED"
+assert maite_receipts[1]["units"][1]["operation"] == "REFERENCE_BOUND"
+assert "backlinks:Maite:2" in outcomes["maite_cross_app"]["verified_readback"]["assertions"]
+assert outcomes["guillermo_control"]["writes"][0]["units"][1]["operation"] == "REFERENCE_BOUND"
+assert "backlinks:Maya:2" in outcomes["maya_pronoun"]["verified_readback"]["assertions"]
+
 print(
     json.dumps(
         {
@@ -97,6 +123,13 @@ print(
             "unverified_claimed_canonical_names": unverified_names,
             "existing_full_source_writer_succeeded": 0,
             "existing_full_source_writer_attempts": 3,
+            "p2_fresh_core_task_writer_completed": len(completed),
+            "p2_fresh_total": len(outcomes),
+            "p2_ana_identity_safe_no_write": True,
+            "p2_maite_reuses_exact_person_id": True,
+            "p2_fresh_cost_estimated_usd": (
+                p2["fresh_semantic_estimated_usd"] + p2["total_estimated_usd"]
+            ),
             "ready_for_DEV": False,
         },
         ensure_ascii=False,

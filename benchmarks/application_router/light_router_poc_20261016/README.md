@@ -1,5 +1,8 @@
 # PoC Router ligero: resultados observados, 16-10-2026
 
+**ETAPA POSTERIOR P2 (16-10, reemplaza el antiguo gate de integración para la arquitectura NUEVA):** [informe P2 integrado](../../../docs/architecture/light-router-p2-results-20261016.md). PoC experimental con IA nueva Router+Planner+revisor de fuente, **5/6 escritores Core y Tasks correctos con readback y backlinks**, y abstención sin escritura para «Ana» vs «Ana López». Los **0/3** descritos más abajo corresponden a la integración antigua de Core sin el nuevo contrato de revisión íntegra; se preservan como comparativa histórica, no como estado del último prototipo. **Sin despliegue ni autorización de uso real**. Resultados: `p2_integration_receipts_fresh.json`, `p2_integrated_bridge.py` y 71 tests relevantes (nuevo módulo y regresiones).
+
+
 **Resultado: VIABILIDAD SEMÁNTICA DEMOSTRADA; INTEGRACIÓN CANÓNICA NO DEMOSTRADA.**
 Por tanto, P1 (factibilidad de interpretar todo junto) tiene evidencia favorable, pero P2 (Core→Writer→Tasks con garantías) NO PASA y el proyecto NO está listo para DEV ni para pedir al usuario otra campaña manual. No se ha modificado la aplicación en ejecución, sus notas, tareas, sus índices ni PROD.
 

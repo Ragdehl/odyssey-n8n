@@ -90,6 +90,10 @@ Base: 16 entregas reales en `/data/odyssey-dev/state/conversations/*/delivery-re
 
 **Decisión:** PoC favorable para **capacidad de comprender sin trocear** y dependencias Core↔Task; **NO demuestra aún escritura segura de extremo a extremo**. Gate siguiente **P2 imprescindible**: puente experimental, solo en sandbox, entre plan íntegro tipado y cobertura/autorización de Core; resolver identidad nueva o existente y orquestación Core→Tasks con readback, sin saltarse invariantes. Si falla, no migrar arquitectura. P3–P5 (implementación/despliegue DEV/UI/usuario) siguen BLOQUEADOS. Ver diagnóstico y artefactos exactos en `benchmarks/application_router/light_router_poc_20261016/README.md`.
 
+## 5 bis. Progreso P2 (16-10-2026)
+
+PoC posterior **5/6 escrituras canónicas correctas sobre copias desechables** con re-ejecución completa de IA y backlinks; Ana/Luis bloqueado sin cambios al faltar prueba «Ana»/«Ana López». 71 regresiones aprobadas. La revisión completa de cobertura Core aún NO existe como contrato productivo y el resultado NO se ha desplegado. Leer [informe P2](light-router-p2-results-20261016.md).
+
 ## 6. Referencias vivas
 
 - `docs/architecture/functional-roadmap.md` (seguimiento oficial y orden).

@@ -1,0 +1,481 @@
+{
+  "purpose": "P2 source→independent semantic review→existing Core Writer and Tasks",
+  "WARNING": "Experimental source-review gate; NOT production candidate_coverage",
+  "model": "gpt-5.6-luna",
+  "real_ai": true,
+  "provider_store": false,
+  "synthetic_embeddings": true,
+  "isolated_vault": true,
+  "results": [
+    {
+      "case": "maya_simple",
+      "source": "Ayer hablé con Maya.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Ayer hablé con Maya.",
+            "kind": "record",
+            "reviewed_text": "Ayer hablé con {{ref:0}}.",
+            "date": "2026-10-15",
+            "reference_names": [
+              "Maya"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-15",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-15",
+              "reason": null
+            },
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "938378b8-9395-4507-8bd9-3e3fbffd1ceb",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "Maya - 938378b8-9395-4507-8bd9-3e3fbffd1ceb.md",
+        "calendar/days/2026-10-15.md"
+      ],
+      "source_notes_count": 97,
+      "review_usage": {
+        "in": 613,
+        "out": 134
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-15.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-15:1",
+          "backlinks:Maya:1"
+        ],
+        "count": 2
+      },
+      "duration_s": 3.86
+    },
+    {
+      "case": "guillermo_control",
+      "source": "Hoy he conocido a Guillermo.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he conocido a Guillermo.",
+            "kind": "record",
+            "reviewed_text": "Hoy he conocido a {{ref:0}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Guillermo"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            },
+            {
+              "operation": "REFERENCE_BOUND",
+              "status": "succeeded",
+              "id": "4eee8c7c-7870-48e8-b2ec-db92011dfde9",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "calendar/days/2026-10-16.md"
+      ],
+      "source_notes_count": 97,
+      "review_usage": {
+        "in": 619,
+        "out": 129
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-16.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-16:1",
+          "backlinks:Guillermo:1"
+        ],
+        "count": 2
+      },
+      "duration_s": 3.02
+    },
+    {
+      "case": "maya_pronoun",
+      "source": "Ayer cené con Maya y hoy he vuelto a hablar con ella.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Ayer cené con Maya",
+            "kind": "record",
+            "reviewed_text": "El usuario cenó con {{ref:0}}.",
+            "date": "2026-10-15",
+            "reference_names": [
+              "Maya"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "hoy he vuelto a hablar con ella",
+            "kind": "record",
+            "reviewed_text": "El usuario volvió a hablar con {{ref:0}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Maya"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-15",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-15",
+              "reason": null
+            },
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "a86b9f9d-2df5-4592-94c7-5bc5c2d7f756",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            },
+            {
+              "operation": "REFERENCE_BOUND",
+              "status": "succeeded",
+              "id": "a86b9f9d-2df5-4592-94c7-5bc5c2d7f756",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "Maya - a86b9f9d-2df5-4592-94c7-5bc5c2d7f756.md",
+        "calendar/days/2026-10-15.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "source_notes_count": 97,
+      "review_usage": {
+        "in": 707,
+        "out": 232
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-15.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-15:1",
+          "day:2026-10-16:1",
+          "backlinks:Maya:2"
+        ],
+        "count": 3
+      },
+      "duration_s": 3.45
+    },
+    {
+      "case": "ana_luis",
+      "source": "Hoy he hablado con Ana y Luis. Ana se va a París mañana y Luis vuelve el domingo.",
+      "status": "failed",
+      "reason": "ValueError: UNPROVEN_PARTIAL_CANONICAL_IDENTITY: Ana",
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he hablado con Ana y Luis.",
+            "kind": "record",
+            "reviewed_text": "El usuario ha hablado con {{ref:0}} y {{ref:1}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Ana",
+              "Luis"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "Ana se va a París mañana",
+            "kind": "record",
+            "reviewed_text": "{{ref:0}} se va a París mañana.",
+            "date": "2026-10-17",
+            "reference_names": [
+              "Ana"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 2,
+            "source_quote": "Luis vuelve el domingo.",
+            "kind": "record",
+            "reviewed_text": "{{ref:0}} vuelve el domingo.",
+            "date": "2026-10-18",
+            "reference_names": [
+              "Luis"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [],
+      "note_changes": [],
+      "source_notes_count": 97,
+      "review_usage": {
+        "in": 800,
+        "out": 354
+      },
+      "duration_s": 3.77
+    },
+    {
+      "case": "maite_cross_app",
+      "source": "Hoy he conocido a Maite, mañana tengo que llamarla.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he conocido a Maite",
+            "kind": "record",
+            "reviewed_text": "Hoy he conocido a {{ref:0}}.",
+            "date": "2026-10-16",
+            "reference_names": [
+              "Maite"
+            ],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "mañana tengo que llamarla",
+            "kind": "task",
+            "reviewed_text": "Llamar a {{ref:0}}.",
+            "date": "2026-10-17",
+            "reference_names": [
+              "Maite"
+            ],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            },
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "ef08b691-3c44-4fd8-a188-49e063386ca3",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "type": "task",
+          "date": "2026-10-17",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "CREATED",
+              "status": "succeeded",
+              "id": "4bc286b4-b185-43f5-bc02-19c06ac57a38",
+              "reason": null
+            },
+            {
+              "operation": "REFERENCE_BOUND",
+              "status": "succeeded",
+              "id": "ef08b691-3c44-4fd8-a188-49e063386ca3",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "Llamar a Maite - 4bc286b4-b185-43f5-bc02-19c06ac57a38.md",
+        "Maite - ef08b691-3c44-4fd8-a188-49e063386ca3.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "source_notes_count": 97,
+      "review_usage": {
+        "in": 696,
+        "out": 214
+      },
+      "verified_facts": [
+        "Llamar a Maite - 4bc286b4-b185-43f5-bc02-19c06ac57a38.md",
+        "calendar/days/2026-10-16.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-16:1",
+          "task:4bc286b4-b185-43f5-bc02-19c06ac57a38:2026-10-17",
+          "backlinks:Maite:2"
+        ],
+        "count": 3
+      },
+      "duration_s": 3.33
+    },
+    {
+      "case": "two_dates",
+      "source": "Hoy he comprado pan y mañana compraré leche.",
+      "status": "completed",
+      "reason": null,
+      "review": {
+        "approved": true,
+        "complete": true,
+        "reason": null,
+        "facts": [
+          {
+            "ordinal": 0,
+            "source_quote": "Hoy he comprado pan",
+            "kind": "record",
+            "reviewed_text": "He comprado pan hoy.",
+            "date": "2026-10-16",
+            "reference_names": [],
+            "supported": true
+          },
+          {
+            "ordinal": 1,
+            "source_quote": "mañana compraré leche",
+            "kind": "record",
+            "reviewed_text": "Comprarė leche mañana.",
+            "date": "2026-10-17",
+            "reference_names": [],
+            "supported": true
+          }
+        ]
+      },
+      "writes": [
+        {
+          "type": "core_day",
+          "date": "2026-10-16",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-16",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "type": "core_day",
+          "date": "2026-10-17",
+          "status": "completed",
+          "reason": null,
+          "units": [
+            {
+              "operation": "UPDATED",
+              "status": "succeeded",
+              "id": "date:2026-10-17",
+              "reason": null
+            }
+          ]
+        }
+      ],
+      "note_changes": [
+        "calendar/days/2026-10-16.md",
+        "calendar/days/2026-10-17.md"
+      ],
+      "source_notes_count": 97,
+      "review_usage": {
+        "in": 656,
+        "out": 180
+      },
+      "verified_facts": [
+        "calendar/days/2026-10-16.md",
+        "calendar/days/2026-10-17.md"
+      ],
+      "verified_readback": {
+        "assertions": [
+          "day:2026-10-16:1",
+          "day:2026-10-17:1"
+        ],
+        "count": 2
+      },
+      "duration_s": 3.09
+    }
+  ],
+  "total_estimated_usd": 0.0023098,
+  "temporary_vaults_discarded": true
+}
