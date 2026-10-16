@@ -381,3 +381,67 @@ def test_runtime_subtask_create_is_a_typed_notes_mutation(tmp_path: Path) -> Non
         == result
     )
     assert refreshes == ["refresh"]
+
+
+def test_direct_mutation_preserves_receipt_when_index_refresh_fails(tmp_path: Path) -> None:
+    """Physical Markdown remains true even if a derived index becomes unavailable."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    repository = VaultRepository(vault)
+    create_entity(
+        repository,
+        SCHEMA,
+        path="parent.md",
+        entity_id="parent-partial",
+        metadata={"name": "Padre", "type": "task", "status": "pending"},
+        content="- Padre.\n",
+        actor="fixture",
+        now="2026-10-05T17:00:00+02:00",
+    )
+    context = ContextIndex(tmp_path / "context.sqlite3")
+    semantic = SemanticEntityIndex(tmp_path / "semantic.sqlite3")
+    context.rebuild(repository, SCHEMA, Embedder())
+    semantic.rebuild(repository, SCHEMA, Embedder())
+    refresh_attempts: list[bool] = []
+
+    def failing_refresh() -> None:
+        refresh_attempts.append(True)
+        raise RuntimeError("simulated index outage after physical creation")
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *args, **kwargs: None,
+        refresh_indexes=failing_refresh,
+        notes_service=NotesQueryService(repository, SCHEMA, context),
+        direct_notes_mutations=object(),
+        direct_task_mutations=TaskDirectMutationService(
+            repository,
+            SCHEMA,
+            None,
+            semantic_index=semantic,
+            embedder=Embedder(),
+            contextual_reasoner=NoReasoner(),
+            semantic_limit=5,
+        ),
+        notes_mutation_actor=lambda *_args: "runtime-test",
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+    )
+    parent = runtime.notes("detail", {"note_id": "parent-partial"})
+    payload = {
+        "parent_note_id": "parent-partial",
+        "title": "Subtask after index failure",
+        "expected_revision": parent["mutation"]["revision"],
+        "expected_source_hash": parent["mutation"]["source_hash"],
+        "request_id": "index-failure-replay",
+    }
+    first = runtime.notes("task_subtask_create", payload)
+    assert first["operation"] == "task_subtask_created"
+    assert first["partial"] == {"physical_write": True, "reason": "INDEX_REFRESH_UNAVAILABLE"}
+    paths_after_first_write = tuple(repository.list_markdown_paths())
+    assert any(
+        parse_note(repository.read_text(path)).metadata.get("id") == first["note_id"]
+        for path in paths_after_first_write
+    )
+    assert refresh_attempts == [True]
+    assert runtime.notes("task_subtask_create", payload) == first
+    assert tuple(repository.list_markdown_paths()) == paths_after_first_write
+    assert refresh_attempts == [True]
