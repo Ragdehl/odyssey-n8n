@@ -39,7 +39,7 @@ Referencias: `docs/architecture/p4-dev-latency-graph-20261017.md`, `docs/archite
 ## Bloque siguiente — escalabilidad y observabilidad (17-10-2026)
 
 ### Medición de 100/1000/5000 Notes sintéticas en Raspberry
-Script efímero reproducible: `/tmp/odyssey-index-scaling-20261017.py`; `/tmp/odyssey-index-scaling-20261017.log`. Se crean SOLO Markdown e índices temporales bajo `/tmp` con un embedder determinista sin modelo neural, para aislar filesystem, parseo y proyección SQLite. NO mide inferencia local real en 5000 notas ni hardware móvil.
+Script reproducible y versionado: `PYTHONPATH=. python benchmarks/indexing/probe_incremental_scale.py`; salida de control `/tmp/odyssey-index-scaling-tracked.log` (repetición 5000 Notes: context 0,643s, semantic 0,936s, semantic.Tasks 0,948s, 2,527s total). Se crean SOLO Markdown e índices temporales bajo `/tmp` con un embedder determinista sin modelo neural, para aislar filesystem, parseo y proyección SQLite. NO mide inferencia local real en 5000 notas ni hardware móvil.
 
 | Notes | build 3 índices inicial | refresh context 1 Note | refresh semantic 1 Note | refresh semantic.Tasks 1 Note | total incremental |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -59,3 +59,10 @@ No eliminar el doble barrido semántico a ciegas: actualmente es defensa ante mo
 - Instrumentación base desplegada DEV `c0cdcba` (script `odyssey-dev deploy` RC=0; check físico); E2E live nuevo `p4dev20261017-indextrace05`: COMPLETED, **22,1s cliente / 21,025s runtime**, 2 Core writes en una ruta, barrera inicial 0 ms, `index_refresh.schedule` no bloqueante. DEV/PROD HTTP 200.
 - **No se ha podido confirmar aún la modalidad incremental desde este E2E**: `journalctl --user -u odyssey-dev-runtime.service` devuelve `No journal files were found` en la Raspberry, aunque el servicio tiene `StandardOutput=journal` y stderr heredado. Las pruebas aisladas sí demostraron eventos correctos; no atribuir observación en producción al log inexistente.
 - Corrección siguiente (en rama): además de stderr, escribir los mismos registros *sin contenido privado* en `ODYSSEY_RUNTIME_ROOT/index-refresh-events.jsonl`, con permisos 0600, límite ~256 KiB y truncado al superar el límite; el log jamás se almacena en /data/odyssey PROD y no se escribe fuera de DEV+full source. Un fallo de disco o registro no interrumpe la mutación ni cambia el estado del índice. Tests de archivo, modo privado, rotación y silencio en PROD; nuevos E2E/log real y deploy pendientes.
+
+### Cierre del último deploy: comprobación real de modo incremental
+- `985aa0d` desplegado con `scripts/odyssey-dev deploy` RC=0; marcador físico `985aa0d92a8674bf82ffd7b51d250762cb701976`.
+- Nuevo E2E por n8n/IA/Core Writer con `p4dev20261017-indexpersist06`: **COMPLETED**, cliente 26,9 s, runtime 23,860 s; UNA ruta Core y DOS recibos físicos en Markdown, `index_barrier=0 ms`, `index_refresh.schedule=0 ms`. No significa que la indexación haya terminado antes de responder.
+- Archivo PRIVADO local `/data/odyssey-dev/runtime/index-refresh-events.jsonl`: **0600**, evento observado: `outcome=incremental`, `note_count=4`, `duration_ms=3229,1`; fases `context=2461,4 ms`, `semantic=42,9 ms`, `semantic.tasks=536,9 ms`. **NO full_rebuild** en esta muestra. DEV y PROD `/healthz` HTTP 200; PROD no modificado.
+- La medida de 3,23s REAL no contradice el benchmark de 0,267s anterior: batch 4 frente a 2, proyecciones diferentes y modelo neural real. Ambos muestran que el mecanismo es incremental en vectores, no O(1) en I/O y todavía carga CPU/RAM.
+- No afirmar que el ahorro de CPU sea universal: repetir con personas, tareas, cambios externos, pérdida de energía y bibliotecas grandes con modelo real; medir RSS durante background. La opción móvil debe eliminar la dependencia de FastEmbed de la escritura y de su hilo obligado, con indexación semántica perezosa fuera de UI y reconciliación persistente.
