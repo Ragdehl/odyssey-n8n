@@ -42,7 +42,7 @@ assert.equal(helpers.safeDetailStage(spoofedStage),undefined,
 assert.equal(safeFlow(flow)===undefined, false, 'Real n8n safeFlow rejected dependent execution');
 assert.equal(flowMatchesStages(flow,stages),true,'Actual n8n graph cannot correlate stages');
 assert.deepEqual(Array.from(flow.routes, r=>r.capability),['core','tasks']);
-assert.equal(flow.routes[0].depends_on,null);
+assert.equal(flow.routes[0].depends_on,undefined);
 assert.equal(flow.routes[1].depends_on,0);
 assert(stages.some(s=>s.name==='application.router'), 'The observed router boundary is absent');
 assert(stages.some(s=>s.route_index===0) && stages.some(s=>s.route_index===1));

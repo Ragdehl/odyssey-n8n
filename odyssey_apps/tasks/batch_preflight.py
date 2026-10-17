@@ -15,7 +15,11 @@ class TaskBatchPreflightError(ValueError):
     """This sequence violates a Tasks-owned lifecycle invariant."""
 
 
-def validate_task_batch_prewrite(operations: Sequence[TaskInterpretation]) -> None:
+def validate_task_batch_prewrite(
+    operations: Sequence[TaskInterpretation],
+    *,
+    session_linked_stops: frozenset[int] = frozenset(),
+) -> None:
     """At most one globally active new session until an intervening STOP.
 
     The domain allows only one active Work Session globally. Starting two
@@ -28,8 +32,20 @@ def validate_task_batch_prewrite(operations: Sequence[TaskInterpretation]) -> No
         not isinstance(item, TaskInterpretation) for item in operations
     ):
         raise TaskBatchPreflightError("Task batch interpretation is malformed")
+    if not isinstance(session_linked_stops, frozenset) or any(
+        not isinstance(index, int)
+        or isinstance(index, bool)
+        or index < 0
+        or index >= len(operations)
+        for index in session_linked_stops
+    ):
+        raise TaskBatchPreflightError("Session dependency indices malformed")
     new_session_active = False
-    for operation in operations:
+    for ordinal, operation in enumerate(operations):
+        if ordinal in session_linked_stops and (
+            operation.operation is not TaskOperation.STOP_WORK_SESSION or not new_session_active
+        ):
+            raise TaskBatchPreflightError("Claimed session link does not consume new START")
         if operation.operation is TaskOperation.START_WORK_SESSION:
             if new_session_active:
                 raise TaskBatchPreflightError(
@@ -37,11 +53,7 @@ def validate_task_batch_prewrite(operations: Sequence[TaskInterpretation]) -> No
                 )
             new_session_active = True
         elif operation.operation is TaskOperation.STOP_WORK_SESSION:
-            if new_session_active:
-                # This STOP depends on the new session created by an earlier
-                # operation in this delivery. The current DAG only carries
-                # Core->Task Note links, not an E2/E3 session-instance proof.
-                # Never pretend an active-session lookup is a proven edge.
+            if new_session_active and ordinal not in session_linked_stops:
                 raise TaskBatchPreflightError(
                     "Stop after same-message start requires a typed session dependency"
                 )

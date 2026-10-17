@@ -481,7 +481,12 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
       lane.setAttribute("aria-label", `Camino ${index + 1}: ${route.capability}`);
       const fragment = plainCard(doc, `${index + 1} · ${route.capability}`, route.text, "fragment");
       if (route.depends_on !== undefined) {
-        fragment.append(detailLine(doc, `Depende del camino ${route.depends_on + 1}`, "flow-dependency"));
+        const ancestors = Array.isArray(route.dependency_indices)
+          ? route.dependency_indices : [route.depends_on];
+        const description = ancestors.length > 1
+          ? `Depende de los caminos ${ancestors.map(index => index + 1).join(", ")}`
+          : `Depende del camino ${ancestors[0] + 1}`;
+        fragment.append(detailLine(doc, description, "flow-dependency"));
         if (route.reason) fragment.append(detailLine(doc, route.reason, "flow-error"));
       }
       lane.append(fragment);

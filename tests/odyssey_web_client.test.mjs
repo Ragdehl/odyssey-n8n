@@ -976,3 +976,34 @@ test("only explicit server confirmation lets a browser skip its own assistant ap
   assert.throws(()=>validateProductResponse({request_id:"chat-1",status:"completed",
     kind:"acknowledgement",message:"Guardado.",conversation_persisted:"true"}),ProductRequestError);
 });
+
+test("browser preserves every reviewed parent of a multi-target dependency", () => {
+  const flow = {
+    version: 1, input: "Core A. Core B. Start session. Stop same session.",
+    parallel_preparation: false,
+    routes: [
+      {capability: "core", text: "Core A.", status: "completed", stage_count: 1, temporal: []},
+      {capability: "core", text: "Core B.", status: "completed", stage_count: 1, temporal: []},
+      {capability: "tasks", text: "Start session.", status: "completed", stage_count: 1,
+        temporal: [], depends_on: 0, reason: null},
+      {capability: "tasks", text: "Stop same session.", status: "completed", stage_count: 1,
+        temporal: [], depends_on: 2, reason: null, dependency_indices: [0, 2]},
+    ],
+  };
+  const stages = [{name: "application.router"}, ...Array.from({length: 4}, () => ({name: "planner"}))];
+  const validated = validateExecutionFlow(flow, stages);
+  assert.deepEqual(validated.routes[3].dependency_indices, [0, 2]);
+  assert.equal(validated.routes[3].depends_on, 2);
+  assert.equal(validated.routes[0].depends_on, undefined);
+  for (const indices of [[0, 0, 2], [0, 3], [0, -1], [0, true], [0, 1], [], [2]]) {
+    const tampered = structuredClone(flow);
+    tampered.routes[3].dependency_indices = indices;
+    assert.throws(() => validateExecutionFlow(tampered, stages), ProductRequestError);
+  }
+  const missing = structuredClone(flow);
+  missing.routes[3].depends_on = null;
+  assert.throws(() => validateExecutionFlow(missing, stages), ProductRequestError);
+  const invalid = structuredClone(flow);
+  invalid.routes[2].dependency_indices = [0, 0];
+  assert.throws(() => validateExecutionFlow(invalid, stages), ProductRequestError);
+});

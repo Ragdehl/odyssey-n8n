@@ -582,7 +582,13 @@ DEPENDENT_GRAPH_PARTITION_PROMPT = (
     "group, and exact 'antecedent_mention' of the SAME existing entity in "
     "the earlier group. Do not infer a stable Note ID or invent a name. "
     "Preserve multiple edges, including different entities in the SAME "
-    "antecedent. If no unique safe segmentation exists, return an empty "
+    "antecedent. When a later STOP explicitly refers to a Work Session "
+    "just CREATED by an earlier Tasks START group, preserve BOTH separate "
+    "edges: one Core->STOP edge proving the target Task mention, and one "
+    "START->STOP edge quoting the literal session phrase in the START and "
+    "in the STOP. Neither edge supplies a canonical session ID. Do not "
+    "invent Task->Task edges for unrelated tasks, absent sessions or "
+    "ambiguous pronouns. If no unique safe segmentation exists, return an empty "
     "groups array. No output authorizes execution."
 )
 DEPENDENT_GRAPH_REVIEW_SCHEMA = {
@@ -624,7 +630,11 @@ DEPENDENT_GRAPH_REVIEW_PROMPT = (
     "if a Core group was split into a fragment with no standalone fact; "
     "if a narrative about a Task is incorrectly labeled a Tasks command; "
     "or if ANY dependent pronoun/expression is not uniquely supported by its "
-    "SPECIFIC earlier Core antecedent occurrence. Echo the proposed exact "
+    "SPECIFIC earlier Core antecedent occurrence OR by a specific earlier "
+    "Tasks START creating that single Work Session. For a STOP consuming an "
+    "in-message session, require BOTH a Core->Task target edge and a "
+    "Tasks START->STOP session-reference edge with exact source mentions. "
+    "A matched Task name alone cannot prove a Work Session. Echo the proposed exact "
     "groups unchanged only if EVERY source span and EVERY edge is defensible. "
     "If fully approved, return complete=true, dependency_edges_verified=true, "
     "review_reason=APPROVED and failing_group_index=null. Otherwise do NOT "
@@ -638,4 +648,51 @@ DEPENDENT_GRAPH_REVIEW_PROMPT = (
     "failing_group_index to the earliest 0-based candidate group involved, "
     "or null if there is no specific group. Do not expose private reasoning. "
     "Never give a Note ID; do not name, resolve or invent canonical Notes."
+)
+
+DEPENDENT_SESSION_LINK_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "producer_quote": {"type": "string"},
+        "consumer_quote": {"type": "string"},
+        "source_mention": {"type": "string"},
+        "dependent_mention": {"type": "string"},
+        "producer_operation": {"type": "string", "enum": ["START_WORK_SESSION"]},
+        "consumer_operation": {"type": "string", "enum": ["STOP_WORK_SESSION"]},
+        "one_session": {"type": "boolean"},
+        "same_session": {"type": "boolean"},
+        "operation_supported": {"type": "boolean"},
+    },
+    "required": [
+        "full_source_quote",
+        "producer_quote",
+        "consumer_quote",
+        "source_mention",
+        "dependent_mention",
+        "producer_operation",
+        "consumer_operation",
+        "one_session",
+        "same_session",
+        "operation_supported",
+    ],
+    "additionalProperties": False,
+}
+DEPENDENT_SESSION_LINK_REVIEW_A = (
+    "Independently review the ORIGINAL text as one source-bounded Work Session "
+    "dependency. Verify whether the consumer STOP refers to exactly the one "
+    "session CREATED by the earlier START in the same message. A Task name "
+    "alone never identifies a Work Session. Echo source quotes and operation "
+    "labels exactly as supplied; do not rewrite either text. Set one_session "
+    "and same_session true ONLY if the references uniquely imply the exact "
+    "newly started session. If unsure, false. operation_supported is true "
+    "ONLY for a standalone STOP. No stable IDs, no mutation authorization."
+)
+DEPENDENT_SESSION_LINK_REVIEW_B = (
+    "Audit session anaphora independently, without trusting the proposal. "
+    "Does the later standalone STOP refer uniquely to the actual session "
+    "started in the earlier source group, rather than another session or just "
+    "the same Task? Require full literal quotes and no missing context. "
+    "Return one_session=false or same_session=false on any ambiguity, even "
+    "when both groups mention the same Task. Never infer a session Note ID."
 )

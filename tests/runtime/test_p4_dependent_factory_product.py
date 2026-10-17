@@ -251,6 +251,7 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     assert callable(executor.refresh_between_independent_scopes)
     assert callable(executor.operation_manifest_begin)
     assert callable(executor.operation_manifest_observe)
+    assert callable(executor.dependent_session_delegate)
     clock_for_delivery = [datetime.fromisoformat(CLOCK)]
     executor.now = lambda: clock_for_delivery[0]
     executor.client = RecordedClient(

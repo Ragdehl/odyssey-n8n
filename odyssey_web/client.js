@@ -395,7 +395,7 @@ export function validateExecutionFlow(value, stages) {
   let totalStages = 0;
   const routes = value.routes.map((route, index) => {
     if (!route || typeof route !== "object" || Array.isArray(route) ||
-        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes", "steps", "depends_on", "reason"].includes(key)) ||
+        Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes", "steps", "depends_on", "reason", "dependency_indices"].includes(key)) ||
         typeof route.capability !== "string" || !route.capability || route.capability.length > 40 ||
         typeof route.text !== "string" || !route.text || route.text.length > 4096 ||
         !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 16 ||
@@ -408,6 +408,16 @@ export function validateExecutionFlow(value, stages) {
         !Number.isInteger(route.depends_on) || route.depends_on < 0 || route.depends_on >= index ||
         (route.reason !== null && (typeof route.reason !== "string" || !route.reason.trim() || route.reason.length > 120)))) {
       throw new ProductRequestError("Odyssey returned invalid route dependency.");
+    }
+    const hasMultipleDependencies = Object.hasOwn(route, "dependency_indices");
+    if (hasMultipleDependencies && (
+      !hasDependency || !Array.isArray(route.dependency_indices) ||
+      route.dependency_indices.length < 2 || route.dependency_indices.length > 8 ||
+      !route.dependency_indices.every(value =>
+        Number.isSafeInteger(value) && value >= 0 && value < index) ||
+      new Set(route.dependency_indices).size !== route.dependency_indices.length ||
+      !route.dependency_indices.includes(route.depends_on))) {
+      throw new ProductRequestError("Odyssey returned invalid multi-route dependency.");
     }
     const temporal = route.temporal.map(item => {
       if (!item || typeof item !== "object" || Array.isArray(item) ||
@@ -461,7 +471,8 @@ export function validateExecutionFlow(value, stages) {
     totalStages += route.stage_count;
     return {capability: route.capability, text: route.text, stage_count: route.stage_count,
       status: route.status, temporal, plan, entities, writes, ...(steps ? {steps} : {}),
-      ...(hasDependency ? {depends_on: route.depends_on, reason: route.reason} : {})};
+      ...(hasDependency ? {depends_on: route.depends_on, reason: route.reason} : {}),
+      ...(hasMultipleDependencies ? {dependency_indices: [...route.dependency_indices]} : {})};
   });
   // v6 exposes the ACTUAL proposal model instead of an adapter's 0ms
   // "application.router" stage. Only known prewrite, source-bound review

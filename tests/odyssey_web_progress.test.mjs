@@ -235,3 +235,24 @@ test("polling ignores mismatched deliveries and stale sequence but accepts futur
   stop();
   assert.deepEqual(queued, ["events.prepare.started", "events.prepare.ready"]);
 });
+
+test("execution graph displays both verified Core and Session predecessor routes", () => {
+  const graph = renderExecutionFlow(fakeDocument, {
+    operational: {total_duration_ms: 3, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 0, provider_calls: []},
+      ...Array.from({length: 4}, () =>
+        ({name: "planner", outcome: "completed", duration_ms: 1, provider_calls: []})),
+    ]},
+    flow: {version: 1, input: "Core A. Core B. Start. Stop.", parallel_preparation: false,
+      routes: [
+        {capability: "core", text: "Core A.", stage_count: 1, status: "completed", temporal: []},
+        {capability: "core", text: "Core B.", stage_count: 1, status: "completed", temporal: []},
+        {capability: "tasks", text: "Start.", stage_count: 1, status: "completed", temporal: [],
+          depends_on: 0, reason: null},
+        {capability: "tasks", text: "Stop.", stage_count: 1, status: "completed", temporal: [],
+          depends_on: 2, reason: null, dependency_indices: [0, 2]},
+      ]},
+  });
+  assert.match(graph.textContent, /Depende del camino 1/);
+  assert.match(graph.textContent, /Depende de los caminos 1, 3/);
+});

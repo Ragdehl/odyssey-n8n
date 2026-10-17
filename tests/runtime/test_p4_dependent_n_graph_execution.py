@@ -289,7 +289,11 @@ def test_n_dependent_three_groups_have_real_core_writers_session_manifest_and_re
         "core",
         "tasks",
     ]
-    assert [entry["depends_on"] for entry in result["execution_flow"]["routes"]] == [None, None, 0]
+    assert [entry.get("depends_on") for entry in result["execution_flow"]["routes"]] == [
+        None,
+        None,
+        0,
+    ]
     assert len(domain.list_for_task("atlas-p4-dependent-task")) == 1
     assert len(domain.list_for_task("second-task-id")) == 0
     assert domain.list_for_task("atlas-p4-dependent-task")[0].ended_at is None
@@ -528,3 +532,250 @@ def test_n_graph_review_reason_is_visible_but_never_allows_a_write(tmp_path, rea
     replay = runtime.execute_product(SOURCE_THREE, locator, "main", actor)
     assert replay["delivery_replayed"] is True
     assert replay["clarification_code"] == response["clarification_code"]
+
+
+def _session_link_rows():
+    """Explicitly reviewed Task→WorkSession edge alongside the Core→Task edge."""
+    rows = _rows()
+    rows[1]["groups"][3]["dependencies"].append(
+        {
+            "predecessor_index": 2,
+            "antecedent_mention": "una sesión de trabajo",
+            "mention": "la sesión",
+        }
+    )
+    rows[2]["groups"] = deepcopy(rows[1]["groups"])
+    review = {
+        "full_source_quote": SOURCE,
+        "producer_quote": FIRST_TASK,
+        "consumer_quote": SECOND_TASK,
+        "source_mention": "una sesión de trabajo",
+        "dependent_mention": "la sesión",
+        "producer_operation": "START_WORK_SESSION",
+        "consumer_operation": "STOP_WORK_SESSION",
+        "one_session": True,
+        "same_session": True,
+        "operation_supported": True,
+    }
+    return [*rows, deepcopy(review), deepcopy(review)]
+
+
+def _linked_session_runtime(tmp_path):
+    from odyssey_apps.tasks import prove_created_session
+
+    repo, actor, executor, runtime, calls, domain, store = _physical_runtime(tmp_path)
+    executor.client = RecordedClient(_session_link_rows())
+
+    def execute_proven_step(text, locator, who, task, temporal, target, instant, prior_session):
+        assert temporal is None
+        task_id = target.require_current(repo, SCHEMA)
+        if task.operation is TaskOperation.START_WORK_SESSION:
+            assert prior_session is None
+            calls.append("typed-start")
+            revision, digest = domain.task_mutation_tokens(task_id)
+            mutation = domain.start(
+                task_id=task_id,
+                started_at=instant.isoformat(),
+                request_id=locator,
+                actor=who.stable_user_id,
+                now=instant.isoformat(),
+                expected_task_revision=revision,
+                expected_task_source_hash=digest,
+            )
+            evidence = prove_created_session(
+                result=mutation,
+                expected_task_id=task_id,
+                creator_delivery_step=locator,
+                service=domain,
+            )
+        else:
+            assert task.operation is TaskOperation.STOP_WORK_SESSION
+            assert prior_session is not None and prior_session.task_id == task_id
+            calls.append("typed-stop")
+            revision, digest = prior_session.require_current(domain)
+            mutation = domain.stop(
+                session_id=prior_session.session_id,
+                ended_at=instant.isoformat(),
+                expected_revision=revision,
+                expected_source_hash=digest,
+                request_id=locator,
+                actor=who.stable_user_id,
+                now=instant.isoformat(),
+            )
+            evidence = None
+        return (
+            ApplicationResult(locator, ApplicationStatus.COMPLETED, (), (mutation.session.id,)),
+            evidence,
+        )
+
+    executor.dependent_session_delegate = execute_proven_step
+    return repo, actor, executor, runtime, calls, domain, store
+
+
+def test_n_graph_four_groups_start_stop_same_canonical_session_with_e3_replay(tmp_path):
+    repo, actor, executor, runtime, calls, domain, store = _linked_session_runtime(tmp_path)
+    delivery = "p4-n4-typed-session-edge"
+    result = runtime.execute_product(SOURCE, delivery, "main", actor)
+    assert result["status"] == "completed", result
+    assert [entry.get("depends_on") for entry in result["execution_flow"]["routes"]] == [
+        None,
+        None,
+        0,
+        2,
+    ]
+    assert result["execution_flow"]["routes"][3]["dependency_indices"] == [0, 2]
+    # Pass the REAL product result through the deployed n8n source's
+    # sanitizer and the actual browser graph validator (no network/deploy).
+    import json
+    import subprocess
+    from pathlib import Path
+
+    bridge = subprocess.run(
+        ["node", str(Path(__file__).resolve().parents[1] / "p4_n4_n8n_flow_contract.mjs")],
+        input=json.dumps(result, ensure_ascii=False),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert bridge.returncode == 0, bridge.stderr or bridge.stdout
+    assert json.loads(bridge.stdout)["verified_dependencies"] == 2
+    assert not any("depends_on" in part for part in result["execution_flow"]["routes"][:2])
+    assert calls == ["prepare-a", "prepare-b", "core", "core2", "typed-start", "typed-stop"]
+    sessions = domain.list_for_task("atlas-p4-dependent-task")
+    assert len(sessions) == 1
+    assert sessions[0].id == "first-n-session"
+    assert sessions[0].ended_at == sessions[0].started_at
+    manifest = store.inspect_operation_manifest(delivery, store.fingerprint(SOURCE, "main"))
+    assert manifest["planned_operations"] == 4
+    assert manifest["observed_operations"] == 4
+    assert manifest["recovery_authorized"] is False
+    before = _snapshot(repo)
+    replay = runtime.execute_product(SOURCE, delivery, "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert _snapshot(repo) == before
+    assert executor.client.rows == []
+    assert calls == ["prepare-a", "prepare-b", "core", "core2", "typed-start", "typed-stop"]
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "no_session_review",
+        "review_wrong_parent",
+        "review_ambiguous",
+        "review_wrong_mention",
+        "review_wrong_scope",
+        "no_typed_adapter",
+    ],
+)
+def test_n_graph_session_link_rejected_before_first_core_write(tmp_path, tamper):
+    repo, actor, executor, runtime, calls, domain, store = _linked_session_runtime(tmp_path)
+    rows = _session_link_rows()
+    if tamper == "no_session_review":
+        rows[10]["same_session"] = False
+    elif tamper == "review_wrong_parent":
+        rows[1]["groups"][3]["dependencies"][1]["predecessor_index"] = 1
+        rows[2]["groups"] = deepcopy(rows[1]["groups"])
+    elif tamper == "review_ambiguous":
+        rows[9]["one_session"] = False
+    elif tamper == "review_wrong_mention":
+        rows[9]["dependent_mention"] = "otras sesiones"
+    elif tamper == "review_wrong_scope":
+        rows[10]["consumer_quote"] = "otro texto"
+    elif tamper == "no_typed_adapter":
+        executor.dependent_session_delegate = None
+        rows = rows[:3]
+    executor.client = RecordedClient(rows)
+    before = _snapshot(repo)
+    delivery = f"p4-n4-typed-veto-{tamper}"
+    outcome = runtime.execute_product(SOURCE, delivery, "main", actor)
+    assert outcome["status"] == "needs_attention", outcome
+    assert _snapshot(repo) == before
+    assert not domain.list_for_task("atlas-p4-dependent-task")
+    assert "core" not in calls
+    assert not store.inspect_operation_manifest(delivery, store.fingerprint(SOURCE, "main"))[
+        "manifest_present"
+    ]
+
+
+def test_n_graph_start_physical_then_stale_session_stops_with_partial(tmp_path):
+    from dataclasses import replace
+
+    from odyssey_apps.tasks import CanonicalSessionEvidenceError
+    from odyssey_core.notes import parse_note, serialize_note
+
+    repo, actor, executor, runtime, calls, domain, store = _linked_session_runtime(tmp_path)
+    original = executor.dependent_session_delegate
+    assert original is not None
+
+    def mutate_session_between_steps(*args):
+        if args[3].operation is TaskOperation.STOP_WORK_SESSION:
+            # Non-cooperating actor changes same physical session between
+            # START receipt and dependent STOP. No second writer is allowed.
+            for path in repo.list_markdown_paths():
+                note = parse_note(repo.read_text(path))
+                if note.metadata.get("id") == "first-n-session":
+                    repo.replace_text(
+                        path,
+                        serialize_note(
+                            replace(note, metadata={**note.metadata, "name": "Edited outside"})
+                        ),
+                    )
+                    break
+            try:
+                args[7].require_current(domain)
+            except CanonicalSessionEvidenceError:
+                return (
+                    ApplicationResult(
+                        args[1],
+                        ApplicationStatus.NEEDS_ATTENTION,
+                        (),
+                        (),
+                        planning_error="SESSION_DEPENDENCY_STALE",
+                    ),
+                    None,
+                )
+            raise AssertionError("Tampered session proof should be stale")
+        return original(*args)
+
+    executor.dependent_session_delegate = mutate_session_between_steps
+    delivery = "p4-n4-session-stale"
+    result = runtime.execute_product(SOURCE, delivery, "main", actor)
+    assert result["status"] == "partial", result
+    assert len(domain.list_for_task("atlas-p4-dependent-task")) == 1
+    assert domain.list_for_task("atlas-p4-dependent-task")[0].ended_at is None
+    manifest = store.inspect_operation_manifest(delivery, store.fingerprint(SOURCE, "main"))
+    assert manifest["planned_operations"] == 4
+    assert manifest["observed_operations"] == 4
+    before = _snapshot(repo)
+    assert runtime.execute_product(SOURCE, delivery, "main", actor)["delivery_replayed"] is True
+    assert _snapshot(repo) == before
+
+
+def test_n_graph_crash_after_physical_stop_leaves_uncertain_e3_no_replay(tmp_path):
+    from odyssey_runtime.delivery_results import DeliveryResultError
+
+    repo, actor, executor, runtime, calls, domain, store = _linked_session_runtime(tmp_path)
+    original = executor.dependent_session_delegate
+    assert original is not None
+
+    def crash_after_stop(*args):
+        outcome = original(*args)
+        if args[3].operation is TaskOperation.STOP_WORK_SESSION:
+            raise RuntimeError("crash after physical Work Session STOP")
+        return outcome
+
+    executor.dependent_session_delegate = crash_after_stop
+    delivery = "p4-n4-crash-after-stop"
+    with pytest.raises(RuntimeError, match="crash after physical"):
+        runtime.execute_product(SOURCE, delivery, "main", actor)
+    sessions = domain.list_for_task("atlas-p4-dependent-task")
+    assert len(sessions) == 1 and sessions[0].ended_at is not None
+    report = store.inspect_operation_manifest(delivery, store.fingerprint(SOURCE, "main"))
+    assert report["observed_operations"] == 3
+    assert report["claim_state"] == "unresolved_attempt"
+    before = _snapshot(repo)
+    with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
+        runtime.execute_product(SOURCE, delivery, "main", actor)
+    assert _snapshot(repo) == before

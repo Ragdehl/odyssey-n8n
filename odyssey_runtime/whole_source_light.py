@@ -26,7 +26,9 @@ from zoneinfo import ZoneInfo
 from openai import OpenAIError
 
 from odyssey_apps.tasks import (
+    CanonicalSessionEvidence,
     PreparedDependentSubtask,
+    SessionDependencyError,
     TaskBatchPreflightError,
     TaskDependentTarget,
     TaskDependentTargetError,
@@ -36,6 +38,7 @@ from odyssey_apps.tasks import (
     prove_dependent_task_target,
     validate_task_batch_prewrite,
     verify_dependent_task_semantics,
+    verify_session_dependency,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
 from odyssey_core.context import ContextIndexError
@@ -91,6 +94,9 @@ from odyssey_runtime.whole_source_model_contract import (
     DEPENDENT_GRAPH_PARTITION_SCHEMA,
     DEPENDENT_GRAPH_REVIEW_PROMPT,
     DEPENDENT_GRAPH_REVIEW_SCHEMA,
+    DEPENDENT_SESSION_LINK_REVIEW_A,
+    DEPENDENT_SESSION_LINK_REVIEW_B,
+    DEPENDENT_SESSION_LINK_REVIEW_SCHEMA,
     DEPENDENT_TASK_PARTITION_PROMPT,
     DEPENDENT_TASK_PARTITION_SCHEMA,
     DEPENDENT_TASK_TARGET_REVIEW_A,
@@ -179,6 +185,22 @@ class WholeSourceLightExecutor:
     ) = None
     dependent_subtask_prepare: (
         Callable[[str, TaskInterpretation, datetime], PreparedDependentSubtask] | None
+    ) = None
+    dependent_session_delegate: (
+        Callable[
+            [
+                str,
+                str,
+                AuthenticatedActorContext,
+                TaskInterpretation,
+                TemporalInterpretation | None,
+                TaskDependentTarget,
+                datetime,
+                CanonicalSessionEvidence | None,
+            ],
+            tuple[ApplicationResult, CanonicalSessionEvidence | None],
+        ]
+        | None
     ) = None
     dependent_task_delegate: (
         Callable[
@@ -911,7 +933,7 @@ class WholeSourceLightExecutor:
                         # persisted by the preceding Core fact, NOT an independent
                         # interpretation group. E2 ledger and UI can draw this
                         # actual dependency without guessing from source prose.
-                        "depends_on": 0 if cap == "tasks" else None,
+                        **({"depends_on": 0, "reason": None} if cap == "tasks" else {}),
                         "status": receipt.status.value,
                         "stage_count": len(receipt.operational.stages),
                         "temporal": [],
@@ -980,6 +1002,20 @@ class WholeSourceLightExecutor:
             except DependentGroupGraphError:
                 return self._abstain(delivery, "DEPENDENT_N_GRAPH_SOURCE_UNVERIFIED")
             return self._abstain(delivery, f"DEPENDENT_N_GRAPH_REVIEW_{reason}")
+
+        def _split_task_edges(part):
+            core = tuple(
+                dep
+                for dep in part.dependencies
+                if graph.groups[dep.predecessor_index].capability == "core"
+            )
+            sessions = tuple(
+                dep
+                for dep in part.dependencies
+                if graph.groups[dep.predecessor_index].capability == "tasks"
+            )
+            return core, sessions
+
         if (
             len(graph.groups) != len(route_scopes)
             or not any(group.dependencies for group in graph.groups)
@@ -995,19 +1031,27 @@ class WholeSourceLightExecutor:
                 or (
                     part.capability == "tasks"
                     and (
-                        len(part.dependencies) != 1
-                        or graph.groups[part.dependencies[0].predecessor_index].capability != "core"
+                        len(_split_task_edges(part)[0]) != 1
+                        or len(_split_task_edges(part)[1]) > 1
+                        or len(part.dependencies) not in (1, 2)
                     )
                 )
                 for part in graph.groups
             )
         ):
             return self._abstain(delivery, "DEPENDENT_N_GRAPH_UNREPRESENTABLE")
+        # A Task->Task edge can only mean one subsequent consumer of a
+        # same-delivery Work Session START, on the very same Core Task.
+        if any(_split_task_edges(part)[1] for part in graph.groups):
+            if self.dependent_session_delegate is None:
+                return self._abstain(delivery, "DEPENDENT_N_SESSION_ADAPTER_UNAVAILABLE")
+
         locators = [f"{delivery}-dependent-n-{part.ordinal}" for part in graph.groups]
         if any(len(locator) > 110 for locator in locators):
             return self._abstain(delivery)
         # Preflight every downstream app operation, including its two semantic
         # target attestations, before any earlier Core result is persisted.
+        reviewed_session_links: dict[int, int] = {}
         prepared: dict[
             int,
             tuple[
@@ -1020,7 +1064,8 @@ class WholeSourceLightExecutor:
             if part.capability != "tasks":
                 continue
             segment = part.source.strip()
-            dependency = part.dependencies[0]
+            core_dependencies, session_dependencies = _split_task_edges(part)
+            dependency = core_dependencies[0]
             try:
                 interpretation, temporal = self.dependent_task_prepare(segment, delivery_instant)
                 if (
@@ -1092,8 +1137,68 @@ class WholeSourceLightExecutor:
             except TaskDependentTargetError:
                 return self._abstain(delivery, "DEPENDENT_N_TASK_SEMANTICS_UNVERIFIED")
             prepared[part.ordinal] = (interpretation, temporal, prepared_subtask)
+            if session_dependencies:
+                session_edge = session_dependencies[0]
+                producer_index = session_edge.predecessor_index
+                prior = prepared.get(producer_index)
+                prior_core, prior_session = _split_task_edges(graph.groups[producer_index])
+                if (
+                    prior is None
+                    or prior[0].operation is not TaskOperation.START_WORK_SESSION
+                    or interpretation.operation is not TaskOperation.STOP_WORK_SESSION
+                    or len(prior_core) != 1
+                    or prior_session
+                    or prior_core[0].predecessor_index != dependency.predecessor_index
+                    or prior_core[0].antecedent_mention != dependency.antecedent_mention
+                ):
+                    return self._abstain(delivery, "DEPENDENT_N_SESSION_SOURCE_UNSUPPORTED")
+                session_payload = {
+                    "full_source": source,
+                    "producer_source": graph.groups[producer_index].source,
+                    "consumer_source": part.source,
+                    "source_mention": session_edge.antecedent_mention,
+                    "dependent_mention": session_edge.mention,
+                    "producer_operation": prior[0].operation.value,
+                    "consumer_operation": interpretation.operation.value,
+                }
+                session_a = self._ask(
+                    PLANNER_MODEL,
+                    DEPENDENT_SESSION_LINK_REVIEW_A,
+                    session_payload,
+                    DEPENDENT_SESSION_LINK_REVIEW_SCHEMA,
+                    "odyssey_dependent_session_review_a_v1",
+                )
+                session_b = self._ask(
+                    ROUTER_MODEL,
+                    DEPENDENT_SESSION_LINK_REVIEW_B,
+                    session_payload,
+                    DEPENDENT_SESSION_LINK_REVIEW_SCHEMA,
+                    "odyssey_dependent_session_review_b_v1",
+                )
+                try:
+                    verify_session_dependency(
+                        full_source=source,
+                        producer_source=graph.groups[producer_index].source,
+                        consumer_source=part.source,
+                        source_mention=session_edge.antecedent_mention,
+                        dependent_mention=session_edge.mention,
+                        producer_index=producer_index,
+                        consumer_index=part.ordinal,
+                        producer=prior[0],
+                        consumer=interpretation,
+                        reviews=(session_a, session_b),
+                    )
+                except SessionDependencyError:
+                    return self._abstain(delivery, "DEPENDENT_N_SESSION_SEMANTICS_UNVERIFIED")
+                reviewed_session_links[part.ordinal] = producer_index
         try:
-            validate_task_batch_prewrite(tuple(prepared[index][0] for index in sorted(prepared)))
+            ordered_task_indices = tuple(sorted(prepared))
+            validate_task_batch_prewrite(
+                tuple(prepared[index][0] for index in ordered_task_indices),
+                session_linked_stops=frozenset(
+                    ordered_task_indices.index(index) for index in reviewed_session_links
+                ),
+            )
         except TaskBatchPreflightError:
             return self._abstain(delivery, "DEPENDENT_N_TASK_BATCH_INCOMPATIBLE")
         if self.operation_manifest_begin is not None:
@@ -1115,6 +1220,8 @@ class WholeSourceLightExecutor:
             self.progress("action.write.started", {})
         outcomes: list[ApplicationResult] = []
         predecessors: dict[int, ApplicationResult] = {}
+        session_proofs: dict[int, CanonicalSessionEvidence] = {}
+        session_producers = frozenset(reviewed_session_links.values())
         pending_index_ids: list[str] = []
         for part, locator in zip(graph.groups, locators, strict=True):
             if part.capability == "core" and pending_index_ids:
@@ -1140,10 +1247,21 @@ class WholeSourceLightExecutor:
                     part.source.strip(), locator, actor, delivery_instant
                 )
             else:
-                dependency = part.dependencies[0]
+                core_dependencies, session_dependencies = _split_task_edges(part)
+                dependency = core_dependencies[0]
                 try:
+                    # The Core verifier only handles Core-authored note links,
+                    # never interpret a Tasks-produced session as a Core link.
+                    core_only_group = replace(part, dependencies=core_dependencies)
+                    core_only_graph = replace(
+                        graph,
+                        groups=tuple(
+                            core_only_group if item.ordinal == part.ordinal else item
+                            for item in graph.groups
+                        ),
+                    )
                     handoff = prove_canonical_group_handoff(
-                        graph=graph,
+                        graph=core_only_graph,
                         consumer_index=part.ordinal,
                         predecessors=predecessors,
                         repository=self.repository,
@@ -1174,15 +1292,54 @@ class WholeSourceLightExecutor:
                 else:
                     if self.progress is not None:
                         self.progress("action.delegate.started", {})
-                    outcome = self.dependent_task_delegate(
-                        part.source.strip(),
-                        locator,
-                        actor,
-                        task,
-                        temporal,
-                        target,
-                        delivery_instant,
-                    )
+                    if part.ordinal in reviewed_session_links:
+                        prior_proof = session_proofs.get(reviewed_session_links[part.ordinal])
+                        if prior_proof is None or prior_proof.task_id != target.require_current(
+                            self.repository, self.schema
+                        ):
+                            outcome = self._abstain(
+                                locator, "DEPENDENT_N_SESSION_RECEIPT_UNAVAILABLE"
+                            )
+                        else:
+                            assert self.dependent_session_delegate is not None
+                            outcome, _ = self.dependent_session_delegate(
+                                part.source.strip(),
+                                locator,
+                                actor,
+                                task,
+                                temporal,
+                                target,
+                                delivery_instant,
+                                prior_proof,
+                            )
+                    elif part.ordinal in session_producers:
+                        assert self.dependent_session_delegate is not None
+                        outcome, new_proof = self.dependent_session_delegate(
+                            part.source.strip(),
+                            locator,
+                            actor,
+                            task,
+                            temporal,
+                            target,
+                            delivery_instant,
+                            None,
+                        )
+                        if outcome.status is ApplicationStatus.COMPLETED:
+                            if not isinstance(new_proof, CanonicalSessionEvidence):
+                                raise WholeSourceLightError(
+                                    "A completed START is missing physical session evidence"
+                                )
+                            session_proofs[part.ordinal] = new_proof
+                    else:
+                        outcome = self.dependent_task_delegate(
+                            part.source.strip(),
+                            locator,
+                            actor,
+                            task,
+                            temporal,
+                            target,
+                            delivery_instant,
+                        )
             if self.operation_manifest_observe is not None:
                 self.operation_manifest_observe(
                     delivery, source, actor, part.ordinal, part.capability, outcome
@@ -1213,9 +1370,23 @@ class WholeSourceLightExecutor:
                 {
                     "capability": part.capability,
                     "text": part.source,
-                    "depends_on": part.dependencies[0].predecessor_index
-                    if part.dependencies
-                    else None,
+                    **(
+                        {
+                            "depends_on": part.dependencies[-1].predecessor_index,
+                            "reason": None,
+                            **(
+                                {
+                                    "dependency_indices": [
+                                        dep.predecessor_index for dep in part.dependencies
+                                    ]
+                                }
+                                if len(part.dependencies) > 1
+                                else {}
+                            ),
+                        }
+                        if part.dependencies
+                        else {}
+                    ),
                     "status": outcome.status.value,
                     "stage_count": len(outcome.operational.stages),
                     "temporal": [],

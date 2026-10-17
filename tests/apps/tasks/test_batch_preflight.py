@@ -55,3 +55,17 @@ def test_batch_validator_does_not_invent_global_session_state(ops):
 def test_batch_validator_rejects_malformed_inputs():
     with pytest.raises(TaskBatchPreflightError):
         validate_task_batch_prewrite(("start",))
+
+
+def test_prevalidated_session_dependency_allows_one_start_then_its_reviewed_stop():
+    sequence = (
+        _operation(TaskOperation.START_WORK_SESSION),
+        _operation(TaskOperation.STOP_WORK_SESSION),
+        _operation(TaskOperation.START_WORK_SESSION),
+    )
+    validate_task_batch_prewrite(sequence, session_linked_stops=frozenset({1}))
+    with pytest.raises(TaskBatchPreflightError):
+        validate_task_batch_prewrite(sequence)
+    for link in (frozenset({0}), frozenset({2}), frozenset({3}), frozenset({True})):
+        with pytest.raises(TaskBatchPreflightError):
+            validate_task_batch_prewrite(sequence, session_linked_stops=link)

@@ -23,6 +23,7 @@ SCHEMAS = (
     contract.DEPENDENT_TASK_PARTITION_SCHEMA,
     contract.DEPENDENT_GRAPH_PARTITION_SCHEMA,
     contract.DEPENDENT_GRAPH_REVIEW_SCHEMA,
+    contract.DEPENDENT_SESSION_LINK_REVIEW_SCHEMA,
 )
 
 
@@ -62,6 +63,7 @@ def _check(schema, depth=0):
         "dependent-task-source-partition",
         "dependent-n-graph-partition",
         "dependent-n-graph-review",
+        "dependent-session-link-review",
     ),
 )
 def test_product_model_schema_requires_every_declared_field_and_forbids_extra(schema):

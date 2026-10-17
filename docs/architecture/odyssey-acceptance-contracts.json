@@ -214,7 +214,10 @@
       "offline_test_selectors": [
         "tests/apps/tasks/test_session_evidence.py::test_session_receipt_proves_markdown_and_powers_existing_stop_cas",
         "tests/apps/tasks/test_session_evidence.py::test_session_recheck_rejects_external_mutations_and_duplicate_ids",
-        "tests/apps/tasks/test_session_evidence.py::test_evidence_cannot_be_reused_in_other_vault_even_with_copied_markdown"
+        "tests/runtime/test_p4_dependent_n_graph_execution.py::test_n_graph_four_groups_start_stop_same_canonical_session_with_e3_replay",
+        "tests/runtime/test_p4_dependent_n_graph_execution.py::test_n_graph_session_link_rejected_before_first_core_write",
+        "tests/runtime/test_p4_dependent_n_graph_execution.py::test_n_graph_crash_after_physical_stop_leaves_uncertain_e3_no_replay",
+        "tests/apps/tasks/test_session_dependency.py::test_session_dependency_requires_two_exact_semantic_attestations"
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false

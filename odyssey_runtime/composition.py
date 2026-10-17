@@ -28,6 +28,8 @@ from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
     TASK_TYPE,
+    CanonicalSessionEvidence,
+    CanonicalSessionEvidenceError,
     OpenAITaskInterpreter,
     TaskCorePlanner,
     TaskDependentTarget,
@@ -45,12 +47,14 @@ from odyssey_apps.tasks import (
     TaskScopedInterpretation,
     TaskWorkSessionService,
     WorkSessionError,
+    WorkSessionMutationResult,
     WorkSessionSnapshot,
     compose_scoped_task_domain_interpretation,
     compose_task_domain_interpretation,
     compose_work_session_activity_date,
     compose_work_session_times,
     prepare_dependent_subtask_title,
+    prove_created_session,
 )
 from odyssey_core.application import (
     ActionResult,
@@ -3366,6 +3370,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
         prepared_task_temporal: _PreparedInterpretation | None = None,
         prepared_core: _PrecomputedCorePlan | None = None,
         dependent_task_target: TaskDependentTarget | None = None,
+        completed_work_session: Callable[[WorkSessionMutationResult], None] | None = None,
+        dependent_session_evidence: CanonicalSessionEvidence | None = None,
     ) -> ApplicationResult:
         """Interpret Tasks lifecycle, consume Temporal when needed, then delegate mutation to Core."""
         interpretation = prepared or prepare_task_interpretation(source_text, conversation_context)
@@ -3638,13 +3644,35 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     )
                 elif task.operation is TaskOperation.STOP_WORK_SESSION:
                     assert resolved_task_id is not None and ended_at is not None
-                    mutation = work_session_service.stop_for_task(
-                        task_id=resolved_task_id,
-                        ended_at=ended_at,
-                        request_id=request_id,
-                        actor=persistence_actor,
-                        now=clock["timestamp"],
-                    )
+                    if dependent_session_evidence is not None:
+                        if (
+                            dependent_task_target is None
+                            or dependent_session_evidence.task_id != resolved_task_id
+                        ):
+                            raise WorkSessionError("SESSION_DEPENDENCY_TARGET_MISMATCH")
+                        try:
+                            revision, source_hash = dependent_session_evidence.require_current(
+                                work_session_service
+                            )
+                        except ValueError as error:
+                            raise WorkSessionError("SESSION_DEPENDENCY_STALE") from error
+                        mutation = work_session_service.stop(
+                            session_id=dependent_session_evidence.session_id,
+                            ended_at=ended_at,
+                            expected_revision=revision,
+                            expected_source_hash=source_hash,
+                            request_id=request_id,
+                            actor=persistence_actor,
+                            now=clock["timestamp"],
+                        )
+                    else:
+                        mutation = work_session_service.stop_for_task(
+                            task_id=resolved_task_id,
+                            ended_at=ended_at,
+                            request_id=request_id,
+                            actor=persistence_actor,
+                            now=clock["timestamp"],
+                        )
                 elif task.operation is TaskOperation.EDIT_WORK_SESSION:
                     assert resolved_task_id is not None
                     mutation = work_session_service.edit_for_task(
@@ -3692,6 +3720,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     planning_error=error.code,
                     operational=OperationalEvidence(total_duration + duration, tuple(stages)),
                 )
+            # This is the original, fully read-back Tasks domain result, NOT
+            # AppResult. Keep it request-private and let the caller mint the
+            # E2 proof. If callback crashes after physical WRITE, propagate
+            # to the enclosing E3 unresolved claim rather than retrying.
+            if completed_work_session is not None:
+                completed_work_session(mutation)
             duration = max(0.0, (perf_counter() - mutation_started) * 1000)
             total_duration += duration
             stages.append(
@@ -4245,6 +4279,97 @@ def build_runtime_from_environment() -> RuntimeComposition:
             outcome.affected_stable_note_ids,
         )
 
+    def _execute_reviewed_session_step(
+        segment: str,
+        locator: str,
+        identity: AuthenticatedActorContext,
+        task: TaskInterpretation,
+        temporal: TemporalInterpretation | None,
+        target: TaskDependentTarget,
+        instant: datetime,
+        preceding_session: CanonicalSessionEvidence | None,
+    ) -> tuple[ApplicationResult, CanonicalSessionEvidence | None]:
+        """Same Tasks executor; keep canonical WorkSession start receipt private."""
+        if work_session_service is None or task.operation not in {
+            TaskOperation.START_WORK_SESSION,
+            TaskOperation.STOP_WORK_SESSION,
+        }:
+            raise TaskInterpretationError("Unrepresentable dependent Work Session step")
+        if task.operation is TaskOperation.START_WORK_SESSION and preceding_session is not None:
+            raise TaskInterpretationError("START cannot consume a prior Work Session")
+        if task.operation is TaskOperation.STOP_WORK_SESSION and preceding_session is None:
+            raise TaskInterpretationError("STOP requires a physically proven Work Session")
+        if preceding_session is not None:
+            # A stale prior-session receipt is a PREWRITE veto. A fault after
+            # WorkSessionService actually persists remains an unresolved E3
+            # exception; do not conflate these two phases.
+            try:
+                preceding_session.require_current(work_session_service)
+            except CanonicalSessionEvidenceError:
+                return (
+                    ApplicationResult(
+                        locator,
+                        ApplicationStatus.NEEDS_ATTENTION,
+                        (),
+                        (),
+                        planning_error="SESSION_DEPENDENCY_STALE",
+                    ),
+                    None,
+                )
+        proofs: list[CanonicalSessionEvidence] = []
+
+        def _retain_start_receipt(mutation: WorkSessionMutationResult) -> None:
+            if task.operation is not TaskOperation.START_WORK_SESSION or proofs:
+                raise TaskInterpretationError("Unexpected Work Session receipt")
+            proofs.append(
+                prove_created_session(
+                    result=mutation,
+                    expected_task_id=target.require_current(repository, schema),
+                    creator_delivery_step=locator,
+                    service=work_session_service,
+                )
+            )
+
+        clock = _captured_dependent_clock(instant)
+        result = execute_tasks(
+            segment,
+            locator,
+            identity,
+            (),
+            prepared=_PreparedInterpretation(
+                clock,
+                task,
+                OperationalStage("tasks.interpretation", OperationalOutcome.COMPLETED, 0.0),
+            ),
+            prepared_task_temporal=(
+                _PreparedInterpretation(
+                    clock,
+                    temporal,
+                    OperationalStage("temporal.interpretation", OperationalOutcome.COMPLETED, 0.0),
+                )
+                if temporal is not None
+                else None
+            ),
+            dependent_task_target=target,
+            dependent_session_evidence=preceding_session,
+            completed_work_session=(
+                _retain_start_receipt
+                if task.operation is TaskOperation.START_WORK_SESSION
+                else None
+            ),
+        )
+        if result.status is ApplicationStatus.COMPLETED:
+            if task.operation is TaskOperation.START_WORK_SESSION:
+                if len(proofs) != 1:
+                    # Completed response missing physical source evidence; keep
+                    # the E3 claim unresolved rather than silently progressing.
+                    raise TaskInterpretationError("START receipt absent after completed write")
+                return result, proofs[0]
+            return result, None
+        if proofs:
+            raise TaskInterpretationError("Incomplete Work Session returned a START receipt")
+        return result, None
+
     light_source_execute = None
     if light_source_enabled:
         if self_binding_repository is None:
@@ -4328,6 +4453,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 prepare_dependent_subtask_before_core_write
                 if "tasks" in enabled_application_ids
                 else None
+            ),
+            dependent_session_delegate=(
+                _execute_reviewed_session_step if "tasks" in enabled_application_ids else None
             ),
             dependent_task_delegate=(
                 lambda segment, locator, identity, task, temporal, target, instant: execute_tasks(
