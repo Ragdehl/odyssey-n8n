@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -170,6 +171,54 @@ class VaultRepository:
             raise NoteUnavailableError("Canonical note is unavailable") from None
         except OSError:
             raise VaultAccessError("Cannot check canonical source freshness") from None
+
+    def note_version_snapshot(self) -> dict[str, tuple[object, ...]]:
+        """Version every canonical regular Markdown file in one no-symlink walk.
+
+        This is a physical-version CHANGE DETECTOR, not a canonical content
+        proof. Re-ground selected notes with read_text and Writer/CAS. Directory
+        and file changes while enumerating make the batch unusable, never a
+        negative source-of-truth claim.
+        """
+        paths: dict[str, tuple[object, ...]] = {}
+        directories = [self._root]
+        before_directories: list[tuple[Path, tuple[object, ...]]] = []
+        try:
+            while directories:
+                folder = directories.pop()
+                before_status = folder.lstat()
+                if not stat.S_ISDIR(before_status.st_mode):
+                    raise VaultAccessError("Vault folder changed during version scan")
+                before_directories.append((folder, self._fingerprint(folder)))
+                with os.scandir(folder) as entries:
+                    for entry in entries:
+                        if entry.is_symlink():
+                            continue
+                        entry_status = entry.stat(follow_symlinks=False)
+                        if stat.S_ISDIR(entry_status.st_mode):
+                            directories.append(Path(entry.path))
+                        elif stat.S_ISREG(entry_status.st_mode) and entry.name.endswith(".md"):
+                            path = Path(entry.path).relative_to(self._root).as_posix()
+                            paths[path] = (
+                                entry.path,
+                                entry_status.st_dev,
+                                entry_status.st_ino,
+                                entry_status.st_size,
+                                entry_status.st_mtime_ns,
+                                entry_status.st_ctime_ns,
+                            )
+                        if len(paths) > 30_000:
+                            raise VaultAccessError("Vault version proof exceeds bounded capacity")
+            if any(
+                not stat.S_ISDIR(folder.lstat().st_mode) or self._fingerprint(folder) != previous
+                for folder, previous in before_directories
+            ):
+                raise VaultAccessError("Vault folder changed during version scan")
+        except VaultAccessError:
+            raise
+        except (OSError, RuntimeError, ValueError) as error:
+            raise VaultAccessError("Cannot enumerate canonical source versions") from error
+        return paths
 
     def read_text(self, path: str) -> str:
         """Read one contained Markdown file as unchanged UTF-8 text.

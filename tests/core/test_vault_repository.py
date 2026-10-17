@@ -337,3 +337,43 @@ class ScopedReadCacheContractTests(unittest.TestCase):
             # Parent scope might still have an old entry, but its live inode
             # check refuses to return it after the nested scope changed file.
             self.assertEqual(self.repo.read_text("a.md"), "after")
+
+
+class BulkPhysicalVersionProofTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        root = Path(self.temp.name) / "vault"
+        root.mkdir()
+        self.repo = VaultRepository(root)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_bulk_versions_agree_with_individual_canonical_source_versions(self):
+        (self.repo.root / "people").mkdir()
+        self.repo.create_text("a.md", "content")
+        self.repo.create_text("people/b.md", "another")
+        versions = self.repo.note_version_snapshot()
+        assert sorted(versions) == ["a.md", "people/b.md"]
+        for path, version in versions.items():
+            assert version == self.repo.file_version(path)
+
+    def test_bulk_versions_notice_create_replace_delete_nested_and_soft_files(self):
+        self.repo.create_text("a.md", "before")
+        initial = self.repo.note_version_snapshot()
+        self.repo.replace_text("a.md", "after")
+        assert self.repo.note_version_snapshot()["a.md"] != initial["a.md"]
+        (self.repo.root / "deep").mkdir()
+        self.repo.create_text("deep/b.md", "new")
+        assert len(self.repo.note_version_snapshot()) == 2
+        (self.repo.root / "deep/b.md").unlink()
+        assert len(self.repo.note_version_snapshot()) == 1
+
+    def test_bulk_scan_never_follows_external_or_internal_symlink(self):
+        self.repo.create_text("a.md", "in")
+        external = Path(self.temp.name) / "outside.md"
+        external.write_text("private", encoding="utf-8")
+        (self.repo.root / "outside-link.md").symlink_to(external)
+        (self.repo.root / "linked-dir").symlink_to(external.parent, target_is_directory=True)
+        assert list(self.repo.note_version_snapshot()) == ["a.md"]
+        assert list(self.repo.list_markdown_paths()) == ["a.md"]

@@ -197,7 +197,7 @@ class WholeSourceLightExecutor:
         with (
             scoped_note_decode_cache(),
             self.repository.scoped_unchanged_reads(),
-            scoped_verified_metadata_catalog(),
+            scoped_verified_metadata_catalog(index_path=str(self.context_index.path)),
         ):
             try:
                 return self._execute_source(source, delivery, actor, conversation_id)

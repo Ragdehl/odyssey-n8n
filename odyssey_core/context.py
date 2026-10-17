@@ -31,9 +31,10 @@ from odyssey_core.relationship_evidence import (
 )
 from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.semantic import TextEmbedder
+from odyssey_core.source_inventory import exact_key, inventory_row, schema_digest
 from odyssey_core.storage import VaultRepository
 
-_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "5"}
+_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "6"}
 _TECHNICAL_METADATA = frozenset(
     {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
 )
@@ -610,12 +611,14 @@ class ContextIndex:
         aliases_index: list[tuple[str, str, str]] = []
         facts_index: list[tuple[Any, ...]] = []
         fact_integrity: list[tuple[str, str]] = []
+        full_inventory: list[tuple[str, str, str, str, str, str, str]] = []
         active_paths: dict[str, str] = {}
         active_basenames: dict[str, set[str]] = {}
         bodies: dict[str, str] = {}
         properties: list[tuple[str, str, str | int, str]] = []
         seen_ids: set[str] = set()
         for path in repository.list_markdown_paths():
+            before_version = repository.file_version(path)
             raw = repository.read_text(path)
             try:
                 note = parse_note(raw)
@@ -626,6 +629,12 @@ class ContextIndex:
             if note_id in seen_ids:
                 raise ContextIndexError(f"Cannot safely index duplicate note ID: {note_id}")
             seen_ids.add(note_id)
+            try:
+                full_inventory.append(
+                    inventory_row(repository, path, note, raw, before=before_version)
+                )
+            except ValueError as error:
+                raise ContextIndexError("Canonical source changed during rebuild") from error
             if note.metadata.get("deleted") is True:
                 continue
             note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
@@ -716,6 +725,19 @@ class ContextIndex:
             with sqlite3.connect(temporary) as connection:
                 connection.executescript("""
                     CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE vault_inventory (
+                        path TEXT PRIMARY KEY, note_id TEXT NOT NULL UNIQUE,
+                        version_json TEXT NOT NULL, source_hash TEXT NOT NULL,
+                        metadata_json TEXT NOT NULL, body_excerpt TEXT NOT NULL,
+                        normalized_name TEXT NOT NULL
+                    );
+                    CREATE INDEX vault_inventory_note ON vault_inventory(note_id);
+                    CREATE INDEX vault_inventory_name ON vault_inventory(normalized_name, note_id);
+                    CREATE TABLE vault_aliases (
+                        note_id TEXT NOT NULL, alias TEXT NOT NULL, normalized TEXT NOT NULL,
+                        PRIMARY KEY(note_id, alias)
+                    );
+                    CREATE INDEX vault_aliases_name ON vault_aliases(normalized, note_id);
                     CREATE TABLE notes (
                         id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, type TEXT NOT NULL,
                         primary_name TEXT NOT NULL, source_hash TEXT NOT NULL, tags TEXT NOT NULL,
@@ -783,6 +805,7 @@ class ContextIndex:
                     "INSERT INTO metadata(key, value) VALUES (?, ?)",
                     (
                         *_INDEX_MARKERS.items(),
+                        ("schema_digest", schema_digest(schema)),
                         ("model_name", embedder.model_name),
                         ("model_version", embedder.model_version),
                         ("dimension", str(dimension)),
@@ -816,6 +839,17 @@ class ContextIndex:
                 )
                 connection.executemany(
                     "INSERT INTO note_projection VALUES (?, ?, ?, ?, ?, ?)", note_projections
+                )
+                connection.executemany(
+                    "INSERT INTO vault_inventory VALUES (?, ?, ?, ?, ?, ?, ?)", full_inventory
+                )
+                connection.executemany(
+                    "INSERT INTO vault_aliases VALUES (?, ?, ?)",
+                    (
+                        (note_id, alias, exact_key(alias))
+                        for _path, note_id, _ver, _sha, meta, _excerpt, _name in full_inventory
+                        for alias in json.loads(meta).get("aliases", [])
+                    ),
                 )
                 connection.executemany("INSERT INTO note_attributes VALUES (?, ?, ?)", attributes)
                 connection.executemany("INSERT INTO note_aliases VALUES (?, ?, ?)", aliases_index)
@@ -859,9 +893,40 @@ class ContextIndex:
         canonical_subtypes = tuple(sorted(_canonical_subtypes(schema)))
         filter_definitions = _filter_definitions(schema)
 
+        # Existing complete inventory lets unchanged Notes skip reread, YAML
+        # validation and embedding. Physical versions of EVERY file are still
+        # checked; unknown or changed unrelated Notes force a safe rebuild.
+        try:
+            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as inventory_db:
+                check = dict(inventory_db.execute("SELECT key,value FROM metadata"))
+                if any(check.get(k) != v for k, v in _INDEX_MARKERS.items()) or check.get(
+                    "schema_digest"
+                ) != schema_digest(schema):
+                    raise ContextIndexError("Incremental inventory index is incompatible")
+                old_inventory = {
+                    row[0]: row
+                    for row in inventory_db.execute(
+                        "SELECT path,note_id,version_json,source_hash,metadata_json,body_excerpt,normalized_name FROM vault_inventory"
+                    )
+                }
+        except sqlite3.Error as error:
+            raise ContextIndexError("Incremental inventory is missing") from error
         current: dict[str, tuple[Any, ...]] = {}
+        inventory_current: dict[str, tuple[str, str, str, str, str, str, str]] = {}
         seen_ids: set[str] = set()
         for path in repository.list_markdown_paths():
+            before_version = repository.file_version(path)
+            previous = old_inventory.get(path)
+            if (
+                previous is not None
+                and previous[2] == json.dumps(before_version)
+                and previous[1] not in requested
+            ):
+                if previous[1] in seen_ids:
+                    raise ContextIndexError("Incremental source contains duplicate IDs")
+                seen_ids.add(previous[1])
+                inventory_current[previous[1]] = previous
+                continue
             raw = repository.read_text(path)
             try:
                 note = parse_note(raw)
@@ -872,6 +937,16 @@ class ContextIndex:
             if note_id in seen_ids:
                 raise ContextIndexError(f"Cannot safely index duplicate note ID: {note_id}")
             seen_ids.add(note_id)
+            if note_id not in requested:
+                raise ContextIndexError(
+                    "Incremental context refresh detected unrelated index drift in inventory"
+                )
+            try:
+                inventory_current[note_id] = inventory_row(
+                    repository, path, note, raw, before=before_version
+                )
+            except ValueError as error:
+                raise ContextIndexError("Canonical source changed during refresh") from error
             if note.metadata.get("deleted") is True:
                 continue
             note_tags = tuple(cast(list[str], note.metadata.get("tags", [])))
@@ -947,6 +1022,8 @@ class ContextIndex:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Context index markers are incompatible")
+                if metadata.get("schema_digest") != schema_digest(schema):
+                    raise ContextIndexError("Context schema differs from index; rebuild required")
                 if (
                     metadata.get("model_name") != embedder.model_name
                     or metadata.get("model_version") != embedder.model_version
@@ -972,6 +1049,18 @@ class ContextIndex:
                     note_id: (item[0], item[1], item[2], item[3])
                     for note_id, item in current.items()
                 }
+                for note_id, inventory in inventory_current.items():
+                    if note_id in current:
+                        continue
+                    metadata_note = json.loads(inventory[4])
+                    if metadata_note.get("deleted") is True:
+                        continue
+                    current_identity[note_id] = (
+                        inventory[0],
+                        metadata_note["type"],
+                        metadata_note["name"],
+                        inventory[3],
+                    )
                 for note_id, identity in current_identity.items():
                     if note_id not in affected and indexed.get(note_id) != identity:
                         raise ContextIndexError(
@@ -985,6 +1074,48 @@ class ContextIndex:
                         "Incremental context refresh detected unrelated index drift"
                     )
 
+                indexed_inventory = {
+                    row[1]: row
+                    for row in connection.execute(
+                        "SELECT path, note_id, version_json, source_hash, metadata_json, body_excerpt, normalized_name FROM vault_inventory"
+                    )
+                }
+                if any(
+                    indexed_inventory.get(note_id) != row
+                    for note_id, row in inventory_current.items()
+                    if note_id not in affected
+                ) or any(
+                    note_id not in affected and note_id not in inventory_current
+                    for note_id in indexed_inventory
+                ):
+                    raise ContextIndexError(
+                        "Incremental context refresh detected unrelated index drift in inventory"
+                    )
+                connection.executemany(
+                    "DELETE FROM vault_inventory WHERE note_id = ?",
+                    ((note_id,) for note_id in requested),
+                )
+                connection.executemany(
+                    "DELETE FROM vault_aliases WHERE note_id = ?",
+                    ((note_id,) for note_id in requested),
+                )
+                connection.executemany(
+                    "INSERT INTO vault_inventory VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        inventory_current[note_id]
+                        for note_id in requested
+                        if note_id in inventory_current
+                    ),
+                )
+                connection.executemany(
+                    "INSERT INTO vault_aliases VALUES (?, ?, ?)",
+                    (
+                        (note_id, alias, exact_key(alias))
+                        for note_id in requested
+                        if note_id in inventory_current
+                        for alias in json.loads(inventory_current[note_id][4]).get("aliases", [])
+                    ),
+                )
                 for derived_table in (
                     "note_attributes",
                     "note_aliases",
@@ -1059,6 +1190,69 @@ class ContextIndex:
             raise ContextIndexError("Unable to incrementally refresh context index") from error
         return len(selected)
 
+    def reconcile_external_changes(
+        self,
+        repository: VaultRepository,
+        schema: dict[str, Any],
+        embedder: TextEmbedder,
+        *,
+        max_changed: int = 64,
+    ) -> int:
+        """Re-index bounded external Markdown edits without rewriting any Notes.
+
+        The full path/version manifest is checked, but only unknown or changed
+        Markdown is parsed. All changed source IDs are passed to the existing
+        incremental refresh, including old IDs on rename/deletion. An unsafe
+        or excessive drift rejects rather than silently rebuilding everything.
+        """
+        if not 1 <= max_changed <= 256:
+            raise ValueError("External reconciliation requires a bounded mutation budget")
+        try:
+            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as conn:
+                markers = dict(conn.execute("SELECT key,value FROM metadata"))
+                if any(markers.get(k) != v for k, v in _INDEX_MARKERS.items()) or markers.get(
+                    "schema_digest"
+                ) != schema_digest(schema):
+                    raise ContextIndexError("External reconciliation needs a compatible inventory")
+                indexed = {
+                    row[0]: (row[1], row[2])
+                    for row in conn.execute("SELECT path,note_id,version_json FROM vault_inventory")
+                }
+        except sqlite3.Error as error:
+            raise ContextIndexError("External reconciliation index is unavailable") from error
+        paths = tuple(repository.list_markdown_paths())
+        changed: set[str] = set()
+        for path in paths:
+            version = repository.file_version(path)
+            prior = indexed.get(path)
+            if prior is not None and prior[1] == json.dumps(version):
+                continue
+            if prior is not None:
+                changed.add(prior[0])
+            try:
+                before = version
+                text = repository.read_text(path)
+                note = parse_note(text)
+                validate_note(note, schema)
+                if repository.file_version(path) != before:
+                    raise ContextIndexError("Source changed during external reconciliation")
+                changed.add(note.metadata["id"])
+            except (NoteFormatError, NoteValidationError, OSError) as error:
+                raise ContextIndexError(
+                    f"Cannot reconcile invalid external canonical Note: {path}"
+                ) from error
+            if len(changed) > max_changed:
+                raise ContextIndexError("External change count exceeds safe reconciliation budget")
+        changed.update(indexed[path][0] for path in indexed if path not in paths)
+        if len(changed) > max_changed:
+            raise ContextIndexError("External change count exceeds safe reconciliation budget")
+        if tuple(repository.list_markdown_paths()) != paths:
+            raise ContextIndexError("Vault paths changed during external reconciliation")
+        if not changed:
+            return 0
+        self.refresh_notes(repository, schema, embedder, note_ids=tuple(sorted(changed)))
+        return len(changed)
+
     def refresh_existing_note(
         self,
         repository: VaultRepository,
@@ -1078,6 +1272,7 @@ class ContextIndex:
             raise ContextIndexError("Incremental context refresh requires a Markdown path")
         if not isinstance(expected_source_hash, str) or len(expected_source_hash) != 64:
             raise ContextIndexError("Incremental context refresh requires the previous source hash")
+        before_version = repository.file_version(path)
         raw = repository.read_text(path)
         try:
             note = parse_note(raw)
@@ -1131,6 +1326,8 @@ class ContextIndex:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Context index markers are incompatible")
+                if metadata.get("schema_digest") != schema_digest(schema):
+                    raise ContextIndexError("Context schema differs from index; rebuild required")
                 if (
                     metadata.get("model_name") != embedder.model_name
                     or metadata.get("model_version") != embedder.model_version
@@ -1173,6 +1370,32 @@ class ContextIndex:
                        SET created_at = ?, updated_at = ?, lexical_text = ?
                        WHERE note_id = ?""",
                     (created_at, updated_at, lexical_text, note_id),
+                )
+                old_inventory = connection.execute(
+                    "SELECT path, source_hash FROM vault_inventory WHERE note_id = ?",
+                    (note_id,),
+                ).fetchone()
+                if old_inventory != (path, expected_source_hash):
+                    raise ContextIndexError("Metadata refresh inventory identity/hash drift")
+                try:
+                    updated_inventory = inventory_row(
+                        repository, path, note, raw, before=before_version
+                    )
+                except ValueError as error:
+                    raise ContextIndexError(
+                        "Canonical source changed during metadata refresh"
+                    ) from error
+                connection.execute("DELETE FROM vault_inventory WHERE note_id = ?", (note_id,))
+                connection.execute("DELETE FROM vault_aliases WHERE note_id = ?", (note_id,))
+                connection.execute(
+                    "INSERT INTO vault_inventory VALUES (?, ?, ?, ?, ?, ?, ?)", updated_inventory
+                )
+                connection.executemany(
+                    "INSERT INTO vault_aliases VALUES (?, ?, ?)",
+                    (
+                        (note_id, alias, exact_key(alias))
+                        for alias in note.metadata.get("aliases", [])
+                    ),
                 )
                 connection.execute("DELETE FROM properties WHERE note_id = ?", (note_id,))
                 connection.executemany(

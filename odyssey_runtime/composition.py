@@ -2905,7 +2905,24 @@ def build_runtime_from_environment() -> RuntimeComposition:
             stages=(planner_stage, query_stage),
         )
 
-    refresh_indexes()
+    if light_source_enabled:
+        from odyssey_runtime.index_startup import p4_indexes_reusable
+
+        can_reuse = p4_indexes_reusable(
+            repository,
+            schema,
+            embedder,
+            context_index,
+            semantic_index,
+            {
+                capability_id: (index, planning_schema_for_capability(schema, capability_id))
+                for capability_id, index in application_semantic_indexes.items()
+            },
+        )
+        if not can_reuse:
+            refresh_indexes()
+    else:
+        refresh_indexes()
 
     def notes_mutation_actor(
         authenticated_actor: AuthenticatedActorContext | None,

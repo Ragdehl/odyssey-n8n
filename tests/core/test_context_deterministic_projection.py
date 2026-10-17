@@ -244,7 +244,7 @@ def test_version_4_sqlite_requires_rebuild_not_unverified_partial_refresh(tmp_pa
         index.refresh_notes(repo, SCHEMA, KeywordEmbedder(), note_ids=("nerea",))
     index.rebuild(repo, SCHEMA, KeywordEmbedder())
     assert rows(index, "SELECT fact_text FROM note_facts") == []
-    assert rows(index, "SELECT value FROM metadata WHERE key='format_version'") == [("5",)]
+    assert rows(index, "SELECT value FROM metadata WHERE key='format_version'") == [("6",)]
 
 
 def test_name_alias_change_on_incremental_refresh_matches_rebuild(tmp_path):
