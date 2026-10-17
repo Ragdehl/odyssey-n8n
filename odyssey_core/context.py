@@ -931,7 +931,7 @@ class ContextIndex:
             previous = old_inventory.get(path)
             if (
                 previous is not None
-                and previous[2] == json.dumps(before_version)
+                and previous[2] == json.dumps(before_version, ensure_ascii=False)
                 and previous[1] not in requested
             ):
                 if previous[1] in seen_ids:
