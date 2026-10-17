@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .storage import VaultRepository
+from .verified_metadata_catalog import VerifiedCatalogError, verified_catalog_if_active
 
 _SAFE_USER_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\Z")
 _FORMAT = "odyssey_identity_mapping"
@@ -327,6 +328,17 @@ class SelfBindingRepository:
         """Require exactly one active schema-valid canonical person note for a stable ID."""
         note_id = _validate_note_id(person_note_id)
         matches = []
+        try:
+            verified = verified_catalog_if_active(self._vault, self._schema)
+        except VerifiedCatalogError as error:
+            raise SelfBindingError("self binding target cannot be verified") from error
+        if verified is not None:
+            matching = [row for row in verified.rows if row.id == note_id]
+            if len(matching) != 1:
+                raise SelfBindingError("self binding target is unavailable or ambiguous")
+            if matching[0].deleted or matching[0].type != "person":
+                raise SelfBindingError("self binding target is not an active person note")
+            return note_id
         for path in self._vault.list_markdown_paths():
             try:
                 note = parse_note(self._vault.read_text(path))

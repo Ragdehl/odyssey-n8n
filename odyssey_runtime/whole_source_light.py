@@ -49,6 +49,7 @@ from odyssey_core.notes import scoped_note_decode_cache
 from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal_interpretation import TemporalInterpretation
+from odyssey_core.verified_metadata_catalog import scoped_verified_metadata_catalog
 from odyssey_core.whole_message_coverage import (
     WholeMessageCoverageError,
     validate_whole_message_coverage,
@@ -193,7 +194,11 @@ class WholeSourceLightExecutor:
     ) -> ApplicationResult:
         # No trust caching: only parsed representations of byte-for-byte
         # identical canonical Markdown, and only within this one delivery.
-        with scoped_note_decode_cache(), self.repository.scoped_unchanged_reads():
+        with (
+            scoped_note_decode_cache(),
+            self.repository.scoped_unchanged_reads(),
+            scoped_verified_metadata_catalog(),
+        ):
             try:
                 return self._execute_source(source, delivery, actor, conversation_id)
             except WholeSourceLightError:

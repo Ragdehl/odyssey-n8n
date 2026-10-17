@@ -5,11 +5,12 @@ from __future__ import annotations
 import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.storage import VaultRepository
+from odyssey_core.verified_metadata_catalog import VerifiedCatalogError, verified_catalog_if_active
 
 
 class ExactEntityLookupError(RuntimeError):
@@ -182,20 +183,43 @@ def find_exact_entity_candidates_batch(
         parsed.append((normalized, note_type))
 
     results: list[list[ExactEntityCandidate]] = [[] for _ in parsed]
-    for path in repository.list_markdown_paths():
-        try:
-            note = parse_note(repository.read_text(path))
-            validate_note(note, schema)
-        except (NoteFormatError, NoteValidationError) as error:
-            raise ExactEntityLookupError(f"Cannot safely inspect invalid note: {path}") from error
-        note_type = cast(str, note.metadata["type"])
+    try:
+        verified = verified_catalog_if_active(repository, schema)
+    except VerifiedCatalogError as error:
+        raise ExactEntityLookupError("Cannot safely inspect canonical source metadata") from error
+    if verified is None:
+
+        def source_notes():
+            for path in repository.list_markdown_paths():
+                try:
+                    note = parse_note(repository.read_text(path))
+                    validate_note(note, schema)
+                except (NoteFormatError, NoteValidationError) as error:
+                    raise ExactEntityLookupError(
+                        f"Cannot safely inspect invalid note: {path}"
+                    ) from error
+                yield (
+                    path,
+                    note.metadata["id"],
+                    note.metadata["type"],
+                    note.metadata["name"],
+                    tuple(note.metadata.get("aliases", [])),
+                    note.content.strip()[:320],
+                    note.metadata.get("deleted") is True,
+                )
+
+        candidates = source_notes()
+    else:
+        candidates = (
+            (row.path, row.id, row.type, row.name, row.aliases, row.content_excerpt, row.deleted)
+            for row in verified.rows
+        )
+    for path, note_id, note_type, primary_name, aliases, excerpt, deleted in candidates:
         if note_type not in canonical_types:
             continue
-        if note.metadata.get("deleted") is True and not include_deleted:
+        if deleted and not include_deleted:
             continue
-        primary_name = cast(str, note.metadata["name"])
         primary_key = _normalize_reference(primary_name)
-        aliases = cast(list[str], note.metadata.get("aliases", []))
         alias_by_key: dict[str, str] = {}
         for alias in aliases:
             alias_by_key.setdefault(_normalize_reference(alias), alias)
@@ -213,12 +237,12 @@ def find_exact_entity_candidates_batch(
             results[index].append(
                 ExactEntityCandidate(
                     path=path,
-                    id=cast(str, note.metadata["id"]),
+                    id=note_id,
                     type=note_type,
                     primary_name=primary_name,
                     match_kind=kind,
                     matched_value=value,
-                    content_excerpt=note.content.strip()[:320],
+                    content_excerpt=excerpt,
                 )
             )
     return tuple(

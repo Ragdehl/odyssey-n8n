@@ -28,6 +28,7 @@ from .request_planning import KnowledgeReference, KnowledgeUnit, SelectionCriter
 from .schema_types import is_application_managed_type
 from .storage import VaultRepository
 from .temporal import CALENDAR_DAY_TYPE, CalendarDayRepository
+from .verified_metadata_catalog import VerifiedCatalogError, verified_catalog_if_active
 from .write_target import WriteTargetDecision, WriteTargetOutcome, decide_write_target
 
 
@@ -954,17 +955,24 @@ def _find_existing_identity(
 ) -> tuple[str, str]:
     """Find and validate the authoritative path and canonical name for an existing ID."""
     matches: list[tuple[str, str]] = []
-    for path in repository.list_markdown_paths():
-        try:
-            note = parse_note(repository.read_text(path))
-            validate_note(note, schema)
-        except (NoteFormatError, NoteValidationError) as error:
-            raise ReferencePreflightError(f"Cannot inspect existing note: {path}") from error
-        if note.metadata.get("id") == stable_id:
-            name = note.metadata.get("name")
-            if not isinstance(name, str) or not name.strip():
-                raise ReferencePreflightError(f"Existing note has no canonical name: {path}")
-            matches.append((path, name))
+    try:
+        verified = verified_catalog_if_active(repository, schema)
+    except VerifiedCatalogError as error:
+        raise ReferencePreflightError("Cannot inspect canonical source metadata") from error
+    if verified is not None:
+        matches = [(row.path, row.name) for row in verified.rows if row.id == stable_id]
+    else:
+        for path in repository.list_markdown_paths():
+            try:
+                note = parse_note(repository.read_text(path))
+                validate_note(note, schema)
+            except (NoteFormatError, NoteValidationError) as error:
+                raise ReferencePreflightError(f"Cannot inspect existing note: {path}") from error
+            if note.metadata.get("id") == stable_id:
+                name = note.metadata.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    raise ReferencePreflightError(f"Existing note has no canonical name: {path}")
+                matches.append((path, name))
     if not matches:
         raise ReferencePreflightError(f"Resolved note ID is no longer present: {stable_id}")
     if len(matches) > 1:

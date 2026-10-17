@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.persistence import ActorInput, EntityAlreadyExistsError, create_entity
 from odyssey_core.storage import NoteAlreadyExistsError, NoteUnavailableError, VaultRepository
+from odyssey_core.verified_metadata_catalog import VerifiedCatalogError, verified_catalog_if_active
 
 CALENDAR_DAY_TYPE = "calendar_day"
 _CALENDAR_ROOT = ("calendar", "days")
@@ -317,6 +318,16 @@ def _assert_unique_day_identity(
 ) -> None:
     """Reject misplaced duplicate Day identity/date claims elsewhere in canonical Markdown."""
     expected_id = calendar_day_id(expected_date)
+    try:
+        catalog = verified_catalog_if_active(repository, schema)
+    except VerifiedCatalogError as error:
+        raise CalendarDayCollisionError(
+            "Calendar Day uniqueness cannot be verified against invalid canonical state"
+        ) from error
+    if catalog is not None:
+        if catalog.day_identity_collides(expected_path, expected_id, expected_date):
+            raise CalendarDayCollisionError("Calendar Day identity is already claimed elsewhere")
+        return
     for path in repository.list_markdown_paths():
         if path == expected_path:
             continue

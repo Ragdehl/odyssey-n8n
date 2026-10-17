@@ -154,6 +154,23 @@ class VaultRepository:
             raise InvalidNotePath("Invalid note path")
         return normalized
 
+    def file_version(self, path: str) -> tuple[object, ...]:
+        """Return a current contained-file version for derived lookup freshness.
+
+        This is a *change detector*, not proof of the note's ID, type, or body.
+        No symlink or out-of-vault path can authorize a cached lookup.
+        """
+        relative = self._validate_note_path(path)
+        try:
+            physical = self._root.joinpath(*relative.parts).resolve(strict=True)
+            if not physical.is_relative_to(self._root) or not physical.is_file():
+                raise NoteUnavailableError("Canonical note is unavailable")
+            return self._fingerprint(physical)
+        except (FileNotFoundError, RuntimeError):
+            raise NoteUnavailableError("Canonical note is unavailable") from None
+        except OSError:
+            raise VaultAccessError("Cannot check canonical source freshness") from None
+
     def read_text(self, path: str) -> str:
         """Read one contained Markdown file as unchanged UTF-8 text.
 

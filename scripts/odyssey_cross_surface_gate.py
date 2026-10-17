@@ -97,6 +97,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "performance_and_indexes": (
         "tests/core/test_vault_repository.py",
+        "tests/core/test_verified_metadata_catalog.py",
         "tests/benchmarks/test_performance_p1_budget.py",
         "tests/core/test_scoped_note_decode_cache.py",
         "tests/core/test_p4_indexed_name_hints.py",
