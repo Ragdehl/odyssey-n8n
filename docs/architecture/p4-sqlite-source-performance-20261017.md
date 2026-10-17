@@ -42,6 +42,6 @@ Preparar desde cero los índices de 1.000 notas tardó ~82,4 s en la nueva prueb
 
 ## Gates de esta ronda y estado de adopción
 
-- **Gate transversal offline `CROSS_SURFACE_GATE PASS`: 763 Python PASS**, 65 archivos / 9 grupos, **168 Node PASS**. Incluye ahora `tests/core/test_vault_repository.py` en `performance_and_indexes` y el gate original de E2/E3/Tasks/UI. El acceptance ledger conserva **15 invariantes / 26 anclas** y P4 DEV no autorizada.
+- **Gate transversal offline `CROSS_SURFACE_GATE PASS`: 763 Python PASS**, 64 archivos / 9 grupos, **168 Node PASS**. Incluye ahora `tests/core/test_vault_repository.py` en `performance_and_indexes` y el gate original de E2/E3/Tasks/UI. El acceptance ledger conserva **15 invariantes / 26 anclas** y P4 DEV no autorizada.
 - **Suite global:** 3.667 Python PASS, 80 SKIP, los **mismos 10 fallos históricos** de presupuestos y hashes de benchmark, 52 subtests PASS; ninguna regresión nueva observada. Ruff y formato PASS; el hook de pytest global en commit se omite expresamente por esos 10 históricos, no se afirma CI verde.
 - **Arquitectura/P4:** cambio acotado a `VaultRepository` y `WholeSourceLightExecutor`. No se ha desplegado, no se han migrado identidades ni introducido index SQLite autoritativo. El benchmark sintético y la memoria de la Raspberry no aprueban por sí mismos el circuito auténtico n8n/browser.
