@@ -35,3 +35,22 @@ Referencias: `docs/architecture/p4-dev-latency-graph-20261017.md`, `docs/archite
 - RSS proceso runtime DEV observado posteriormente ~757 MB; swap global host ~933 MB en uso. No deducir consumo móvil ni fuga de memoria a partir de una muestra.
 - Gate completo después de los dos cambios: 964 Python y 171 JavaScript PASS; 11 regresiones focales PASS.
 - Pendiente: segundo deploy de reconciliación externa, observabilidad de motivo y duración de fallback, móvil nativo, corte abrupto del índice y pruebas a 1000/5000 Notes.
+
+## Bloque siguiente — escalabilidad y observabilidad (17-10-2026)
+
+### Medición de 100/1000/5000 Notes sintéticas en Raspberry
+Script efímero reproducible: `/tmp/odyssey-index-scaling-20261017.py`; `/tmp/odyssey-index-scaling-20261017.log`. Se crean SOLO Markdown e índices temporales bajo `/tmp` con un embedder determinista sin modelo neural, para aislar filesystem, parseo y proyección SQLite. NO mide inferencia local real en 5000 notas ni hardware móvil.
+
+| Notes | build 3 índices inicial | refresh context 1 Note | refresh semantic 1 Note | refresh semantic.Tasks 1 Note | total incremental |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 100 | 0,092 s | 0,015 s | 0,019 s | 0,019 s | 0,053 s |
+| 1000 | 0,861 s | 0,127 s | 0,185 s | 0,184 s | 0,496 s |
+| 5000 | 4,286 s | 0,640 s | 0,939 s | 0,921 s | 2,500 s |
+
+Contadores I/O al cambiar UNA Note, con 5000 existentes: context **una lectura Markdown y 5001 comprobaciones file_version**; semantic **5000 lecturas Markdown**; semantic.Tasks **5000 lecturas Markdown**. Se confirma O(N) del refresco de proyecciones que no necesitan embeddings nuevos. Memoria pico benchmark sintético sin modelo: 73,5 MB RSS. El código aún procesa de nuevo la nota afectada si se repite refresh, incluso sin modificaciones: otra oportunidad menor de optimización.
+
+### Instrumentación DEV (solo rama hasta deploy)
+`odyssey_runtime/composition.py` emite a stderr un solo evento privado `odyssey_dev_index_refresh` al terminar el refresco. Los campos son `outcome` (incremental, full_rebuild, failed), `note_count`, `duration_ms`, `stages_ms` (context, semantic, semantic.tasks y full_rebuild cuando corresponda), `failure_stage` y `failure_class` si hay fallo. No contiene paths, IDs, texto, alias ni contenido de errores. Fuera de `ODYSSEY_DEPLOYMENT_ENV=DEV` + `ODYSSEY_LIGHT_SOURCE_V1=1`, no emite nada. No relaja ninguna comprobación: sigue reconstruyendo si detecta drift no declarado y falla cerrado si falla el fallback. Prueba física con índices reales sintéticos valida un incremental sin fallback y un full_rebuild a causa de una nota externa. La modificación de la reconciliación Unicode `1ced0a2` se incorpora en el mismo deploy pendiente.
+
+### Límite de optimización
+No eliminar el doble barrido semántico a ciegas: actualmente es defensa ante modificaciones externas y contratos incompatibles. Dirección P1: materializar un inventario/Snapshot de metadata, source_hash y versiones físicas verificado por context y reutilizarlo entre índices en UNA transacción lógica; cada índice debe preservar validación de origen, type y drift y una comprobación final anti-carrera antes de publicación. Nunca reutilizar contexto obsoleto para autorizar identidad, backlinks o inferencia.

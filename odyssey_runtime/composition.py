@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from contextvars import ContextVar
@@ -358,6 +359,38 @@ class DerivedIndexRefreshCoordinator:
                 self._completed_generation = max(self._completed_generation, generation)
                 self._last_error = error
                 self._condition.notify_all()
+
+
+def _emit_dev_index_refresh_diagnostic(
+    *,
+    outcome: str,
+    note_count: int,
+    duration_ms: float,
+    stages_ms: Mapping[str, float],
+    failure_stage: str | None = None,
+    failure_class: str | None = None,
+) -> None:
+    """Report bounded DEV performance without note IDs, paths or user contents."""
+    if (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_LIGHT_SOURCE_V1") != "1"
+    ):
+        return
+    event: dict[str, object] = {
+        "outcome": outcome,
+        "note_count": note_count,
+        "duration_ms": round(max(0.0, duration_ms), 1),
+        "stages_ms": {stage: round(max(0.0, duration), 1) for stage, duration in stages_ms.items()},
+    }
+    if failure_stage is not None:
+        event["failure_stage"] = failure_stage
+    if failure_class is not None:
+        event["failure_class"] = failure_class
+    print(
+        "odyssey_dev_index_refresh " + json.dumps(event, sort_keys=True),
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 @dataclass(slots=True)
@@ -2805,36 +2838,82 @@ def build_runtime_from_environment() -> RuntimeComposition:
     def refresh_affected_indexes(
         note_ids: Sequence[str], *, allow_full_rebuild: bool = True
     ) -> None:
-        """Refresh changed notes plus their deterministic, already-created Day links.
+        """Refresh changed notes; report when a strict drift check triggers rebuilding.
 
-        Core can materialize linked blank Calendar Days as verified side effects
-        of one fact-bearing mutation. Preserve strict index drift checks for
-        unrelated Notes without rebuilding all embeddings on ordinary writes.
+        The observed IDs are never logged. A rebuild preserves fail-closed safety
+        for untracked external changes; telemetry must not relax that contract.
         """
-        expanded = tuple(
-            dict.fromkeys(
-                (
-                    *note_ids,
-                    *materialized_day_link_index_ids(repository, schema, tuple(note_ids)),
+        started = perf_counter()
+        durations_ms: dict[str, float] = {}
+        stage = "resolve_affected"
+        outcome = "incremental"
+        failure_stage: str | None = None
+        failure_class: str | None = None
+        expanded: tuple[str, ...] = ()
+
+        def measure(name: str, refresh: Callable[[], object]) -> object:
+            nonlocal stage
+            stage = name
+            t0 = perf_counter()
+            try:
+                return refresh()
+            finally:
+                durations_ms[name] = (perf_counter() - t0) * 1000
+
+        try:
+            expanded = tuple(
+                dict.fromkeys(
+                    (
+                        *note_ids,
+                        *materialized_day_link_index_ids(repository, schema, tuple(note_ids)),
+                    )
                 )
             )
-        )
-        try:
-            context_index.refresh_notes(repository, schema, embedder, note_ids=expanded)
-            semantic_index.refresh_notes(repository, schema, embedder, note_ids=expanded)
-            for capability_id, index in application_semantic_indexes.items():
-                index.refresh_notes(
-                    repository,
-                    planning_schema_for_capability(schema, capability_id),
-                    embedder,
-                    note_ids=expanded,
+            try:
+                measure(
+                    "context",
+                    lambda: context_index.refresh_notes(
+                        repository, schema, embedder, note_ids=expanded
+                    ),
                 )
-        except (ContextIndexError, SemanticIndexError, ValueError):
-            if not allow_full_rebuild:
-                # A mid-message Core scope must never hide unexpected drift
-                # behind a whole-vault rebuild or a second mutation attempt.
-                raise
-            refresh_indexes()
+                measure(
+                    "semantic",
+                    lambda: semantic_index.refresh_notes(
+                        repository, schema, embedder, note_ids=expanded
+                    ),
+                )
+                for capability_id, index in application_semantic_indexes.items():
+                    measure(
+                        f"semantic.{capability_id}",
+                        lambda index=index, capability_id=capability_id: index.refresh_notes(
+                            repository,
+                            planning_schema_for_capability(schema, capability_id),
+                            embedder,
+                            note_ids=expanded,
+                        ),
+                    )
+            except (ContextIndexError, SemanticIndexError, ValueError) as error:
+                failure_class = type(error).__name__
+                failure_stage = stage
+                if not allow_full_rebuild:
+                    # Independent Core scopes cannot mask unknown drift.
+                    raise
+                outcome = "full_rebuild"
+                measure("full_rebuild", refresh_indexes)
+        except Exception as error:
+            outcome = "failed"
+            failure_class = failure_class or type(error).__name__
+            failure_stage = failure_stage or stage
+            raise
+        finally:
+            _emit_dev_index_refresh_diagnostic(
+                outcome=outcome,
+                note_count=len(expanded),
+                duration_ms=(perf_counter() - started) * 1000,
+                stages_ms=durations_ms,
+                failure_stage=failure_stage,
+                failure_class=failure_class,
+            )
 
     index_refresh_coordinator = DerivedIndexRefreshCoordinator(refresh_affected_indexes)
 
