@@ -622,3 +622,90 @@ def test_many_parallel_route_stages_persist_as_optional_diagnostics(tmp_path: Pa
     _append(store, 1, detail=detail)
     assert store.load_main_page()["turns"][0]["request_detail"]["flow"]["routes"] == routes
     assert store.recent_context() == [{"role": "assistant", "text": "turn 1"}]
+
+
+def test_multi_parent_execution_flow_survives_history_without_inventing_edges(tmp_path: Path):
+    from odyssey_core.conversations import _validate_request_detail
+
+    store = _store(tmp_path)
+    source = "Core A. Core B. Inicia una sesión. Después termínala."
+    detail = {
+        "request_id": "nm-story-1",
+        "operational": {
+            "total_duration_ms": 400.0,
+            "stages": [
+                {
+                    "name": "application.router",
+                    "outcome": "completed",
+                    "duration_ms": 50.0,
+                    "stage_view": {"version": 1, "label": "Router", "icon": "router"},
+                },
+                *(
+                    {
+                        "name": "action.write",
+                        "outcome": "completed",
+                        "duration_ms": 90.0,
+                        "route_index": index,
+                        "stage_view": {"version": 1, "label": "Core", "icon": "core"},
+                    }
+                    for index in range(4)
+                ),
+            ],
+        },
+        "flow": {
+            "version": 1,
+            "input": source,
+            "parallel_preparation": False,
+            "routes": [
+                {
+                    "capability": "core",
+                    "text": "Core A.",
+                    "status": "completed",
+                    "stage_count": 1,
+                    "temporal": [],
+                },
+                {
+                    "capability": "core",
+                    "text": " Core B.",
+                    "status": "completed",
+                    "stage_count": 1,
+                    "temporal": [],
+                },
+                {
+                    "capability": "tasks",
+                    "text": " Inicia una sesión.",
+                    "status": "completed",
+                    "stage_count": 1,
+                    "temporal": [],
+                    "depends_on": 0,
+                    "reason": None,
+                },
+                {
+                    "capability": "tasks",
+                    "text": " Después termínala.",
+                    "status": "completed",
+                    "stage_count": 1,
+                    "temporal": [],
+                    "depends_on": 2,
+                    "reason": None,
+                    "dependency_indices": [0, 2],
+                },
+            ],
+        },
+    }
+    store.append_turn(
+        request_id="nm-story-1",
+        role="assistant",
+        text="He guardado la sesión.",
+        created_at=NOW,
+        status="completed",
+        request_detail=detail,
+    )
+    assert store.load_main_page()["turns"][0]["request_detail"]["flow"]["routes"][3][
+        "dependency_indices"
+    ] == [0, 2]
+    for bad in ([0, 0], [0, 3], [-1, 2], [True, 2]):
+        altered = json.loads(json.dumps(detail))
+        altered["flow"]["routes"][3]["dependency_indices"] = bad
+        with pytest.raises(ConversationError):
+            _validate_request_detail(altered, "nm-story-1", "assistant")

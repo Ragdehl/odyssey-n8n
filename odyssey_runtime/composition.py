@@ -4416,6 +4416,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             reasoner=contextual_reasoner,
             bindings=self_binding_repository,
             pending_recorder=pending_recorder,
+            parallel_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             refresh_affected_indexes=refresh_affected_indexes,
             refresh_between_independent_scopes=lambda ids: refresh_affected_indexes(
                 ids, allow_full_rebuild=False

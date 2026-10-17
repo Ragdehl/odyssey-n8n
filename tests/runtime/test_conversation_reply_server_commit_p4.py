@@ -290,3 +290,115 @@ def test_replay_keeps_first_assistant_text_status_and_diagnostics(isolated_http)
     assert status == 200 and len(page["turns"]) == 2
     assert page["turns"][-1]["text"] == "Guardado."
     assert calls == ["e3-reply-stable-1"]
+
+
+def test_rendered_graph_and_model_timing_survive_actual_server_history_and_replay(isolated_http):
+    """Real n8n stage_view used to trigger text-only fallback on EVERY live turn."""
+    port, _runtime, actor, _other, calls = isolated_http
+    request_id = "p4-dev-real-stage-view-reload"
+    status, _ = _post(
+        port,
+        "/execute",
+        {
+            "request": "Ayer compré un cuaderno y hoy regué una planta.",
+            "request_id": request_id,
+            "conversation_id": "main",
+            **_actor(actor),
+        },
+    )
+    assert status == 200
+    detail = {
+        "request_id": request_id,
+        "operational": {
+            "total_duration_ms": 52460.0,
+            "stages": [
+                {
+                    "name": "application.source_processing",
+                    "outcome": "completed",
+                    "duration_ms": 52000.0,
+                    "provider_calls": [],
+                    "stage_view": {"version": 1, "label": "Analizar mensaje", "icon": "router"},
+                    "substeps": [
+                        {
+                            "name": "provider.gpt-6-luna.odyssey_light_capability_route_v1",
+                            "outcome": "completed",
+                            "start_offset_ms": 0.0,
+                            "duration_ms": 12460.0,
+                            "error_category": None,
+                        }
+                    ],
+                },
+                {
+                    "name": "application.router",
+                    "outcome": "completed",
+                    "duration_ms": 12460.0,
+                    "provider_calls": [],
+                    "stage_view": {"version": 1, "label": "Router", "icon": "router"},
+                },
+                {
+                    "name": "planner",
+                    "outcome": "completed",
+                    "duration_ms": 0.1,
+                    "provider_calls": [],
+                    "route_index": 0,
+                    "stage_view": {"version": 1, "label": "Planner", "icon": "planner"},
+                },
+                {
+                    "name": "action.write",
+                    "outcome": "completed",
+                    "duration_ms": 240.0,
+                    "provider_calls": [],
+                    "route_index": 0,
+                    "stage_view": {"version": 1, "label": "Escribir", "icon": "core"},
+                },
+            ],
+        },
+        "flow": {
+            "version": 1,
+            "input": "Ayer compré un cuaderno y hoy regué una planta.",
+            "parallel_preparation": False,
+            "routes": [
+                {
+                    "capability": "core",
+                    "text": "Ayer compré un cuaderno y hoy regué una planta.",
+                    "stage_count": 2,
+                    "status": "completed",
+                    "temporal": [],
+                }
+            ],
+        },
+        "changes": {
+            "affected_stable_note_ids": ["date:2026-10-16", "date:2026-10-17"],
+            "units": [],
+        },
+    }
+    response = {
+        "request_id": request_id,
+        "status": "completed",
+        "kind": "acknowledgement",
+        "message": "La información se ha guardado.",
+        "request_detail": detail,
+    }
+    status, first = _post(
+        port, "/conversation/assistant-response", {"response": response, **_actor(actor)}
+    )
+    assert status == 200 and first["conversation_diagnostics_preserved"] is True
+    status, history = _post(port, "/conversation/main", {"operation": "main", **_actor(actor)})
+    assert status == 200
+    assistant = next(turn for turn in history["turns"] if turn["role"] == "assistant")
+    assert assistant["request_detail"] == detail
+    assert assistant["request_detail"]["flow"]["routes"][0]["capability"] == "core"
+    assert (
+        assistant["request_detail"]["operational"]["stages"][0]["substeps"][0]["duration_ms"]
+        == 12460.0
+    )
+    status, replay = _post(
+        port,
+        "/conversation/assistant-response",
+        {
+            "response": {**response, "request_detail": {"some_new_timing": 0}},
+            **_actor(actor),
+        },
+    )
+    assert status == 200 and replay["request_detail"] == detail
+    assert calls == [request_id]

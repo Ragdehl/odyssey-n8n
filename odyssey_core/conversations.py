@@ -596,6 +596,7 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
                 "steps",
                 "depends_on",
                 "reason",
+                "dependency_indices",
             }
             or not isinstance(route["capability"], str)
             or not 1 <= len(route["capability"]) <= 40
@@ -623,6 +624,17 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
             )
         ):
             raise ConversationError("execution flow is invalid")
+        if "dependency_indices" in route:
+            ancestors = route["dependency_indices"]
+            if (
+                not has_dependency
+                or not isinstance(ancestors, list)
+                or not 2 <= len(ancestors) <= 8
+                or any(type(parent) is not int or not 0 <= parent < index for parent in ancestors)
+                or len(set(ancestors)) != len(ancestors)
+                or route["depends_on"] not in ancestors
+            ):
+                raise ConversationError("execution flow is invalid")
         if "steps" in route:
             steps = route["steps"]
             if not isinstance(steps, list) or len(steps) != route["stage_count"]:
@@ -779,6 +791,8 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         "output_text_chars",
         "output_text_bytes",
         "estimated_cost",
+        "stage_view",
+        "route_index",
     }
     if (
         not isinstance(value, dict)
@@ -789,6 +803,36 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
         or len(value["outcome"]) > 80
     ):
         raise ConversationError("request detail is invalid")
+    if "route_index" in value and (
+        not allow_calls
+        or type(value["route_index"]) is not int
+        or not 0 <= value["route_index"] <= 7
+    ):
+        raise ConversationError("request detail is invalid")
+    if "stage_view" in value:
+        view = value["stage_view"]
+        if (
+            not allow_calls
+            or not isinstance(view, dict)
+            or set(view) != {"version", "label", "icon"}
+            or type(view["version"]) is not int
+            or view["version"] != 1
+            or not isinstance(view["label"], str)
+            or not 1 <= len(view["label"]) <= 80
+            or view["icon"]
+            not in {
+                "router",
+                "temporal",
+                "planner",
+                "tasks",
+                "core",
+                "git",
+                "index",
+                "pending",
+                "result",
+            }
+        ):
+            raise ConversationError("request detail is invalid")
     for key in ("model", "reasoning_effort", "error_category"):
         if value.get(key) is not None and (
             not isinstance(value[key], str) or len(value[key]) > 120

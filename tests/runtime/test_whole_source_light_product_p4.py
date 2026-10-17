@@ -179,6 +179,46 @@ def test_production_p4_real_writer_and_e3_replay_from_authentic_model_snapshot(t
     assert "odyssey:fact request=p4-prod-real-md-day-2026-10-15" in asserted[0].content
     assert "(yo:" in asserted[0].content
     assert all(not n.content for n in dated if n.metadata["id"] != "date:2026-10-15")
+    # The Core path used to lose the execution graph even when Markdown was
+    # correct. Transport actual original-source scope and observed Core stages
+    # without fabricating Router splits or any dependency edge.
+    flow = result["execution_flow"]
+    assert flow["input"] == source and len(flow["routes"]) == 1
+    assert flow["routes"][0]["capability"] == "core"
+    assert "depends_on" not in flow["routes"][0]
+    detail_stages = result["operational"]["stages"]
+    assert detail_stages[0]["name"] == "application.source_processing"
+    model_spans = detail_stages[0]["substeps"]
+    assert len(model_spans) == 5
+    assert [item["name"].split(".")[-1] for item in model_spans] == [
+        "odyssey_light_capability_route_v1",
+        "odyssey_light_shared_semantic_plan_v1",
+        "odyssey_p2_source_coverage_v1",
+        "odyssey_speaker_full_A",
+        "odyssey_speaker_full_B",
+    ]
+    assert all(item["duration_ms"] >= 0 for item in model_spans)
+    assert detail_stages[1]["name"] == "application.router"
+    # Runtime legitimately appends its postwrite index scheduling stage
+    # AFTER the source route; it does not belong to the Core action scope.
+    assert flow["routes"][0]["stage_count"] == len(detail_stages) - 3
+    assert detail_stages[-1]["name"] in {"index_refresh", "index_refresh.schedule"}
+    # Check the ACTUAL n8n workflow source and browser validator using the
+    # physical Core Writer's product result, not a fabricated UI fixture.
+    import subprocess
+
+    js_contract = ROOT / "tests/p4_single_core_n8n_flow_contract.mjs"
+    bridge = subprocess.run(
+        ["node", str(js_contract)],
+        input=json.dumps(result, ensure_ascii=False),
+        capture_output=True,
+        text=True,
+        timeout=12,
+        check=False,
+    )
+    assert bridge.returncode == 0, bridge.stderr or bridge.stdout
+    assert json.loads(bridge.stdout)["passed"] is True
+    assert [stage["name"] for stage in detail_stages[2:]].count("action.write") >= 1
     before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
     replay = runtime.execute_product(*payload)
     assert replay["delivery_replayed"] is True
@@ -666,3 +706,50 @@ def test_router_two_task_operations_can_never_execute_only_the_first(tmp_path):
         "odyssey_light_capability_route_v1",
         "odyssey_task_only_scope_v1",
     ]
+
+
+def test_dev_parallel_speaker_reviewers_both_run_and_remain_source_verified(tmp_path):
+    """No loss of either A/B source attestation when the real provider is parallel."""
+    from threading import Lock
+    from time import perf_counter, sleep
+
+    source, router, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, executor, runtime = _fixture(tmp_path)
+    records = {
+        "odyssey_light_capability_route_v1": router,
+        "odyssey_light_shared_semantic_plan_v1": plan,
+        "odyssey_p2_source_coverage_v1": review,
+        "odyssey_speaker_full_A": _speaker(source, plan, base=1),
+        "odyssey_speaker_full_B": _speaker(source, plan),
+    }
+
+    class ThreadSafeClient:
+        def __init__(self):
+            self.responses = self
+            self.started = {}
+            self.lock = Lock()
+
+        def create(self, **kwargs):
+            name = kwargs["text"]["format"]["name"]
+            with self.lock:
+                assert name not in self.started
+                self.started[name] = perf_counter()
+            if name.startswith("odyssey_speaker_full_"):
+                sleep(0.08)
+            return SimpleNamespace(status="completed", output_text=json.dumps(records[name]))
+
+    client = ThreadSafeClient()
+    executor.client = client
+    executor.parallel_speaker_reviews = True
+    result = runtime.execute_product(source, "p4-real-parallel-speaker-proof", "main", actor)
+    assert result["status"] == "completed", result
+    assert len(client.started) == 5
+    assert (
+        abs(client.started["odyssey_speaker_full_A"] - client.started["odyssey_speaker_full_B"])
+        < 0.055
+    )
+    spans = result["operational"]["stages"][0]["substeps"]
+    assert len(spans) == 5
+    assert len([span for span in spans if "odyssey_speaker_full_" in span["name"]]) == 2
+    assert result["execution_flow"]["routes"][0]["capability"] == "core"
+    assert "(yo:" in repo.read_text("calendar/days/2026-10-15.md")

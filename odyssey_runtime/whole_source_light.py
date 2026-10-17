@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime
 from json import JSONDecodeError
@@ -61,7 +63,12 @@ from odyssey_core.independent_source_scopes import (
     verify_independent_source_scopes,
 )
 from odyssey_core.notes import scoped_note_decode_cache
-from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
+from odyssey_core.observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalStage,
+    SpanRecorder,
+)
 from odyssey_core.source_bound_dependency import SourceBoundDependency
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal_interpretation import TemporalInterpretation
@@ -123,6 +130,11 @@ from odyssey_runtime.whole_source_model_contract import (
 
 ROUTER_MODEL = "gpt-6-luna"
 PLANNER_MODEL = "gpt-5.6-luna"
+# Request-local, content-free provider telemetry. No cross-actor or
+# cross-request mutable state is stored on the long-lived P4 executor.
+_P4_PROVIDER_SPANS: ContextVar[SpanRecorder | None] = ContextVar(
+    "odyssey_p4_provider_spans", default=None
+)
 
 
 class WholeSourceLightError(ValueError):
@@ -144,6 +156,10 @@ class WholeSourceLightExecutor:
     progress: Callable[[str, dict[str, object]], None] | None = None
     timezone: str = "Europe/Paris"
     now: Callable[[], datetime] | None = None
+    # Prewrite-independent source-speaker reviewers can run concurrently on
+    # the DEV provider. The frozen provider client stays sequential by default.
+    # This does not remove either attestation or allow a write before both.
+    parallel_speaker_reviews: bool = False
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
     pending_recorder: Any | None = None
@@ -221,24 +237,33 @@ class WholeSourceLightExecutor:
     ) = None
 
     def _ask(self, model: str, instructions: str, payload: dict, schema: dict, name: str) -> dict:
+        # Same strict provider contract in production and frozen tests. Only
+        # the timing wrapper differs; inputs never enter the request trace.
+        arguments = {
+            "model": model,
+            "reasoning": {"effort": "low"},
+            "store": False,
+            "max_output_tokens": 1700,
+            "input": [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": name,
+                    "strict": True,
+                    "schema": schema,
+                }
+            },
+        }
         try:
-            answer = self.client.responses.create(
-                model=model,
-                reasoning={"effort": "low"},
-                store=False,
-                max_output_tokens=1700,
-                input=[
-                    {"role": "system", "content": instructions},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                ],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": name,
-                        "strict": True,
-                        "schema": schema,
-                    }
-                },
+            recorder = _P4_PROVIDER_SPANS.get()
+            create = self.client.responses.create
+            answer = (
+                recorder.invoke(f"provider.{model}.{name}", create, **arguments)
+                if recorder is not None
+                else create(**arguments)
             )
         except (OpenAIError, TimeoutError, ConnectionError, OSError) as error:
             raise WholeSourceLightError("Bounded P4 provider is unavailable") from error
@@ -251,6 +276,56 @@ class WholeSourceLightExecutor:
         if not isinstance(result, dict):
             raise WholeSourceLightError("Provider response shape is invalid")
         return result
+
+    def _independent_speaker_reviews(self, payload: dict) -> tuple[dict, dict]:
+        """Run independently required attestations concurrently, never skip one.
+
+        Only the true provider path opts in. Each thread owns its own
+        SpanRecorder and the caller joins the two bounded duration records;
+        the request's parent SpanRecorder is never modified concurrently.
+        """
+        if not self.parallel_speaker_reviews:
+            return (
+                self._ask(
+                    PLANNER_MODEL,
+                    PROMPT_SPEAKER_A,
+                    payload,
+                    SPEAKER_SCHEMA,
+                    "odyssey_speaker_full_A",
+                ),
+                self._ask(
+                    ROUTER_MODEL,
+                    PROMPT_SPEAKER_B,
+                    payload,
+                    SPEAKER_SCHEMA,
+                    "odyssey_speaker_full_B",
+                ),
+            )
+
+        parent_recorder = _P4_PROVIDER_SPANS.get()
+        origin = parent_recorder.origin if parent_recorder is not None else perf_counter()
+
+        def review(model: str, instructions: str, name: str) -> tuple[dict, tuple]:
+            thread_recorder = SpanRecorder(origin, perf_counter)
+            token = _P4_PROVIDER_SPANS.set(thread_recorder)
+            try:
+                value = self._ask(model, instructions, payload, SPEAKER_SCHEMA, name)
+            finally:
+                _P4_PROVIDER_SPANS.reset(token)
+            return value, thread_recorder.spans
+
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="odyssey-p4-review") as pool:
+            future_a = pool.submit(
+                review, PLANNER_MODEL, PROMPT_SPEAKER_A, "odyssey_speaker_full_A"
+            )
+            future_b = pool.submit(review, ROUTER_MODEL, PROMPT_SPEAKER_B, "odyssey_speaker_full_B")
+            first, first_spans = future_a.result()
+            second, second_spans = future_b.result()
+        if parent_recorder is not None:
+            parent_recorder.spans += tuple(
+                sorted((*first_spans, *second_spans), key=lambda span: span.start_offset_ms)
+            )
+        return first, second
 
     def _note_hints(self, source: str) -> list[dict]:
         # The existing derived context index is only a bounded hint source.
@@ -268,21 +343,85 @@ class WholeSourceLightExecutor:
     def __call__(
         self, source: str, delivery: str, actor: AuthenticatedActorContext, conversation_id: str
     ) -> ApplicationResult:
-        # No trust caching: only parsed representations of byte-for-byte
-        # identical canonical Markdown, and only within this one delivery.
-        with (
-            scoped_note_decode_cache(),
-            self.repository.scoped_unchanged_reads(),
-            scoped_verified_metadata_catalog(index_path=str(self.context_index.path)),
+        # Instrument only the authenticated request's MODEL boundaries. Source
+        # text, token contents, Note identities and prompts never enter spans.
+        # The existing typed Core/Tasks stage evidence remains authoritative.
+        started = perf_counter()
+        recorder = SpanRecorder(started, perf_counter)
+        token = _P4_PROVIDER_SPANS.set(recorder)
+        try:
+            with (
+                scoped_note_decode_cache(),
+                self.repository.scoped_unchanged_reads(),
+                scoped_verified_metadata_catalog(index_path=str(self.context_index.path)),
+            ):
+                try:
+                    result = self._execute_source(source, delivery, actor, conversation_id)
+                except WholeSourceLightError:
+                    # The P4-specific error class is raised only by model and
+                    # source-hint PREWRITE steps. Core/Tasks mutations use their
+                    # own typed failures, which must still propagate and retain
+                    # the E3 claim if a physical write may have happened.
+                    result = self._abstain(delivery, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+        finally:
+            _P4_PROVIDER_SPANS.reset(token)
+        elapsed_ms = max(0.0, (perf_counter() - started) * 1000)
+        stages = result.operational.stages
+        # One true source wall-clock stage with bounded model-only substeps.
+        # The Core Writers/Task services continue to own their own stages;
+        # overlaps here describe nested work, not additional operations.
+        source_stage = OperationalStage(
+            "application.source_processing",
+            OperationalOutcome.COMPLETED,
+            elapsed_ms,
+            substeps=recorder.spans[:64],
+        )
+        flow = result.execution_flow
+        if (
+            flow is None
+            and result.status is ApplicationStatus.COMPLETED
+            and 0 < len(stages) <= 16
+            and isinstance(source, str)
+            and 0 < len(source) <= 4096
         ):
-            try:
-                return self._execute_source(source, delivery, actor, conversation_id)
-            except WholeSourceLightError:
-                # The P4-specific error class is raised only by model and
-                # source-hint PREWRITE steps. Core/Tasks mutations use their
-                # own typed failures, which must still propagate and retain
-                # the E3 claim if a physical write may have happened.
-                return self._abstain(delivery, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+            # The Core-owned whole-source writer may produce several real
+            # actions from ONE reviewed source. Describe exactly one Core
+            # scope containing ALL observed steps; never fabricate a split
+            # into source spans or dependency edges the Router didn't prove.
+            first_router_ms = recorder.spans[0].duration_ms if recorder.spans else 0.0
+            router_stage = OperationalStage(
+                "application.router", OperationalOutcome.COMPLETED, first_router_ms
+            )
+            flow = {
+                "version": 1,
+                "input": source,
+                "parallel_preparation": False,
+                "routes": [
+                    {
+                        "capability": "core",
+                        "text": source,
+                        "stage_count": len(stages),
+                        "status": result.status.value,
+                        "temporal": [],
+                    }
+                ],
+            }
+            stages = (router_stage, *stages)
+        if flow is not None and result.execution_flow is not None:
+            # Existing N-scope flows already have a real application.router
+            # followed by exact per-route stages. Keep its position/owner
+            # unchanged for the E2 ledger and JS flow contract; attach only
+            # child provider timings without inserting a synthetic stage.
+            if stages and stages[0].name == "application.router":
+                stages = (replace(stages[0], substeps=recorder.spans[:64]), *stages[1:])
+            operational_stages = stages
+        else:
+            operational_stages = (source_stage, *stages)
+        return replace(
+            result,
+            operational=OperationalEvidence(elapsed_ms, operational_stages),
+            execution_flow=flow,
+        )
 
     def _execute_source(
         self,
@@ -590,20 +729,7 @@ class WholeSourceLightExecutor:
                 ],
                 "clock": clock,
             }
-            speaker_a = self._ask(
-                PLANNER_MODEL,
-                PROMPT_SPEAKER_A,
-                speaker_payload,
-                SPEAKER_SCHEMA,
-                "odyssey_speaker_full_A",
-            )
-            speaker_b = self._ask(
-                ROUTER_MODEL,
-                PROMPT_SPEAKER_B,
-                speaker_payload,
-                SPEAKER_SCHEMA,
-                "odyssey_speaker_full_B",
-            )
+            speaker_a, speaker_b = self._independent_speaker_reviews(speaker_payload)
             attested = validate_dual_speaker_review(source, proposed["facts"], speaker_a, speaker_b)
             if any(f.assertion not in {"asserted", "planned"} for f in attested.facts):
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
