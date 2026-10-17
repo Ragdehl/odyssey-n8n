@@ -141,6 +141,8 @@ def test_router_generic_intention_coverage_does_not_merge_core_fact_with_session
     assert "existing Task" in prompt
     assert "Core AND Tasks" in prompt
     assert "dependent Tasks operation scope" in prompt
+    assert "App scopes are INTENTION groups" in prompt
+    assert "preserve TWO Task scopes" in prompt
     assert "A progress report explicitly attached to a session" in prompt
     for example_specific in ("Preparar informe Atlas", "esa tarea", "Guillem", "Maite"):
         assert example_specific not in prompt

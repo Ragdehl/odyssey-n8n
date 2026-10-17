@@ -17,6 +17,7 @@ from threading import Thread
 
 from openai import OpenAI
 
+from odyssey_core.note_queries import NotesQueryService
 from odyssey_core.notes import parse_note
 from odyssey_runtime.server import _handler_for
 from tests.runtime.test_whole_source_light_product_p4 import _fixture
@@ -113,6 +114,25 @@ def main():
                         parse_note(value).metadata.get("type") == "task"
                         for value in changed.values()
                     )
+                    # Speaker/SELF and graph evidence for an undated Spanish
+                    # first-person sentence cannot be inferred from a positive
+                    # fact count. Check the actual Notes projection/backlink.
+                    implicit_self_backlink = None
+                    if case == "implicit_undated_self" and status == 200:
+                        found = [
+                            parse_note(body)
+                            for body in after.values()
+                            if parse_note(body).metadata.get("name") == "Nerea Ensayo"
+                            and parse_note(body).metadata.get("type") == "person"
+                        ]
+                        implicit_self_backlink = len(found) == 1 and any(
+                            back.source.id == "self-note"
+                            for back in NotesQueryService(
+                                repo, service.schema, service.context_index
+                            )
+                            .backlinks(found[0].metadata["id"])
+                            .items
+                        )
                     accepted = (
                         status == 200
                         and result.get("status") == expected_status
@@ -122,6 +142,7 @@ def main():
                         and replay.get("delivery_replayed") is True
                         and replay_same
                         and (expected_status != "needs_attention" or not changed)
+                        and (implicit_self_backlink is None or implicit_self_backlink)
                     )
                     row = {
                         "accepted": accepted,
@@ -135,6 +156,7 @@ def main():
                         "affected_count": len(result.get("affected_stable_note_ids") or []),
                         "physical_source_fact_count": real_facts,
                         "physical_changed_note_count": len(changed),
+                        "implicit_self_backlink_verified": implicit_self_backlink,
                         "replay_http": replay_http,
                         "replay": replay.get("delivery_replayed"),
                         "replay_preserves_all_bytes": replay_same,

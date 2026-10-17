@@ -49,6 +49,31 @@ CASES = (
         "Hoy revisé la tarea Atlas, empieza una sesión en esa tarea y después corrige la tarea Beta.",
         ("core", "tasks"),
     ),
+    ("implicit-self-person", "Hoy he conocido a Guillem.", ("core",)),
+    ("implicit-self-elliptic", "Hoy conocí a Guillem y mañana debo llamarlo.", ("core", "tasks")),
+    ("multiple-people-one-fact", "Hoy vi a Ana y Luis en el parque.", ("core",)),
+    (
+        "children-shared-actor",
+        "Hoy mis hijos fueron al museo, jugaron y cenaron juntos.",
+        ("core",),
+    ),
+    ("sprint-day-context", "Mañana es el final del sprint de trabajo.", ("core",)),
+    ("new-project-fact", "Hoy he creado el proyecto XBOm.", ("core",)),
+    ("group-pronoun", "Hoy hablé con Bea y con mis hijos.", ("core",)),
+    ("explicit-create-task", "Crea una tarea de preparar la presentación Atlas.", ("tasks",)),
+    (
+        "explicit-create-subtask",
+        "Crea una subtarea de revisar los gráficos dentro de la tarea Atlas.",
+        ("tasks",),
+    ),
+    ("stop-session", "Termina ahora la sesión de trabajo de Atlas.", ("tasks",)),
+    ("edit-session-time", "Corrige el inicio de la sesión de Atlas a las 15:10.", ("tasks",)),
+    ("core-personal-preference", "Me gusta la subida.", ("core",)),
+    (
+        "two-tasks-no-core",
+        "Inicia sesión en la tarea Atlas y después completa la tarea Beta.",
+        ("tasks",),
+    ),
 )
 
 
@@ -98,13 +123,21 @@ def main() -> int:
             scopes = value.get("app_scopes", [])
             depended = any(part.get("depends_on_another_scope") is True for part in scopes)
             expected_dependent = name.startswith("dependent-")
-            complete = exact and (
-                not expected_dependent
-                or (
-                    value["interpretation"] == "joint"
-                    and depended
-                    and any(x.get("capability") == "core" for x in scopes)
-                    and any(x.get("capability") == "tasks" for x in scopes)
+            separate_multi = name not in {"multiple-dependency-groups", "two-tasks-no-core"} or (
+                len(scopes) >= (3 if name == "multiple-dependency-groups" else 2)
+                and sum(part.get("capability") == "tasks" for part in scopes) >= 2
+            )
+            complete = (
+                exact
+                and separate_multi
+                and (
+                    not expected_dependent
+                    or (
+                        value["interpretation"] == "joint"
+                        and depended
+                        and any(x.get("capability") == "core" for x in scopes)
+                        and any(x.get("capability") == "tasks" for x in scopes)
+                    )
                 )
             )
             result = {

@@ -594,3 +594,54 @@ def test_postwrite_failure_cannot_be_reclassified_as_prewrite_provider_abstentio
     with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
         runtime.execute_product(source, "p4-failed-after-write", "main", actor)
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_router_two_task_operations_can_never_execute_only_the_first(tmp_path):
+    """A truthful two-scope Router still needs Tasks-only ONE-operation proof.
+
+    This freezes the genuine model's intent separation from the 22-case live
+    diversity run, but does not treat Router scope descriptions as authority.
+    """
+    text = "Inicia sesión en la tarea Atlas y después completa la tarea Beta."
+    delegated = []
+
+    def forbidden_delegate(*args):
+        delegated.append(args)
+        raise AssertionError("Two Tasks operations cannot be silently collapsed")
+
+    repo, actor, executor, runtime = _fixture(tmp_path, task_delegate=forbidden_delegate)
+    executor.client = RecordedClient(
+        [
+            {
+                "capabilities": ["tasks"],
+                "interpretation": "separable",
+                "reason": "two_lifecycle_intents",
+                "self_relation_span": None,
+                "app_scopes": [
+                    {
+                        "capability": "tasks",
+                        "description": "Start Atlas session",
+                        "depends_on_another_scope": False,
+                    },
+                    {
+                        "capability": "tasks",
+                        "description": "Complete Beta task",
+                        "depends_on_another_scope": False,
+                    },
+                ],
+            },
+            {"only_task_semantics": False, "exactly_one_operation": False, "source_quote": text},
+        ]
+    )
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    first = runtime.execute_product(text, "p4-two-task-operations-veto", "main", actor)
+    assert first["status"] == "needs_attention"
+    assert not delegated
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    replay = runtime.execute_product(text, "p4-two-task-operations-veto", "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    assert executor.client.calls == [
+        "odyssey_light_capability_route_v1",
+        "odyssey_task_only_scope_v1",
+    ]
