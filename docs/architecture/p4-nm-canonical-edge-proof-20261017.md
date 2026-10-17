@@ -1,0 +1,17 @@
+# P4 — Re-grounding canónico por cada arista N:M (17-10-2026, rama aislada)
+
+## Qué se ha cerrado
+
+El grafo exacto N:M ahora exige, para cada arista revisada, **dos menciones literales**: `antecedent_mention` en el grupo previo y `mention` en el consumidor posterior. Cada una debe aparecer una sola vez en su fragmento; no son identidades inventadas por Router. Una misma operación Core puede materializar varias referencias genuinas (p. ej. un enlace a Alfa y otro a Beta). Por tanto, múltiples aristas *distintas* pueden apuntar al mismo grupo de origen sin perder cardinalidad; sí se rechaza repetir exactamente la misma arista.
+
+`odyssey_core/dependent_group_evidence.py` implementa `prove_canonical_group_handoff`: selecciona la evidencia de cada arista por **mención de origen exacta** de entre los `ActionResult.canonical_reference_evidence` realmente emitidos por Core, exige estado COMPLETED y que el documento Markdown origen esté en la lista de Notes materializadas, verifica acción y ocurrencia de referencia únicas y usa `_dependent_evidence_is_current` para confirmar hash actual de la nota fuente y del target. Rechaza referencia ausente, alias no demostrado, mención repetida, resultado parcial, carriers adulterados y modificaciones/borrado externos. Su `CanonicalGroupHandoff.require_all_current` vuelve a verificar **TODAS** las aristas en el límite del futuro consumidor. La única puerta potencial para Core sigue siendo `DependentReferenceGuard` por arista; el handoff es solo evidencia interna, sin método de escribir.
+
+## Prueba física, no simulación de contenido
+
+`tests/core/test_p4_canonical_group_handoff.py` crea auténticas Notes `task`, escribe antecedentes reales con `execute_request`/Core Writer y obtiene evidence canónica materializada. Demuestra dos grupos predecesores→un consumidor, una identidad antecedente→varios consumidores y **dos wikilinks físicos en la misma única escritura Core** que posteriormente se asignan separadamente a sus menciones. Prueba readback de documentos reales, modificación posterior de la nota origen, del destino, soft-delete, carriers alterados, acción ausente, resultados parciales, el orden lógico y un recheck luego de editar el origen. Se mantiene el contrato anterior 1:1 sin cambio en su semántica.
+
+## Límites y siguiente frontera
+
+Esta etapa NO habilita todavía `joint` con 3+ grupos en `WholeSourceLightExecutor`: faltan los validadores semánticos de cada operación (`Task` lifecycle o Core fact), el plan prewrite global y el tratamiento de planes que refieren a varios targets, antes de que el Runtime pueda autorizar cada mutación. Las relaciones entre aplicaciones no pueden heredar IDs de un Router; el consumidor debe comprobar el handoff **inmediatamente antes** de su preflight Core/CAS y E3 debe conservar recibos parciales. `prove_canonical_group_handoff` acredita enlaces Core→consumidor, no convierte un pronombre ambiguo en certeza: una revisión semántica de todas las aristas es obligatoria. Tampoco habilita recuperación de claims E3 sin recibo terminal ni navegador→n8n auténtico.
+
+Evidencia de cierre: gate transversal **874 Python +168 Node PASS**, suite global **3778 PASS, 80 SKIP, 52 subtests PASS y los mismos 10 FAIL históricos**; acceptance ledger **17 invariantes /34 anclas**. Ruff de los módulos cambiados PASS. Estos ensayos no usan GPT fresco ni navegador+n8n; el estado operativo y el siguiente gate permanecen en el Functional Roadmap.

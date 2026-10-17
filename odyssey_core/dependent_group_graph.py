@@ -20,6 +20,7 @@ class DependentGroupGraphError(ValueError):
 class GroupDependency:
     predecessor_index: int
     mention: str
+    antecedent_mention: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +37,14 @@ class ReviewedSourceGraph:
     groups: tuple[SourceGroup, ...]
 
     @property
-    def edges(self) -> tuple[tuple[int, int, str], ...]:
+    def edges(self) -> tuple[tuple[int, int, str, str], ...]:
         return tuple(
-            (dependency.predecessor_index, group.ordinal, dependency.mention)
+            (
+                dependency.predecessor_index,
+                group.ordinal,
+                dependency.antecedent_mention,
+                dependency.mention,
+            )
             for group in self.groups
             for dependency in group.dependencies
         )
@@ -91,24 +97,38 @@ def verify_dependent_group_graph(
         dependencies = []
         seen = set()
         for entry in group["dependencies"]:
-            if not isinstance(entry, Mapping) or set(entry) != {"predecessor_index", "mention"}:
+            if not isinstance(entry, Mapping) or set(entry) != {
+                "predecessor_index",
+                "mention",
+                "antecedent_mention",
+            }:
                 raise DependentGroupGraphError("Unrecognized dependency edge")
             parent = entry["predecessor_index"]
             mention = entry["mention"]
+            antecedent_mention = entry["antecedent_mention"]
+            key = (parent, antecedent_mention, mention)
             if (
                 not isinstance(parent, int)
                 or isinstance(parent, bool)
                 or not 0 <= parent < i
-                or parent in seen
+                or key in seen
                 or not isinstance(mention, str)
                 or not mention.strip()
                 or mention != mention.strip()
                 or len(mention) > 120
                 or group["source_quote"].casefold().count(mention.casefold()) != 1
+                or not isinstance(antecedent_mention, str)
+                or not antecedent_mention.strip()
+                or antecedent_mention != antecedent_mention.strip()
+                or len(antecedent_mention) > 120
+                or raw_groups[parent]["source_quote"]
+                .casefold()
+                .count(antecedent_mention.casefold())
+                != 1
             ):
                 raise DependentGroupGraphError("Ambiguous, forward, or ungrounded dependency")
-            seen.add(parent)
-            dependencies.append(GroupDependency(parent, mention))
+            seen.add(key)
+            dependencies.append(GroupDependency(parent, mention, antecedent_mention))
         if len(dependencies) > 8:
             raise DependentGroupGraphError("Dependency fan-in exceeds budget")
         has_dependency |= bool(dependencies)

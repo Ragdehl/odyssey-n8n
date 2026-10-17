@@ -32,6 +32,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_p4_source_bound_dependency.py",
         "tests/core/test_p4_dependent_source_scopes.py",
         "tests/core/test_p4_dependent_group_graph.py",
+        "tests/core/test_p4_canonical_group_handoff.py",
         "tests/core/test_write_plan_enrichment_e2.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",

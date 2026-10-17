@@ -17,14 +17,16 @@ def _proof():
         {
             "capability": "tasks",
             "source_quote": "Prepara un resumen para ella. ",
-            "dependencies": [{"predecessor_index": 0, "mention": "ella"}],
+            "dependencies": [
+                {"predecessor_index": 0, "mention": "ella", "antecedent_mention": "Ana"}
+            ],
         },
         {
             "capability": "tasks",
             "source_quote": "Y manda el documento a ambos.",
             "dependencies": [
-                {"predecessor_index": 0, "mention": "documento"},
-                {"predecessor_index": 1, "mention": "ambos"},
+                {"predecessor_index": 0, "mention": "ambos", "antecedent_mention": "Ana"},
+                {"predecessor_index": 1, "mention": "ambos", "antecedent_mention": "Luis"},
             ],
         },
     ]
@@ -44,7 +46,7 @@ def test_nm_reviewed_source_graph_preserves_all_spans_and_parent_edges():
     graph = verify_dependent_group_graph(source, proposal, review)
     assert "".join(group.source for group in graph.groups) == source
     assert [group.ordinal for group in graph.groups] == [0, 1, 2, 3]
-    assert graph.edges == ((0, 2, "ella"), (0, 3, "documento"), (1, 3, "ambos"))
+    assert graph.edges == ((0, 2, "Ana", "ella"), (0, 3, "Ana", "ambos"), (1, 3, "Luis", "ambos"))
     assert all(not group.dependencies for group in graph.groups[:2])
 
 
@@ -102,6 +104,44 @@ def test_nm_group_graph_fails_closed_on_unverified_edge_or_source(mutation):
         review["groups"] = deepcopy(proposal["groups"])
     with pytest.raises(DependentGroupGraphError):
         verify_dependent_group_graph(source, proposal, review)
+
+
+def test_nm_two_distinct_reference_occurrences_may_share_one_predecessor():
+    groups = [
+        {"capability": "core", "source_quote": "Revisé Alfa y Beta. ", "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": "Organiza ambas tareas.",
+            "dependencies": [
+                {"predecessor_index": 0, "mention": "ambas tareas", "antecedent_mention": "Alfa"},
+                {"predecessor_index": 0, "mention": "ambas tareas", "antecedent_mention": "Beta"},
+            ],
+        },
+    ]
+    full = "".join(group["source_quote"] for group in groups)
+    graph = verify_dependent_group_graph(
+        full,
+        {"full_source_quote": full, "groups": groups},
+        {
+            "full_source_quote": full,
+            "complete": True,
+            "dependency_edges_verified": True,
+            "groups": deepcopy(groups),
+        },
+    )
+    assert graph.edges == ((0, 1, "Alfa", "ambas tareas"), (0, 1, "Beta", "ambas tareas"))
+    groups[1]["dependencies"].append(deepcopy(groups[1]["dependencies"][0]))
+    with pytest.raises(DependentGroupGraphError):
+        verify_dependent_group_graph(
+            full,
+            {"full_source_quote": full, "groups": groups},
+            {
+                "full_source_quote": full,
+                "complete": True,
+                "dependency_edges_verified": True,
+                "groups": deepcopy(groups),
+            },
+        )
 
 
 def test_nm_reviewed_graph_never_exposes_or_guesses_a_canonical_id():
