@@ -54,23 +54,19 @@ class TaskDependentTarget:
         return proof.stable_note_id
 
 
-def prove_dependent_task_target(
+def verify_dependent_task_semantics(
     *,
     full_source: str,
     antecedent_source: str,
     dependent_source: str,
     dependent_mention: str,
-    core_predecessor: ApplicationResult,
     interpretation: TaskInterpretation,
     attestations: tuple[Mapping[str, object], Mapping[str, object]],
-    repository: VaultRepository,
-    schema: dict[str, Any],
-) -> TaskDependentTarget:
-    """Validate both semantic reviewers AND physically grounded Task identity.
+) -> None:
+    """Pure E2 prewrite check: reject model disagreement BEFORE Core writes.
 
-    Reviewers must independently attest that the exact mention in the dependent
-    scope refers to the uniquely linked Task in the prior source. Neither
-    reviewer supplies Note IDs, mutation commands, or canonical paths.
+    Canonical identity is deliberately NOT selected here. The later
+    prove_dependent_task_target binds the evidence to physical Core Markdown.
     """
     if not isinstance(interpretation, TaskInterpretation):
         raise TaskDependentTargetError("Typed Tasks interpretation required")
@@ -121,6 +117,34 @@ def prove_dependent_task_target(
     }
     if any(not isinstance(att, Mapping) or dict(att) != required for att in attestations):
         raise TaskDependentTargetError("Uncorroborated or altered Task reference semantics")
+
+
+def prove_dependent_task_target(
+    *,
+    full_source: str,
+    antecedent_source: str,
+    dependent_source: str,
+    dependent_mention: str,
+    core_predecessor: ApplicationResult,
+    interpretation: TaskInterpretation,
+    attestations: tuple[Mapping[str, object], Mapping[str, object]],
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> TaskDependentTarget:
+    """Validate both semantic reviewers AND physically grounded Task identity.
+
+    Reviewers must independently attest that the exact mention in the dependent
+    scope refers to the uniquely linked Task in the prior source. Neither
+    reviewer supplies Note IDs, mutation commands, or canonical paths.
+    """
+    verify_dependent_task_semantics(
+        full_source=full_source,
+        antecedent_source=antecedent_source,
+        dependent_source=dependent_source,
+        dependent_mention=dependent_mention,
+        interpretation=interpretation,
+        attestations=attestations,
+    )
     try:
         source_proof = prove_source_bound_dependency(
             complete_original_source=full_source,

@@ -4,6 +4,7 @@ from .dependent_target import (
     TaskDependentTarget,
     TaskDependentTargetError,
     prove_dependent_task_target,
+    verify_dependent_task_semantics,
 )
 from .interpretation import (
     OpenAITaskInterpreter,
@@ -52,6 +53,7 @@ __all__ = [
     "TaskDependentTarget",
     "TaskDependentTargetError",
     "prove_dependent_task_target",
+    "verify_dependent_task_semantics",
     "TASK_SCHEMA_EXTENSION",
     "TASK_STATUS_VALUES",
     "TASK_TYPE",

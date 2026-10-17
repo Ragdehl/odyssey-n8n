@@ -20,6 +20,7 @@ SCHEMAS = (
     contract.INDEPENDENT_SCOPE_PARTITION_SCHEMA,
     contract.INDEPENDENT_SCOPE_REVIEW_SCHEMA,
     contract.DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
+    contract.DEPENDENT_TASK_PARTITION_SCHEMA,
 )
 
 
@@ -56,6 +57,7 @@ def _check(schema, depth=0):
         "independent-scope-partition",
         "independent-scope-audit",
         "dependent-task-target-audit",
+        "dependent-task-source-partition",
     ),
 )
 def test_product_model_schema_requires_every_declared_field_and_forbids_extra(schema):

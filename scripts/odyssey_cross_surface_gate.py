@@ -30,6 +30,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_whole_message_speaker_proof_p4.py",
         "tests/core/test_whole_source_compilation_prewrite_p4.py",
         "tests/core/test_p4_source_bound_dependency.py",
+        "tests/core/test_p4_dependent_source_scopes.py",
         "tests/core/test_write_plan_enrichment_e2.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",
@@ -84,6 +85,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_p4_independent_mixed_scopes.py",
         "tests/runtime/test_p4_dependent_task_target.py",
         "tests/runtime/test_p4_production_composition_task_ui.py",
+        "tests/runtime/test_p4_dependent_router_integrated.py",
+        "tests/runtime/test_p4_dependent_factory_product.py",
         "tests/runtime/test_p4_verified_group_e2.py",
         "tests/runtime/test_p4_taskonly_real_session_parity.py",
         "tests/runtime/test_p4_chat_to_ui_http_flow.py",
@@ -115,7 +118,7 @@ PENDING_LIVE_GATES = (
     "post-write crash and multi-note recovery with real n8n and request IDs",
     "production-like indexes and 250/1000/5000-note Raspberry CPU/RAM benchmarks",
     "clarification/continuation after a partial multi-App write",
-    "dependent Core+Work Session mixed semantics and NEW light-router subtask readback",
+    "dependent Core+Work Session real-model and browser validation, plus NEW light-router subtask readback",
 )
 
 

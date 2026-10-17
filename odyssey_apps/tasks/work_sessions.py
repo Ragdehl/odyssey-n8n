@@ -112,6 +112,15 @@ class TaskWorkSessionService:
         self.id_allocator = id_allocator
         self.activity_id_allocator = activity_id_allocator
 
+    def task_mutation_tokens(self, task_id: str) -> tuple[int, str]:
+        """Read current Task optimistic-lock tokens using the normal typed lookup.
+
+        This is read-only and never authorizes an operation. It is shared with
+        dependent E2 callers; the regular start mutation still CAS-checks it.
+        """
+        _path, note, raw = self._load_task(task_id)
+        return int(note.metadata["revision"]), hashlib.sha256(raw.encode()).hexdigest()
+
     def list_for_task(self, task_id: str) -> tuple[WorkSessionSnapshot, ...]:
         """Return current sessions for one canonical Task, newest first."""
         if not isinstance(task_id, str) or not task_id:

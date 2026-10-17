@@ -26,11 +26,20 @@ from zoneinfo import ZoneInfo
 from openai import OpenAIError
 
 from odyssey_apps.tasks import (
+    TaskDependentTarget,
+    TaskDependentTargetError,
+    TaskInterpretation,
     TaskLifecycleGuard,
     TaskOperation,
+    prove_dependent_task_target,
+    verify_dependent_task_semantics,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
 from odyssey_core.context import ContextIndexError
+from odyssey_core.dependent_source_scopes import (
+    DependentSourceScopesError,
+    verify_dependent_source_scopes,
+)
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.independent_source_scopes import (
     IndependentSourceScopesError,
@@ -39,6 +48,7 @@ from odyssey_core.independent_source_scopes import (
 from odyssey_core.notes import scoped_note_decode_cache
 from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
 from odyssey_core.storage import VaultRepository
+from odyssey_core.temporal_interpretation import TemporalInterpretation
 from odyssey_core.whole_message_coverage import (
     WholeMessageCoverageError,
     validate_whole_message_coverage,
@@ -63,6 +73,11 @@ from odyssey_core.whole_source_compiler import (
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
 from odyssey_runtime.routing import _aggregate as aggregate_verified_application_results
 from odyssey_runtime.whole_source_model_contract import (
+    DEPENDENT_TASK_PARTITION_PROMPT,
+    DEPENDENT_TASK_PARTITION_SCHEMA,
+    DEPENDENT_TASK_TARGET_REVIEW_A,
+    DEPENDENT_TASK_TARGET_REVIEW_B,
+    DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
     INDEPENDENT_SCOPE_PARTITION_PROMPT,
     INDEPENDENT_SCOPE_PARTITION_SCHEMA,
     INDEPENDENT_SCOPE_REVIEW_PROMPT,
@@ -105,6 +120,28 @@ class WholeSourceLightExecutor:
     progress: Callable[[str, dict[str, object]], None] | None = None
     timezone: str = "Europe/Paris"
     now: Callable[[], datetime] | None = None
+    # Distinct capability-owned adapters injected by production composition.
+    # Optional for existing Core-only/independent tests. No new Writer.
+    dependent_core_delegate: (
+        Callable[[str, str, AuthenticatedActorContext, datetime], ApplicationResult] | None
+    ) = None
+    dependent_task_prepare: (
+        Callable[[str, datetime], tuple[TaskInterpretation, TemporalInterpretation | None]] | None
+    ) = None
+    dependent_task_delegate: (
+        Callable[
+            [
+                str,
+                str,
+                AuthenticatedActorContext,
+                TaskInterpretation,
+                TaskDependentTarget,
+                datetime,
+            ],
+            ApplicationResult,
+        ]
+        | None
+    ) = None
 
     def _ask(self, model: str, instructions: str, payload: dict, schema: dict, name: str) -> dict:
         try:
@@ -264,6 +301,38 @@ class WholeSourceLightExecutor:
             )
             and {item["capability"] for item in scopes} == {"core", "tasks"}
         )
+        # A truly dependent source cannot be partitioned as independent. A
+        # separately reviewed literal Core→Tasks chain can use the normal
+        # Core planner and Tasks interpreter, but never a Router-supplied ID.
+        dependent_route = (
+            self.dependent_core_delegate is not None
+            and self.dependent_task_prepare is not None
+            and self.dependent_task_delegate is not None
+            and independent_scope is None
+            and "core" in capabilities
+            and "tasks" in capabilities
+            and route.get("interpretation") == "joint"
+            and isinstance(scopes, list)
+            and len(scopes) >= 2
+            and any(
+                isinstance(item, dict) and item.get("depends_on_another_scope") is True
+                for item in scopes
+            )
+        )
+        if dependent_route:
+            dependent_result = self._execute_dependent_core_task(
+                source,
+                delivery,
+                actor,
+                delivery_instant=instant,
+                router_started=router_started,
+            )
+            if dependent_result is not None:
+                return dependent_result
+            # Only a non-lifecycle mixed Task CREATE can fall through to
+            # the existing whole-source Core planner + Task CREATE auditor.
+            # A Work Session candidate with unproven target never falls back
+            # to a less constrained Task-only mutation route.
         if independent_route:
             return self._execute_independent_scopes(
                 source,
@@ -519,6 +588,213 @@ class WholeSourceLightExecutor:
                 canonical_reference_evidence=(),
             )
         return candidate
+
+    def _execute_dependent_core_task(
+        self,
+        source: str,
+        delivery: str,
+        actor: AuthenticatedActorContext,
+        *,
+        delivery_instant: datetime,
+        router_started: float,
+    ) -> ApplicationResult | None:
+        """One narrow source-exact Core→Task chain, with E2 prewrite reviews.
+
+        The normal Core planner must physically link an EXISTING Task in the
+        antecedent. A later target/operation is selected ONLY by typed Tasks
+        interpretation and corroborated source reviews. More than two
+        dependent groups remain unsupported and cannot silently be dropped.
+        """
+        if (
+            self.dependent_core_delegate is None
+            or self.dependent_task_prepare is None
+            or self.dependent_task_delegate is None
+        ):
+            return self._abstain(delivery)
+        candidate = self._ask(
+            PLANNER_MODEL,
+            DEPENDENT_TASK_PARTITION_PROMPT,
+            {"original_source": source},
+            DEPENDENT_TASK_PARTITION_SCHEMA,
+            "odyssey_dependent_task_partition_v1",
+        )
+        try:
+            scope = verify_dependent_source_scopes(source, candidate)
+        except DependentSourceScopesError:
+            return self._abstain(delivery)
+        # No write occurs until the target operation and TWO independent
+        # source auditors are available, with identical exact-source claims.
+        try:
+            interpretation, temporal = self.dependent_task_prepare(
+                scope.dependent.strip(), delivery_instant
+            )
+            if (
+                not isinstance(interpretation, TaskInterpretation)
+                or interpretation.requires_temporal() != (temporal is not None)
+                or temporal is not None
+                and (
+                    not isinstance(temporal, TemporalInterpretation)
+                    or temporal.source_text != scope.dependent.strip()
+                )
+            ):
+                return self._abstain(delivery, "DEPENDENT_TASK_PREWRITE_UNAVAILABLE")
+        except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
+            return self._abstain(delivery, "DEPENDENT_TASK_PREWRITE_UNAVAILABLE")
+        if interpretation.operation is TaskOperation.CREATE:
+            if any(
+                getattr(mention.role, "value", None) == "PARENT_TASK"
+                for mention in interpretation.relationship_mentions
+            ):
+                # The typed E2 parent proof exists, but P4 does not yet
+                # derive/verify the child title through the ordinary Planner.
+                # Never write a predecessor fact knowing the child must fail.
+                return self._abstain(delivery, "DEPENDENT_SUBTASK_PLANNER_NOT_READY")
+            # Ordinary dependent Task CREATE (an obligation after meeting)
+            # remains owned by the existing whole-source Core compiler.
+            return None
+        # Audit the dependent segment's complete single-operation semantics
+        # independently from both its Router label and the Tasks interpreter.
+        # Two Work Session operations in the same fragment must never be
+        # silently reduced to one before the first Core write.
+        tasks_only = self._ask(
+            PLANNER_MODEL,
+            TASK_ONLY_SCOPE_PROMPT,
+            {"original_source": scope.dependent.strip()},
+            TASK_ONLY_SCOPE_SCHEMA,
+            "odyssey_task_only_scope_v1",
+        )
+        if (
+            tasks_only.get("only_task_semantics") is not True
+            or tasks_only.get("exactly_one_operation") is not True
+            or tasks_only.get("source_quote") != scope.dependent.strip()
+        ):
+            return self._abstain(delivery)
+        payload = {
+            "original_source": scope.original,
+            "antecedent_source": scope.antecedent,
+            "dependent_source": scope.dependent,
+            "dependent_mention": scope.mention,
+            "task_operation": interpretation.operation.value,
+        }
+        first = self._ask(
+            PLANNER_MODEL,
+            DEPENDENT_TASK_TARGET_REVIEW_A,
+            payload,
+            DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
+            "odyssey_dependent_task_review_a_v1",
+        )
+        second = self._ask(
+            ROUTER_MODEL,
+            DEPENDENT_TASK_TARGET_REVIEW_B,
+            payload,
+            DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
+            "odyssey_dependent_task_review_b_v1",
+        )
+        try:
+            verify_dependent_task_semantics(
+                full_source=source,
+                antecedent_source=scope.antecedent,
+                dependent_source=scope.dependent,
+                dependent_mention=scope.mention,
+                interpretation=interpretation,
+                attestations=(first, second),
+            )
+        except TaskDependentTargetError:
+            return self._abstain(delivery)
+        # Do not allow an unproven dependent CREATE to fall back into the
+        # person-only P4 light compiler. Task lifecycle paths are domain-owned.
+        core_locator = f"{delivery}-dependent-core"
+        task_locator = f"{delivery}-dependent-task"
+        if max(len(core_locator), len(task_locator)) > 110:
+            return self._abstain(delivery)
+        # Stages have the same observable meaning as the established P4
+        # route, never synthetic model success. This is the actual boundary
+        # where all model prechecks passed and the first WRITE begins.
+        if self.progress is not None:
+            self.progress("planner.ready", {})
+            self.progress("action.write.started", {})
+        # Standard Core planner/Writer performs the first write and MUST prove
+        # a physical Task backlink. Provider and identity failures stay safe.
+        core = self.dependent_core_delegate(
+            scope.antecedent.strip(), core_locator, actor, delivery_instant
+        )
+        if core.status is not ApplicationStatus.COMPLETED:
+            return replace(core, request_id=delivery)
+        # The typed handoff reads current canonical Markdown directly; it
+        # never needs an index refresh between the two writes. Product E3
+        # schedules ONE incremental refresh of the combined affected IDs at
+        # the outer boundary, avoiding needless Raspberry index/CPU churn.
+        try:
+            target = prove_dependent_task_target(
+                full_source=source,
+                antecedent_source=scope.antecedent,
+                dependent_source=scope.dependent,
+                dependent_mention=scope.mention,
+                core_predecessor=core,
+                interpretation=interpretation,
+                attestations=(first, second),
+                repository=self.repository,
+                schema=self.schema,
+            )
+        except TaskDependentTargetError:
+            # Core may have written a real fact but its Task link was missing,
+            # conflicting or stale: report PARTIAL and NEVER run Tasks.
+            return self._partial(delivery, [core, self._abstain(task_locator)])
+        if self.progress is not None:
+            self.progress("action.delegate.started", {})
+        task = self.dependent_task_delegate(
+            scope.dependent.strip(),
+            task_locator,
+            actor,
+            interpretation,
+            temporal,
+            target,
+            delivery_instant,
+        )
+        # Task's own domain service may still reject state/time/conflicts;
+        # preserve the earlier Core write and describe the result truthfully.
+        result = self._partial(delivery, [core, task])
+        stages = (
+            OperationalStage(
+                "application.router",
+                OperationalOutcome.COMPLETED,
+                max(0.0, (perf_counter() - router_started) * 1000),
+            ),
+            *(
+                replace(stage, route_index=index)
+                for index, part in enumerate((core, task))
+                for stage in part.operational.stages
+            ),
+        )
+        return replace(
+            result,
+            operational=OperationalEvidence(
+                max(0.0, (perf_counter() - router_started) * 1000),
+                tuple(stages),
+            ),
+            execution_flow={
+                "version": 1,
+                "input": source,
+                "parallel_preparation": False,
+                "routes": [
+                    {
+                        "capability": cap,
+                        "text": text,
+                        "status": receipt.status.value,
+                        "stage_count": len(receipt.operational.stages),
+                        "temporal": [],
+                        "steps": [
+                            {"name": stage.name[:80], "input": text[:512], "output": ""}
+                            for stage in receipt.operational.stages
+                        ],
+                    }
+                    for cap, text, receipt in (
+                        ("core", scope.antecedent, core),
+                        ("tasks", scope.dependent, task),
+                    )
+                ],
+            },
+        )
 
     def _execute_independent_scopes(
         self,

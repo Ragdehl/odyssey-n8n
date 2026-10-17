@@ -95,12 +95,12 @@
       "invariant": "Un mensaje que mezcla hechos y Tasks conserva su fuente y exige cobertura completa.",
       "max_evidence_level": "isolated_http",
       "offline_test_selectors": [
-        "tests/core/test_whole_source_compilation_prewrite_p4.py::test_any_unsupported_later_fact_fails_before_compiling_any_write",
         "tests/core/test_p4_source_bound_dependency.py::test_whole_source_multiple_persisted_reference_occurrences_cannot_choose_last",
         "tests/runtime/test_p4_independent_mixed_scopes.py::test_misrouted_future_indicative_task_is_rejected_before_any_core_write",
-        "tests/runtime/test_p4_dependent_task_target.py::test_bound_task_consumer_uses_existing_e3_outer_claim_and_http_replay",
         "tests/runtime/test_p4_dependent_task_target.py::test_bound_task_consumer_crash_postwrite_retains_e3_claim_and_no_reexecution",
-        "tests/runtime/test_p4_production_composition_task_ui.py::test_environment_factory_real_tasks_interpreter_resolution_session_and_notes_ui"
+        "tests/runtime/test_p4_production_composition_task_ui.py::test_environment_factory_real_tasks_interpreter_resolution_session_and_notes_ui",
+        "tests/runtime/test_p4_dependent_router_integrated.py::test_real_joined_core_task_target_and_work_session_through_product_e3",
+        "tests/runtime/test_p4_dependent_factory_product.py::test_real_product_factory_core_and_tasks_dependent_work_session"
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false

@@ -479,3 +479,33 @@ DEPENDENT_TASK_TARGET_REVIEW_B = (
     "return false/unknown. Neither this output nor the first output may "
     "authorize a Task or Work Session write."
 )
+
+
+# Joint Core→Task dependencies require the exact original source to be
+# partitioned into a Core antecedent and one Tasks action, without inferred
+# titles, dates or identities. This is NOT the independent-scopes contract.
+DEPENDENT_TASK_PARTITION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "antecedent_quote": {"type": "string"},
+        "dependent_quote": {"type": "string"},
+        "dependent_mention": {"type": "string"},
+    },
+    "required": ["full_source_quote", "antecedent_quote", "dependent_quote", "dependent_mention"],
+    "additionalProperties": False,
+}
+DEPENDENT_TASK_PARTITION_PROMPT = (
+    "You are a cautious, non-authoritative source segment proposer. For an "
+    "ORIGINAL message that first asserts a personal Core fact mentioning an "
+    "EXISTING Task and then asks to modify that SAME Task via Work Session or "
+    "explicit subtask, propose two exact, consecutive source quotes: one "
+    "Core antecedent and one Tasks operation. Their concatenation MUST "
+    "reproduce every original character, including whitespace, punctuation "
+    "and conjunctions. Return dependent_mention as the exact phrase in the "
+    "second quote referring to the Task in the first quote. Never emit a Note "
+    "ID, title or resolved entity. If there is no unique such partition, "
+    "return empty antecedent_quote/dependent_quote/dependent_mention. A person "
+    "in a prior fact is NOT a Task antecedent. Do not turn ordinary future "
+    "indicative plans into Tasks. No output authorizes mutations or source loss."
+)

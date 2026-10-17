@@ -30,6 +30,8 @@ from odyssey_apps.tasks import (
     TASK_TYPE,
     OpenAITaskInterpreter,
     TaskCorePlanner,
+    TaskDependentTarget,
+    TaskDependentTargetError,
     TaskDirectMutationError,
     TaskDirectMutationService,
     TaskInterpretation,
@@ -2596,6 +2598,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         prepared_core: _PrecomputedCorePlan | None = None,
         fixed_plan: RequestPlan | None = None,
         dependent_handoff: DependentRouteHandoff | None = None,
+        captured_request_instant: datetime | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
         if prepared_core is not None:
@@ -2611,7 +2614,24 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 raise ValueError("dependent route cannot reuse an independent Core plan")
             if prepared_core.clock["date"] != _current_time()["date"]:
                 raise ValueError("prepared Core clock is stale")
-        clock = prepared_core.clock if prepared_core is not None else _current_time()
+        if captured_request_instant is not None:
+            if (
+                not isinstance(captured_request_instant, datetime)
+                or captured_request_instant.tzinfo is None
+                or captured_request_instant.utcoffset() is None
+                or prepared_core is not None
+            ):
+                raise ValueError("Core captured request instant is invalid")
+            clock = {
+                "date": captured_request_instant.date().isoformat(),
+                "time": captured_request_instant.time().replace(microsecond=0).isoformat(),
+                "timezone": getattr(
+                    captured_request_instant.tzinfo, "key", os.environ.get("TZ", "Europe/Paris")
+                ),
+                "timestamp": captured_request_instant.isoformat(timespec="seconds"),
+            }
+        else:
+            clock = prepared_core.clock if prepared_core is not None else _current_time()
         planner_context = {key: clock[key] for key in ("date", "time", "timezone")}
         if dependent_handoff is not None:
             reference = dependent_handoff.evidence
@@ -3082,10 +3102,13 @@ def build_runtime_from_environment() -> RuntimeComposition:
         stage: OperationalStage
 
     def prepare_temporal_interpretation(
-        source_text: str, conversation_context: Sequence[Mapping[str, str]] = ()
+        source_text: str,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+        *,
+        captured_clock: dict[str, str] | None = None,
     ) -> _PreparedInterpretation:
-        """Interpret only exact date/time wording, without touching canonical knowledge."""
-        clock = _current_time()
+        """Interpret exact time against the SAME captured delivery instant if supplied."""
+        clock = captured_clock if captured_clock is not None else _current_time()
         interpreter = OpenAITemporalInterpreter.from_environment(
             {key: clock[key] for key in ("date", "time", "timezone")}
         )
@@ -3315,6 +3338,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         prepared: _PreparedInterpretation | None = None,
         prepared_task_temporal: _PreparedInterpretation | None = None,
         prepared_core: _PrecomputedCorePlan | None = None,
+        dependent_task_target: TaskDependentTarget | None = None,
     ) -> ApplicationResult:
         """Interpret Tasks lifecycle, consume Temporal when needed, then delegate mutation to Core."""
         interpretation = prepared or prepare_task_interpretation(source_text, conversation_context)
@@ -3332,6 +3356,25 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 operational=OperationalEvidence(task_duration, (task_stage,)),
             )
         assert isinstance(task, TaskInterpretation)
+        if dependent_task_target is not None and (
+            authenticated_actor is None
+            or task.operation is not dependent_task_target.operation
+            or task.source_text != source_text
+            or task.operation
+            not in {
+                TaskOperation.START_WORK_SESSION,
+                TaskOperation.STOP_WORK_SESSION,
+                TaskOperation.EDIT_WORK_SESSION,
+                TaskOperation.ADD_WORK_SESSION_ACTIVITY,
+            }
+        ):
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="DEPENDENT_TASK_SCOPE_INVALID",
+            )
         stages: list[OperationalStage] = [task_stage]
         total_duration = task_duration
         if task.operation is TaskOperation.QUERY:
@@ -3372,8 +3415,20 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
         temporal = None
         if task.requires_temporal():
+            if dependent_task_target is not None and prepared_task_temporal is None:
+                # Never call Temporal AFTER Core's predecessor already wrote.
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="DEPENDENT_TASK_TEMPORAL_NOT_PREPARED",
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                )
             temporal_evidence = prepared_task_temporal or prepare_temporal_interpretation(
-                source_text, conversation_context
+                source_text,
+                conversation_context,
+                captured_clock=clock if dependent_task_target is not None else None,
             )
             duration = temporal_evidence.stage.duration_ms or 0.0
             if (
@@ -3423,7 +3478,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     operational=OperationalEvidence(total_duration, tuple(stages)),
                 )
             resolved_task_id: str | None = None
-            if task.task_reference is not None:
+            if dependent_task_target is not None:
+                try:
+                    resolved_task_id = dependent_task_target.require_current(repository, schema)
+                except TaskDependentTargetError:
+                    return ApplicationResult(
+                        request_id,
+                        ApplicationStatus.NEEDS_ATTENTION,
+                        (),
+                        (),
+                        planning_error="DEPENDENT_TASK_TARGET_STALE",
+                        operational=OperationalEvidence(total_duration, tuple(stages)),
+                    )
+            elif task.task_reference is not None:
                 resolution_started = perf_counter()
                 try:
                     task_schema = planning_schema_for_capability(schema, "tasks")
@@ -3517,6 +3584,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
             mutation_started = perf_counter()
             try:
                 persistence_actor = _persistence_actor(actor, authenticated_actor)
+                tokens = None
+                if dependent_task_target is not None:
+                    # E2 proof freshness is checked AGAIN immediately before
+                    # the domain command; START also uses the existing CAS
+                    # expected-revision and hash from the Task Notes service.
+                    assert resolved_task_id is not None
+                    dependent_task_target.require_current(repository, schema)
+                    tokens = work_session_service.task_mutation_tokens(resolved_task_id)
+                    if (
+                        tokens[1]
+                        != dependent_task_target.source_dependency.evidence.canonical_content_guard
+                    ):
+                        raise WorkSessionError("STALE_NOTE")
                 if task.operation is TaskOperation.START_WORK_SESSION:
                     assert resolved_task_id is not None and started_at is not None
                     mutation = work_session_service.start(
@@ -3525,6 +3605,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         request_id=request_id,
                         actor=persistence_actor,
                         now=clock["timestamp"],
+                        expected_task_revision=tokens[0] if tokens else None,
+                        expected_task_source_hash=tokens[1] if tokens else None,
                     )
                 elif task.operation is TaskOperation.STOP_WORK_SESSION:
                     assert resolved_task_id is not None and ended_at is not None
@@ -3555,6 +3637,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         actor=persistence_actor,
                         now=clock["timestamp"],
                     )
+            except TaskDependentTargetError:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="DEPENDENT_TASK_TARGET_STALE",
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                )
             except WorkSessionError as error:
                 duration = max(0.0, (perf_counter() - mutation_started) * 1000)
                 stages.append(
@@ -3952,6 +4043,42 @@ def build_runtime_from_environment() -> RuntimeComposition:
         if "tasks" in enabled_application_ids:
             route_preparers["tasks"] = prepare_tasks_route
 
+    def _captured_dependent_clock(instant: datetime) -> dict[str, str]:
+        return {
+            "date": instant.date().isoformat(),
+            "time": instant.time().replace(microsecond=0).isoformat(),
+            "timezone": getattr(instant.tzinfo, "key", os.environ.get("TZ", "Europe/Paris")),
+            "timestamp": instant.isoformat(timespec="seconds"),
+        }
+
+    def prepare_dependent_task_before_core_write(
+        source: str, instant: datetime
+    ) -> tuple[TaskInterpretation, TemporalInterpretation | None]:
+        # Reuse the production Task and Temporal interpreters BEFORE any
+        # Core write. Semantic identity still belongs solely to Core.
+        task = OpenAITaskInterpreter.from_environment().interpret(source, ())
+        temporal = None
+        if task.requires_temporal():
+            captured = _captured_dependent_clock(instant)
+            temporal = OpenAITemporalInterpreter.from_environment(
+                {key: captured[key] for key in ("date", "time", "timezone")}
+            ).interpret(source, ())
+            if any(
+                kind
+                not in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
+                for kind in temporal.kinds()
+            ):
+                raise TaskInterpretationError("Dependent temporal evidence not exact")
+            if task.operation is TaskOperation.ADD_WORK_SESSION_ACTIVITY:
+                compose_work_session_activity_date(task, temporal)
+            elif task.operation in {
+                TaskOperation.START_WORK_SESSION,
+                TaskOperation.STOP_WORK_SESSION,
+                TaskOperation.EDIT_WORK_SESSION,
+            }:
+                compose_work_session_times(task, temporal, now=captured["timestamp"])
+        return task, temporal
+
     light_source_execute = None
     if light_source_enabled:
         if self_binding_repository is None:
@@ -3974,6 +4101,49 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ),
             client=OpenAI(max_retries=0, timeout=70),
             progress=_emit_progress,
+            dependent_core_delegate=(
+                lambda segment, locator, identity, instant: core_execute(
+                    segment,
+                    locator,
+                    identity,
+                    conversation_context_override=(),
+                    captured_request_instant=instant,
+                )
+            )
+            if "tasks" in enabled_application_ids
+            else None,
+            dependent_task_prepare=(
+                prepare_dependent_task_before_core_write
+                if "tasks" in enabled_application_ids
+                else None
+            ),
+            dependent_task_delegate=(
+                lambda segment, locator, identity, task, temporal, target, instant: execute_tasks(
+                    segment,
+                    locator,
+                    identity,
+                    (),
+                    prepared=_PreparedInterpretation(
+                        _captured_dependent_clock(instant),
+                        task,
+                        OperationalStage("tasks.interpretation", OperationalOutcome.COMPLETED, 0.0),
+                    ),
+                    prepared_task_temporal=(
+                        _PreparedInterpretation(
+                            _captured_dependent_clock(instant),
+                            temporal,
+                            OperationalStage(
+                                "temporal.interpretation", OperationalOutcome.COMPLETED, 0.0
+                            ),
+                        )
+                        if temporal is not None
+                        else None
+                    ),
+                    dependent_task_target=target,
+                )
+            )
+            if "tasks" in enabled_application_ids
+            else None,
         )
 
     return RuntimeComposition(
