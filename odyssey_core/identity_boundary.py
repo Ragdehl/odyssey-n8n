@@ -333,7 +333,7 @@ class SelfBindingRepository:
         except VerifiedCatalogError as error:
             raise SelfBindingError("self binding target cannot be verified") from error
         if verified is not None:
-            matching = [row for row in verified.rows if row.id == note_id]
+            matching = verified.id_candidates(note_id)
             if len(matching) != 1:
                 raise SelfBindingError("self binding target is unavailable or ambiguous")
             if matching[0].deleted or matching[0].type != "person":

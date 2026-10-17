@@ -13,7 +13,7 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from odyssey_core.notes import parse_note, validate_note
@@ -41,15 +41,56 @@ class _VerifiedSnapshot:
     paths: tuple[str, ...]
     versions: tuple[tuple[object, ...], ...]
     rows: tuple[_MetadataRow, ...]
+    _ids: dict[str, tuple[_MetadataRow, ...]] = field(init=False, compare=False, repr=False)
+    _names: dict[str, tuple[_MetadataRow, ...]] = field(init=False, compare=False, repr=False)
+    _days: dict[str, tuple[_MetadataRow, ...]] = field(init=False, compare=False, repr=False)
+
+    def __post_init__(self) -> None:
+        from odyssey_core.source_inventory import exact_key
+
+        id_rows: dict[str, list[_MetadataRow]] = {}
+        name_rows: dict[str, list[_MetadataRow]] = {}
+        days: dict[str, list[_MetadataRow]] = {}
+        for row in self.rows:
+            id_rows.setdefault(row.id, []).append(row)
+            if not row.deleted:
+                unique_names = {exact_key(row.name), *(exact_key(alias) for alias in row.aliases)}
+                for normalized in unique_names:
+                    name_rows.setdefault(normalized, []).append(row)
+                if row.type == "calendar_day" and row.date is not None:
+                    days.setdefault(row.date, []).append(row)
+        object.__setattr__(self, "_ids", {key: tuple(value) for key, value in id_rows.items()})
+        object.__setattr__(self, "_names", {key: tuple(value) for key, value in name_rows.items()})
+        object.__setattr__(self, "_days", {key: tuple(value) for key, value in days.items()})
+
+    def id_candidates(self, stable_id: str) -> tuple[_MetadataRow, ...]:
+        """Every claim on this ID, including deleted and misplaced Notes."""
+        return self._ids.get(stable_id, ())
+
+    def exact_name_candidates(
+        self, normalized_name: str, *, include_deleted: bool = False
+    ) -> tuple[_MetadataRow, ...]:
+        """Candidates from physically verified names and aliases, with no guess."""
+        matches = self._names.get(normalized_name, ())
+        if include_deleted:
+            # Deleted candidates deliberately omitted from ordinary lookups.
+            from odyssey_core.source_inventory import exact_key
+
+            deleted = (
+                row
+                for row in self.rows
+                if row.deleted
+                and (
+                    exact_key(row.name) == normalized_name
+                    or any(exact_key(alias) == normalized_name for alias in row.aliases)
+                )
+            )
+            return (*matches, *deleted)
+        return matches
 
     def day_identity_collides(self, path: str, identity: str, date: str) -> bool:
-        return any(
-            item.path != path
-            and (
-                item.id == identity
-                or (item.type == "calendar_day" and item.date == date and not item.deleted)
-            )
-            for item in self.rows
+        return any(row.path != path for row in self.id_candidates(identity)) or any(
+            row.path != path for row in self._days.get(date, ())
         )
 
 

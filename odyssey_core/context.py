@@ -31,7 +31,12 @@ from odyssey_core.relationship_evidence import (
 )
 from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.semantic import TextEmbedder
-from odyssey_core.source_inventory import exact_key, inventory_row, schema_digest
+from odyssey_core.source_inventory import (
+    exact_key,
+    inventory_row,
+    schema_digest,
+    source_inventory_unchanged,
+)
 from odyssey_core.storage import VaultRepository
 
 _INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "6"}
@@ -860,6 +865,13 @@ class ContextIndex:
                     "INSERT INTO note_fact_integrity VALUES (?, ?)", fact_integrity
                 )
                 _refresh_derived_links(connection)
+                if not source_inventory_unchanged(
+                    repository,
+                    {row[0]: tuple(json.loads(row[2])) for row in full_inventory},
+                ):
+                    raise ContextIndexError(
+                        "Canonical source changed before publishing rebuilt index"
+                    )
             os.replace(temporary, self.path)
         except (OSError, sqlite3.Error) as error:
             raise ContextIndexError("Unable to rebuild context index") from error
@@ -1177,6 +1189,13 @@ class ContextIndex:
                     )
 
                 _refresh_derived_links(connection)
+                if not source_inventory_unchanged(
+                    repository,
+                    {row[0]: tuple(json.loads(row[2])) for row in inventory_current.values()},
+                ):
+                    raise ContextIndexError(
+                        "Canonical source changed before committing incremental index"
+                    )
         except ContextIndexError:
             raise
         except (
@@ -1411,6 +1430,10 @@ class ContextIndex:
                 connection.executemany(
                     "INSERT INTO note_aliases VALUES (?, ?, ?)", note_alias_rows(note_id, note)
                 )
+                if repository.file_version(path) != before_version:
+                    raise ContextIndexError(
+                        "Canonical source changed before committing metadata refresh"
+                    )
         except ContextIndexError:
             raise
         except (KeyError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:

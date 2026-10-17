@@ -97,3 +97,27 @@ def test_index_model_schema_missing_index_and_corrupt_rows_never_reuse(fx, tmp_p
     with sqlite3.connect(context.path) as conn:
         conn.execute("DELETE FROM notes WHERE id='ana'")
     assert not ready(fx)
+
+
+def test_external_process_edit_during_app_index_bootstrap_disables_reuse(fx, monkeypatch):
+    from odyssey_core.notes import serialize_note
+    from odyssey_runtime import index_startup
+    from tests.core.test_index_publication_races import _outside_process_changes_file
+
+    repo, _schema, _embedder, _context, semantic = fx
+    physical = repo.root / "people/ana.md"
+    replacement = serialize_note(note("ana", "person", "External edit.", name="Ana"))
+    original = index_startup._indexed_rows
+    calls = []
+
+    def interleave(path, markers, embedder):
+        response = original(path, markers, embedder)
+        calls.append(path)
+        if path == semantic.path:
+            _outside_process_changes_file(physical, replacement)
+        return response
+
+    monkeypatch.setattr(index_startup, "_indexed_rows", interleave)
+    assert not ready(fx)
+    assert semantic.path in calls
+    assert physical.read_text() == replacement

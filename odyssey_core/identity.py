@@ -210,9 +210,17 @@ def find_exact_entity_candidates_batch(
 
         candidates = source_notes()
     else:
+        # Name/alias lookups share a verified per-delivery map, not a full
+        # Python scan of all rows for each query. Preserve the original
+        # query order, ambiguity, type filter and primary-name precedence.
+        matching = {
+            row.path: row
+            for normalized, _requested_type in parsed
+            for row in verified.exact_name_candidates(normalized, include_deleted=include_deleted)
+        }
         candidates = (
             (row.path, row.id, row.type, row.name, row.aliases, row.content_excerpt, row.deleted)
-            for row in verified.rows
+            for row in matching.values()
         )
     for path, note_id, note_type, primary_name, aliases, excerpt, deleted in candidates:
         if note_type not in canonical_types:

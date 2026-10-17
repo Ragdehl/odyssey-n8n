@@ -17,7 +17,8 @@ from odyssey_core.context import ContextIndex
 from odyssey_core.semantic import _INDEX_MARKERS as SEMANTIC_MARKERS
 from odyssey_core.semantic import SemanticEntityIndex
 from odyssey_core.semantic import _canonical_types as semantic_types
-from odyssey_core.storage import VaultRepository
+from odyssey_core.source_inventory import source_inventory_unchanged
+from odyssey_core.storage import VaultAccessError, VaultRepository
 from odyssey_core.verified_metadata_catalog import _from_complete_index
 
 
@@ -86,6 +87,19 @@ def p4_indexes_reusable(
             allowed = {key: value for key, value in expected.items() if value[1] in types}
             if indexed != allowed:
                 return False
-        return True
-    except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, IndexError, AttributeError):
+        # Bootstrap must not accept an index whose source changed during the
+        # semantic/App index checks. This is a freshness check, not a lock.
+        return source_inventory_unchanged(
+            repo, dict(zip(snapshot.paths, snapshot.versions, strict=True))
+        )
+    except (
+        OSError,
+        VaultAccessError,
+        sqlite3.Error,
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
+    ):
         return False

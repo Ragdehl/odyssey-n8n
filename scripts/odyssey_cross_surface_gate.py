@@ -100,6 +100,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_vault_repository.py",
         "tests/core/test_verified_metadata_catalog.py",
         "tests/core/test_indexed_queries_and_freshness.py",
+        "tests/core/test_index_publication_races.py",
         "tests/runtime/test_p4_index_startup_reuse.py",
         "tests/benchmarks/test_performance_p1_budget.py",
         "tests/core/test_scoped_note_decode_cache.py",

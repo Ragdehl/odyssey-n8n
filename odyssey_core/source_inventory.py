@@ -46,3 +46,16 @@ def inventory_row(
         note.content.strip()[:320],
         exact_key(note.metadata["name"]),
     )
+
+
+def source_inventory_unchanged(
+    repo: VaultRepository,
+    rows: dict[str, tuple[object, ...]],
+) -> bool:
+    """Recheck a complete physical inventory immediately before SQL publication.
+
+    The evidence is version-based rather than an externally coordinated lock;
+    another process may still write after it. Consumers independently verify
+    sources before acting, and canonical Writer owns source CAS.
+    """
+    return repo.note_version_snapshot() == rows

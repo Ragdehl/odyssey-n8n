@@ -960,7 +960,7 @@ def _find_existing_identity(
     except VerifiedCatalogError as error:
         raise ReferencePreflightError("Cannot inspect canonical source metadata") from error
     if verified is not None:
-        matches = [(row.path, row.name) for row in verified.rows if row.id == stable_id]
+        matches = [(row.path, row.name) for row in verified.id_candidates(stable_id)]
     else:
         for path in repository.list_markdown_paths():
             try:

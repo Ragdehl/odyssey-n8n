@@ -268,3 +268,55 @@ def test_tampered_alias_or_incorrect_link_target_is_never_grounded(tmp_path, sch
         db.execute("UPDATE note_links SET target_id='project' WHERE source_id='project'")
     with pytest.raises(IndexedQueryUnavailable, match="Graph link"):
         q.links("project")
+
+
+def test_external_create_between_complete_proof_and_sql_negative_must_fail_closed(
+    tmp_path, schema_fixture, monkeypatch
+):
+    repo, _index, queries = setup(tmp_path, schema_fixture)
+    real = queries._complete
+
+    def race():
+        snapshot = real()
+        write(repo, "people/new.md", note("new", "person", "New.", name="New Person"))
+        return snapshot
+
+    monkeypatch.setattr(queries, "_complete", race)
+    with pytest.raises(IndexedQueryUnavailable, match="changed during indexed lookup"):
+        queries.exact_names("New Person")
+
+
+def test_external_change_during_positive_cannot_be_reported_as_stable(
+    tmp_path, schema_fixture, monkeypatch
+):
+    repo, _index, queries = setup(tmp_path, schema_fixture)
+    grounded = queries._ground
+
+    def race(path, identity, source_hash):
+        result = grounded(path, identity, source_hash)
+        write(
+            repo,
+            "people/old.md",
+            note("old", "person", "Retired edited.", name="Old", deleted=True),
+        )
+        return result
+
+    monkeypatch.setattr(queries, "_ground", race)
+    with pytest.raises(IndexedQueryUnavailable, match="changed during indexed lookup"):
+        queries.exact_names("Ana")
+
+
+def test_external_change_during_by_id_absent_is_not_false_negative(
+    tmp_path, schema_fixture, monkeypatch
+):
+    repo, _index, queries = setup(tmp_path, schema_fixture)
+    real = queries._complete
+
+    def race():
+        snapshot = real()
+        write(repo, "people/new.md", note("new", "person", "New.", name="New Person"))
+        return snapshot
+
+    monkeypatch.setattr(queries, "_complete", race)
+    with pytest.raises(IndexedQueryUnavailable, match="changed during indexed lookup"):
+        queries.by_id("new")

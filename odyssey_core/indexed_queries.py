@@ -48,6 +48,23 @@ class CoreIndexedQueries:
             raise IndexedQueryUnavailable("Canonical inventory is missing, stale, or incomplete")
         return snapshot
 
+    def _source_unchanged(self, snapshot: Any) -> None:
+        """Re-check physical scope after SQL: a mid-query edit invalidates negatives.
+
+        This closes the common check/use gap when another editor changes a
+        Markdown file between our first complete-inventory proof and the
+        indexed SQL selection. It is still not a cross-process transaction;
+        Writer/CAS independently guards mutations.
+        """
+        try:
+            now = self.repository.note_version_snapshot()
+            if now != dict(zip(snapshot.paths, snapshot.versions, strict=True)):
+                raise IndexedQueryUnavailable("Canonical sources changed during indexed lookup")
+        except IndexedQueryUnavailable:
+            raise
+        except (OSError, ValueError, RuntimeError) as error:
+            raise IndexedQueryUnavailable("Cannot reconfirm indexed source freshness") from error
+
     def _ground(self, path: str, indexed_id: str, indexed_sha: str) -> IndexedNoteHit:
         try:
             source = self.repository.read_text(path)
@@ -64,7 +81,7 @@ class CoreIndexedQueries:
             raise IndexedQueryUnavailable("Cannot ground indexed Note") from error
 
     def by_id(self, note_id: str) -> IndexedNoteHit | None:
-        self._complete()
+        snapshot = self._complete()
         with sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True) as conn:
             rows = conn.execute(
                 "SELECT path,note_id,source_hash FROM vault_inventory WHERE note_id=?",
@@ -72,7 +89,9 @@ class CoreIndexedQueries:
             ).fetchall()
         if len(rows) > 1:
             raise IndexedQueryUnavailable("Ambiguous indexed ID")
-        return self._ground(*rows[0]) if rows else None
+        result = self._ground(*rows[0]) if rows else None
+        self._source_unchanged(snapshot)
+        return result
 
     def exact_names(
         self,
@@ -84,7 +103,7 @@ class CoreIndexedQueries:
     ) -> tuple[IndexedNoteHit, ...]:
         from odyssey_core.identity import _normalize_reference
 
-        self._complete()
+        snapshot = self._complete()
         normalized = _normalize_reference(name)
         if not normalized or maximum < 1:
             raise ValueError("An exact name and a positive budget are required")
@@ -117,12 +136,13 @@ class CoreIndexedQueries:
             for hit in hits
         ):
             raise IndexedQueryUnavailable("Index name/alias evidence is not canonical")
+        self._source_unchanged(snapshot)
         return hits
 
     def by_attribute(
         self, field: str, value: Any, *, maximum: int = 24
     ) -> tuple[IndexedNoteHit, ...]:
-        self._complete()
+        snapshot = self._complete()
         if not field or maximum < 1:
             raise ValueError("Invalid field or budget")
         encoded = json.dumps(value, sort_keys=True, ensure_ascii=False)
@@ -138,6 +158,7 @@ class CoreIndexedQueries:
         hits = tuple(self._ground(*row) for row in rows)
         if any(hit.note.metadata.get(field) != value for hit in hits):
             raise IndexedQueryUnavailable("Indexed attribute does not match canonical Note")
+        self._source_unchanged(snapshot)
         return hits
 
     def facts(self, note_id: str) -> tuple[tuple[str, str], ...]:
@@ -195,4 +216,5 @@ class CoreIndexedQueries:
                 )
             ):
                 raise IndexedQueryUnavailable("Graph link lacks canonical source evidence")
+        self._source_unchanged(snapshot)
         return tuple(data)
