@@ -14,6 +14,7 @@ from typing import Any
 
 from odyssey_core.atomic_facts import AtomicFact, AtomicFactError, parse_atomic_facts
 from odyssey_core.context import (
+    _INDEX_MARKERS,
     ContextFilter,
     ContextIndex,
     ContextIndexError,
@@ -789,7 +790,7 @@ class NotesQueryService:
         try:
             with sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True) as connection:
                 markers = dict(connection.execute("SELECT key, value FROM metadata"))
-                if markers.get("format_version") != "4":
+                if any(markers.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise NotesQueryError("Notes index requires rebuild")
                 rows = list(
                     connection.execute(

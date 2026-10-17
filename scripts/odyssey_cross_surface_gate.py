@@ -67,6 +67,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "canonical_graph_and_notes": (
         "tests/core/test_note_queries.py",
+        "tests/core/test_context_deterministic_projection.py",
         "tests/core/test_reference_preflight.py",
         "tests/core/test_atomic_facts.py",
         "tests/runtime/test_hybrid_independent_linked_events_real_core_replay.py",

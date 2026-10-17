@@ -17,6 +17,12 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
 
+from odyssey_core.deterministic_projections import (
+    DeterministicProjectionError,
+    note_alias_rows,
+    note_attribute_rows,
+    note_fact_rows,
+)
 from odyssey_core.filtering import supported_filter_operators
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.relationship_evidence import (
@@ -27,7 +33,7 @@ from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.semantic import TextEmbedder
 from odyssey_core.storage import VaultRepository
 
-_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "4"}
+_INDEX_MARKERS = {"application": "odyssey", "format": "context-index", "format_version": "5"}
 _TECHNICAL_METADATA = frozenset(
     {"id", "created_at", "updated_at", "created_by", "updated_by", "revision", "schema_version"}
 )
@@ -515,6 +521,59 @@ def _metadata_matches_filters(
     return True
 
 
+def _refresh_derived_links(connection: sqlite3.Connection) -> None:
+    """Recompute forward/backward, unresolved, and fact-level link projections.
+
+    A newly created/deleted target may resolve/unresolve old source links, so
+    the link graph is derived from stored bodies after every index refresh.
+    No fresh embeddings are calculated for unaffected source notes.
+    """
+    paths: dict[str, set[str]] = {}
+    basenames: dict[str, set[str]] = {}
+    for note_id, path in connection.execute("SELECT id, path FROM notes"):
+        stem = path.removesuffix(".md").casefold()
+        paths.setdefault(stem, set()).add(note_id)
+        basenames.setdefault(stem.rsplit("/", 1)[-1], set()).add(note_id)
+
+    def target_identity(target: str) -> str | None:
+        key = target.removesuffix(".md").casefold()
+        found = paths.get(key, set())
+        if not found and "/" not in key:
+            found = basenames.get(key, set())
+        return next(iter(found)) if len(found) == 1 else None
+
+    forward = []
+    raw_mentions = []
+    fact_links = []
+    for source_id, body in connection.execute("SELECT note_id, body_text FROM note_projection"):
+        counts: dict[tuple[str | None, str, str], int] = {}
+        for target, label in extract_wikilink_targets(body):
+            key = (target_identity(target), target, label)
+            counts[key] = counts.get(key, 0) + 1
+        context = _humanize_wikilinks(body).strip().replace("\n", " ")[:320]
+        for (target_id, target, label), count in counts.items():
+            raw_mentions.append((source_id, target_id, target, label, count, context))
+            if target_id is not None:
+                forward.append((source_id, target_id, target, label, count, context))
+    for note_id, locator, fact_text in connection.execute(
+        "SELECT note_id, locator, fact_text FROM note_facts"
+    ):
+        counts: dict[tuple[str | None, str, str], int] = {}
+        for target, label in extract_wikilink_targets(fact_text):
+            key = (target_identity(target), target, label)
+            counts[key] = counts.get(key, 0) + 1
+        fact_links.extend(
+            (note_id, locator, target_id, target, label, count)
+            for (target_id, target, label), count in counts.items()
+        )
+    connection.execute("DELETE FROM note_links")
+    connection.execute("DELETE FROM note_mentions")
+    connection.execute("DELETE FROM note_fact_links")
+    connection.executemany("INSERT INTO note_links VALUES (?, ?, ?, ?, ?, ?)", forward)
+    connection.executemany("INSERT INTO note_mentions VALUES (?, ?, ?, ?, ?, ?)", raw_mentions)
+    connection.executemany("INSERT INTO note_fact_links VALUES (?, ?, ?, ?, ?, ?)", fact_links)
+
+
 class ContextIndex:
     """Own one disposable SQLite file containing atomic-note context embeddings."""
 
@@ -547,6 +606,10 @@ class ContextIndex:
             raise ContextIndexError("Context index must be stored outside the Markdown vault")
         projected: list[tuple[str, str, str, str, str, tuple[str, ...], str]] = []
         note_projections: list[tuple[str, str, str, str, str, str]] = []
+        attributes: list[tuple[str, str, str]] = []
+        aliases_index: list[tuple[str, str, str]] = []
+        facts_index: list[tuple[Any, ...]] = []
+        fact_integrity: list[tuple[str, str]] = []
         active_paths: dict[str, str] = {}
         active_basenames: dict[str, set[str]] = {}
         bodies: dict[str, str] = {}
@@ -609,6 +672,16 @@ class ContextIndex:
             active_paths[stem] = note_id
             active_basenames.setdefault(stem.rsplit("/", 1)[-1], set()).add(note_id)
             bodies[note_id] = note.content
+            attributes.extend(note_attribute_rows(note_id, note))
+            aliases_index.extend(note_alias_rows(note_id, note))
+            try:
+                facts_index.extend(note_fact_rows(note_id, note))
+            except DeterministicProjectionError:
+                # Historical loose markers remain readable Markdown, but may
+                # NOT be used as addressable fact evidence until repaired.
+                fact_integrity.append((note_id, "malformed"))
+            else:
+                fact_integrity.append((note_id, "valid"))
             for field, definition in filter_definitions.items():
                 value = note.metadata.get(
                     field, note.metadata.get("tags") if field == "tags" else None
@@ -668,6 +741,43 @@ class ContextIndex:
                         context TEXT NOT NULL,
                         PRIMARY KEY(source_id, target_id, target_text, label)
                     );
+                    CREATE INDEX backlinks_by_target ON note_links(target_id, source_id);
+                    CREATE TABLE note_attributes (
+                        note_id TEXT NOT NULL, field TEXT NOT NULL,
+                        value_json TEXT NOT NULL, PRIMARY KEY(note_id, field)
+                    );
+                    CREATE INDEX attributes_by_field ON note_attributes(field, value_json);
+                    CREATE TABLE note_aliases (
+                        note_id TEXT NOT NULL, alias TEXT NOT NULL,
+                        normalized TEXT NOT NULL, PRIMARY KEY(note_id, alias)
+                    );
+                    CREATE INDEX aliases_by_name ON note_aliases(normalized, note_id);
+                    CREATE TABLE note_facts (
+                        note_id TEXT NOT NULL, locator TEXT NOT NULL,
+                        request_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+                        fact_text TEXT NOT NULL, recorded_at TEXT,
+                        temporal_anchors TEXT NOT NULL,
+                        start_offset INTEGER NOT NULL, end_offset INTEGER NOT NULL,
+                        PRIMARY KEY(note_id, locator)
+                    );
+                    CREATE INDEX facts_by_capture ON note_facts(recorded_at, note_id);
+                    CREATE TABLE note_fact_integrity (
+                        note_id TEXT PRIMARY KEY, status TEXT NOT NULL
+                        CHECK(status IN ('valid','malformed'))
+                    );
+                    CREATE TABLE note_fact_links (
+                        note_id TEXT NOT NULL, fact_locator TEXT NOT NULL,
+                        target_id TEXT, target_text TEXT NOT NULL, label TEXT NOT NULL,
+                        occurrence_count INTEGER NOT NULL,
+                        PRIMARY KEY(note_id, fact_locator, target_text, label)
+                    );
+                    CREATE INDEX fact_backlinks_by_target ON note_fact_links(target_id, note_id);
+                    CREATE TABLE note_mentions (
+                        source_id TEXT NOT NULL, target_id TEXT,
+                        target_text TEXT NOT NULL, label TEXT NOT NULL,
+                        occurrence_count INTEGER NOT NULL, context TEXT NOT NULL,
+                        PRIMARY KEY(source_id, target_text, label)
+                    );
                 """)
                 connection.executemany(
                     "INSERT INTO metadata(key, value) VALUES (?, ?)",
@@ -707,22 +817,15 @@ class ContextIndex:
                 connection.executemany(
                     "INSERT INTO note_projection VALUES (?, ?, ?, ?, ?, ?)", note_projections
                 )
-                links: list[tuple[str, str, str, str, int, str]] = []
-                for source_id, body in bodies.items():
-                    occurrences: dict[tuple[str, str, str], int] = {}
-                    for target, label in extract_wikilink_targets(body):
-                        target_key = target.removesuffix(".md").casefold()
-                        target_id = active_paths.get(target_key)
-                        if target_id is None and "/" not in target_key:
-                            matches = active_basenames.get(target_key, set())
-                            target_id = next(iter(matches)) if len(matches) == 1 else None
-                        if target_id is not None:
-                            key = (target_id, target, label)
-                            occurrences[key] = occurrences.get(key, 0) + 1
-                    for (target_id, target, label), count in occurrences.items():
-                        context = _humanize_wikilinks(body).strip().replace("\n", " ")[:320]
-                        links.append((source_id, target_id, target, label, count, context))
-                connection.executemany("INSERT INTO note_links VALUES (?, ?, ?, ?, ?, ?)", links)
+                connection.executemany("INSERT INTO note_attributes VALUES (?, ?, ?)", attributes)
+                connection.executemany("INSERT INTO note_aliases VALUES (?, ?, ?)", aliases_index)
+                connection.executemany(
+                    "INSERT INTO note_facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", facts_index
+                )
+                connection.executemany(
+                    "INSERT INTO note_fact_integrity VALUES (?, ?)", fact_integrity
+                )
+                _refresh_derived_links(connection)
             os.replace(temporary, self.path)
         except (OSError, sqlite3.Error) as error:
             raise ContextIndexError("Unable to rebuild context index") from error
@@ -803,6 +906,13 @@ class ContextIndex:
                     )
                     for item in values
                 )
+            try:
+                fact_rows = tuple(note_fact_rows(note_id, note))
+            except DeterministicProjectionError:
+                fact_rows = ()
+                fact_state = "malformed"
+            else:
+                fact_state = "valid"
             current[note_id] = (
                 path,
                 cast(str, note.metadata["type"]),
@@ -816,6 +926,10 @@ class ContextIndex:
                 lexical_text,
                 note.content,
                 tuple(properties),
+                tuple(note_attribute_rows(note_id, note)),
+                tuple(note_alias_rows(note_id, note)),
+                fact_rows,
+                fact_state,
             )
 
         selected = [(note_id, current[note_id]) for note_id in requested if note_id in current]
@@ -871,7 +985,16 @@ class ContextIndex:
                         "Incremental context refresh detected unrelated index drift"
                     )
 
-                connection.execute("DELETE FROM note_links")
+                for derived_table in (
+                    "note_attributes",
+                    "note_aliases",
+                    "note_facts",
+                    "note_fact_integrity",
+                ):
+                    connection.executemany(
+                        f"DELETE FROM {derived_table} WHERE note_id = ?",
+                        ((note_id,) for note_id in requested),
+                    )
                 connection.executemany(
                     "DELETE FROM properties WHERE note_id = ?",
                     ((note_id,) for note_id in requested),
@@ -913,36 +1036,26 @@ class ContextIndex:
                         "INSERT INTO properties(note_id, field, value, value_type) VALUES (?, ?, ?, ?)",
                         item[11],
                     )
-
-                active_paths: dict[str, str] = {}
-                active_basenames: dict[str, set[str]] = {}
-                for note_id, path in connection.execute("SELECT id, path FROM notes"):
-                    stem = path.removesuffix(".md").casefold()
-                    active_paths[stem] = note_id
-                    active_basenames.setdefault(stem.rsplit("/", 1)[-1], set()).add(note_id)
-                links: list[tuple[str, str, str, str, int, str]] = []
-                for source_id, body in connection.execute(
-                    "SELECT note_id, body_text FROM note_projection"
-                ):
-                    occurrences: dict[tuple[str, str, str], int] = {}
-                    for target, label in extract_wikilink_targets(body):
-                        target_key = target.removesuffix(".md").casefold()
-                        target_id = active_paths.get(target_key)
-                        if target_id is None and "/" not in target_key:
-                            matches = active_basenames.get(target_key, set())
-                            target_id = next(iter(matches)) if len(matches) == 1 else None
-                        if target_id is not None:
-                            key = (target_id, target, label)
-                            occurrences[key] = occurrences.get(key, 0) + 1
-                    context = _humanize_wikilinks(body).strip().replace("\n", " ")[:320]
-                    links.extend(
-                        (source_id, target_id, target, label, count, context)
-                        for (target_id, target, label), count in occurrences.items()
+                    connection.executemany("INSERT INTO note_attributes VALUES (?, ?, ?)", item[12])
+                    connection.executemany("INSERT INTO note_aliases VALUES (?, ?, ?)", item[13])
+                    connection.executemany(
+                        "INSERT INTO note_facts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", item[14]
                     )
-                connection.executemany("INSERT INTO note_links VALUES (?, ?, ?, ?, ?, ?)", links)
+                    connection.execute(
+                        "INSERT INTO note_fact_integrity VALUES (?, ?)", (note_id, item[15])
+                    )
+
+                _refresh_derived_links(connection)
         except ContextIndexError:
             raise
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError, sqlite3.Error) as error:
+        except (
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+            sqlite3.Error,
+            DeterministicProjectionError,
+        ) as error:
             raise ContextIndexError("Unable to incrementally refresh context index") from error
         return len(selected)
 
@@ -1065,6 +1178,15 @@ class ContextIndex:
                 connection.executemany(
                     "INSERT INTO properties(note_id, field, value, value_type) VALUES (?, ?, ?, ?)",
                     properties,
+                )
+                connection.execute("DELETE FROM note_attributes WHERE note_id = ?", (note_id,))
+                connection.execute("DELETE FROM note_aliases WHERE note_id = ?", (note_id,))
+                connection.executemany(
+                    "INSERT INTO note_attributes VALUES (?, ?, ?)",
+                    note_attribute_rows(note_id, note),
+                )
+                connection.executemany(
+                    "INSERT INTO note_aliases VALUES (?, ?, ?)", note_alias_rows(note_id, note)
                 )
         except ContextIndexError:
             raise
