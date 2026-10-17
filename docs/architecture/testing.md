@@ -121,6 +121,8 @@ When provider access is unavailable, record the live-evidence gate as pending. D
 
 Live calls should remain focused and cost-aware. Reuse existing benchmark evidence and frozen cases rather than rerunning broad model selection without a concrete reason.
 
+**Raspberry live API procedure, already established (do not forget):** a normal Remote Desktop shell deliberately has no `OPENAI_API_KEY`. This is **not** proof of missing credentials/provider failure. Before classifying the API inaccessible, read `AGENTS.md` (model execution/security section) and verify the fixed user `systemd` manager/bus and protected existing `EnvironmentFile` metadata **without reading its contents**. The authorized one-shot provider gate runs via `systemd --user` transient unit using `EnvironmentFile=`, `--wait --collect --pipe`, explicit bounded opt-in, and a disposable test vault. Never source the key in the remote shell, invent an alternate credential path, or display its contents. If the unit/tool itself is blocked, report a **blocked provider run**, preserve exact evidence already obtained and continue provider-free checks without attempting alternate evasions.
+
 ## Integration and E2E evidence
 
 Integration tests cover composition across real boundaries when needed, including:

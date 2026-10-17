@@ -128,3 +128,19 @@ def test_one_bounded_task_target_review_supports_work_sessions_and_subtask_paren
     }
     assert "CREATE_SUBTASK" in contract.DEPENDENT_TASK_TARGET_REVIEW_A
     assert "subtask" in contract.DEPENDENT_TASK_TARGET_REVIEW_B.lower()
+
+
+def test_router_generic_intention_coverage_does_not_merge_core_fact_with_session_lifecycle():
+    """Live-model regression: a past fact about a Task is not retroactive Session activity.
+
+    This is a prompt-contract sentinel, NOT a substitute for genuine GPT gates.
+    No named Task/participant/phrase matching enters the production Router.
+    """
+    prompt = contract.ROUTER_INSTRUCTIONS
+    assert "independent assertion of a completed past action" in prompt
+    assert "existing Task" in prompt
+    assert "Core AND Tasks" in prompt
+    assert "dependent Tasks operation scope" in prompt
+    assert "A progress report explicitly attached to a session" in prompt
+    for example_specific in ("Preparar informe Atlas", "esa tarea", "Guillem", "Maite"):
+        assert example_specific not in prompt

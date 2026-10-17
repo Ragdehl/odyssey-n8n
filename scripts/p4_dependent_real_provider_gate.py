@@ -28,10 +28,31 @@ class ObservedClient:
         self.responses = self
         self._client = OpenAI(timeout=80, max_retries=0)
         self.stages: list[str] = []
+        self.route_audits: list[dict[str, object]] = []
 
     def create(self, **kwargs):
-        self.stages.append(kwargs["text"]["format"]["name"])
-        return self._client.responses.create(**kwargs)
+        name = kwargs["text"]["format"]["name"]
+        self.stages.append(name)
+        response = self._client.responses.create(**kwargs)
+        # Only synthetic fixture decisions; never logs prompts, keys, or
+        # personal Notes. Needed to distinguish a wrong routing classification
+        # from a Task-only coverage veto.
+        if name in {"odyssey_light_capability_route_v1", "odyssey_task_only_scope_v1"}:
+            try:
+                content = json.loads(response.output_text)
+                self.route_audits.append(
+                    {
+                        "step": name,
+                        "capabilities": content.get("capabilities"),
+                        "interpretation": content.get("interpretation"),
+                        "scopes": content.get("app_scopes"),
+                        "only_task_semantics": content.get("only_task_semantics"),
+                        "exactly_one_operation": content.get("exactly_one_operation"),
+                    }
+                )
+            except (ValueError, TypeError):
+                self.route_audits.append({"step": name, "invalid_json": True})
+        return response
 
 
 def one_attempt(number: int) -> bool:
@@ -82,6 +103,7 @@ def one_attempt(number: int) -> bool:
                     == {p: repo.read_text(p) for p in repo.list_markdown_paths()},
                     "domain_calls": calls,
                     "model_steps": client.stages,
+                    "route_audits": client.route_audits,
                 }
             )
             report["passed"] = bool(
@@ -89,7 +111,7 @@ def one_attempt(number: int) -> bool:
                 and report["canonical_backlink"]
                 and report["replay"]
                 and report["unchanged_after_replay"]
-                and calls == ["prepare", "core", "task"]
+                and calls == ["core", "task"]
                 and len(interpreted) == 1
                 and interpreted[0]["operation"] == TaskOperation.START_WORK_SESSION.value
                 and interpreted[0]["reference_exact"]
@@ -101,6 +123,7 @@ def one_attempt(number: int) -> bool:
                     "error_type": type(error).__name__,
                     "passed": False,
                     "model_steps": client.stages,
+                    "route_audits": client.route_audits,
                 }
             )
         report["seconds"] = round(perf_counter() - started, 2)
@@ -124,9 +147,9 @@ def main() -> int:
                 "failed": count - success,
                 "real_gpt": True,
                 "full_browser_n8n": False,
-            },
-            flush=True,
-        )
+            }
+        ),
+        flush=True,
     )
     return 0 if success == count else 1
 
