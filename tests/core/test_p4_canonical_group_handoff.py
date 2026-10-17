@@ -73,6 +73,8 @@ def _reviewed_graph():
             "full_source_quote": SOURCE,
             "complete": True,
             "dependency_edges_verified": True,
+            "review_reason": "APPROVED",
+            "failing_group_index": None,
             "groups": [dict(group) for group in groups],
         },
     )
@@ -371,6 +373,8 @@ def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(
             "full_source_quote": source,
             "complete": True,
             "dependency_edges_verified": True,
+            "review_reason": "APPROVED",
+            "failing_group_index": None,
             "groups": deepcopy(groups),
         },
     )

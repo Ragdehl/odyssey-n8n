@@ -205,6 +205,19 @@
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E2-TASK-SESSION-PHYSICAL-HANDOFF",
+      "phase": "E2",
+      "invariant": "La evidencia de sesión se obtiene exclusivamente tras un resultado START real, exige identidad y hash actuales de Work Session y su Task, y nunca sustituye el CAS del servicio Tasks ni autoriza una cadena Task→Task sin semántica propia.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/apps/tasks/test_session_evidence.py::test_session_receipt_proves_markdown_and_powers_existing_stop_cas",
+        "tests/apps/tasks/test_session_evidence.py::test_session_recheck_rejects_external_mutations_and_duplicate_ids",
+        "tests/apps/tasks/test_session_evidence.py::test_evidence_cannot_be_reused_in_other_vault_even_with_copied_markdown"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
     }
   ]
 }

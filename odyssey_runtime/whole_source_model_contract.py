@@ -591,9 +591,30 @@ DEPENDENT_GRAPH_REVIEW_SCHEMA = {
         "full_source_quote": {"type": "string"},
         "complete": {"type": "boolean"},
         "dependency_edges_verified": {"type": "boolean"},
+        "review_reason": {
+            "type": "string",
+            "enum": [
+                "APPROVED",
+                "SOURCE_COVERAGE",
+                "GROUP_CLASSIFICATION",
+                "GROUP_ATOMICITY",
+                "DEPENDENCY_AMBIGUOUS",
+                "DEPENDENCY_UNGROUNDED",
+                "DEPENDENCY_MISSING",
+                "OTHER",
+            ],
+        },
+        "failing_group_index": {"type": ["integer", "null"]},
         "groups": DEPENDENT_GRAPH_PARTITION_SCHEMA["properties"]["groups"],
     },
-    "required": ["full_source_quote", "complete", "dependency_edges_verified", "groups"],
+    "required": [
+        "full_source_quote",
+        "complete",
+        "dependency_edges_verified",
+        "review_reason",
+        "failing_group_index",
+        "groups",
+    ],
     "additionalProperties": False,
 }
 DEPENDENT_GRAPH_REVIEW_PROMPT = (
@@ -605,6 +626,16 @@ DEPENDENT_GRAPH_REVIEW_PROMPT = (
     "or if ANY dependent pronoun/expression is not uniquely supported by its "
     "SPECIFIC earlier Core antecedent occurrence. Echo the proposed exact "
     "groups unchanged only if EVERY source span and EVERY edge is defensible. "
-    "Otherwise set complete=false or dependency_edges_verified=false. "
-    "Do not name, resolve or invent any canonical Notes or IDs."
+    "If fully approved, return complete=true, dependency_edges_verified=true, "
+    "review_reason=APPROVED and failing_group_index=null. Otherwise do NOT "
+    "silently rewrite or repair the proposal; set complete=false or "
+    "dependency_edges_verified=false, return groups=[] and select exactly "
+    "one coarse rejection code: SOURCE_COVERAGE (missing/reordered), "
+    "GROUP_CLASSIFICATION (wrong Core vs Tasks), GROUP_ATOMICITY (mixed "
+    "commands), DEPENDENCY_AMBIGUOUS (multiple referents), "
+    "DEPENDENCY_UNGROUNDED (source mention absent), DEPENDENCY_MISSING "
+    "(necessary edge absent), or OTHER (cannot establish safety). Set "
+    "failing_group_index to the earliest 0-based candidate group involved, "
+    "or null if there is no specific group. Do not expose private reasoning. "
+    "Never give a Note ID; do not name, resolve or invent canonical Notes."
 )

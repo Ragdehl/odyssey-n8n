@@ -44,6 +44,11 @@ from .planning import TaskCorePlanner
 from .query import TaskQueryError, TaskQueryService
 from .schema import TASK_SCHEMA_EXTENSION, TASK_STATUS_VALUES, TASK_TYPE, WORK_SESSION_TYPE
 from .scoped_evidence import TaskScopedEvidence, TaskScopedExecution
+from .session_evidence import (
+    CanonicalSessionEvidence,
+    CanonicalSessionEvidenceError,
+    prove_created_session,
+)
 from .work_sessions import (
     TaskWorkSessionService,
     WorkSessionActivity,
@@ -53,6 +58,9 @@ from .work_sessions import (
 )
 
 __all__ = [
+    "CanonicalSessionEvidence",
+    "CanonicalSessionEvidenceError",
+    "prove_created_session",
     "TaskBatchPreflightError",
     "validate_task_batch_prewrite",
     "TaskDependentTarget",

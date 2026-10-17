@@ -26,12 +26,13 @@ from odyssey_runtime.whole_source_model_contract import (
 from scripts.p4_mixed_independent_real_isolated import ObservedClient
 from tests.runtime.test_p4_dependent_n_graph_execution import (
     BEFORE,
-    FIRST_TASK,
     SECOND,
     _physical_runtime,
 )
 
-SOURCE = BEFORE + SECOND + FIRST_TASK
+SOURCE = (
+    BEFORE + SECOND + " Por favor, inicia ahora una sesión de trabajo en Preparar informe Atlas."
+)
 
 
 def main() -> int:
@@ -65,6 +66,8 @@ def main() -> int:
                         "review_complete": review.get("complete") is True,
                         "review_edges_verified": review.get("dependency_edges_verified") is True,
                         "review_group_match": review.get("groups") == proposal.get("groups"),
+                        "review_reason": review.get("review_reason"),
+                        "failing_group_index": review.get("failing_group_index"),
                         "source_full_match": proposal.get("full_source_quote") == SOURCE,
                         "proposed_caps": [p.get("capability") for p in proposal.get("groups", [])],
                         "reviewed_caps": [p.get("capability") for p in review.get("groups", [])],
@@ -81,13 +84,9 @@ def main() -> int:
             )
             return 2
         ok = (
-            len(graph.groups) == 4
-            and [group.capability for group in graph.groups] == ["core", "core", "tasks", "tasks"]
-            and graph.edges
-            == (
-                (0, 2, "Preparar informe Atlas", "Preparar informe Atlas"),
-                (0, 3, "Preparar informe Atlas", "Preparar informe Atlas"),
-            )
+            len(graph.groups) == 3
+            and [group.capability for group in graph.groups] == ["core", "core", "tasks"]
+            and graph.edges == ((0, 2, "Preparar informe Atlas", "Preparar informe Atlas"),)
         )
         print(
             json.dumps(

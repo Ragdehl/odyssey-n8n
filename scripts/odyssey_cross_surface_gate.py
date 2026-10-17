@@ -48,6 +48,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "task_ui_and_subtask": (
         "tests/apps/tasks/test_direct_mutations.py",
         "tests/apps/tasks/test_batch_preflight.py",
+        "tests/apps/tasks/test_session_evidence.py",
         "tests/apps/tasks/test_relationships_e2e.py",
         "tests/apps/tasks/test_lifecycle.py",
         "tests/apps/tasks/test_work_session_runtime.py",

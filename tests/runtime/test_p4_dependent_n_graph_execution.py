@@ -93,6 +93,8 @@ def _reviewed():
         "full_source_quote": SOURCE,
         "complete": True,
         "dependency_edges_verified": True,
+        "review_reason": "APPROVED",
+        "failing_group_index": None,
         "groups": deepcopy(proposal["groups"]),
     }
 
@@ -489,3 +491,40 @@ def test_n_graph_missing_tasks_capability_adapter_cannot_fall_through_to_core(tm
     assert _snapshot(repo) == before
     assert executor.client.rows == []
     assert calls == []
+
+
+@pytest.mark.parametrize(
+    "reason,index",
+    [
+        ("SOURCE_COVERAGE", None),
+        ("GROUP_CLASSIFICATION", 0),
+        ("DEPENDENCY_AMBIGUOUS", 2),
+        ("DEPENDENCY_MISSING", 2),
+    ],
+)
+def test_n_graph_review_reason_is_visible_but_never_allows_a_write(tmp_path, reason, index):
+    repo, actor, executor, runtime, calls, domain, store = _physical_runtime(tmp_path)
+    rows = _three_rows()
+    rows[2] = {
+        "full_source_quote": SOURCE_THREE,
+        "complete": False,
+        "dependency_edges_verified": False,
+        "review_reason": reason,
+        "failing_group_index": index,
+        "groups": [],
+    }
+    executor.client = RecordedClient(rows[:3])
+    before = _snapshot(repo)
+    locator = f"n-review-{reason.lower()}"
+    response = runtime.execute_product(SOURCE_THREE, locator, "main", actor)
+    assert response["status"] == "needs_attention"
+    assert response["clarification_code"] == f"DEPENDENT_N_GRAPH_REVIEW_{reason}"
+    assert _snapshot(repo) == before
+    assert calls == []
+    assert not domain.list_for_task("atlas-p4-dependent-task")
+    assert not store.inspect_operation_manifest(locator, store.fingerprint(SOURCE_THREE, "main"))[
+        "manifest_present"
+    ]
+    replay = runtime.execute_product(SOURCE_THREE, locator, "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert replay["clarification_code"] == response["clarification_code"]

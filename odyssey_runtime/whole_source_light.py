@@ -45,6 +45,7 @@ from odyssey_core.dependent_group_evidence import (
 )
 from odyssey_core.dependent_group_graph import (
     DependentGroupGraphError,
+    classify_dependent_group_review_rejection,
     verify_dependent_group_graph,
 )
 from odyssey_core.dependent_source_scopes import (
@@ -969,7 +970,16 @@ class WholeSourceLightExecutor:
         try:
             graph = verify_dependent_group_graph(source, proposed, reviewed)
         except DependentGroupGraphError:
-            return self._abstain(delivery, "DEPENDENT_N_GRAPH_SOURCE_UNVERIFIED")
+            # A reviewer veto may convey ONE bounded failure category, never
+            # reasoning text or identities. No rejected review can be promoted
+            # to authorization through its diagnostic fields.
+            try:
+                reason, _index = classify_dependent_group_review_rejection(
+                    source, proposed, reviewed
+                )
+            except DependentGroupGraphError:
+                return self._abstain(delivery, "DEPENDENT_N_GRAPH_SOURCE_UNVERIFIED")
+            return self._abstain(delivery, f"DEPENDENT_N_GRAPH_REVIEW_{reason}")
         if (
             len(graph.groups) != len(route_scopes)
             or not any(group.dependencies for group in graph.groups)

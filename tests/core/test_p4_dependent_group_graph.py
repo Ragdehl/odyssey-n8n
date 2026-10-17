@@ -36,6 +36,8 @@ def _proof():
         "full_source_quote": original,
         "complete": True,
         "dependency_edges_verified": True,
+        "review_reason": "APPROVED",
+        "failing_group_index": None,
         "groups": deepcopy(parts),
     }
     return original, proposal, review
@@ -126,6 +128,8 @@ def test_nm_two_distinct_reference_occurrences_may_share_one_predecessor():
             "full_source_quote": full,
             "complete": True,
             "dependency_edges_verified": True,
+            "review_reason": "APPROVED",
+            "failing_group_index": None,
             "groups": deepcopy(groups),
         },
     )
@@ -139,6 +143,8 @@ def test_nm_two_distinct_reference_occurrences_may_share_one_predecessor():
                 "full_source_quote": full,
                 "complete": True,
                 "dependency_edges_verified": True,
+                "review_reason": "APPROVED",
+                "failing_group_index": None,
                 "groups": deepcopy(groups),
             },
         )
@@ -149,3 +155,78 @@ def test_nm_reviewed_graph_never_exposes_or_guesses_a_canonical_id():
     graph = verify_dependent_group_graph(source, proposal, review)
     assert not hasattr(graph, "stable_note_ids")
     assert not hasattr(graph.groups[2].dependencies[0], "target_id")
+
+
+@pytest.mark.parametrize(
+    "reason,index",
+    [
+        ("SOURCE_COVERAGE", None),
+        ("GROUP_CLASSIFICATION", 1),
+        ("GROUP_ATOMICITY", 3),
+        ("DEPENDENCY_AMBIGUOUS", 2),
+        ("DEPENDENCY_UNGROUNDED", 3),
+        ("DEPENDENCY_MISSING", 3),
+        ("OTHER", None),
+    ],
+)
+def test_rejection_reason_is_bounded_diagnostic_and_never_graph_approval(reason, index):
+    from odyssey_core.dependent_group_graph import classify_dependent_group_review_rejection
+
+    source, proposal, _ = _proof()
+    review = {
+        "full_source_quote": source,
+        "complete": False,
+        "dependency_edges_verified": False,
+        "review_reason": reason,
+        "failing_group_index": index,
+        "groups": [],
+    }
+    assert classify_dependent_group_review_rejection(source, proposal, review) == (reason, index)
+    with pytest.raises(DependentGroupGraphError):
+        verify_dependent_group_graph(source, proposal, review)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "false_approved",
+        "invalid_reason",
+        "group_index_outside",
+        "bool_index",
+        "rejected_with_groups",
+        "source_changed",
+        "no_veto",
+        "extra_identity",
+    ],
+)
+def test_rejection_cannot_upgrade_a_result_or_smuggle_identity(change):
+    from odyssey_core.dependent_group_graph import classify_dependent_group_review_rejection
+
+    source, proposal, _ = _proof()
+    review = {
+        "full_source_quote": source,
+        "complete": False,
+        "dependency_edges_verified": False,
+        "review_reason": "DEPENDENCY_AMBIGUOUS",
+        "failing_group_index": 2,
+        "groups": [],
+    }
+    if change == "false_approved":
+        review["review_reason"] = "APPROVED"
+    elif change == "invalid_reason":
+        review["review_reason"] = "ACCEPT_AND_WRITE"
+    elif change == "group_index_outside":
+        review["failing_group_index"] = 100
+    elif change == "bool_index":
+        review["failing_group_index"] = True
+    elif change == "rejected_with_groups":
+        review["groups"] = proposal["groups"]
+    elif change == "source_changed":
+        review["full_source_quote"] = "other"
+    elif change == "no_veto":
+        review["complete"] = True
+        review["dependency_edges_verified"] = True
+    elif change == "extra_identity":
+        review["note_id"] = "untrusted"
+    with pytest.raises(DependentGroupGraphError):
+        classify_dependent_group_review_rejection(source, proposal, review)

@@ -11,6 +11,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+REVIEW_REASONS = frozenset(
+    {
+        "APPROVED",
+        "SOURCE_COVERAGE",
+        "GROUP_CLASSIFICATION",
+        "GROUP_ATOMICITY",
+        "DEPENDENCY_AMBIGUOUS",
+        "DEPENDENCY_UNGROUNDED",
+        "DEPENDENCY_MISSING",
+        "OTHER",
+    }
+)
+
 
 class DependentGroupGraphError(ValueError):
     """Exact source, ordered dependencies, or reviewer agreement is missing."""
@@ -68,7 +81,17 @@ def verify_dependent_group_graph(
         raise DependentGroupGraphError("Source proposal and independent review required")
     if (
         set(proposal) != {"full_source_quote", "groups"}
-        or set(review) != {"full_source_quote", "complete", "dependency_edges_verified", "groups"}
+        or set(review)
+        != {
+            "full_source_quote",
+            "complete",
+            "dependency_edges_verified",
+            "review_reason",
+            "failing_group_index",
+            "groups",
+        }
+        or review.get("review_reason") != "APPROVED"
+        or review.get("failing_group_index") is not None
         or proposal["full_source_quote"] != original
         or review["full_source_quote"] != original
         or review["complete"] is not True
@@ -138,3 +161,51 @@ def verify_dependent_group_graph(
     if not has_dependency:
         raise DependentGroupGraphError("Independent groups require the independent-source contract")
     return ReviewedSourceGraph(original, tuple(groups))
+
+
+def classify_dependent_group_review_rejection(
+    original: str, proposal: Mapping[str, Any], review: Mapping[str, Any]
+) -> tuple[str, int | None]:
+    """Validate a diagnostic from the independent auditor, never authorize it.
+
+    A model-generated rejection code is informational only; it cannot become
+    approval or an alternate source partition. Only canonical graph verifier
+    grants the *structural* acceptance for an APPROVED review.
+    """
+    if (
+        not isinstance(original, str)
+        or not original.strip()
+        or not isinstance(proposal, Mapping)
+        or not isinstance(review, Mapping)
+    ):
+        raise DependentGroupGraphError("Invalid rejection diagnostic source")
+    expected = {
+        "full_source_quote",
+        "complete",
+        "dependency_edges_verified",
+        "review_reason",
+        "failing_group_index",
+        "groups",
+    }
+    if (
+        set(review) != expected
+        or proposal.get("full_source_quote") != original
+        or review.get("full_source_quote") != original
+        or review.get("review_reason") not in REVIEW_REASONS
+    ):
+        raise DependentGroupGraphError("Rejection diagnostic identity is invalid")
+    reason = review["review_reason"]
+    group = review["failing_group_index"]
+    groups = proposal.get("groups")
+    if (
+        reason == "APPROVED"
+        or review["complete"] is not False
+        and review["dependency_edges_verified"] is not False
+        or review["groups"] != []
+        or not isinstance(groups, list)
+        or not isinstance(group, (int, type(None)))
+        or isinstance(group, bool)
+        or (group is not None and not 0 <= group < len(groups))
+    ):
+        raise DependentGroupGraphError("Contradictory or unsupported rejection diagnostic")
+    return reason, group
