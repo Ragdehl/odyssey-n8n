@@ -567,3 +567,192 @@ def test_task_scope_provider_outage_before_any_core_fact_keeps_e3_consistent(tmp
     assert runtime.execute_product(SOURCE, "p4-task-preflight-outage", "main", actor)[
         "delivery_replayed"
     ]
+
+
+@pytest.mark.parametrize("refresh_fails", [False, True])
+def test_three_independent_scopes_core_task_core_have_complete_real_readback(
+    tmp_path, refresh_fails
+):
+    """N independent scopes share one E3 claim and no graph route disappears."""
+    from odyssey_apps.tasks import TaskInterpretation, TaskOperation
+
+    extra = "También he regado las plantas."
+    whole = SOURCE + " " + extra
+    repo, actor, executor, runtime, calls = _runtime(tmp_path)
+    rows = _provider_rows()
+    extra_core_rows = deepcopy(rows[4:9])
+
+    def replace_literals(item):
+        if isinstance(item, str):
+            return item.replace(CORE, extra).replace("Me gusta correr por la tarde.", extra)
+        if isinstance(item, dict):
+            return {key: replace_literals(value) for key, value in item.items()}
+        if isinstance(item, list):
+            return [replace_literals(value) for value in item]
+        return item
+
+    extra_core_rows = replace_literals(extra_core_rows)
+    route = deepcopy(rows[0])
+    route["app_scopes"].append(
+        {"capability": "core", "description": "independent fact", "depends_on_another_scope": False}
+    )
+    partition = {
+        "full_source_quote": whole,
+        "parts": [
+            {"capability": "core", "source_quote": CORE + " "},
+            {"capability": "tasks", "source_quote": TASK + " "},
+            {"capability": "core", "source_quote": extra},
+        ],
+    }
+    audit = {**_audit(), "full_source_quote": whole}
+    rows = [route, partition, audit, *rows[3:9], *extra_core_rows]
+    executor.client = RecordedClient(rows)
+    seen = []
+
+    def prepared(text, instant):
+        assert text == TASK
+        seen.append(("prepare", instant))
+        return TaskInterpretation(
+            text, TaskOperation.START_WORK_SESSION, task_reference="Preparar informe Atlas"
+        ), None
+
+    def delegated(text, locator, who, interpretation, temporal, instant):
+        assert interpretation.operation is TaskOperation.START_WORK_SESSION and temporal is None
+        assert seen == [("prepare", instant)]
+        seen.append(("delegate", instant))
+        return executor.task_delegate(text, locator, who)
+
+    executor.independent_task_prepare = prepared
+    executor.independent_task_delegate = delegated
+    if refresh_fails:
+
+        def fail_mid_scope_refresh(_ids):
+            raise ValueError("synthetic unrelated index drift")
+
+        executor.refresh_between_independent_scopes = fail_mid_scope_refresh
+    result = runtime.execute_product(whole, "independent-three-verified", "main", actor)
+    if refresh_fails:
+        assert result["status"] == "partial", result
+        assert CORE in repo.read_text("self.md")
+        assert extra not in repo.read_text("self.md")
+        assert len(runtime.work_session_service.list_for_task("atlas-task")) == 1
+        before = _snapshot(repo)
+        assert (
+            runtime.execute_product(whole, "independent-three-verified", "main", actor)[
+                "delivery_replayed"
+            ]
+            is True
+        )
+        assert _snapshot(repo) == before
+        return
+    assert result["status"] == "completed", result
+    assert [item["capability"] for item in result["execution_flow"]["routes"]] == [
+        "core",
+        "tasks",
+        "core",
+    ]
+    assert executor.client.rows == []
+    assert len(seen) == 2 and seen[0][1] == seen[1][1]
+    assert len(calls) == 1
+    source = repo.read_text("self.md")
+    assert CORE in source and extra in source
+    assert len(runtime.work_session_service.list_for_task("atlas-task")) == 1
+    snapshot = _snapshot(repo)
+    replay = runtime.execute_product(whole, "independent-three-verified", "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert _snapshot(repo) == snapshot and len(seen) == 2 and len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "problem",
+    [
+        "router_missing",
+        "router_reordered",
+        "precheck_missing",
+        "precheck_raises",
+        "precheck_wrong_source",
+    ],
+)
+def test_independent_scope_preflight_vetoes_before_first_core_write(tmp_path, problem):
+    from odyssey_apps.tasks import TaskInterpretation, TaskOperation
+
+    repo, actor, executor, runtime, calls = _runtime(tmp_path)
+    rows = _provider_rows()
+    if problem == "router_missing":
+        rows[0]["app_scopes"] = rows[0]["app_scopes"][:1]
+        # This is not a valid independent outer route; it may be rejected
+        # immediately, without asking for any downstream source plan.
+        executor.client = RecordedClient(rows)
+        before = _snapshot(repo)
+        outcome = runtime.execute_product(SOURCE, "independent-precheck-" + problem, "main", actor)
+        assert outcome["status"] != "completed"
+        assert _snapshot(repo) == before and calls == []
+        return
+    if problem == "router_reordered":
+        rows[0]["app_scopes"].reverse()
+    executor.client = RecordedClient(rows)
+    before = _snapshot(repo)
+    if problem == "precheck_missing":
+        executor.independent_task_prepare = lambda _text, _instant: (
+            TaskInterpretation(
+                TASK, TaskOperation.START_WORK_SESSION, task_reference="Preparar informe Atlas"
+            ),
+            None,
+        )
+    elif problem == "precheck_raises":
+        executor.independent_task_prepare = lambda _text, _instant: (_ for _ in ()).throw(
+            ValueError("synthetic prewrite interpretation failure")
+        )
+        executor.independent_task_delegate = lambda *_: pytest.fail("must never execute")
+    elif problem == "precheck_wrong_source":
+        executor.independent_task_prepare = lambda _text, _instant: (
+            TaskInterpretation(
+                "wrong source", TaskOperation.START_WORK_SESSION, task_reference="wrong"
+            ),
+            None,
+        )
+        executor.independent_task_delegate = lambda *_: pytest.fail("must never execute")
+    result = runtime.execute_product(SOURCE, "independent-precheck-" + problem, "main", actor)
+    assert result["status"] == "needs_attention", result
+    assert calls == [] and _snapshot(repo) == before
+
+
+def test_four_scopes_later_task_precheck_vetoes_all_prior_core_writes(tmp_path):
+    """A bad fourth group is caught before either preceding Core WRITE."""
+    repo, actor, executor, runtime, calls = _runtime(tmp_path)
+    pieces = [CORE + " ", TASK + " ", "He preparado café. ", "Termina esa sesión."]
+    source = "".join(pieces)
+    route = _outer_route()
+    route["app_scopes"].extend(
+        [
+            {"capability": "core", "description": "coffee", "depends_on_another_scope": False},
+            {"capability": "tasks", "description": "stop", "depends_on_another_scope": False},
+        ]
+    )
+    # Independent auditor statements are frozen evidence; the actual final
+    # scope still needs its own task-only and typed Task interpretation checks.
+    proposal = {
+        "full_source_quote": source,
+        "parts": [
+            {"capability": cap, "source_quote": quote}
+            for cap, quote in zip(("core", "tasks", "core", "tasks"), pieces, strict=True)
+        ],
+    }
+    executor.client = RecordedClient(
+        [
+            route,
+            proposal,
+            {**_audit(), "full_source_quote": source},
+            {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": TASK},
+            {
+                "only_task_semantics": False,
+                "exactly_one_operation": True,
+                "source_quote": pieces[-1],
+            },
+        ]
+    )
+    before = _snapshot(repo)
+    outcome = runtime.execute_product(source, "independent-four-prewrite-veto", "main", actor)
+    assert outcome["status"] == "needs_attention", outcome
+    assert _snapshot(repo) == before and calls == []
+    assert executor.client.rows == []

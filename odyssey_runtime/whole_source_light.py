@@ -122,8 +122,29 @@ class WholeSourceLightExecutor:
     progress: Callable[[str, dict[str, object]], None] | None = None
     timezone: str = "Europe/Paris"
     now: Callable[[], datetime] | None = None
+    refresh_between_independent_scopes: Callable[[tuple[str, ...]], None] | None = None
     # Distinct capability-owned adapters injected by production composition.
     # Optional for existing Core-only/independent tests. No new Writer.
+    # Optional independent N-scope preflight and product Task execution.
+    # Both must be installed together: a prechecked Task interpretation is
+    # executed exactly once, never reinterpreted after an earlier Core WRITE.
+    independent_task_prepare: (
+        Callable[[str, datetime], tuple[TaskInterpretation, TemporalInterpretation | None]] | None
+    ) = None
+    independent_task_delegate: (
+        Callable[
+            [
+                str,
+                str,
+                AuthenticatedActorContext,
+                TaskInterpretation,
+                TemporalInterpretation | None,
+                datetime,
+            ],
+            ApplicationResult,
+        ]
+        | None
+    ) = None
     dependent_core_delegate: (
         Callable[[str, str, AuthenticatedActorContext, datetime], ApplicationResult] | None
     ) = None
@@ -363,6 +384,7 @@ class WholeSourceLightExecutor:
                 conversation_id,
                 delivery_instant=instant,
                 router_started=router_started,
+                route_scopes=scopes,
             )
         if "tasks" in capabilities and "core" not in capabilities:
             # The router is a fallible hypothesis, NOT source coverage proof.
@@ -845,6 +867,7 @@ class WholeSourceLightExecutor:
         *,
         delivery_instant: datetime,
         router_started: float,
+        route_scopes: list[dict[str, object]],
     ) -> ApplicationResult:
         # Proposed scopes are non-authoritative byte ranges. No trimming,
         # deletion, or LLM-authored canonical identities in this boundary.
@@ -871,6 +894,12 @@ class WholeSourceLightExecutor:
             )
         except IndependentSourceScopesError:
             return self._abstain(delivery)
+        if len(route_scopes) != len(verified) or any(
+            route_scopes[part.index].get("capability") != part.capability
+            or route_scopes[part.index].get("depends_on_another_scope") is not False
+            for part in verified
+        ):
+            return self._abstain(delivery, "INDEPENDENT_ROUTE_PARTITION_MISMATCH")
         # Reject overlong derived locators BEFORE writing anything. This keeps
         # the outer E3 claim responsible for the full logical request.
         locators = [f"{delivery}-independent-{part.index}" for part in verified]
@@ -881,6 +910,9 @@ class WholeSourceLightExecutor:
         # classification for a narrated future plan can leave an avoidable
         # first-Core-write + later failure/uncertain E3 claim.
         task_scopes: dict[int, dict[str, object]] = {}
+        prepared_tasks: dict[int, tuple[TaskInterpretation, TemporalInterpretation | None]] = {}
+        if (self.independent_task_prepare is None) != (self.independent_task_delegate is None):
+            return self._abstain(delivery, "INDEPENDENT_TASK_ADAPTER_INCOMPLETE")
         for part in verified:
             if part.capability != "tasks":
                 continue
@@ -898,22 +930,69 @@ class WholeSourceLightExecutor:
             ):
                 return self._abstain(delivery)
             task_scopes[part.index] = scope
+            if self.independent_task_prepare is not None:
+                try:
+                    task, temporal = self.independent_task_prepare(
+                        part.source.strip(), delivery_instant
+                    )
+                    if (
+                        not isinstance(task, TaskInterpretation)
+                        or task.source_text != part.source.strip()
+                        or task.requires_temporal() != (temporal is not None)
+                        or temporal is not None
+                        and (
+                            not isinstance(temporal, TemporalInterpretation)
+                            or temporal.source_text != part.source.strip()
+                        )
+                    ):
+                        return self._abstain(delivery, "INDEPENDENT_TASK_PREWRITE_UNVERIFIED")
+                    prepared_tasks[part.index] = (task, temporal)
+                except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
+                    return self._abstain(delivery, "INDEPENDENT_TASK_PREWRITE_UNAVAILABLE")
         router_duration_ms = max(0.0, (perf_counter() - router_started) * 1000)
         outcomes: list[ApplicationResult] = []
+        pending_index_ids: list[str] = []
         for part, locator in zip(verified, locators, strict=True):
+            # An earlier canonical Writer may have made derived hints stale.
+            # Refresh only the changed Note IDs before another Core planner
+            # reads derived context. Never rebuild the complete index, and
+            # never let an index failure rewrite or erase prior successes.
+            if part.capability == "core" and pending_index_ids:
+                try:
+                    refresh = (
+                        self.refresh_between_independent_scopes or self.refresh_affected_indexes
+                    )
+                    refresh(tuple(dict.fromkeys(pending_index_ids)))
+                except Exception:
+                    outcomes.append(
+                        self._abstain(locator, "INDEPENDENT_CONTEXT_REFRESH_UNAVAILABLE")
+                    )
+                    break
+                pending_index_ids.clear()
             # This re-enters the EXACT usual Core/Tasks app path and guards,
             # with only the independently source-verified span as its scope.
             # No alternate Work Session or Task writer is introduced.
             try:
-                outcome = self._execute_source(
-                    part.source.strip(),
-                    locator,
-                    actor,
-                    conversation_id,
-                    independent_scope=part.capability,
-                    delivery_instant=delivery_instant,
-                    prechecked_task_scope=task_scopes.get(part.index),
-                )
+                if part.capability == "tasks" and self.independent_task_delegate is not None:
+                    task, temporal = prepared_tasks[part.index]
+                    outcome = self.independent_task_delegate(
+                        part.source.strip(),
+                        locator,
+                        actor,
+                        task,
+                        temporal,
+                        delivery_instant,
+                    )
+                else:
+                    outcome = self._execute_source(
+                        part.source.strip(),
+                        locator,
+                        actor,
+                        conversation_id,
+                        independent_scope=part.capability,
+                        delivery_instant=delivery_instant,
+                        prechecked_task_scope=task_scopes.get(part.index),
+                    )
             except WholeSourceLightError:
                 # A per-scope provider failure is prewrite for THAT scope,
                 # but earlier independent scopes may already be durable.
@@ -921,6 +1000,7 @@ class WholeSourceLightExecutor:
             if outcome.status is not ApplicationStatus.COMPLETED and not outcomes:
                 return replace(outcome, request_id=delivery)
             outcomes.append(outcome)
+            pending_index_ids.extend(outcome.affected_stable_note_ids)
             if outcome.status is not ApplicationStatus.COMPLETED:
                 break
         # Preserve actual Core/Task stages for donut + execution ledger instead

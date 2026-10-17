@@ -2759,7 +2759,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 repository, planning_schema_for_capability(schema, capability_id), embedder
             )
 
-    def refresh_affected_indexes(note_ids: Sequence[str]) -> None:
+    def refresh_affected_indexes(
+        note_ids: Sequence[str], *, allow_full_rebuild: bool = True
+    ) -> None:
         """Refresh changed notes plus their deterministic, already-created Day links.
 
         Core can materialize linked blank Calendar Days as verified side effects
@@ -2785,6 +2787,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     note_ids=expanded,
                 )
         except (ContextIndexError, SemanticIndexError, ValueError):
+            if not allow_full_rebuild:
+                # A mid-message Core scope must never hide unexpected drift
+                # behind a whole-vault rebuild or a second mutation attempt.
+                raise
             refresh_indexes()
 
     index_refresh_coordinator = DerivedIndexRefreshCoordinator(refresh_affected_indexes)
@@ -4224,11 +4230,50 @@ def build_runtime_from_environment() -> RuntimeComposition:
             reasoner=contextual_reasoner,
             bindings=self_binding_repository,
             refresh_affected_indexes=refresh_affected_indexes,
+            refresh_between_independent_scopes=lambda ids: refresh_affected_indexes(
+                ids, allow_full_rebuild=False
+            ),
             task_delegate=lambda source, locator, identity: execute_tasks(
                 source, locator, identity, ()
             ),
             client=OpenAI(max_retries=0, timeout=70),
             progress=_emit_progress,
+            # For source-reviewed N independent Core/Tasks scopes, prepare
+            # every Task and its Temporal meaning before the first sibling
+            # Core WRITE. Execute the same prepared interpretation later via
+            # the ordinary Tasks/Core/WorkSession service, without another
+            # potentially divergent TaskInterpreter model call.
+            independent_task_prepare=(
+                prepare_dependent_task_before_core_write
+                if "tasks" in enabled_application_ids
+                else None
+            ),
+            independent_task_delegate=(
+                lambda segment, locator, identity, task, temporal, instant: execute_tasks(
+                    segment,
+                    locator,
+                    identity,
+                    (),
+                    prepared=_PreparedInterpretation(
+                        _captured_dependent_clock(instant),
+                        task,
+                        OperationalStage("tasks.interpretation", OperationalOutcome.COMPLETED, 0.0),
+                    ),
+                    prepared_task_temporal=(
+                        _PreparedInterpretation(
+                            _captured_dependent_clock(instant),
+                            temporal,
+                            OperationalStage(
+                                "temporal.interpretation", OperationalOutcome.COMPLETED, 0.0
+                            ),
+                        )
+                        if temporal is not None
+                        else None
+                    ),
+                )
+            )
+            if "tasks" in enabled_application_ids
+            else None,
             dependent_core_delegate=(
                 lambda segment, locator, identity, instant: core_execute(
                     segment,

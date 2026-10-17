@@ -232,6 +232,8 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     assert without_tasks.hybrid_candidate_execute.dependent_task_prepare is None
     assert without_tasks.hybrid_candidate_execute.dependent_subtask_prepare is None
     assert without_tasks.hybrid_candidate_execute.dependent_task_delegate is None
+    assert without_tasks.hybrid_candidate_execute.independent_task_prepare is None
+    assert without_tasks.hybrid_candidate_execute.independent_task_delegate is None
     monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks")
     scheduled_indexes: list[tuple[str, ...]] = []
     original_scheduler = product.schedule_index_refresh
@@ -244,6 +246,9 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     product.schedule_index_refresh = record_schedule
     executor = product.hybrid_candidate_execute
     assert executor is not None
+    assert callable(executor.independent_task_prepare)
+    assert callable(executor.independent_task_delegate)
+    assert callable(executor.refresh_between_independent_scopes)
     clock_for_delivery = [datetime.fromisoformat(CLOCK)]
     executor.now = lambda: clock_for_delivery[0]
     executor.client = RecordedClient(

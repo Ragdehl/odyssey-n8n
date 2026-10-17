@@ -129,6 +129,8 @@ class LocalDeliveryResultStore:
         result_path = self._path(request_id)
         claim_path = result_path.with_suffix(".claim")
         receipt = self.load(request_id, fingerprint)  # validate immutable receipt
+        if claim_path.is_symlink():
+            raise DeliveryResultError("mutation claim is unsafe")
         if not claim_path.exists():
             return {
                 "state": "receipt_confirmed" if receipt is not None else "unseen",
@@ -160,14 +162,59 @@ class LocalDeliveryResultStore:
             "replay_permitted": receipt is not None,
         }
 
+    def reconcile_confirmed_claim(self, request_id: str, fingerprint: str) -> dict[str, object]:
+        """Reconcile ONLY an orphan reservation with a verified immutable result.
+
+        This never examines or changes Markdown and never guesses whether a
+        receipt-less attempt wrote zero, one or multiple Notes. Such attempts
+        are reported unresolved and MUST NOT be resumed or re-executed.
+        """
+        prior = self.inspect_mutation_claim(request_id, fingerprint)
+        if prior["state"] == "receipt_confirmed_with_stale_claim":
+            self.finish_mutation_claim(request_id)
+            current = self.inspect_mutation_claim(request_id, fingerprint)
+            if current["receipt_verified"] is not True:
+                raise DeliveryResultError("confirmed receipt disappeared during reconciliation")
+            return {**current, "reconciled_confirmed_claim": True}
+        return {**prior, "reconciled_confirmed_claim": False}
+
     def finish_mutation_claim(self, request_id: str) -> None:
-        """Best-effort cleanup only after the immutable receipt exists."""
-        if not self._path(request_id).exists():
+        """Cleanup only a matching claim after verifying its complete durable receipt.
+
+        A mere existing filename must not authorize deletion: the actual
+        result checksum, request identity and original claim fingerprint must
+        agree. A lost or tampered claim cannot be silently made replayable.
+        """
+        receipt_path = self._path(request_id)
+        if not receipt_path.exists() or receipt_path.is_symlink():
             raise DeliveryResultError("mutation cannot finish before receipt")
+        receipt = self._read(receipt_path)
+        if receipt["request_id"] != request_id:
+            raise DeliveryResultError("mutation result identity is invalid")
+        claim_path = receipt_path.with_suffix(".claim")
+        if not claim_path.exists() and not claim_path.is_symlink():
+            return
         try:
-            self._path(request_id).with_suffix(".claim").unlink(missing_ok=True)
+            if claim_path.is_symlink() or not claim_path.is_file():
+                raise DeliveryResultError("mutation claim is unsafe")
+            raw = claim_path.read_bytes()
+            if len(raw) > 4096:
+                raise DeliveryResultError("mutation claim exceeds budget")
+            claim = json.loads(raw)
+        except (OSError, ValueError, TypeError) as error:
+            raise DeliveryResultError("mutation claim is unavailable") from error
+        if (
+            not isinstance(claim, dict)
+            or set(claim) != {"version", "request_id", "fingerprint"}
+            or claim["version"] != 1
+            or claim["request_id"] != request_id
+            or claim["fingerprint"] != receipt["request_fingerprint"]
+        ):
+            raise DeliveryResultError("mutation claim does not match completed receipt")
+        try:
+            claim_path.unlink()
         except OSError:
-            # Completed receipt takes precedence on all later replay checks.
+            # Immutable completed receipt still wins even if cleanup fails.
             pass
 
     def load(self, request_id: str, fingerprint: str) -> dict[str, Any] | None:
