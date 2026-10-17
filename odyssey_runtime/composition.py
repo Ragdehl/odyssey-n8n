@@ -50,6 +50,7 @@ from odyssey_apps.tasks import (
     compose_task_domain_interpretation,
     compose_work_session_activity_date,
     compose_work_session_times,
+    prepare_dependent_subtask_title,
 )
 from odyssey_core.application import (
     ActionResult,
@@ -116,6 +117,9 @@ from odyssey_core.observability import (
 from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
 from odyssey_core.persistence import ActorInput
 from odyssey_core.reference_preflight import ReferencePreflightError, current_identity_guard
+from odyssey_core.request_planning import (
+    OpenAIRequestPlanner as GPT56RequestPlanner,
+)
 from odyssey_core.request_planning import (
     PlannerClarification,
     RequestDisposition,
@@ -3379,6 +3383,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             or task.source_text != source_text
             or task.operation
             not in {
+                TaskOperation.CREATE,
                 TaskOperation.START_WORK_SESSION,
                 TaskOperation.STOP_WORK_SESSION,
                 TaskOperation.EDIT_WORK_SESSION,
@@ -3711,6 +3716,86 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 # the already returned UnitResult receipt and actual Markdown.
                 (mutation.session.id,),
                 history=mutation.history,
+                operational=OperationalEvidence(total_duration, tuple(stages)),
+                execution_flow=_task_flow(task),
+            )
+        if dependent_task_target is not None and task.operation is TaskOperation.CREATE:
+            mutation_started = perf_counter()
+            try:
+                if direct_task_mutations is None:
+                    raise TaskDirectMutationError("TASK_UNAVAILABLE")
+                parent_id = dependent_task_target.require_current(repository, schema)
+                title = dependent_task_target.require_prepared_subtask_title(source_text)
+                revision, source_hash = direct_task_mutations.task_mutation_tokens(parent_id)
+                if (
+                    source_hash
+                    != dependent_task_target.source_dependency.evidence.canonical_content_guard
+                ):
+                    raise TaskDependentTargetError("Dependent parent changed before subtask CAS")
+                child = direct_task_mutations.create_subtask(
+                    parent_note_id=parent_id,
+                    title=title,
+                    expected_revision=revision,
+                    expected_source_hash=source_hash,
+                    request_id=request_id,
+                    actor=_persistence_actor(actor, authenticated_actor),
+                    now=clock["timestamp"],
+                )
+            except TaskDependentTargetError:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="DEPENDENT_TASK_TARGET_STALE",
+                    operational=OperationalEvidence(total_duration, tuple(stages)),
+                )
+            except TaskDirectMutationError as error:
+                if error.physical_write:
+                    # An uncertain postwrite cannot safely become an E3 success receipt.
+                    raise
+                duration = max(0.0, (perf_counter() - mutation_started) * 1000)
+                stages.append(
+                    OperationalStage(
+                        "tasks.subtask_mutation",
+                        OperationalOutcome.FAILED,
+                        duration,
+                        error_category=error.code,
+                    )
+                )
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error=error.code,
+                    operational=OperationalEvidence(total_duration + duration, tuple(stages)),
+                )
+            duration = max(0.0, (perf_counter() - mutation_started) * 1000)
+            total_duration += duration
+            stages.append(
+                OperationalStage("tasks.subtask_mutation", OperationalOutcome.COMPLETED, duration)
+            )
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.COMPLETED,
+                (
+                    ActionResult(
+                        0,
+                        "write",
+                        ActionStatus.COMPLETED,
+                        unit_results=(
+                            UnitResult(
+                                0,
+                                UnitStatus.SUCCEEDED,
+                                operation=child.operation,
+                                stable_note_id=child.note_id,
+                            ),
+                        ),
+                    ),
+                ),
+                (child.note_id,),
+                history=child.history,
                 operational=OperationalEvidence(total_duration, tuple(stages)),
                 execution_flow=_task_flow(task),
             )
@@ -4096,6 +4181,32 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 compose_work_session_times(task, temporal, now=captured["timestamp"])
         return task, temporal
 
+    def prepare_dependent_subtask_before_core_write(
+        source: str, task: TaskInterpretation, instant: datetime
+    ):
+        """Use the ordinary Core Task planner to prepare one child title without writing.
+
+        The resulting plan is consumed only by the strict source-bound title
+        validator.  Parent identity and the child write remain unavailable
+        until the preceding Core result proves a fresh canonical Task link.
+        """
+        if task.operation is not TaskOperation.CREATE or task.source_text != source:
+            raise TaskInterpretationError("Dependent subtask preparation requires matching CREATE")
+        clock = _captured_dependent_clock(instant)
+        domain = compose_task_domain_interpretation(task, None, now=clock["timestamp"])
+        planner = TaskCorePlanner(
+            GPT56RequestPlanner.from_environment(
+                schema,
+                {key: clock[key] for key in ("date", "time", "timezone")},
+                domain_interpretation=domain,
+            ),
+            task,
+        )
+        plan = planner.plan(source, ())
+        if not isinstance(plan, RequestPlan):
+            raise TaskInterpretationError("Dependent subtask planner did not return a write plan")
+        return prepare_dependent_subtask_title(source_text=source, interpretation=task, plan=plan)
+
     light_source_execute = None
     if light_source_enabled:
         if self_binding_repository is None:
@@ -4131,6 +4242,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
             else None,
             dependent_task_prepare=(
                 prepare_dependent_task_before_core_write
+                if "tasks" in enabled_application_ids
+                else None
+            ),
+            dependent_subtask_prepare=(
+                prepare_dependent_subtask_before_core_write
                 if "tasks" in enabled_application_ids
                 else None
             ),

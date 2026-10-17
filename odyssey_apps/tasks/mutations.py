@@ -19,6 +19,7 @@ from odyssey_core.mutation_gate import (
     CreateMutationCommand,
     MutationCommand,
 )
+from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.persistence import ActorInput, PersistenceOperation
 from odyssey_core.reference_binding import ReferenceBindingError, render_reference_facts
 from odyssey_core.reference_preflight import (
@@ -33,7 +34,7 @@ from odyssey_core.request_planning import (
     SelectionCriteria,
     WriteAction,
 )
-from odyssey_core.storage import VaultRepository
+from odyssey_core.storage import NoteUnavailableError, VaultRepository
 from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
 
 from .schema import TASK_TYPE
@@ -200,6 +201,43 @@ class TaskDirectMutationService:
             updated_status,
             completed_at,
         )
+
+    def task_mutation_tokens(self, note_id: str) -> tuple[int, str]:
+        """Read current canonical Task revision/hash for an immediately following CAS command.
+
+        This is the same direct-mutation service used by the UI.  It exposes
+        no mutation authority and deliberately rejects non-Task or malformed
+        canonical state rather than returning a best-effort token.
+        """
+        if not isinstance(note_id, str) or not note_id:
+            raise TaskDirectMutationError("TASK_UNAVAILABLE")
+        matches = []
+        for path in self.repository.list_markdown_paths():
+            try:
+                raw = self.repository.read_text(path)
+                note = parse_note(raw)
+                validate_note(note, self.schema)
+            except (
+                NoteUnavailableError,
+                NoteFormatError,
+                NoteValidationError,
+                ValueError,
+            ) as error:
+                raise TaskDirectMutationError("TASK_UNAVAILABLE") from error
+            if note.metadata.get("id") == note_id and note.metadata.get("deleted") is not True:
+                matches.append((note, raw))
+        if len(matches) != 1:
+            raise TaskDirectMutationError("TASK_UNAVAILABLE")
+        note, raw = matches[0]
+        revision = note.metadata.get("revision")
+        if (
+            note.metadata.get("type") != TASK_TYPE
+            or not isinstance(revision, int)
+            or isinstance(revision, bool)
+            or revision < 1
+        ):
+            raise TaskDirectMutationError("TASK_UNAVAILABLE")
+        return revision, hashlib.sha256(raw.encode()).hexdigest()
 
     def create_subtask(
         self,

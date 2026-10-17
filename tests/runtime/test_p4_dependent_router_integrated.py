@@ -12,13 +12,30 @@ from types import SimpleNamespace
 
 import pytest
 
-from odyssey_apps.tasks import TaskInterpretation, TaskOperation, TaskWorkSessionService
+from odyssey_apps.tasks import (
+    TaskDirectMutationService,
+    TaskInterpretation,
+    TaskOperation,
+    TaskRelationshipMention,
+    TaskRelationshipRole,
+    TaskWorkSessionService,
+    prepare_dependent_subtask_title,
+)
 from odyssey_core import create_entity
-from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
+from odyssey_core.application import (
+    ActionResult,
+    ActionStatus,
+    ApplicationResult,
+    ApplicationStatus,
+    UnitResult,
+    UnitStatus,
+    execute_request,
+)
 from odyssey_core.notes import parse_note
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    PropertyChange,
     RequestPlan,
     SelectionCriteria,
     WriteAction,
@@ -357,9 +374,225 @@ def test_dependent_subtask_without_verified_title_must_block_prewrite(tmp_path):
     snapshot = _snapshot(repo)
     result = runtime.execute_product(SOURCE, "p4-subtask-title-unready", "main", actor)
     assert result["status"] == "needs_attention"
-    assert result["product_reason"] == "DEPENDENT_SUBTASK_PLANNER_NOT_READY"
+    assert result["product_reason"] == "DEPENDENT_SUBTASK_PREWRITE_UNAVAILABLE"
     assert not calls or calls == ["prepare"]
     assert _snapshot(repo) == snapshot
+
+
+SUBTASK_AFTER = " Ahora crea la subtarea Preparar el índice dentro de esa tarea."
+SUBTASK_SOURCE = BEFORE + SUBTASK_AFTER
+
+
+def _subtask_plan():
+    title = "Preparar el índice"
+    primary = KnowledgeUnit(
+        SelectionCriteria(title, title, "task", (), None),
+        "record",
+        (PropertyChange("status", "set", "pending"),),
+        (),
+        (f"{title}.", "Tarea superior: {{ref:0}}."),
+        (KnowledgeReference(1, "parent_task", "esa tarea"),),
+        force_create=True,
+    )
+    parent = KnowledgeUnit(
+        SelectionCriteria(None, "esa tarea", "task", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    return RequestPlan((WriteAction((primary, parent)),), ())
+
+
+def _subtask_attestation(**changes):
+    return {
+        "full_source_quote": SUBTASK_SOURCE,
+        "antecedent_quote": BEFORE,
+        "dependent_quote": SUBTASK_AFTER,
+        "dependent_mention": "esa tarea",
+        "one_target": True,
+        "same_target": True,
+        "target_type": "task",
+        "operation": "CREATE_SUBTASK",
+        "operation_supported": True,
+        **changes,
+    }
+
+
+@pytest.mark.parametrize("crash_after_write", [False, True])
+def test_dependent_subtask_uses_prewrite_core_title_and_ui_service_through_e3(
+    tmp_path, crash_after_write
+):
+    repo, actor, executor, runtime, calls, _domain = _setup(tmp_path)
+    direct = TaskDirectMutationService(
+        repo,
+        SCHEMA,
+        None,
+        semantic_index=executor.semantic_index,
+        embedder=executor.embedder,
+        contextual_reasoner=executor.reasoner,
+        semantic_limit=10,
+    )
+
+    def prepare_task(text, instant):
+        assert text == SUBTASK_AFTER.strip() and instant.isoformat() == CLOCK
+        calls.append("prepare")
+        return (
+            TaskInterpretation(
+                text,
+                TaskOperation.CREATE,
+                relationship_mentions=(
+                    TaskRelationshipMention("esa tarea", TaskRelationshipRole.PARENT_TASK),
+                ),
+            ),
+            None,
+        )
+
+    def prepare_title(text, interpretation, instant):
+        assert text == SUBTASK_AFTER.strip() and instant.isoformat() == CLOCK
+        calls.append("title")
+        return prepare_dependent_subtask_title(
+            source_text=text, interpretation=interpretation, plan=_subtask_plan()
+        )
+
+    def create_child(source, locator, who, interpretation, temporal, target, instant):
+        assert source == SUBTASK_AFTER.strip() and who == actor and temporal is None
+        assert instant.isoformat() == CLOCK and interpretation.operation is TaskOperation.CREATE
+        calls.append("task")
+        parent_id = target.require_current(repo, SCHEMA)
+        title = target.require_prepared_subtask_title(source)
+        revision, source_hash = direct.task_mutation_tokens(parent_id)
+        child = direct.create_subtask(
+            parent_note_id=parent_id,
+            title=title,
+            expected_revision=revision,
+            expected_source_hash=source_hash,
+            request_id=locator,
+            actor=who.stable_user_id,
+            now=CLOCK,
+        )
+        if crash_after_write:
+            raise RuntimeError("synthetic crash after canonical subtask write")
+        return ApplicationResult(
+            locator,
+            ApplicationStatus.COMPLETED,
+            (
+                ActionResult(
+                    0,
+                    "write",
+                    ActionStatus.COMPLETED,
+                    unit_results=(
+                        UnitResult(
+                            0,
+                            UnitStatus.SUCCEEDED,
+                            operation=child.operation,
+                            stable_note_id=child.note_id,
+                        ),
+                    ),
+                ),
+            ),
+            (child.note_id,),
+            history=child.history,
+        )
+
+    executor.dependent_task_prepare = prepare_task
+    executor.dependent_subtask_prepare = prepare_title
+    executor.dependent_task_delegate = create_child
+    executor.client = RecordedClient(
+        [
+            _route(),
+            {
+                "full_source_quote": SUBTASK_SOURCE,
+                "antecedent_quote": BEFORE,
+                "dependent_quote": SUBTASK_AFTER,
+                "dependent_mention": "esa tarea",
+            },
+            {
+                "only_task_semantics": True,
+                "exactly_one_operation": True,
+                "source_quote": SUBTASK_AFTER.strip(),
+            },
+            _subtask_attestation(),
+            _subtask_attestation(),
+        ]
+    )
+    if crash_after_write:
+        from odyssey_runtime.delivery_results import DeliveryResultError
+
+        with pytest.raises(RuntimeError, match="synthetic crash after canonical subtask write"):
+            runtime.execute_product(SUBTASK_SOURCE, "p4-dependent-subtask", "main", actor)
+        assert calls == ["prepare", "title", "core", "task"]
+        child_notes = [
+            parse_note(repo.read_text(path))
+            for path in repo.list_markdown_paths()
+            if parse_note(repo.read_text(path)).metadata.get("name") == "Preparar el índice"
+        ]
+        assert len(child_notes) == 1
+        assert "[[atlas|Preparar informe Atlas]]" in child_notes[0].content
+        snapshot = _snapshot(repo)
+        with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
+            runtime.execute_product(SUBTASK_SOURCE, "p4-dependent-subtask", "main", actor)
+        assert _snapshot(repo) == snapshot
+        assert calls == ["prepare", "title", "core", "task"]
+        return
+    result = runtime.execute_product(SUBTASK_SOURCE, "p4-dependent-subtask", "main", actor)
+    assert result["status"] == "completed", result
+    assert calls == ["prepare", "title", "core", "task"]
+    child_path = next(
+        path
+        for path in repo.list_markdown_paths()
+        if parse_note(repo.read_text(path)).metadata.get("name") == "Preparar el índice"
+    )
+    child = parse_note(repo.read_text(child_path))
+    assert child.metadata["type"] == "task" and child.metadata["status"] == "pending"
+    assert "[[atlas|Preparar informe Atlas]]" in child.content
+    before = _snapshot(repo)
+    replay = runtime.execute_product(SUBTASK_SOURCE, "p4-dependent-subtask", "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert calls == ["prepare", "title", "core", "task"]
+    assert _snapshot(repo) == before
+
+
+@pytest.mark.parametrize(
+    "invalid", ["wrong_type", "extra_action", "parent_title", "extra_fact", "duplicate_title"]
+)
+def test_dependent_subtask_title_plan_rejects_ambiguous_or_lossy_shapes(invalid):
+    source = SUBTASK_AFTER.strip()
+    if invalid == "duplicate_title":
+        source += " Preparar el índice."
+    interpretation = TaskInterpretation(
+        source,
+        TaskOperation.CREATE,
+        relationship_mentions=(
+            TaskRelationshipMention("esa tarea", TaskRelationshipRole.PARENT_TASK),
+        ),
+    )
+    plan = _subtask_plan()
+    action = plan.actions[0]
+    primary, helper = action.units
+    if invalid == "wrong_type":
+        primary = replace(primary, target=replace(primary.target, type="person"))
+    elif invalid == "extra_action":
+        plan = replace(plan, actions=(action, action))
+    elif invalid == "parent_title":
+        primary = replace(
+            primary,
+            target=replace(primary.target, entity="esa tarea", query="esa tarea"),
+            facts=("esa tarea.", "Tarea superior: {{ref:0}}."),
+        )
+    else:
+        primary = replace(
+            primary,
+            facts=(*primary.facts, "No perder esta mutación adicional."),
+        )
+    if invalid != "extra_action":
+        plan = replace(plan, actions=(replace(action, units=(primary, helper)),))
+    with pytest.raises(ValueError):
+        prepare_dependent_subtask_title(
+            source_text=source, interpretation=interpretation, plan=plan
+        )
 
 
 def test_dep_tasks_postwrite_crash_leaves_outer_e3_claim_and_no_duplicate(tmp_path):

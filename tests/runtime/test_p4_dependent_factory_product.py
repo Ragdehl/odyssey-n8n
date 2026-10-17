@@ -18,6 +18,8 @@ from odyssey_apps.tasks import (
     TaskActivityTarget,
     TaskInterpretation,
     TaskOperation,
+    TaskRelationshipMention,
+    TaskRelationshipRole,
     TaskTemporalMention,
     TaskTemporalRole,
 )
@@ -28,6 +30,7 @@ from odyssey_core.notes import parse_note
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    PropertyChange,
     RequestPlan,
     SelectionCriteria,
     WriteAction,
@@ -227,6 +230,7 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     without_tasks = composition.build_runtime_from_environment()
     assert without_tasks.hybrid_candidate_execute.dependent_core_delegate is None
     assert without_tasks.hybrid_candidate_execute.dependent_task_prepare is None
+    assert without_tasks.hybrid_candidate_execute.dependent_subtask_prepare is None
     assert without_tasks.hybrid_candidate_execute.dependent_task_delegate is None
     monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks")
     scheduled_indexes: list[tuple[str, ...]] = []
@@ -267,6 +271,122 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     assert result["affected_stable_note_ids"]
     assert scheduled_indexes == [tuple(result["affected_stable_note_ids"])]
 
+    # The child title is prepared by the production GPT-5.6 Core planner
+    # seam, then shaped by the existing Tasks decorator; no separate prompt
+    # or direct Markdown path participates.
+    subtask_source = "Ahora crea la subtarea Preparar el índice dentro de esa tarea."
+    subtask = TaskInterpretation(
+        subtask_source,
+        TaskOperation.CREATE,
+        relationship_mentions=(
+            TaskRelationshipMention("esa tarea", TaskRelationshipRole.PARENT_TASK),
+        ),
+    )
+    raw_subtask_plan = RequestPlan(
+        (
+            WriteAction(
+                (
+                    KnowledgeUnit(
+                        SelectionCriteria(
+                            "Preparar el índice", "Preparar el índice", "task", (), None
+                        ),
+                        "record",
+                        (PropertyChange("status", "set", "pending"),),
+                        (),
+                        ("Preparar el índice.",),
+                        (),
+                    ),
+                )
+            ),
+        ),
+        (),
+    )
+
+    class GPT56Planner:
+        def plan(self, text, _context=()):
+            assert text == subtask_source
+            return raw_subtask_plan
+
+    monkeypatch.setattr(
+        composition.GPT56RequestPlanner,
+        "from_environment",
+        classmethod(lambda _cls, *_args, **_kwargs: GPT56Planner()),
+    )
+    assert executor.dependent_subtask_prepare is not None
+    prepared = executor.dependent_subtask_prepare(
+        subtask_source, subtask, datetime.fromisoformat(CLOCK)
+    )
+    assert prepared.require_matches(subtask_source, TaskOperation.CREATE) == "Preparar el índice"
+
+    # Exercise the production delegate itself: Core writes a fresh backlink,
+    # then execute_tasks uses TaskDirectMutationService.create_subtask rather
+    # than the test's own mutation shim.
+    subtask_before = "Hoy comprobé Preparar informe Atlas."
+    subtask_dependent = " Ahora crea la subtarea Preparar el índice dentro de esa tarea."
+    subtask_full_source = subtask_before + subtask_dependent
+    followup_antecedents.add(subtask_before)
+    followup_interpretations[subtask_dependent.strip()] = TaskInterpretation(
+        subtask_dependent.strip(),
+        TaskOperation.CREATE,
+        relationship_mentions=(
+            TaskRelationshipMention("esa tarea", TaskRelationshipRole.PARENT_TASK),
+        ),
+    )
+    executor.client = RecordedClient(
+        [
+            _route(),
+            {
+                "full_source_quote": subtask_full_source,
+                "antecedent_quote": subtask_before,
+                "dependent_quote": subtask_dependent,
+                "dependent_mention": "esa tarea",
+            },
+            {
+                "only_task_semantics": True,
+                "exactly_one_operation": True,
+                "source_quote": subtask_dependent.strip(),
+            },
+            {
+                "full_source_quote": subtask_full_source,
+                "antecedent_quote": subtask_before,
+                "dependent_quote": subtask_dependent,
+                "dependent_mention": "esa tarea",
+                "one_target": True,
+                "same_target": True,
+                "target_type": "task",
+                "operation": "CREATE_SUBTASK",
+                "operation_supported": True,
+            },
+            {
+                "full_source_quote": subtask_full_source,
+                "antecedent_quote": subtask_before,
+                "dependent_quote": subtask_dependent,
+                "dependent_mention": "esa tarea",
+                "one_target": True,
+                "same_target": True,
+                "target_type": "task",
+                "operation": "CREATE_SUBTASK",
+                "operation_supported": True,
+            },
+        ]
+    )
+    subtask_result = product.execute_product(
+        subtask_full_source, "p4-factory-subtask", "main", actor
+    )
+    assert subtask_result["status"] == "completed", subtask_result
+    created_child = next(
+        parse_note(repo.read_text(path))
+        for path in repo.list_markdown_paths()
+        if parse_note(repo.read_text(path)).metadata.get("name") == "Preparar el índice"
+    )
+    assert created_child.metadata["type"] == "task"
+    assert "[[atlas|Preparar informe Atlas]]" in created_child.content
+    subtask_snapshot = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    assert product.execute_product(subtask_full_source, "p4-factory-subtask", "main", actor)[
+        "delivery_replayed"
+    ]
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == subtask_snapshot
+
     # Evaluate the workflow's ACTUAL JavaScript bounded flow guards against
     # the real product result, rather than duplicating their logic in Python.
     import subprocess
@@ -294,7 +414,8 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
     replay = product.execute_product(SOURCE, "p4-factory-dependent", "main", actor)
     assert replay["delivery_replayed"] is True
-    assert core_sources == [SOURCE, BEFORE] and task_sources == [AFTER.strip()]
+    assert core_sources == [SOURCE, BEFORE, subtask_full_source, subtask_before]
+    assert task_sources == [AFTER.strip(), subtask_dependent.strip()]
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
     ui = product.notes(
         "work_session_activity_add",
@@ -433,7 +554,7 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
         activity="verifiqué los plazos",
     )
     assert progress["status"] == "completed", progress
-    assert len(scheduled_indexes) == 2  # Exactly one scheduled index update per Chat delivery
+    assert len(scheduled_indexes) == 3  # Exactly one scheduled index update per Chat delivery
     assert scheduled_indexes[-1] == tuple(progress["affected_stable_note_ids"])
     updated = product.notes("detail", {"note_id": "atlas-factory-p4-dependent"}, actor)
     assert len(updated["work_sessions"][0]["activity"]) == 2
@@ -445,7 +566,7 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     stop_antecedent = "Hoy cerré la revisión de Preparar informe Atlas."
     stopped = followup(stop_antecedent, stopped_source, TaskOperation.STOP_WORK_SESSION)
     assert stopped["status"] == "completed", stopped
-    assert len(scheduled_indexes) == 3
+    assert len(scheduled_indexes) == 4
     assert scheduled_indexes[-1] == tuple(stopped["affected_stable_note_ids"])
     ended = product.notes("detail", {"note_id": "atlas-factory-p4-dependent"}, actor)
     assert len(ended["work_sessions"]) == 1
@@ -466,7 +587,7 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     edit_fragment = " Ahora corrige el inicio de la sesión de esa tarea a las 15:10."
     edited = followup(edit_antecedent, edit_fragment, TaskOperation.EDIT_WORK_SESSION)
     assert edited["status"] == "completed", edited
-    assert len(scheduled_indexes) == 4
+    assert len(scheduled_indexes) == 5
     assert scheduled_indexes[-1] == tuple(edited["affected_stable_note_ids"])
     assert temporal_review_clocks == ["2026-10-16"]
     after_edit = product.notes("detail", {"note_id": "atlas-factory-p4-dependent"}, actor)

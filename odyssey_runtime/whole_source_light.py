@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 from openai import OpenAIError
 
 from odyssey_apps.tasks import (
+    PreparedDependentSubtask,
     TaskDependentTarget,
     TaskDependentTargetError,
     TaskInterpretation,
@@ -128,6 +129,9 @@ class WholeSourceLightExecutor:
     ) = None
     dependent_task_prepare: (
         Callable[[str, datetime], tuple[TaskInterpretation, TemporalInterpretation | None]] | None
+    ) = None
+    dependent_subtask_prepare: (
+        Callable[[str, TaskInterpretation, datetime], PreparedDependentSubtask] | None
     ) = None
     dependent_task_delegate: (
         Callable[
@@ -658,18 +662,29 @@ class WholeSourceLightExecutor:
                 return self._abstain(delivery, "DEPENDENT_TASK_PREWRITE_UNAVAILABLE")
         except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
             return self._abstain(delivery, "DEPENDENT_TASK_PREWRITE_UNAVAILABLE")
+        prepared_subtask: PreparedDependentSubtask | None = None
         if interpretation.operation is TaskOperation.CREATE:
             if any(
                 getattr(mention.role, "value", None) == "PARENT_TASK"
                 for mention in interpretation.relationship_mentions
             ):
-                # The typed E2 parent proof exists, but P4 does not yet
-                # derive/verify the child title through the ordinary Planner.
-                # Never write a predecessor fact knowing the child must fail.
-                return self._abstain(delivery, "DEPENDENT_SUBTASK_PLANNER_NOT_READY")
+                if self.dependent_subtask_prepare is None:
+                    return self._abstain(delivery, "DEPENDENT_SUBTASK_PREWRITE_UNAVAILABLE")
+                try:
+                    prepared_subtask = self.dependent_subtask_prepare(
+                        scope.dependent.strip(), interpretation, delivery_instant
+                    )
+                    if not isinstance(prepared_subtask, PreparedDependentSubtask):
+                        return self._abstain(delivery, "DEPENDENT_SUBTASK_PREWRITE_UNAVAILABLE")
+                    prepared_subtask.require_matches(
+                        scope.dependent.strip(), interpretation.operation
+                    )
+                except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
+                    return self._abstain(delivery, "DEPENDENT_SUBTASK_PREWRITE_UNAVAILABLE")
             # Ordinary dependent Task CREATE (an obligation after meeting)
             # remains owned by the existing whole-source Core compiler.
-            return None
+            elif not interpretation.relationship_mentions:
+                return None
         # Audit the dependent segment's complete single-operation semantics
         # independently from both its Router label and the Tasks interpreter.
         # Two Work Session operations in the same fragment must never be
@@ -754,6 +769,8 @@ class WholeSourceLightExecutor:
                 repository=self.repository,
                 schema=self.schema,
             )
+            if prepared_subtask is not None:
+                target = target.with_prepared_subtask(prepared_subtask)
         except TaskDependentTargetError:
             # Core may have written a real fact but its Task link was missing,
             # conflicting or stale: report PARTIAL and NEVER run Tasks.

@@ -99,7 +99,7 @@
         "tests/runtime/test_p4_independent_mixed_scopes.py::test_misrouted_future_indicative_task_is_rejected_before_any_core_write",
         "tests/runtime/test_p4_dependent_task_target.py::test_bound_task_consumer_crash_postwrite_retains_e3_claim_and_no_reexecution",
         "tests/runtime/test_p4_production_composition_task_ui.py::test_environment_factory_real_tasks_interpreter_resolution_session_and_notes_ui",
-        "tests/runtime/test_p4_dependent_router_integrated.py::test_real_joined_core_task_target_and_work_session_through_product_e3",
+        "tests/runtime/test_p4_dependent_router_integrated.py::test_dependent_subtask_uses_prewrite_core_title_and_ui_service_through_e3",
         "tests/runtime/test_p4_dependent_factory_product.py::test_real_product_factory_core_and_tasks_dependent_work_session"
       ],
       "blocks_p4_dev": true,

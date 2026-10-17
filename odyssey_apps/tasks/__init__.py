@@ -1,8 +1,10 @@
 """Tasks application domain package."""
 
 from .dependent_target import (
+    PreparedDependentSubtask,
     TaskDependentTarget,
     TaskDependentTargetError,
+    prepare_dependent_subtask_title,
     prove_dependent_task_target,
     verify_dependent_task_semantics,
 )
@@ -52,6 +54,8 @@ from .work_sessions import (
 __all__ = [
     "TaskDependentTarget",
     "TaskDependentTargetError",
+    "PreparedDependentSubtask",
+    "prepare_dependent_subtask_title",
     "prove_dependent_task_target",
     "verify_dependent_task_semantics",
     "TASK_SCHEMA_EXTENSION",
