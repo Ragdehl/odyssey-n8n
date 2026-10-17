@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from odyssey_core.storage import (
     InvalidNotePath,
@@ -233,3 +235,105 @@ class VaultRepositoryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScopedReadCacheContractTests(unittest.TestCase):
+    """A request-local hint must never mask fresh filesystem canonical state."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "vault"
+        self.root.mkdir()
+        self.repo = VaultRepository(self.root)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_repeated_unchanged_text_and_list_can_be_reused(self):
+        self.repo.create_text("a.md", "first")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "first")
+            self.assertEqual(self.repo.read_text("a.md"), "first")
+            original = self.repo.list_markdown_paths()
+            original.append("fiction.md")
+            self.assertEqual(self.repo.list_markdown_paths(), ["a.md"])
+
+    def test_external_atomic_replace_and_same_length_in_place_edit_are_fresh(self):
+        self.repo.create_text("a.md", "first")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "first")
+            # External mutation, no repository invalidation: inode/ctime changes.
+            other = self.root / "swap.tmp"
+            other.write_text("newer", encoding="utf-8")
+            other.replace(self.root / "a.md")
+            self.assertEqual(self.repo.read_text("a.md"), "newer")
+            (self.root / "a.md").write_text("later", encoding="utf-8")
+            self.assertEqual(self.repo.read_text("a.md"), "later")
+
+    def test_internal_create_replace_remove_and_directory_structure_are_fresh(self):
+        self.repo.create_text("a.md", "before")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.list_markdown_paths(), ["a.md"])
+            self.assertEqual(self.repo.read_text("a.md"), "before")
+            self.repo.replace_text("a.md", "updated")
+            self.assertEqual(self.repo.read_text("a.md"), "updated")
+            self.repo.create_text("b.md", "born")
+            self.assertEqual(self.repo.list_markdown_paths(), ["a.md", "b.md"])
+            self.repo.remove_text("b.md")
+            self.assertEqual(self.repo.list_markdown_paths(), ["a.md"])
+            self.repo.read_text("a.md")
+            (self.root / "other").mkdir()
+            (self.root / "other" / "c.md").write_text("external", encoding="utf-8")
+            self.assertEqual(self.repo.list_markdown_paths(), ["a.md", "other/c.md"])
+            (self.root / "other" / "c.md").unlink()
+            self.assertEqual(self.repo.list_markdown_paths(), ["a.md"])
+
+    def test_deletion_and_escape_symlink_must_never_reuse_cached_text(self):
+        self.repo.create_text("a.md", "trusted")
+        secret = Path(self.tmp.name) / "outside.md"
+        secret.write_text("never expose", encoding="utf-8")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "trusted")
+            (self.root / "a.md").unlink()
+            (self.root / "a.md").symlink_to(secret)
+            with self.assertRaises(NoteUnavailableError):
+                self.repo.read_text("a.md")
+            self.assertEqual(self.repo.list_markdown_paths(), [])
+
+    def test_request_boundary_never_reuses_a_previous_deliveries_copy(self):
+        self.repo.create_text("a.md", "older")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "older")
+        (self.root / "a.md").write_text("fresh", encoding="utf-8")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "fresh")
+
+    def test_cached_text_rejects_mtime_restored_after_same_size_change(self):
+        note = self.root / "a.md"
+        self.repo.create_text("a.md", "alpha")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "alpha")
+            stamp = note.stat().st_mtime_ns
+            note.write_text("omega", encoding="utf-8")
+            os.utime(note, ns=(stamp, stamp))
+            # Same byte size, old mtime: ctime still proves the file changed.
+            self.assertEqual(self.repo.read_text("a.md"), "omega")
+
+    def test_memory_budget_disables_large_file_cache_without_changing_reads(self):
+        self.repo.create_text("a.md", "exceeds")
+        with patch("odyssey_core.storage.repository._REQUEST_READ_MAX_BYTES", 2):
+            with self.repo.scoped_unchanged_reads():
+                self.assertEqual(self.repo.read_text("a.md"), "exceeds")
+                self.assertEqual(self.repo._request_reads.get().bytes_used, 0)
+                self.assertEqual(self.repo.read_text("a.md"), "exceeds")
+
+    def test_nested_request_cache_is_not_a_write_authority(self):
+        self.repo.create_text("a.md", "before")
+        with self.repo.scoped_unchanged_reads():
+            self.assertEqual(self.repo.read_text("a.md"), "before")
+            with self.repo.scoped_unchanged_reads():
+                self.repo.replace_text("a.md", "after")
+                self.assertEqual(self.repo.read_text("a.md"), "after")
+            # Parent scope might still have an old entry, but its live inode
+            # check refuses to return it after the nested scope changed file.
+            self.assertEqual(self.repo.read_text("a.md"), "after")

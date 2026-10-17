@@ -8,6 +8,7 @@ n8n latency, browser paint or model inference.
 from __future__ import annotations
 
 import json
+import os
 import resource
 import tempfile
 import time
@@ -26,7 +27,11 @@ from tests.runtime.test_whole_source_light_product_p4 import (
 def main():
     source, route, plan, review = _actual_snapshot("maya_simple")
     rows = []
-    for note_count in (20, 250, 1000):
+    selected = os.environ.get("ODYSSEY_P4_SCALE_COUNTS")
+    counts = (20, 250, 1000) if not selected else tuple(int(x) for x in selected.split(","))
+    if not counts or any(count not in {20, 250, 1000} for count in counts):
+        raise ValueError("Synthetic scale fixture only supports 20, 250, 1000 notes")
+    for note_count in counts:
         with tempfile.TemporaryDirectory(prefix="odyssey-p4-scale-") as path:
             repo, actor, service, runtime = _fixture(Path(path), incremental_indexes=True)
             before_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss

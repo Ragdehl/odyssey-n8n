@@ -193,7 +193,7 @@ class WholeSourceLightExecutor:
     ) -> ApplicationResult:
         # No trust caching: only parsed representations of byte-for-byte
         # identical canonical Markdown, and only within this one delivery.
-        with scoped_note_decode_cache():
+        with scoped_note_decode_cache(), self.repository.scoped_unchanged_reads():
             try:
                 return self._execute_source(source, delivery, actor, conversation_id)
             except WholeSourceLightError:

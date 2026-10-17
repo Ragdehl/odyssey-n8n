@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+
+_REQUEST_READ_MAX_BYTES = 8 * 1024 * 1024
+_REQUEST_READ_MAX_NOTES = 4096
+_REQUEST_PATH_LIST_MAX_NOTES = 20_000
 
 
 class InvalidNotePath(ValueError):
@@ -21,6 +29,16 @@ class NoteAlreadyExistsError(OSError):
 
 class VaultAccessError(OSError):
     """Indicate an unexpected or unsafe filesystem access outcome."""
+
+
+@dataclass(slots=True)
+class _RequestReads:
+    """Bound only within one delivery; never trust a saved result without live stat."""
+
+    texts: dict[str, tuple[tuple[object, ...], str]] = field(default_factory=dict)
+    bytes_used: int = 0
+    paths: tuple[str, ...] | None = None
+    directory_versions: tuple[tuple[Path, tuple[int, ...]], ...] = ()
 
 
 class VaultRepository:
@@ -43,6 +61,48 @@ class VaultRepository:
         if not root.is_dir() or not os.access(root, os.R_OK | os.X_OK):
             raise VaultAccessError("Vault root is unusable")
         self._root = root
+        self._request_reads: ContextVar[_RequestReads | None] = ContextVar(
+            f"odyssey_vault_request_reads_{id(self)}", default=None
+        )
+
+    @contextmanager
+    def scoped_unchanged_reads(self) -> Iterator[None]:
+        """Avoid repeat filesystem I/O *inside one delivery* without caching authority.
+
+        Every reused text is first checked against its live resolved path,
+        inode, device, size, mtime and ctime; directory listings are similarly
+        checked against every previously discovered directory. Writes made by
+        this repository invalidate its context-local hints. Any mismatch is
+        resolved again from the canonical vault. No caching across requests.
+        """
+        token = self._request_reads.set(_RequestReads())
+        try:
+            yield
+        finally:
+            self._request_reads.reset(token)
+
+    @staticmethod
+    def _fingerprint(target: Path) -> tuple[object, ...]:
+        """Get a live filesystem version; an unsafe/missing path must not be reused."""
+        status = target.stat()
+        return (
+            str(target),
+            status.st_dev,
+            status.st_ino,
+            status.st_size,
+            status.st_mtime_ns,
+            status.st_ctime_ns,
+        )
+
+    def _invalidate_request_hints(self, path: str) -> None:
+        """Never allow an internal mutation to reuse older request-local evidence."""
+        scope = self._request_reads.get()
+        if scope is not None:
+            previous = scope.texts.pop(path, None)
+            if previous is not None:
+                scope.bytes_used -= int(previous[0][3])
+            scope.paths = None
+            scope.directory_versions = ()
 
     @property
     def root(self) -> Path:
@@ -125,9 +185,38 @@ class VaultRepository:
         if not target.is_relative_to(self._root) or not target.is_file():
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}")
 
+        scope = self._request_reads.get()
+        path_key = relative_path.as_posix()
+        version = None
+        if scope is not None:
+            try:
+                version = self._fingerprint(target)
+            except OSError:
+                raise NoteUnavailableError(f"Note is unavailable: {path_key}") from None
+            cached = scope.texts.get(path_key)
+            if cached is not None and cached[0] == version:
+                return cached[1]
         try:
             with target.open("r", encoding="utf-8", newline="") as note_file:
-                return note_file.read()
+                content = note_file.read()
+            if scope is not None:
+                try:
+                    previous = scope.texts.pop(path_key, None)
+                    if previous is not None:
+                        scope.bytes_used -= int(previous[0][3])
+                    if self._fingerprint(target) == version:
+                        size = int(version[3])
+                        if (
+                            size <= _REQUEST_READ_MAX_BYTES - scope.bytes_used
+                            and len(scope.texts) < _REQUEST_READ_MAX_NOTES
+                        ):
+                            scope.texts[path_key] = (version, content)
+                            scope.bytes_used += size
+                except OSError:
+                    previous = scope.texts.pop(path_key, None)
+                    if previous is not None:
+                        scope.bytes_used -= int(previous[0][3])
+            return content
         except (FileNotFoundError, IsADirectoryError):
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
         except (OSError, UnicodeError):
@@ -175,6 +264,7 @@ class VaultRepository:
         try:
             with target.open("xb") as note_file:
                 note_file.write(encoded_content)
+            self._invalidate_request_hints(relative_path.as_posix())
         except FileExistsError:
             raise NoteAlreadyExistsError(
                 f"Note already exists: {relative_path.as_posix()}"
@@ -235,6 +325,7 @@ class VaultRepository:
                 os.fsync(temporary_file.fileno())
             os.replace(temporary_path, target)
             temporary_path = None
+            self._invalidate_request_hints(relative_path.as_posix())
         except OSError:
             raise VaultAccessError("Unable to replace note") from None
         finally:
@@ -271,6 +362,7 @@ class VaultRepository:
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}")
         try:
             target.unlink()
+            self._invalidate_request_hints(relative_path.as_posix())
         except FileNotFoundError:
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}") from None
         except OSError:
@@ -290,11 +382,26 @@ class VaultRepository:
 
                 ["index.md", "people/ada.md"]
         """
+        scope = self._request_reads.get()
+        if scope is not None and scope.paths is not None:
+            try:
+                if all(
+                    directory.is_dir()
+                    and not directory.is_symlink()
+                    and self._fingerprint(directory) == expected
+                    for directory, expected in scope.directory_versions
+                ):
+                    return list(scope.paths)
+            except OSError:
+                pass
         paths: list[str] = []
         directories = [self._root]
+        observed_directories: list[tuple[Path, tuple[object, ...]]] = []
         try:
             while directories:
                 directory = directories.pop()
+                if scope is not None:
+                    observed_directories.append((directory, self._fingerprint(directory)))
                 with os.scandir(directory) as entries:
                     for entry in entries:
                         # Symlinks are excluded entirely: even an in-vault target could be
@@ -309,4 +416,31 @@ class VaultRepository:
             raise VaultAccessError("Unable to list vault") from None
 
         paths.sort()
+        if scope is not None:
+            if len(paths) <= _REQUEST_PATH_LIST_MAX_NOTES:
+                try:
+                    versions = tuple(
+                        (directory, self._fingerprint(directory))
+                        for directory, _before in observed_directories
+                    )
+                except OSError:
+                    scope.paths = None
+                    scope.directory_versions = ()
+                else:
+                    # A new directory/file appearing DURING enumeration must
+                    # not become a cached negative lookup for later scans.
+                    if all(
+                        original == current
+                        for (_directory, original), (_path, current) in zip(
+                            observed_directories, versions, strict=True
+                        )
+                    ):
+                        scope.paths = tuple(paths)
+                        scope.directory_versions = versions
+                    else:
+                        scope.paths = None
+                        scope.directory_versions = ()
+            else:
+                scope.paths = None
+                scope.directory_versions = ()
         return paths
