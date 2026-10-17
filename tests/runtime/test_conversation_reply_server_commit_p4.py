@@ -124,6 +124,70 @@ def test_duplicate_server_delivery_is_idempotent(isolated_http):
     assert status == 200 and len(reloaded["turns"]) == 2
 
 
+def test_live_execution_ledger_does_not_erase_canonical_flow_from_history(isolated_http):
+    """Transport-only ledger stays ephemeral; validated stages/graph survive reload."""
+    port, rt, actor, _other, _calls = isolated_http
+    _post(
+        port,
+        "/execute",
+        {
+            "request": "He organizado el escritorio.",
+            "request_id": "chat-ledger-1",
+            "conversation_id": "main",
+            **_actor(actor),
+        },
+    )
+    detail = {
+        "request_id": "chat-ledger-1",
+        "operational": {
+            "stages": [
+                {
+                    "name": "application.router",
+                    "outcome": "completed",
+                    "duration_ms": 8,
+                    "stage_view": {"version": 1, "label": "Router", "icon": "router"},
+                }
+            ]
+        },
+        "execution_ledger": {"version": 1, "events": [], "transport_only": True},
+        "flow": {
+            "version": 1,
+            "input": "He organizado el escritorio.",
+            "parallel_preparation": False,
+            "routes": [
+                {
+                    "capability": "core",
+                    "text": "He organizado el escritorio.",
+                    "stage_count": 0,
+                    "status": "completed",
+                    "temporal": [],
+                    "plan": [],
+                    "entities": [],
+                    "writes": [],
+                }
+            ],
+        },
+    }
+    response = {
+        "request_id": "chat-ledger-1",
+        "status": "completed",
+        "kind": "acknowledgement",
+        "message": "Guardado.",
+        "request_detail": detail,
+    }
+    status, saved = _post(
+        port, "/conversation/assistant-response", {"response": response, **_actor(actor)}
+    )
+    assert status == 200, saved
+    assert saved["conversation_diagnostics_preserved"] is True
+    status, history = _post(port, "/conversation/main", {"operation": "main", **_actor(actor)})
+    assert status == 200
+    retained = history["turns"][-1]["request_detail"]
+    assert "execution_ledger" not in retained
+    assert retained["flow"] == detail["flow"]
+    assert retained["operational"]["stages"][0]["stage_view"]["label"] == "Router"
+
+
 def test_invalid_optional_graph_never_erases_visible_reply(isolated_http):
     port, rt, actor, _other, _calls = isolated_http
     _post(

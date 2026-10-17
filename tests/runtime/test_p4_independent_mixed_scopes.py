@@ -213,7 +213,9 @@ def test_mixed_independent_core_and_work_session_share_authored_notes_ui_and_e3(
         assert [step["name"] for step in route["steps"]] == [s["name"] for s in expected]
         assert all(stage["stage_view"] for stage in expected)
         offset += route["stage_count"]
-    assert [stage["name"] for stage in stages[offset:]] == ["index_refresh"]
+    # This isolated product fixture now mirrors the real deferred refresh
+    # boundary instead of doing an incremental embedding before its reply.
+    assert [stage["name"] for stage in stages[offset:]] == ["index_refresh.schedule"]
     assert "Me gusta correr por la tarde." in repo.read_text("self.md")
     task = runtime.notes("detail", {"note_id": "atlas-task"}, actor)
     assert len(task["work_sessions"]) == 1

@@ -145,15 +145,11 @@ def assert_reviewed_markdown(
         if origin == "new":
             assert path in changed, "New fact did not mutate its canonical owner"
             expected_new[(owner_id, subrequest)] += 1
-        for name in item["reference_names"]:
-            person_id = references_by_name[name]
-            backlinks = notes_query.backlinks(person_id)
-            assert any(entry.source.id == owner_id for entry in backlinks.items), (
-                "Physical reference lacks a graph backlink"
-            )
-        if kind == "record" and date is not None and self_roles[position]:
-            backlinks = notes_query.backlinks(self_id)
-            assert any(entry.source.id == owner_id for entry in backlinks.items)
+        # `detail` reads and resolves CURRENT canonical Markdown rather than
+        # the derived backlinks table. `resolved_ids` proves each explicit
+        # source→target link above; its inverse is the physical backlink.
+        # The asynchronous index barrier independently verifies the derived
+        # backlink projection before any later indexed consumer can read it.
         readback.append(
             {
                 "owner_id": owner_id,

@@ -865,12 +865,12 @@ class WholeSourceLightExecutor:
             results.append(result)
             if result.status is not ApplicationStatus.COMPLETED:
                 break
-            if result.affected_stable_note_ids:
-                self._measure_local(
-                    "synchronous_index_refresh",
-                    self.refresh_affected_indexes,
-                    result.affected_stable_note_ids,
-                )
+            # The outer product execution schedules ONE coalesced derived-index
+            # refresh for all physically affected IDs after the complete Core
+            # result. Do not embed or rebuild indexes between already-compiled
+            # actions: the canonical Writer and Markdown readback, not an index,
+            # are the authority for this same-source transaction. Subsequent
+            # product readers use the existing wait_until_clean barrier.
         candidate = self._partial(delivery, results)
         if candidate.status is not ApplicationStatus.COMPLETED:
             return candidate

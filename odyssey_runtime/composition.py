@@ -2299,8 +2299,18 @@ class RuntimeComposition:
                     "conversation_diagnostics_preserved": existing.get("request_detail")
                     is not None,
                 }
+            detail = response.get("request_detail")
+            # The E2 execution ledger is a live, bounded transport diagnostic,
+            # NOT part of the strict persisted transcript schema. Store the
+            # canonical flow/stages unchanged, omitting only this known extra
+            # field; unknown fields still fail closed in ConversationStore.
+            durable_detail = (
+                {key: value for key, value in detail.items() if key != "execution_ledger"}
+                if isinstance(detail, dict)
+                else detail
+            )
             optional = {
-                "request_detail": response.get("request_detail"),
+                "request_detail": durable_detail,
                 "note_result_snapshot": response.get("note_result_snapshot"),
             }
             try:

@@ -135,6 +135,9 @@ def _fixture(tmp_path: Path, *, task_delegate=None, incremental_indexes=False):
     runtime = RuntimeComposition(
         core_execute=lambda *_args: (_ for _ in ()).throw(AssertionError("Legacy Core unexpected")),
         refresh_indexes=lambda: None,
+        # Mirror the product's outer refresh boundary, synchronously in the
+        # small fixture so that eventual index/graph consistency is asserted.
+        schedule_index_refresh=refresh if incremental_indexes else None,
         hybrid_candidate_execute=service,
         full_source_mutation_guard=True,
         conversation_root_resolver=ConversationRootResolver(state),
@@ -535,6 +538,28 @@ def test_real_product_route_updates_context_and_graph_incrementally_without_full
     assert any(item.source.id == "date:2026-10-15" for item in backlinks.items)
 
 
+def test_two_core_writes_refresh_indexes_once_after_physical_readback(tmp_path):
+    """No duplicate embeddings per fact; eventual canonical graph stays sound."""
+    from odyssey_core.note_queries import NotesQueryService
+
+    source, router, plan, review = _actual_snapshot("two_dates")
+    repo, actor, service, runtime = _fixture(tmp_path, incremental_indexes=True)
+    service.client = RecordedClient(
+        [router, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
+    )
+    outcome = runtime.execute_product(source, "p4-coalesce-two-dates", "main", actor)
+    assert outcome["status"] == "completed"
+    assert service.refresh_stats == {"incremental": 1, "rebuild": 0}
+    assert len(outcome["execution_flow"]["routes"][0]["writes"]) == 2
+    notes = NotesQueryService(repo, SCHEMA, service.context_index)
+    assert {n.source.id for n in notes.backlinks("self-note").items} >= {
+        "date:2026-10-16",
+        "date:2026-10-17",
+    }
+    for day in ("2026-10-16", "2026-10-17"):
+        assert notes.detail("date:" + day).body_blocks
+
+
 def test_independent_coverage_can_request_one_generic_replan_before_any_write(tmp_path):
     source, route, plan, review = _actual_snapshot("maya_simple")
     repo, actor, service, runtime = _fixture(tmp_path)
@@ -679,8 +704,6 @@ def test_prewrite_model_service_failure_is_durable_no_write_not_uncertain_claim(
 
 
 def test_postwrite_failure_cannot_be_reclassified_as_prewrite_provider_abstention(tmp_path):
-    from odyssey_runtime.delivery_results import DeliveryResultError
-
     source, route, plan, review = _actual_snapshot("maya_simple")
     repo, actor, service, runtime = _fixture(tmp_path)
     service.client = RecordedClient(
@@ -690,16 +713,23 @@ def test_postwrite_failure_cannot_be_reclassified_as_prewrite_provider_abstentio
     def fail_after_actual_write(_ids):
         raise RuntimeError("index transaction failed after physical write")
 
-    service.refresh_affected_indexes = fail_after_actual_write
-    with pytest.raises(RuntimeError, match="after physical write"):
-        runtime.execute_product(source, "p4-failed-after-write", "main", actor)
+    # Index maintenance is now scheduled OUTSIDE the Core write/readback.
+    # A scheduling failure is technical postwrite telemetry, never an
+    # opportunity to reinterpret a completed E3 claim as an unwritten fact.
+    runtime.schedule_index_refresh = fail_after_actual_write
+    result = runtime.execute_product(source, "p4-failed-after-write", "main", actor)
+    assert result["status"] == "completed"
+    assert any(
+        stage["name"] == "index_refresh.schedule" and stage["outcome"] == "failed"
+        for stage in result["operational"]["stages"]
+    )
     assert any(
         "odyssey:fact request=p4-failed-after-write" in repo.read_text(p)
         for p in repo.list_markdown_paths()
     )
     before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
-    with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
-        runtime.execute_product(source, "p4-failed-after-write", "main", actor)
+    replay = runtime.execute_product(source, "p4-failed-after-write", "main", actor)
+    assert replay["delivery_replayed"] is True
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
 
 
