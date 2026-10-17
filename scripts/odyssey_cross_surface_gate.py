@@ -47,6 +47,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "task_ui_and_subtask": (
         "tests/apps/tasks/test_direct_mutations.py",
+        "tests/apps/tasks/test_batch_preflight.py",
         "tests/apps/tasks/test_relationships_e2e.py",
         "tests/apps/tasks/test_lifecycle.py",
         "tests/apps/tasks/test_work_session_runtime.py",
@@ -90,6 +91,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_p4_dependent_task_target.py",
         "tests/runtime/test_p4_production_composition_task_ui.py",
         "tests/runtime/test_p4_dependent_router_integrated.py",
+        "tests/runtime/test_p4_dependent_n_graph_execution.py",
         "tests/runtime/test_p4_dependent_factory_product.py",
         "tests/runtime/test_p4_verified_group_e2.py",
         "tests/runtime/test_p4_taskonly_real_session_parity.py",

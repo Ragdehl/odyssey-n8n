@@ -5,9 +5,9 @@ compiles source-bound facts and performs canonical preflight, identity resolutio
 reference binding, Task lifecycle validation, Writer and Git. A guarded outer
 request ID protects the full multi-write delivery against blind retries.
 
-This first version supports Core record/Task CREATE and delegates a *single*
-Tasks-owned request to the ordinary Tasks interpreter/domain service; mixed
-Work Session + Core requests are not yet supported and must fail closed.
+The opt-in path supports verified Core plus Task and Work Session operations,
+including narrow N-group dependent DAG execution. Unsupported multi-target,
+session-instance and cross-App dependencies fail closed without source loss.
 """
 
 from __future__ import annotations
@@ -27,16 +27,26 @@ from openai import OpenAIError
 
 from odyssey_apps.tasks import (
     PreparedDependentSubtask,
+    TaskBatchPreflightError,
     TaskDependentTarget,
     TaskDependentTargetError,
     TaskInterpretation,
     TaskLifecycleGuard,
     TaskOperation,
     prove_dependent_task_target,
+    validate_task_batch_prewrite,
     verify_dependent_task_semantics,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
 from odyssey_core.context import ContextIndexError
+from odyssey_core.dependent_group_evidence import (
+    CanonicalGroupEvidenceError,
+    prove_canonical_group_handoff,
+)
+from odyssey_core.dependent_group_graph import (
+    DependentGroupGraphError,
+    verify_dependent_group_graph,
+)
 from odyssey_core.dependent_source_scopes import (
     DependentSourceScopesError,
     verify_dependent_source_scopes,
@@ -48,6 +58,7 @@ from odyssey_core.independent_source_scopes import (
 )
 from odyssey_core.notes import scoped_note_decode_cache
 from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
+from odyssey_core.source_bound_dependency import SourceBoundDependency
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal_interpretation import TemporalInterpretation
 from odyssey_core.verified_metadata_catalog import scoped_verified_metadata_catalog
@@ -75,6 +86,10 @@ from odyssey_core.whole_source_compiler import (
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
 from odyssey_runtime.routing import _aggregate as aggregate_verified_application_results
 from odyssey_runtime.whole_source_model_contract import (
+    DEPENDENT_GRAPH_PARTITION_PROMPT,
+    DEPENDENT_GRAPH_PARTITION_SCHEMA,
+    DEPENDENT_GRAPH_REVIEW_PROMPT,
+    DEPENDENT_GRAPH_REVIEW_SCHEMA,
     DEPENDENT_TASK_PARTITION_PROMPT,
     DEPENDENT_TASK_PARTITION_SCHEMA,
     DEPENDENT_TASK_TARGET_REVIEW_A,
@@ -359,11 +374,44 @@ class WholeSourceLightExecutor:
                 for item in scopes
             )
         )
+        if (
+            independent_scope is None
+            and "core" in capabilities
+            and "tasks" in capabilities
+            and route.get("interpretation") == "joint"
+            and isinstance(scopes, list)
+            and len(scopes) > 2
+            and not dependent_route
+        ):
+            # Missing Tasks adapters can NEVER demote a claimed multi-App
+            # joint dependency into a person-only Core write. The complete
+            # N-scope semantics remain unexecutable until the domain is wired.
+            return self._abstain(delivery, "DEPENDENT_N_GRAPH_ADAPTER_UNAVAILABLE")
         if dependent_route:
             # This opt-in adapter owns precisely ONE Core antecedent and ONE
             # downstream Tasks operation. A Router description with extra
             # groups or an opposite/unproved edge is NOT permission to silently
             # discard N:M semantics. Preserve the complete source and abstain.
+            if len(scopes) > 2 and (
+                not isinstance(scopes[0], dict)
+                or scopes[0].get("capability") != "core"
+                or any(
+                    isinstance(item, dict)
+                    and item.get("capability") == "core"
+                    and item.get("depends_on_another_scope") is not False
+                    for item in scopes
+                )
+            ):
+                return self._abstain(delivery, "DEPENDENT_SOURCE_GROUP_UNSUPPORTED")
+            if len(scopes) > 2:
+                return self._execute_dependent_graph(
+                    source,
+                    delivery,
+                    actor,
+                    delivery_instant=instant,
+                    router_started=router_started,
+                    route_scopes=scopes,
+                )
             if (
                 len(scopes) != 2
                 or not all(isinstance(part, dict) for part in scopes)
@@ -877,6 +925,310 @@ class WholeSourceLightExecutor:
                     )
                 ],
             },
+        )
+
+    def _execute_dependent_graph(
+        self,
+        source: str,
+        delivery: str,
+        actor: AuthenticatedActorContext,
+        *,
+        delivery_instant: datetime,
+        router_started: float,
+        route_scopes: list[dict[str, object]],
+    ) -> ApplicationResult:
+        """Opt-in N-scope Core→Tasks DAG, single canonical target per Task.
+
+        All N-group topology, *each* Tasks domain operation, its source-only
+        audit, and TWO independent semantic target reviews must pass BEFORE
+        the FIRST Core WRITE. At execution each edge is freshly proved by
+        canonical Core Markdown and verified again by the Tasks service CAS.
+        Multi-target Task operations and Core groups depending on earlier
+        groups are not representable by current domain services: fail closed.
+        """
+        if (
+            self.dependent_core_delegate is None
+            or self.dependent_task_prepare is None
+            or self.dependent_task_delegate is None
+        ):
+            return self._abstain(delivery, "DEPENDENT_N_GRAPH_ADAPTER_UNAVAILABLE")
+        proposed = self._ask(
+            PLANNER_MODEL,
+            DEPENDENT_GRAPH_PARTITION_PROMPT,
+            {"original_source": source},
+            DEPENDENT_GRAPH_PARTITION_SCHEMA,
+            "odyssey_dependent_graph_partition_v1",
+        )
+        reviewed = self._ask(
+            ROUTER_MODEL,
+            DEPENDENT_GRAPH_REVIEW_PROMPT,
+            {"original_source": source, "proposed_groups": proposed},
+            DEPENDENT_GRAPH_REVIEW_SCHEMA,
+            "odyssey_dependent_graph_review_v1",
+        )
+        try:
+            graph = verify_dependent_group_graph(source, proposed, reviewed)
+        except DependentGroupGraphError:
+            return self._abstain(delivery, "DEPENDENT_N_GRAPH_SOURCE_UNVERIFIED")
+        if (
+            len(graph.groups) != len(route_scopes)
+            or not any(group.dependencies for group in graph.groups)
+            or not any(group.capability == "tasks" for group in graph.groups)
+            or any(
+                not isinstance(scoped, dict)
+                or scoped.get("capability") != part.capability
+                or scoped.get("depends_on_another_scope") is not bool(part.dependencies)
+                for scoped, part in zip(route_scopes, graph.groups, strict=True)
+            )
+            or any(
+                (part.capability == "core" and part.dependencies)
+                or (
+                    part.capability == "tasks"
+                    and (
+                        len(part.dependencies) != 1
+                        or graph.groups[part.dependencies[0].predecessor_index].capability != "core"
+                    )
+                )
+                for part in graph.groups
+            )
+        ):
+            return self._abstain(delivery, "DEPENDENT_N_GRAPH_UNREPRESENTABLE")
+        locators = [f"{delivery}-dependent-n-{part.ordinal}" for part in graph.groups]
+        if any(len(locator) > 110 for locator in locators):
+            return self._abstain(delivery)
+        # Preflight every downstream app operation, including its two semantic
+        # target attestations, before any earlier Core result is persisted.
+        prepared: dict[
+            int,
+            tuple[
+                TaskInterpretation,
+                TemporalInterpretation | None,
+                PreparedDependentSubtask | None,
+            ],
+        ] = {}
+        for part in graph.groups:
+            if part.capability != "tasks":
+                continue
+            segment = part.source.strip()
+            dependency = part.dependencies[0]
+            try:
+                interpretation, temporal = self.dependent_task_prepare(segment, delivery_instant)
+                if (
+                    not isinstance(interpretation, TaskInterpretation)
+                    or interpretation.source_text != segment
+                    or interpretation.requires_temporal() != (temporal is not None)
+                    or temporal is not None
+                    and (
+                        not isinstance(temporal, TemporalInterpretation)
+                        or temporal.source_text != segment
+                    )
+                ):
+                    return self._abstain(delivery, "DEPENDENT_N_TASK_PREWRITE_UNAVAILABLE")
+                prepared_subtask: PreparedDependentSubtask | None = None
+                if interpretation.operation is TaskOperation.CREATE:
+                    if self.dependent_subtask_prepare is None:
+                        return self._abstain(delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE")
+                    prepared_subtask = self.dependent_subtask_prepare(
+                        segment, interpretation, delivery_instant
+                    )
+                    if not isinstance(prepared_subtask, PreparedDependentSubtask):
+                        return self._abstain(delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE")
+                    prepared_subtask.require_matches(segment, interpretation.operation)
+            except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
+                return self._abstain(delivery, "DEPENDENT_N_TASK_PREWRITE_UNAVAILABLE")
+            task_only = self._ask(
+                PLANNER_MODEL,
+                TASK_ONLY_SCOPE_PROMPT,
+                {"original_source": segment},
+                TASK_ONLY_SCOPE_SCHEMA,
+                "odyssey_task_only_scope_v1",
+            )
+            if (
+                task_only.get("only_task_semantics") is not True
+                or task_only.get("exactly_one_operation") is not True
+                or task_only.get("source_quote") != segment
+            ):
+                return self._abstain(delivery, "DEPENDENT_N_TASK_SOURCE_UNVERIFIED")
+            payload = {
+                "original_source": source,
+                "antecedent_source": graph.groups[dependency.predecessor_index].source,
+                "dependent_source": part.source,
+                "dependent_mention": dependency.mention,
+                "task_operation": interpretation.operation.value,
+            }
+            first = self._ask(
+                PLANNER_MODEL,
+                DEPENDENT_TASK_TARGET_REVIEW_A,
+                payload,
+                DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
+                "odyssey_dependent_task_review_a_v1",
+            )
+            second = self._ask(
+                ROUTER_MODEL,
+                DEPENDENT_TASK_TARGET_REVIEW_B,
+                payload,
+                DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
+                "odyssey_dependent_task_review_b_v1",
+            )
+            try:
+                verify_dependent_task_semantics(
+                    full_source=source,
+                    antecedent_source=graph.groups[dependency.predecessor_index].source,
+                    dependent_source=part.source,
+                    dependent_mention=dependency.mention,
+                    interpretation=interpretation,
+                    attestations=(first, second),
+                )
+            except TaskDependentTargetError:
+                return self._abstain(delivery, "DEPENDENT_N_TASK_SEMANTICS_UNVERIFIED")
+            prepared[part.ordinal] = (interpretation, temporal, prepared_subtask)
+        try:
+            validate_task_batch_prewrite(tuple(prepared[index][0] for index in sorted(prepared)))
+        except TaskBatchPreflightError:
+            return self._abstain(delivery, "DEPENDENT_N_TASK_BATCH_INCOMPATIBLE")
+        if self.operation_manifest_begin is not None:
+            self.operation_manifest_begin(
+                delivery,
+                source,
+                actor,
+                tuple(
+                    (
+                        part.capability,
+                        part.source,
+                        tuple(dep.predecessor_index for dep in part.dependencies),
+                    )
+                    for part in graph.groups
+                ),
+            )
+        if self.progress is not None:
+            self.progress("planner.ready", {})
+            self.progress("action.write.started", {})
+        outcomes: list[ApplicationResult] = []
+        predecessors: dict[int, ApplicationResult] = {}
+        pending_index_ids: list[str] = []
+        for part, locator in zip(graph.groups, locators, strict=True):
+            if part.capability == "core" and pending_index_ids:
+                # Subsequent Core planners need refreshed, source-verified
+                # context; never full-rebuild after earlier writes.
+                try:
+                    refresh = (
+                        self.refresh_between_independent_scopes or self.refresh_affected_indexes
+                    )
+                    refresh(tuple(dict.fromkeys(pending_index_ids)))
+                except Exception:
+                    failure = self._abstain(locator, "DEPENDENT_N_CONTEXT_REFRESH_UNAVAILABLE")
+                    if self.operation_manifest_observe is not None:
+                        self.operation_manifest_observe(
+                            delivery, source, actor, part.ordinal, part.capability, failure
+                        )
+                    outcomes.append(failure)
+                    break
+                pending_index_ids.clear()
+            if part.capability == "core":
+                # Ordinary Core Planner/Writer, not a second custom writer.
+                outcome = self.dependent_core_delegate(
+                    part.source.strip(), locator, actor, delivery_instant
+                )
+            else:
+                dependency = part.dependencies[0]
+                try:
+                    handoff = prove_canonical_group_handoff(
+                        graph=graph,
+                        consumer_index=part.ordinal,
+                        predecessors=predecessors,
+                        repository=self.repository,
+                        schema=self.schema,
+                    )
+                    if len(handoff.edges) != 1:
+                        raise CanonicalGroupEvidenceError("Task has no unique target")
+                    edge = handoff.edges[0]
+                    if edge.evidence.note_type != "task":
+                        raise CanonicalGroupEvidenceError("Dependent target is not a task")
+                    task, temporal, subtask = prepared[part.ordinal]
+                    target = TaskDependentTarget(
+                        SourceBoundDependency(
+                            graph.groups[dependency.predecessor_index].source,
+                            part.source,
+                            dependency.mention,
+                            edge.evidence,
+                        ),
+                        task.operation,
+                    )
+                    if subtask is not None:
+                        target = target.with_prepared_subtask(subtask)
+                    # Recheck at the consumption boundary even if the Core
+                    # backlink was valid when the prior group returned.
+                    handoff.require_all_current(self.repository, self.schema)
+                except (CanonicalGroupEvidenceError, TaskDependentTargetError):
+                    outcome = self._abstain(locator, "DEPENDENT_N_CANONICAL_EDGE_UNVERIFIED")
+                else:
+                    if self.progress is not None:
+                        self.progress("action.delegate.started", {})
+                    outcome = self.dependent_task_delegate(
+                        part.source.strip(),
+                        locator,
+                        actor,
+                        task,
+                        temporal,
+                        target,
+                        delivery_instant,
+                    )
+            if self.operation_manifest_observe is not None:
+                self.operation_manifest_observe(
+                    delivery, source, actor, part.ordinal, part.capability, outcome
+                )
+            outcomes.append(outcome)
+            if outcome.status is not ApplicationStatus.COMPLETED:
+                break
+            pending_index_ids.extend(outcome.affected_stable_note_ids)
+            if part.capability == "core":
+                predecessors[part.ordinal] = outcome
+        aggregate = self._partial(delivery, outcomes)
+        rows = []
+        stages = [
+            OperationalStage(
+                "application.router",
+                OperationalOutcome.COMPLETED,
+                max(0.0, (perf_counter() - router_started) * 1000),
+            )
+        ]
+        complete_flow = len(outcomes) <= 8
+        for part, outcome in zip(graph.groups, outcomes, strict=False):
+            if len(outcome.operational.stages) > 16:
+                complete_flow = False
+            stages.extend(
+                replace(stage, route_index=part.ordinal) for stage in outcome.operational.stages
+            )
+            rows.append(
+                {
+                    "capability": part.capability,
+                    "text": part.source,
+                    "depends_on": part.dependencies[0].predecessor_index
+                    if part.dependencies
+                    else None,
+                    "status": outcome.status.value,
+                    "stage_count": len(outcome.operational.stages),
+                    "temporal": [],
+                    "steps": [
+                        {"name": stage.name[:80], "input": part.source[:512], "output": ""}
+                        for stage in outcome.operational.stages
+                    ],
+                }
+            )
+        return replace(
+            aggregate,
+            operational=OperationalEvidence(
+                max(0.0, (perf_counter() - router_started) * 1000),
+                tuple(stages),
+            ),
+            execution_flow={
+                "version": 1,
+                "input": source,
+                "parallel_preparation": False,
+                "routes": rows,
+            }
+            if complete_flow and rows
+            else None,
         )
 
     def _execute_independent_scopes(

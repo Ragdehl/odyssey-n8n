@@ -527,3 +527,84 @@ DEPENDENT_TASK_PARTITION_PROMPT = (
     "in a prior fact is NOT a Task antecedent. Do not turn ordinary future "
     "indicative plans into Tasks. No output authorizes mutations or source loss."
 )
+
+# N-group dependent Task execution is narrower than the GENERAL N:M source
+# grammar. Multiple Core predecessors and multiple Task consumers are valid;
+# an individual Task operation still has precisely ONE target until the
+# Tasks domain exposes a multi-target mutation contract. Never collapse an
+# unrepresentable fan-in into one arbitrary Task.
+DEPENDENT_GRAPH_PARTITION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "groups": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "capability": {"type": "string", "enum": ["core", "tasks"]},
+                    "source_quote": {"type": "string"},
+                    "dependencies": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "predecessor_index": {"type": "integer"},
+                                "mention": {"type": "string"},
+                                "antecedent_mention": {"type": "string"},
+                            },
+                            "required": ["predecessor_index", "mention", "antecedent_mention"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["capability", "source_quote", "dependencies"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["full_source_quote", "groups"],
+    "additionalProperties": False,
+}
+DEPENDENT_GRAPH_PARTITION_PROMPT = (
+    "Analyze the ORIGINAL user message as an UNTRUSTED proposal of an ordered "
+    "Core/Tasks dependency DAG. Preserve EACH original byte, punctuation, "
+    "whitespace and conjunction exactly once by concatenating source_quote "
+    "for all groups. Emit one group for each semantically independent Core "
+    "fact segment or each distinct Tasks-owned operation. Do NOT split a "
+    "grammatically shared predicate/date/negation from its fact. A past-tense "
+    "report that someone reviewed, discussed, progressed on or finished a "
+    "task is a Core FACT, not a Tasks operation; mention of a Task name "
+    "alone gives no Tasks mutation authority. A Tasks group must express "
+    "an actual requested lifecycle, work-session or task-create operation. For every "
+    "later group that refers to a prior Core group, emit an edge with the "
+    "earlier predecessor_index, the exact dependent 'mention' in the later "
+    "group, and exact 'antecedent_mention' of the SAME existing entity in "
+    "the earlier group. Do not infer a stable Note ID or invent a name. "
+    "Preserve multiple edges, including different entities in the SAME "
+    "antecedent. If no unique safe segmentation exists, return an empty "
+    "groups array. No output authorizes execution."
+)
+DEPENDENT_GRAPH_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "complete": {"type": "boolean"},
+        "dependency_edges_verified": {"type": "boolean"},
+        "groups": DEPENDENT_GRAPH_PARTITION_SCHEMA["properties"]["groups"],
+    },
+    "required": ["full_source_quote", "complete", "dependency_edges_verified", "groups"],
+    "additionalProperties": False,
+}
+DEPENDENT_GRAPH_REVIEW_PROMPT = (
+    "Independently audit this non-authoritative grouped ORIGINAL message. "
+    "Reject if ANY byte is omitted, duplicated or reordered; if an operation "
+    "was silently discarded; if a Tasks operation includes multiple commands; "
+    "if a Core group was split into a fragment with no standalone fact; "
+    "if a narrative about a Task is incorrectly labeled a Tasks command; "
+    "or if ANY dependent pronoun/expression is not uniquely supported by its "
+    "SPECIFIC earlier Core antecedent occurrence. Echo the proposed exact "
+    "groups unchanged only if EVERY source span and EVERY edge is defensible. "
+    "Otherwise set complete=false or dependency_edges_verified=false. "
+    "Do not name, resolve or invent any canonical Notes or IDs."
+)

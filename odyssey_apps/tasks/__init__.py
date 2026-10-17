@@ -1,5 +1,6 @@
 """Tasks application domain package."""
 
+from .batch_preflight import TaskBatchPreflightError, validate_task_batch_prewrite
 from .dependent_target import (
     PreparedDependentSubtask,
     TaskDependentTarget,
@@ -52,6 +53,8 @@ from .work_sessions import (
 )
 
 __all__ = [
+    "TaskBatchPreflightError",
+    "validate_task_batch_prewrite",
     "TaskDependentTarget",
     "TaskDependentTargetError",
     "PreparedDependentSubtask",

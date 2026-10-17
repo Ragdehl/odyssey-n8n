@@ -187,7 +187,8 @@
         "tests/core/test_p4_dependent_group_graph.py::test_nm_group_graph_fails_closed_on_unverified_edge_or_source",
         "tests/core/test_p4_canonical_group_handoff.py::test_canonical_nm_many_to_one_and_one_to_many_read_real_markdown",
         "tests/core/test_p4_canonical_group_handoff.py::test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence",
-        "tests/core/test_p4_canonical_group_handoff.py::test_nm_edge_missing_conflicting_or_stale_never_authorizes_consumer"
+        "tests/core/test_p4_canonical_group_handoff.py::test_nm_edge_missing_conflicting_or_stale_never_authorizes_consumer",
+        "tests/runtime/test_p4_dependent_n_graph_execution.py::test_n_dependent_three_groups_have_real_core_writers_session_manifest_and_replay"
       ],
       "blocks_p4_dev": true,
       "verified_real_browser_n8n": false
