@@ -320,6 +320,19 @@ class WholeSourceLightExecutor:
             )
         )
         if dependent_route:
+            # This opt-in adapter owns precisely ONE Core antecedent and ONE
+            # downstream Tasks operation. A Router description with extra
+            # groups or an opposite/unproved edge is NOT permission to silently
+            # discard N:M semantics. Preserve the complete source and abstain.
+            if (
+                len(scopes) != 2
+                or not all(isinstance(part, dict) for part in scopes)
+                or scopes[0].get("capability") != "core"
+                or scopes[0].get("depends_on_another_scope") is not False
+                or scopes[1].get("capability") != "tasks"
+                or scopes[1].get("depends_on_another_scope") is not True
+            ):
+                return self._abstain(delivery, "DEPENDENT_SOURCE_GROUP_UNSUPPORTED")
             dependent_result = self._execute_dependent_core_task(
                 source,
                 delivery,
@@ -780,6 +793,11 @@ class WholeSourceLightExecutor:
                     {
                         "capability": cap,
                         "text": text,
+                        # The second capability uses a canonical Task reference
+                        # persisted by the preceding Core fact, NOT an independent
+                        # interpretation group. E2 ledger and UI can draw this
+                        # actual dependency without guessing from source prose.
+                        "depends_on": 0 if cap == "tasks" else None,
                         "status": receipt.status.value,
                         "stage_count": len(receipt.operational.stages),
                         "temporal": [],

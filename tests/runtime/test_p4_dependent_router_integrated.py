@@ -456,3 +456,40 @@ def test_dependent_temporal_prewrite_veto_never_persists_core_or_tasks(tmp_path,
     replay = runtime.execute_product(source, f"p4-pretemporal-{failure_kind}", "main", actor)
     assert replay["delivery_replayed"] is True
     assert _snapshot(repo) == snapshot
+
+
+@pytest.mark.parametrize(
+    "new_scopes",
+    [
+        [
+            {"capability": "core", "description": "A", "depends_on_another_scope": False},
+            {"capability": "tasks", "description": "B", "depends_on_another_scope": True},
+            {"capability": "core", "description": "C", "depends_on_another_scope": True},
+        ],
+        [
+            {"capability": "tasks", "description": "B", "depends_on_another_scope": True},
+            {"capability": "core", "description": "A", "depends_on_another_scope": False},
+        ],
+        [
+            {"capability": "core", "description": "A", "depends_on_another_scope": True},
+            {"capability": "tasks", "description": "B", "depends_on_another_scope": True},
+        ],
+    ],
+)
+def test_unsupported_multi_group_or_wrong_direction_never_drops_semantics(tmp_path, new_scopes):
+    repo, actor, executor, runtime, calls, domain = _setup(tmp_path)
+    bad_route = _route() | {"app_scopes": new_scopes}
+    executor.client = RecordedClient([bad_route])
+    before = _snapshot(repo)
+    result = runtime.execute_product(SOURCE, "p4-unsupported-dependent-groups", "main", actor)
+    assert result["status"] == "needs_attention", result
+    assert result["clarification_code"] == "DEPENDENT_SOURCE_GROUP_UNSUPPORTED"
+    assert executor.client.rows == []
+    assert "core" not in calls and "task" not in calls
+    assert _snapshot(repo) == before
+    assert (
+        runtime.execute_product(SOURCE, "p4-unsupported-dependent-groups", "main", actor)[
+            "delivery_replayed"
+        ]
+        is True
+    )

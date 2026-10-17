@@ -144,6 +144,11 @@ function safeDetailStage(value, nested = false) {
     typeof view.label === 'string' && view.label.length > 0 && view.label.length <= 80 &&
     typeof view.icon === 'string' && ['router','temporal','planner','tasks','core','git','index','pending','result'].includes(view.icon);
   const result = { name: value.name, outcome: value.outcome, duration_ms: duration, model, reasoning_effort: reasoning, error_category: error, ...(usage ? { usage } : {}), provider_calls: calls, ...(validView ? { stage_view: {version: 1, label: view.label, icon: view.icon} } : {}) };
+  const owner = value.route_index;
+  if (owner !== undefined && owner !== null) {
+    if (nested || !Number.isInteger(owner) || owner < 0 || owner > 7) return undefined;
+    result.route_index = owner;
+  }
   if (start !== undefined) result.start_offset_ms = start;
   if (spans !== undefined) result.substeps = spans;
   if (coverage !== undefined) result.coverage = coverage;
@@ -172,7 +177,7 @@ const error = { route: 'direct', request_id: id, status: 'failed', kind: 'error'
 const safeSearchSnapshot = value => value && typeof value === 'object' && !Array.isArray(value) && value.version === 1 && typeof value.query === 'string' && value.query.length > 0 && value.query.length <= 512 && Array.isArray(value.filters) && value.filters.length <= 16 && Array.isArray(value.note_ids) && value.note_ids.length <= 64 && new Set(value.note_ids).size === value.note_ids.length && value.note_ids.every(id => typeof id === 'string' && id.length > 0 && id.length <= 128) && Number.isInteger(value.total) && value.total >= value.note_ids.length && typeof value.truncated === 'boolean' && value.truncated === (value.total > value.note_ids.length) && typeof value.sort === 'string' && typeof value.ranking_version === 'string' && typeof value.executed_at === 'string';
 const safeAffectedSnapshot = value => value && typeof value === 'object' && !Array.isArray(value) && value.version === 2 && value.kind === 'affected_notes' && typeof value.executed_at === 'string' && Array.isArray(value.note_ids) && value.note_ids.length <= 64 && new Set(value.note_ids).size === value.note_ids.length && value.note_ids.every(id => typeof id === 'string' && id.length > 0 && id.length <= 128) && Number.isInteger(value.total) && value.total >= 1 && value.total >= value.note_ids.length && typeof value.truncated === 'boolean' && value.truncated === (value.total > value.note_ids.length);
 const safeSnapshot = value => safeSearchSnapshot(value) || safeAffectedSnapshot(value) ? value : undefined;
-const safeFlow = value => value && typeof value === 'object' && !Array.isArray(value) && value.version === 1 && typeof value.input === 'string' && value.input.length <= 4096 && typeof value.parallel_preparation === 'boolean' && Array.isArray(value.routes) && value.routes.length >= 1 && value.routes.length <= 8 && value.routes.every(route => route && typeof route.capability === 'string' && route.capability.length >= 1 && route.capability.length <= 40 && typeof route.text === 'string' && route.text.length >= 1 && route.text.length <= 4096 && Number.isInteger(route.stage_count) && route.stage_count >= 0 && route.stage_count <= 16 && ['completed','failed','partial','needs_attention'].includes(route.status) && Array.isArray(route.temporal) && route.temporal.length <= 8 && route.temporal.every(item => item && typeof item.source === 'string' && item.source.length >= 1 && item.source.length <= 120 && typeof item.value === 'string' && item.value.length >= 1 && item.value.length <= 80 && route.text.includes(item.source)) && (!('steps' in route) || (Array.isArray(route.steps) && route.steps.length === route.stage_count && route.steps.every(step => step && typeof step === 'object' && !Array.isArray(step) && Object.keys(step).length === 3 && typeof step.name === 'string' && step.name.length >= 1 && step.name.length <= 80 && typeof step.input === 'string' && step.input.length <= 512 && typeof step.output === 'string' && step.output.length <= 768)))) ? value : undefined;
+const safeFlow = value => value && typeof value === 'object' && !Array.isArray(value) && value.version === 1 && typeof value.input === 'string' && value.input.length <= 4096 && typeof value.parallel_preparation === 'boolean' && Array.isArray(value.routes) && value.routes.length >= 1 && value.routes.length <= 8 && value.routes.every((route, index) => route && typeof route.capability === 'string' && route.capability.length >= 1 && route.capability.length <= 40 && typeof route.text === 'string' && route.text.length >= 1 && route.text.length <= 4096 && (!('depends_on' in route) || route.depends_on === null || (Number.isInteger(route.depends_on) && route.depends_on >= 0 && route.depends_on < index)) && Number.isInteger(route.stage_count) && route.stage_count >= 0 && route.stage_count <= 16 && ['completed','failed','partial','needs_attention'].includes(route.status) && Array.isArray(route.temporal) && route.temporal.length <= 8 && route.temporal.every(item => item && typeof item.source === 'string' && item.source.length >= 1 && item.source.length <= 120 && typeof item.value === 'string' && item.value.length >= 1 && item.value.length <= 80 && route.text.includes(item.source)) && (!('steps' in route) || (Array.isArray(route.steps) && route.steps.length === route.stage_count && route.steps.every(step => step && typeof step === 'object' && !Array.isArray(step) && Object.keys(step).length === 3 && typeof step.name === 'string' && step.name.length >= 1 && step.name.length <= 80 && typeof step.input === 'string' && step.input.length <= 512 && typeof step.output === 'string' && step.output.length <= 768)))) ? value : undefined;
 const flowMatchesStages = (flow, stages) => {
   if (!flow || !Array.isArray(stages)) return false;
   // Legacy application.router and hybrid v6 candidate.source_proposal are
@@ -185,9 +190,12 @@ const flowMatchesStages = (flow, stages) => {
   let cursor = router + 1;
   const prewrite = new Set(['candidate.source_boundary_review', 'candidate.router_revision']);
   while (prewrite.has(stages[cursor]?.name)) cursor++;
-  for (const route of flow.routes) {
+  for (const [index, route] of flow.routes.entries()) {
     if (cursor + route.stage_count > stages.length) return false;
     if (route.steps?.some((step, i) => step.name !== stages[cursor + i]?.name)) return false;
+    // Observed E2 owner, when provided, overrides any guessed route order.
+    if (Array.from({length: route.stage_count}, (_, i) => stages[cursor + i])
+      .some(stage => stage?.route_index != null && stage.route_index !== index)) return false;
     cursor += route.stage_count;
   }
   return true;

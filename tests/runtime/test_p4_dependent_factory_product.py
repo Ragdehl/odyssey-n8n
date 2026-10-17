@@ -266,6 +266,21 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     assert result["execution_flow"]["routes"][1]["capability"] == "tasks"
     assert result["affected_stable_note_ids"]
     assert scheduled_indexes == [tuple(result["affected_stable_note_ids"])]
+
+    # Evaluate the workflow's ACTUAL JavaScript bounded flow guards against
+    # the real product result, rather than duplicating their logic in Python.
+    import subprocess
+
+    bridge = subprocess.run(
+        ["node", str(Path(__file__).resolve().parents[1] / "p4_dependent_n8n_flow_contract.mjs")],
+        input=json.dumps(result, ensure_ascii=False),
+        text=True,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    assert bridge.returncode == 0, bridge.stderr or bridge.stdout
+    assert json.loads(bridge.stdout)["n8n_flow_accepted"] is True
     day = next(
         parse_note(repo.read_text(p))
         for p in repo.list_markdown_paths()

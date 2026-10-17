@@ -102,6 +102,10 @@ def _stage_response(stage: Any) -> dict[str, Any]:
         "error_category": stage.error_category,
         "provider_calls": [_call_response(call) for call in stage.provider_calls],
     }
+    if stage.route_index is not None:
+        # The aggregator assigned this real owner. Consumers must never
+        # infer an index from timing/order or source wording.
+        response["route_index"] = stage.route_index
     if stage.start_offset_ms is not None:
         response["start_offset_ms"] = stage.start_offset_ms
     if stage.substeps:
