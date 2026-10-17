@@ -66,6 +66,9 @@ def test_refresh_reports_real_incremental_work_and_no_private_paths(tmp_path, mo
     write(repo, "people/ordinary.md", note("ordinary", "person", "Updated.", name="Ordinary"))
     runtime.refresh_affected_indexes(("ordinary",))
     event = _only_event(capsys)
+    log = tmp_path / "runtime" / "index-refresh-events.jsonl"
+    assert json.loads(log.read_text().splitlines()[-1].split(" ", 1)[1]) == event
+    assert log.stat().st_mode & 0o077 == 0
     assert event["outcome"] == "incremental"
     assert event["note_count"] == 1
     assert all(name in event["stages_ms"] for name in ("context", "semantic", "semantic.tasks"))
@@ -82,6 +85,8 @@ def test_refresh_reports_full_rebuild_reason_for_unrelated_real_drift(
     write(repo, "people/other.md", note("other", "person", "External.", name="Other"))
     runtime.refresh_affected_indexes(("ordinary",))
     event = _only_event(capsys)
+    log = tmp_path / "runtime" / "index-refresh-events.jsonl"
+    assert json.loads(log.read_text().splitlines()[-1].split(" ", 1)[1]) == event
     assert event["outcome"] == "full_rebuild"
     assert event["failure_class"] == "ContextIndexError"
     assert event["failure_stage"] == "context"
@@ -91,9 +96,10 @@ def test_refresh_reports_full_rebuild_reason_for_unrelated_real_drift(
     assert "other" not in json.dumps(event)
 
 
-def test_telemetry_off_outside_dev(monkeypatch, capsys):
+def test_telemetry_off_outside_dev(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "PROD")
     monkeypatch.setenv("ODYSSEY_LIGHT_SOURCE_V1", "1")
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(tmp_path))
     composition._emit_dev_index_refresh_diagnostic(
         outcome="full_rebuild",
         note_count=1,
@@ -103,3 +109,21 @@ def test_telemetry_off_outside_dev(monkeypatch, capsys):
         failure_stage="context",
     )
     assert capsys.readouterr().err == ""
+    assert not (tmp_path / "index-refresh-events.jsonl").exists()
+
+
+def test_dev_telemetry_is_bounded_and_rotates(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+    monkeypatch.setenv("ODYSSEY_LIGHT_SOURCE_V1", "1")
+    monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(tmp_path))
+    log = tmp_path / "index-refresh-events.jsonl"
+    log.write_text("x" * 262_145)
+    composition._emit_dev_index_refresh_diagnostic(
+        outcome="incremental",
+        note_count=1,
+        duration_ms=2.0,
+        stages_ms={"context": 1.0},
+    )
+    assert log.stat().st_size < 4096
+    assert "incremental" in log.read_text()
+    assert "index-refresh-events" not in capsys.readouterr().err

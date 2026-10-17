@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
@@ -386,11 +387,31 @@ def _emit_dev_index_refresh_diagnostic(
         event["failure_stage"] = failure_stage
     if failure_class is not None:
         event["failure_class"] = failure_class
-    print(
-        "odyssey_dev_index_refresh " + json.dumps(event, sort_keys=True),
-        file=sys.stderr,
-        flush=True,
-    )
+    # systemd's journal is not guaranteed to be persisted on small/local hosts.
+    # Keep the same content-free record in a small, root-scoped derived log.
+    # A full or read-only disk must never turn a completed index into a failure.
+    record = "odyssey_dev_index_refresh " + json.dumps(event, sort_keys=True)
+    root_value = os.environ.get("ODYSSEY_RUNTIME_ROOT")
+    if root_value:
+        try:
+            root = Path(root_value).resolve()
+            if root.is_dir() and not root.is_relative_to(Path("/data/odyssey").resolve()):
+                target = root / "index-refresh-events.jsonl"
+                flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+                fd = os.open(target, flags, 0o600)
+                try:
+                    if stat.S_ISREG(os.fstat(fd).st_mode):
+                        if os.fstat(fd).st_size > 262_144:
+                            os.ftruncate(fd, 0)
+                        os.write(fd, (record + "\n").encode("utf-8"))
+                finally:
+                    os.close(fd)
+        except (OSError, ValueError):
+            pass
+    try:
+        print(record, file=sys.stderr, flush=True)
+    except OSError:
+        pass
 
 
 @dataclass(slots=True)
