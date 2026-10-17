@@ -205,6 +205,18 @@ def _persist_calendar_day_facts(
         ValueError,
         OSError,
     ) as error:
+        # DEV-only bounded root-cause evidence; keep personal source text out
+        # of diagnostics and retain the fail-closed materialization outcome.
+        if (
+            os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+            and os.environ.get("ODYSSEY_LIGHT_SOURCE_V1") == "1"
+        ):
+            import sys
+
+            print(
+                "ODYSSEY_DEV_DAY_CAUSE " + type(error).__name__ + " " + str(error)[:140],
+                file=sys.stderr,
+            )
         raise MaterializationError("Calendar Day record failed") from error
 
 

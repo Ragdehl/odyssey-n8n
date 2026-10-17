@@ -244,3 +244,49 @@ def test_invalid_or_unauthorized_response_cannot_create_assistant_turn(isolated_
         port, "/conversation/assistant-response", {"response": bad_response, **_actor(actor)}
     )
     assert status == 400
+
+
+def test_replay_keeps_first_assistant_text_status_and_diagnostics(isolated_http):
+    """A repeated E3 delivery must not return 200 with an empty n8n body."""
+    port, _rt, actor, _other, calls = isolated_http
+    _post(
+        port,
+        "/execute",
+        {
+            "request": "Create a synthetic task",
+            "request_id": "e3-reply-stable-1",
+            "conversation_id": "main",
+            **_actor(actor),
+        },
+    )
+    response = {
+        "request_id": "e3-reply-stable-1",
+        "status": "completed",
+        "kind": "acknowledgement",
+        "message": "Guardado.",
+    }
+    first_status, first = _post(
+        port, "/conversation/assistant-response", {"response": response, **_actor(actor)}
+    )
+    assert first_status == 200 and first["conversation_persisted"] is True
+    replay = {
+        **response,
+        "request_detail": {
+            "request_id": "e3-reply-stable-1",
+            "unexpected_extra": "ignored on replay",
+        },
+    }
+    second_status, second = _post(
+        port, "/conversation/assistant-response", {"response": replay, **_actor(actor)}
+    )
+    assert second_status == 200 and second["conversation_persisted"] is True
+    assert "request_detail" not in second
+    for conflict in ({**response, "message": "Otro resultado."}, {**response, "status": "failed"}):
+        status, _ = _post(
+            port, "/conversation/assistant-response", {"response": conflict, **_actor(actor)}
+        )
+        assert status == 400
+    status, page = _post(port, "/conversation/main", {"operation": "main", **_actor(actor)})
+    assert status == 200 and len(page["turns"]) == 2
+    assert page["turns"][-1]["text"] == "Guardado."
+    assert calls == ["e3-reply-stable-1"]

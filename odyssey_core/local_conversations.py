@@ -113,6 +113,29 @@ class LocalConversationStore:
             raise ConversationError("turn role is invalid")
         return self._request_entry(request_id, role) is not None
 
+    def find_turn(self, request_id: str, role: str) -> dict[str, Any] | None:
+        """Read the original immutable transcript turn for safe same-ID replay.
+
+        Unlike the request index (which stores diagnostics but not status),
+        this checks the real, bounded canonical transcript chunk. The index
+        cannot invent a reply or make a different status idempotent.
+        """
+        _validate_id(request_id, "request_id")
+        if role not in {"user", "assistant"}:
+            raise ConversationError("turn role is invalid")
+        if self._request_entry(request_id, role) is None:
+            return None
+        manifest = self._manifest()
+        matches = [
+            turn
+            for item in manifest["chunks"]
+            for turn in self._read_chunk(self._chunk_path(item["name"]), item["count"])["turns"]
+            if turn["request_id"] == request_id and turn["role"] == role
+        ]
+        if len(matches) != 1:
+            raise ConversationError("request index and transcript diverged")
+        return dict(matches[0])
+
     def append_turn(
         self,
         *,

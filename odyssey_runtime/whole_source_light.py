@@ -144,6 +144,9 @@ class WholeSourceLightExecutor:
     progress: Callable[[str, dict[str, object]], None] | None = None
     timezone: str = "Europe/Paris"
     now: Callable[[], datetime] | None = None
+    # Reuse Core's existing persisted pending-work recorder. Losing an
+    # uncertain Day write must not erase the pending review evidence.
+    pending_recorder: Any | None = None
     refresh_between_independent_scopes: Callable[[tuple[str, ...]], None] | None = None
     operation_manifest_begin: (
         Callable[
@@ -639,6 +642,7 @@ class WholeSourceLightExecutor:
                 now=now,
                 context_limit=10,
                 write_preflight_guard=TaskLifecycleGuard(TaskOperation.CREATE) if task else None,
+                pending_recorder=self.pending_recorder,
                 request_id_factory=lambda: locator,
             )
 

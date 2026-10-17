@@ -2270,6 +2270,35 @@ class RuntimeComposition:
             store.load_or_create_main(now=_current_time()["timestamp"])
             if not store.has_turn(request_id, "user"):
                 raise ConversationError("assistant without a matching user delivery")
+            existing = store.find_turn(request_id, "assistant")
+            if existing is not None:
+                # The original n8n-rendered reply is already durable. Its
+                # optional timings/detail may differ on E3 replay, but the
+                # immutable visible content and status MUST match exactly.
+                # Return the first persisted diagnostics/snapshot rather than
+                # a fresh variant; never rewrite the original transcript.
+                if existing["text"] != message or existing.get("status") != status:
+                    raise ConversationError("request ID has a conflicting assistant result")
+                return {
+                    **{
+                        key: value
+                        for key, value in response.items()
+                        if key not in ("request_detail", "note_result_snapshot")
+                    },
+                    **(
+                        {"request_detail": existing["request_detail"]}
+                        if "request_detail" in existing
+                        else {}
+                    ),
+                    **(
+                        {"note_result_snapshot": existing["note_result_snapshot"]}
+                        if "note_result_snapshot" in existing
+                        else {}
+                    ),
+                    "conversation_persisted": True,
+                    "conversation_diagnostics_preserved": existing.get("request_detail")
+                    is not None,
+                }
             optional = {
                 "request_detail": response.get("request_detail"),
                 "note_result_snapshot": response.get("note_result_snapshot"),
@@ -4386,6 +4415,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             embedder=embedder,
             reasoner=contextual_reasoner,
             bindings=self_binding_repository,
+            pending_recorder=pending_recorder,
             refresh_affected_indexes=refresh_affected_indexes,
             refresh_between_independent_scopes=lambda ids: refresh_affected_indexes(
                 ids, allow_full_rebuild=False
