@@ -123,6 +123,16 @@ class WholeSourceLightExecutor:
     timezone: str = "Europe/Paris"
     now: Callable[[], datetime] | None = None
     refresh_between_independent_scopes: Callable[[tuple[str, ...]], None] | None = None
+    operation_manifest_begin: (
+        Callable[
+            [str, str, AuthenticatedActorContext, tuple[tuple[str, str, tuple[int, ...]], ...]],
+            None,
+        ]
+        | None
+    ) = None
+    operation_manifest_observe: (
+        Callable[[str, str, AuthenticatedActorContext, int, str, ApplicationResult], None] | None
+    ) = None
     # Distinct capability-owned adapters injected by production composition.
     # Optional for existing Core-only/independent tests. No new Writer.
     # Optional independent N-scope preflight and product Task execution.
@@ -762,6 +772,13 @@ class WholeSourceLightExecutor:
         task_locator = f"{delivery}-dependent-task"
         if max(len(core_locator), len(task_locator)) > 110:
             return self._abstain(delivery)
+        if self.operation_manifest_begin is not None:
+            self.operation_manifest_begin(
+                delivery,
+                source,
+                actor,
+                (("core", scope.antecedent, ()), ("tasks", scope.dependent, (0,))),
+            )
         # Stages have the same observable meaning as the established P4
         # route, never synthetic model success. This is the actual boundary
         # where all model prechecks passed and the first WRITE begins.
@@ -773,6 +790,8 @@ class WholeSourceLightExecutor:
         core = self.dependent_core_delegate(
             scope.antecedent.strip(), core_locator, actor, delivery_instant
         )
+        if self.operation_manifest_observe is not None:
+            self.operation_manifest_observe(delivery, source, actor, 0, "core", core)
         if core.status is not ApplicationStatus.COMPLETED:
             return replace(core, request_id=delivery)
         # The typed handoff reads current canonical Markdown directly; it
@@ -808,6 +827,8 @@ class WholeSourceLightExecutor:
             target,
             delivery_instant,
         )
+        if self.operation_manifest_observe is not None:
+            self.operation_manifest_observe(delivery, source, actor, 1, "tasks", task)
         # Task's own domain service may still reject state/time/conflicts;
         # preserve the earlier Core write and describe the result truthfully.
         result = self._partial(delivery, [core, task])
@@ -949,6 +970,13 @@ class WholeSourceLightExecutor:
                     prepared_tasks[part.index] = (task, temporal)
                 except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
                     return self._abstain(delivery, "INDEPENDENT_TASK_PREWRITE_UNAVAILABLE")
+        if self.operation_manifest_begin is not None:
+            self.operation_manifest_begin(
+                delivery,
+                source,
+                actor,
+                tuple((part.capability, part.source, ()) for part in verified),
+            )
         router_duration_ms = max(0.0, (perf_counter() - router_started) * 1000)
         outcomes: list[ApplicationResult] = []
         pending_index_ids: list[str] = []
@@ -964,9 +992,12 @@ class WholeSourceLightExecutor:
                     )
                     refresh(tuple(dict.fromkeys(pending_index_ids)))
                 except Exception:
-                    outcomes.append(
-                        self._abstain(locator, "INDEPENDENT_CONTEXT_REFRESH_UNAVAILABLE")
-                    )
+                    failed = self._abstain(locator, "INDEPENDENT_CONTEXT_REFRESH_UNAVAILABLE")
+                    if self.operation_manifest_observe is not None:
+                        self.operation_manifest_observe(
+                            delivery, source, actor, part.index, part.capability, failed
+                        )
+                    outcomes.append(failed)
                     break
                 pending_index_ids.clear()
             # This re-enters the EXACT usual Core/Tasks app path and guards,
@@ -997,6 +1028,10 @@ class WholeSourceLightExecutor:
                 # A per-scope provider failure is prewrite for THAT scope,
                 # but earlier independent scopes may already be durable.
                 outcome = self._abstain(locator, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+            if self.operation_manifest_observe is not None:
+                self.operation_manifest_observe(
+                    delivery, source, actor, part.index, part.capability, outcome
+                )
             if outcome.status is not ApplicationStatus.COMPLETED and not outcomes:
                 return replace(outcome, request_id=delivery)
             outcomes.append(outcome)

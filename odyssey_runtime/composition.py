@@ -4213,6 +4213,38 @@ def build_runtime_from_environment() -> RuntimeComposition:
             raise TaskInterpretationError("Dependent subtask planner did not return a write plan")
         return prepare_dependent_subtask_title(source_text=source, interpretation=task, plan=plan)
 
+    def _operation_manifest_store(identity: AuthenticatedActorContext) -> LocalDeliveryResultStore:
+        return LocalDeliveryResultStore(
+            conversation_root_resolver.resolve(identity.stable_user_id) / "delivery-results"
+        )
+
+    def _begin_p4_operation_manifest(
+        delivery: str,
+        source: str,
+        identity: AuthenticatedActorContext,
+        groups: tuple[tuple[str, str, tuple[int, ...]], ...],
+    ) -> None:
+        store = _operation_manifest_store(identity)
+        store.begin_operation_manifest(delivery, store.fingerprint(source, "main"), source, groups)
+
+    def _observe_p4_operation_manifest(
+        delivery: str,
+        source: str,
+        identity: AuthenticatedActorContext,
+        ordinal: int,
+        capability: str,
+        outcome: ApplicationResult,
+    ) -> None:
+        store = _operation_manifest_store(identity)
+        store.observe_operation_manifest(
+            delivery,
+            store.fingerprint(source, "main"),
+            ordinal,
+            capability,
+            outcome.status.value,
+            outcome.affected_stable_note_ids,
+        )
+
     light_source_execute = None
     if light_source_enabled:
         if self_binding_repository is None:
@@ -4233,6 +4265,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
             refresh_between_independent_scopes=lambda ids: refresh_affected_indexes(
                 ids, allow_full_rebuild=False
             ),
+            operation_manifest_begin=_begin_p4_operation_manifest,
+            operation_manifest_observe=_observe_p4_operation_manifest,
             task_delegate=lambda source, locator, identity: execute_tasks(
                 source, locator, identity, ()
             ),

@@ -176,6 +176,31 @@
       ],
       "blocks_p4_dev": false,
       "verified_real_browser_n8n": false
+    },
+    {
+      "id": "P4-NM-GRAPH-PREWRITE",
+      "phase": "P4",
+      "invariant": "N:M conserva los fragmentos originales y prueba aristas precedentes sin convertir una mención Router en identidad canónica ni autorización de escritura.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/core/test_p4_dependent_group_graph.py::test_nm_reviewed_source_graph_preserves_all_spans_and_parent_edges",
+        "tests/core/test_p4_dependent_group_graph.py::test_nm_group_graph_fails_closed_on_unverified_edge_or_source"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
+    },
+    {
+      "id": "E3-OPERATION-MANIFEST",
+      "phase": "E3",
+      "invariant": "Un manifiesto actor-local de operaciones compuestas conserva evidencia forense prewrite e impide recuperar o repetir una escritura incierta sin recibo terminal.",
+      "max_evidence_level": "isolated_http",
+      "offline_test_selectors": [
+        "tests/runtime/test_p4_operation_manifest.py::test_three_operations_have_immutable_source_bound_prewrite_plan_and_outcomes",
+        "tests/runtime/test_p4_operation_manifest.py::test_dependent_core_write_then_task_crash_is_forensic_not_recoverable",
+        "tests/runtime/test_p4_operation_manifest.py::test_manifest_storage_failure_before_core_write_blocks_all_mutations"
+      ],
+      "blocks_p4_dev": true,
+      "verified_real_browser_n8n": false
     }
   ]
 }

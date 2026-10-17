@@ -249,6 +249,8 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     assert callable(executor.independent_task_prepare)
     assert callable(executor.independent_task_delegate)
     assert callable(executor.refresh_between_independent_scopes)
+    assert callable(executor.operation_manifest_begin)
+    assert callable(executor.operation_manifest_observe)
     clock_for_delivery = [datetime.fromisoformat(CLOCK)]
     executor.now = lambda: clock_for_delivery[0]
     executor.client = RecordedClient(
@@ -275,6 +277,21 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
     assert result["execution_flow"]["routes"][1]["capability"] == "tasks"
     assert result["affected_stable_note_ids"]
     assert scheduled_indexes == [tuple(result["affected_stable_note_ids"])]
+    from odyssey_runtime.delivery_results import LocalDeliveryResultStore
+
+    manifest_store = LocalDeliveryResultStore(
+        product.conversation_root_resolver.resolve(actor.stable_user_id) / "delivery-results"
+    )
+    first_manifest = manifest_store.inspect_operation_manifest(
+        "p4-factory-dependent", manifest_store.fingerprint(SOURCE, "main")
+    )
+    assert first_manifest == {
+        "manifest_present": True,
+        "planned_operations": 2,
+        "observed_operations": 2,
+        "claim_state": "receipt_confirmed",
+        "recovery_authorized": False,
+    }
 
     # The child title is prepared by the production GPT-5.6 Core planner
     # seam, then shaped by the existing Tasks decorator; no separate prompt
@@ -385,6 +402,12 @@ def test_real_product_factory_core_and_tasks_dependent_work_session(tmp_path, mo
         if parse_note(repo.read_text(path)).metadata.get("name") == "Preparar el índice"
     )
     assert created_child.metadata["type"] == "task"
+    child_manifest = manifest_store.inspect_operation_manifest(
+        "p4-factory-subtask", manifest_store.fingerprint(subtask_full_source, "main")
+    )
+    assert child_manifest["planned_operations"] == 2
+    assert child_manifest["observed_operations"] == 2
+    assert child_manifest["recovery_authorized"] is False
     assert "[[atlas|Preparar informe Atlas]]" in created_child.content
     subtask_snapshot = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
     assert product.execute_product(subtask_full_source, "p4-factory-subtask", "main", actor)[

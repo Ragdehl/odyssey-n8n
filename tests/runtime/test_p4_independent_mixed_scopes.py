@@ -624,6 +624,25 @@ def test_three_independent_scopes_core_task_core_have_complete_real_readback(
 
     executor.independent_task_prepare = prepared
     executor.independent_task_delegate = delegated
+    from odyssey_runtime.delivery_results import LocalDeliveryResultStore
+
+    store = LocalDeliveryResultStore(
+        runtime.conversation_root_resolver.resolve(actor.stable_user_id) / "delivery-results"
+    )
+
+    executor.operation_manifest_begin = lambda request, text, _actor, groups: (
+        store.begin_operation_manifest(request, store.fingerprint(text, "main"), text, groups)
+    )
+    executor.operation_manifest_observe = lambda request, text, _actor, index, cap, receipt: (
+        store.observe_operation_manifest(
+            request,
+            store.fingerprint(text, "main"),
+            index,
+            cap,
+            receipt.status.value,
+            receipt.affected_stable_note_ids,
+        )
+    )
     if refresh_fails:
 
         def fail_mid_scope_refresh(_ids):
@@ -631,6 +650,15 @@ def test_three_independent_scopes_core_task_core_have_complete_real_readback(
 
         executor.refresh_between_independent_scopes = fail_mid_scope_refresh
     result = runtime.execute_product(whole, "independent-three-verified", "main", actor)
+    assert store.inspect_operation_manifest(
+        "independent-three-verified", store.fingerprint(whole, "main")
+    ) == {
+        "manifest_present": True,
+        "planned_operations": 3,
+        "observed_operations": 3,
+        "claim_state": "receipt_confirmed",
+        "recovery_authorized": False,
+    }
     if refresh_fails:
         assert result["status"] == "partial", result
         assert CORE in repo.read_text("self.md")

@@ -116,6 +116,223 @@ class LocalDeliveryResultStore:
             # Retain the claim on uncertain write/fsync, fail closed.
             raise DeliveryResultError("mutation reservation is unavailable") from error
 
+    def begin_operation_manifest(
+        self,
+        request_id: str,
+        fingerprint: str,
+        source: str,
+        groups: tuple[tuple[str, str, tuple[int, ...]], ...],
+    ) -> None:
+        """Persist immutable source-hash-only N-group topology BEFORE any WRITE.
+
+        A manifest is operational forensic evidence, NEVER mutation authority.
+        It cannot permit resumption of an unresolved E3 claim.
+        """
+        if (
+            not isinstance(source, str)
+            or not source.strip()
+            or len(source) > 4096
+            or not isinstance(groups, tuple)
+            or not 2 <= len(groups) <= 16
+        ):
+            raise DeliveryResultError("operation source or group budget is invalid")
+        if self.inspect_mutation_claim(request_id, fingerprint)["state"] != "unresolved_attempt":
+            raise DeliveryResultError("operation manifest requires a pending E3 claim")
+        normalized = []
+        for ordinal, group in enumerate(groups):
+            if (
+                not isinstance(group, tuple)
+                or len(group) != 3
+                or group[0] not in ("core", "tasks")
+                or not isinstance(group[1], str)
+                or not group[1].strip()
+                or not isinstance(group[2], tuple)
+                or any(
+                    not isinstance(index, int)
+                    or isinstance(index, bool)
+                    or not 0 <= index < ordinal
+                    for index in group[2]
+                )
+                or len(set(group[2])) != len(group[2])
+            ):
+                raise DeliveryResultError("operation group or dependency is invalid")
+            normalized.append(
+                {
+                    "ordinal": ordinal,
+                    "capability": group[0],
+                    "source_sha256": hashlib.sha256(group[1].encode("utf-8")).hexdigest(),
+                    "predecessors": list(group[2]),
+                }
+            )
+        if "".join(part[1] for part in groups) != source:
+            raise DeliveryResultError("operation manifest does not cover original source")
+        self._atomic_operation_record(
+            self._operation_path(request_id, "plan"),
+            {
+                "version": 1,
+                "request_id": request_id,
+                "fingerprint": fingerprint,
+                "source_sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+                "groups": normalized,
+            },
+        )
+
+    def observe_operation_manifest(
+        self,
+        request_id: str,
+        fingerprint: str,
+        ordinal: int,
+        capability: str,
+        status: str,
+        affected_ids: tuple[str, ...],
+    ) -> None:
+        """Durably observe a *returned* App result, not a provable WRITE receipt.
+
+        This does NOT certify absent writes after a crash between persistence
+        and this observation. All uncertain E3 claims remain non-replayable.
+        """
+        if not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 0:
+            raise DeliveryResultError("operation ordinal is invalid")
+        if status not in ("completed", "partial", "needs_attention"):
+            raise DeliveryResultError("operation status is invalid")
+        if (
+            not isinstance(affected_ids, tuple)
+            or len(affected_ids) > 64
+            or any(
+                not isinstance(value, str) or not value or len(value) > 256
+                for value in affected_ids
+            )
+            or len(set(affected_ids)) != len(affected_ids)
+        ):
+            raise DeliveryResultError("operation affected IDs are invalid")
+        manifest = self._read_operation_record(self._operation_path(request_id, "plan"))
+        if (
+            manifest.get("request_id") != request_id
+            or manifest.get("fingerprint") != fingerprint
+            or manifest.get("version") != 1
+        ):
+            raise DeliveryResultError("operation manifest identity differs from E3 claim")
+        groups = manifest.get("groups")
+        if (
+            not isinstance(groups, list)
+            or ordinal >= len(groups)
+            or groups[ordinal].get("ordinal") != ordinal
+            or groups[ordinal].get("capability") != capability
+        ):
+            raise DeliveryResultError("operation does not match prepared scope")
+        if self.inspect_mutation_claim(request_id, fingerprint)["state"] != "unresolved_attempt":
+            raise DeliveryResultError("operation observation requires a pending E3 claim")
+        for prior in range(ordinal):
+            record = self._read_operation_record(self._operation_path(request_id, str(prior)))
+            if record.get("status") != "completed":
+                raise DeliveryResultError("prior operation was not completed")
+        self._atomic_operation_record(
+            self._operation_path(request_id, str(ordinal)),
+            {
+                "version": 1,
+                "request_id": request_id,
+                "fingerprint": fingerprint,
+                "ordinal": ordinal,
+                "capability": capability,
+                "status": status,
+                "affected_ids": list(affected_ids),
+                "proof_level": "application_result_observed_not_physical_recovery_authority",
+            },
+        )
+
+    def inspect_operation_manifest(self, request_id: str, fingerprint: str) -> dict[str, object]:
+        """Source-free E3 diagnostic; never considers operations recoverable."""
+        claim = self.inspect_mutation_claim(request_id, fingerprint)
+        path = self._operation_path(request_id, "plan")
+        if not path.exists() and not path.is_symlink():
+            return {
+                "manifest_present": False,
+                "observed_operations": 0,
+                "claim_state": claim["state"],
+                "recovery_authorized": False,
+            }
+        manifest = self._read_operation_record(path)
+        if manifest.get("fingerprint") != fingerprint or manifest.get("request_id") != request_id:
+            raise DeliveryResultError("operation manifest fingerprint differs")
+        groups = manifest.get("groups")
+        if not isinstance(groups, list) or not 2 <= len(groups) <= 16:
+            raise DeliveryResultError("operation manifest groups are invalid")
+        observed = 0
+        for ordinal in range(len(groups)):
+            step = self._operation_path(request_id, str(ordinal))
+            if not step.exists() and not step.is_symlink():
+                break
+            record = self._read_operation_record(step)
+            if (
+                record.get("request_id") != request_id
+                or record.get("fingerprint") != fingerprint
+                or record.get("ordinal") != ordinal
+                or record.get("capability") != groups[ordinal].get("capability")
+                or record.get("proof_level")
+                != "application_result_observed_not_physical_recovery_authority"
+            ):
+                raise DeliveryResultError("operation observation identity is invalid")
+            observed += 1
+        return {
+            "manifest_present": True,
+            "planned_operations": len(groups),
+            "observed_operations": observed,
+            "claim_state": claim["state"],
+            "recovery_authorized": False,
+        }
+
+    def _operation_path(self, request_id: str, suffix: str) -> Path:
+        self._validate_request_id(request_id)
+        if suffix != "plan" and (not suffix.isascii() or not suffix.isdecimal() or len(suffix) > 2):
+            raise DeliveryResultError("operation path suffix is invalid")
+        return self._path(request_id).with_suffix(f".operation-{suffix}.json")
+
+    @staticmethod
+    def _read_operation_record(path: Path) -> dict[str, Any]:
+        try:
+            if path.is_symlink() or not path.is_file():
+                raise DeliveryResultError("operation record is unavailable or unsafe")
+            data = path.read_bytes()
+            if len(data) > 8192:
+                raise DeliveryResultError("operation record exceeds budget")
+            result = json.loads(data)
+        except (OSError, ValueError, TypeError) as error:
+            raise DeliveryResultError("operation record is invalid") from error
+        if not isinstance(result, dict):
+            raise DeliveryResultError("operation record is malformed")
+        return result
+
+    @staticmethod
+    def _atomic_operation_record(path: Path, record: Mapping[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.parent.is_symlink():
+            raise DeliveryResultError("operation record root is unsafe")
+        encoded = json.dumps(
+            dict(record), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        if len(encoded) > 8192:
+            raise DeliveryResultError("operation record exceeds budget")
+        if path.exists() or path.is_symlink():
+            existing = LocalDeliveryResultStore._read_operation_record(path)
+            if existing != dict(record):
+                raise DeliveryResultError("operation receipt is immutable")
+            return
+        descriptor, temporary = tempfile.mkstemp(prefix=".odyssey-operation-", dir=path.parent)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(temporary, path)
+            except FileExistsError as error:
+                raise DeliveryResultError(
+                    "concurrent operation record was already written"
+                ) from error
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
     def inspect_mutation_claim(self, request_id: str, fingerprint: str) -> dict[str, object]:
         """Read-only E3 forensic status: never replay, release or repair a claim.
 
