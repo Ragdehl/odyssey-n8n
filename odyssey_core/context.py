@@ -1244,7 +1244,7 @@ class ContextIndex:
         for path in paths:
             version = repository.file_version(path)
             prior = indexed.get(path)
-            if prior is not None and prior[1] == json.dumps(version):
+            if prior is not None and prior[1] == json.dumps(version, ensure_ascii=False):
                 continue
             if prior is not None:
                 changed.add(prior[0])

@@ -46,3 +46,19 @@ def test_incremental_refresh_skips_unchanged_accented_filename(tmp_path, schema)
     write(repo, "people/Lucía García.md", note("lucia", "person", "Changed.", name="Lucía"))
     with pytest.raises(ContextIndexError, match="unrelated index drift"):
         index.refresh_notes(repo, schema, embedder, note_ids=("ordinary",))
+
+
+def test_external_reconciliation_ignores_unchanged_unicode_filenames(tmp_path, schema):
+    (tmp_path / "vault").mkdir()
+    repo = VaultRepository(tmp_path / "vault")
+    write(repo, "people/Lucía García.md", note("lucia", "person", "Lucía.", name="Lucía"))
+    write(repo, "notes/ordinary.md", note("ordinary", "document", "Original."))
+    index = ContextIndex(tmp_path / "context.sqlite3")
+    embedder = KeywordEmbedder()
+    index.rebuild(repo, schema, embedder)
+
+    # Reconciliation should not read unchanged Unicode paths as external edits.
+    assert index.reconcile_external_changes(repo, schema, embedder) == 0
+    write(repo, "notes/ordinary.md", note("ordinary", "document", "Updated."))
+    assert index.reconcile_external_changes(repo, schema, embedder) == 1
+    assert index.reconcile_external_changes(repo, schema, embedder) == 0
