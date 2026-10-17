@@ -6,7 +6,7 @@
 
 Fuente de prueba: `Hoy revisé Preparar informe Atlas. Ahora empieza una sesión de trabajo en esa tarea.` El Router tenía instrucción de no confundir actividad dentro de sesión con Core; en vivo interpretó erróneamente **ambas intenciones como una única operación de Tasks**:
 
-- **4 intentos con prompt previo:** 0/4 completados, `capabilities` incluía solo `tasks` (y en el intento diagnosticado `temporal`). Un único `app_scope` resumía registrar la revisión e iniciar sesión; `TASK_ONLY_SCOPE` independiente devolvió `only_task_semantics=false` y `exactly_one_operation=false`, bloqueando correctamente la escritura **ANTES de Core**. Los cuatro recibos resultaron `needs_attention`, sin sesiones ni hechos falsos, replay E3 estable.
+- **5 intentos con prompt previo:** 0/5 completados, `capabilities` incluía solo `tasks` (y en el intento diagnosticado `temporal`). Un único `app_scope` resumía registrar la revisión e iniciar sesión; `TASK_ONLY_SCOPE` independiente devolvió `only_task_semantics=false` y `exactly_one_operation=false`, bloqueando correctamente la escritura **ANTES de Core**. Los cinco recibos resultaron `needs_attention`, sin sesiones ni hechos falsos, replay E3 estable.
 - **Causa:** el prompt del Router enfatizaba que el progreso de una sesión debe ser Tasks, pero no distinguía explícitamente la **afirmación pasada independiente sobre una Task** de una actividad registrada *dentro* de una Work Session. El modelo amalgamaba un hecho y una orden, incluso sin que se mencionase sesión en la primera cláusula.
 
 ## Corrección general de interpretación
