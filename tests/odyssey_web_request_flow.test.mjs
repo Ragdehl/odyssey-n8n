@@ -108,6 +108,38 @@ test("directed execution graph preserves actual route order, source, dates and m
   assert.doesNotMatch(second.textContent, /gpt-6-luna · 35 ms/);
 });
 
+test("one Core source with two actual writes never duplicates them under two action stages", () => {
+  const requestText = "El 9 de octubre de 2026 revisé una maceta de prueba y el 10 de octubre etiqueté una caja.";
+  const receipts = [
+    {status: "succeeded", operation: "UPDATED", target: "date:2026-10-09"},
+    {status: "succeeded", operation: "UPDATED", target: "date:2026-10-10"},
+  ];
+  const actual = validateRequestDetail({
+    request_id: "core-two-days",
+    operational: {total_duration_ms: 17014, stages: [
+      stage("index_barrier", 0), stage("application.source_processing", 12626),
+      stage("application.router", 4612),
+      stage("planner", 0), stage("action.write", 223), stage("pending", 0),
+      stage("planner", 0), stage("action.write", 210), stage("pending", 0),
+      stage("index_refresh.schedule", 0),
+    ]},
+    flow: {version: 1, input: requestText, parallel_preparation: false, routes: [
+      {capability: "core", text: requestText, stage_count: 6,
+        status: "completed", temporal: [], writes: receipts},
+    ]},
+  }, "core-two-days");
+  const graph = renderExecutionFlow(doc, actual);
+  const lane = graph.findAll("flow-lane")[0];
+  assert.equal(lane.findAll("flow-write-evidence").length, 2);
+  assert.equal(lane.findAll("flow-semantics-line").length, 3); // route status + two receipts
+  assert.equal(lane.findAll("flow-card").filter(x => x.textContent.includes("Core · guardar")).length, 2);
+  assert.match(graph.textContent, /Esta ejecución no registró las entradas y salidas detalladas/);
+  assert.doesNotMatch(graph.textContent, /anterior al registro/);
+  for (const receipt of receipts) {
+    assert.equal(lane.textContent.split(`${receipt.operation} · ${receipt.target} (succeeded)`).length - 1, 1);
+  }
+});
+
 test("stage I/O must match actual stage order and remain within strict bounds", () => {
   const mismatched = {...flow, routes: flow.routes.map((route, i) => i ? {...route,
     steps: [{...route.steps[0], name: "planner"}, ...route.steps.slice(1)]} : route)};

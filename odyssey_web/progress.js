@@ -333,13 +333,10 @@ function stageCard(doc, stage, route = null, observedStep = null) {
     }
     card.append(decisions);
   }
-  if (!observedStep && stage.name.startsWith("action.") && route) {
-    const steps = element(doc, "div", "flow-semantics");
-    for (const item of route.writes || []) {
-      steps.append(detailLine(doc, `${item.operation} · ${item.target} (${item.status})`));
-    }
-    if (steps.children.length) card.append(steps);
-  }
+  // `route.writes` belongs to the route as a whole. Do not repeat ALL
+  // receipts under EACH action.write stage: a grouped Core request may
+  // contain several physical writes, and the transport has no verified
+  // stage↔write mapping. routeEvidence above is the one truthful owner.
   if (stage.outcome === "failed" || stage.outcome === "deferred") {
     card.append(element(doc, "p", "flow-error", stage.error_category || stage.outcome));
   }
@@ -474,7 +471,7 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
     }
     if (flow.routes.some(route => !route.steps)) {
       root.append(element(doc, "p", "flow-legacy",
-        "Esta solicitud conserva sus rutas, pero es anterior al registro de entrada y salida por etapa."));
+        "Esta ejecución no registró las entradas y salidas detalladas de cada etapa."));
     }
     for (const [index, route] of flow.routes.entries()) {
       const lane = element(doc, "section", "flow-lane");
