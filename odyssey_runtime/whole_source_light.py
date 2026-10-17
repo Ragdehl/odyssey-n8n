@@ -311,7 +311,10 @@ class WholeSourceLightExecutor:
             "time": instant.time().isoformat(timespec="seconds"),
             "timezone": self.timezone,
         }
-        now = instant.isoformat()
+        # Atomic facts require an exact offset-aware second timestamp. The
+        # incoming runtime clock usually carries microseconds; passing its
+        # raw isoformat silently fails BOTH Day CREATE and UPDATE preflight.
+        now = instant.isoformat(timespec="seconds")
         # Require current trusted SELF before any provider plan. No synthetic
         # string identity or inferred speaker-to-note mapping is permitted.
         self.bindings.resolve(actor.stable_user_id)

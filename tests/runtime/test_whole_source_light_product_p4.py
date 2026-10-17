@@ -185,6 +185,27 @@ def test_production_p4_real_writer_and_e3_replay_from_authentic_model_snapshot(t
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
 
 
+def test_real_p4_day_fact_normalizes_microsecond_clock_before_write(tmp_path):
+    """A live HTTP clock has microseconds: never write that into fact markers."""
+    source, router, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, service, runtime = _fixture(tmp_path)
+    service.now = lambda: datetime.fromisoformat("2026-10-16T15:30:00.738214+02:00")
+    service.client = RecordedClient(
+        [router, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
+    )
+    response = runtime.execute_product(source, "p4-microsecond-calendar-write", "main", actor)
+    assert response["status"] == "completed", response
+    physical = repo.read_text("calendar/days/2026-10-15.md")
+    assert "recorded_at=2026-10-16T15:30:00+02:00" in physical
+    assert "738214" not in physical
+    assert (
+        runtime.execute_product(source, "p4-microsecond-calendar-write", "main", actor)[
+            "delivery_replayed"
+        ]
+        is True
+    )
+
+
 def test_route_task_only_reuses_one_task_delegate_not_source_model_planner(tmp_path):
     calls = []
 
