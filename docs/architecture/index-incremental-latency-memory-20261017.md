@@ -27,3 +27,11 @@ No. Los vectores seleccionados sí; `ContextIndex.refresh_notes` hace listado y 
 5. **P2:** estudiar con pruebas de concurrencia paralelizar revisión de cobertura y dos speaker reviews tras Planner (si sus prerequisitos son independientes), manteniendo barreras antes de Writer y costes de casos rechazados; perfilar por separado n8n y transporte (~6 s no desglosados en la última muestra).
 
 Referencias: `docs/architecture/p4-dev-latency-graph-20261017.md`, `docs/architecture/functional-roadmap.md`. PROD intocado.
+
+## Validación E2E real y estado desplegado
+- Primera corrección commit 66312f4 desplegada en DEV mediante scripts/odyssey-dev deploy (código de script 0; marker en disco 66312f4). Segunda corrección de la reconciliación externa: commit 1ced0a2 probado en rama, NO desplegado.
+- E2E real nuevo p4dev20261017-unicodeindex04 a través de n8n + GPT + Writer/Markdown: COMPLETED, 19,8 s cliente / 17,989 s runtime, 2 recibos Core físicos, index_barrier 0 ms, index_refresh.schedule ~0 ms. El contexto SQLite DEV cambió a las 22:58:22. PROD /healthz HTTP 200, intacto.
+- Modelo en esa petición: Router 2,990 s; Planner 3,394 s; revisión cobertura 2,834 s; dos speaker reviewers 1,953/2,381 s en paralelo; source_processing 12,319 s. Hay otros ~5,7 s de runtime fuera de source_processing y ~1,8 s de diferencial cliente/runtime; no atribuirlos sin instrumentación a n8n.
+- RSS proceso runtime DEV observado posteriormente ~757 MB; swap global host ~933 MB en uso. No deducir consumo móvil ni fuga de memoria a partir de una muestra.
+- Gate completo después de los dos cambios: 964 Python y 171 JavaScript PASS; 11 regresiones focales PASS.
+- Pendiente: segundo deploy de reconciliación externa, observabilidad de motivo y duración de fallback, móvil nativo, corte abrupto del índice y pruebas a 1000/5000 Notes.
