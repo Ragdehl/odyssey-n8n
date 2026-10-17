@@ -186,9 +186,16 @@ def test_production_p4_real_writer_and_e3_replay_from_authentic_model_snapshot(t
     assert flow["input"] == source and len(flow["routes"]) == 1
     assert flow["routes"][0]["capability"] == "core"
     assert "depends_on" not in flow["routes"][0]
+    assert flow["routes"][0]["writes"]
+    assert all(row["status"] == "succeeded" for row in flow["routes"][0]["writes"])
+    assert all(
+        row["target"] in result["affected_stable_note_ids"] for row in flow["routes"][0]["writes"]
+    )
     detail_stages = result["operational"]["stages"]
     assert detail_stages[0]["name"] == "application.source_processing"
-    model_spans = detail_stages[0]["substeps"]
+    model_spans = [
+        item for item in detail_stages[0]["substeps"] if item["name"].startswith("provider.")
+    ]
     assert len(model_spans) == 5
     assert [item["name"].split(".")[-1] for item in model_spans] == [
         "odyssey_light_capability_route_v1",
@@ -223,6 +230,45 @@ def test_production_p4_real_writer_and_e3_replay_from_authentic_model_snapshot(t
     replay = runtime.execute_product(*payload)
     assert replay["delivery_replayed"] is True
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_two_actual_core_actions_have_one_authored_source_route_and_two_written_days(tmp_path):
+    source, router, proposal, review = _actual_snapshot("two_dates")
+    repo, actor, executor, runtime = _fixture(tmp_path)
+    executor.client = RecordedClient(
+        [router, proposal, review, _speaker(source, proposal, base=1), _speaker(source, proposal)]
+    )
+    outcome = runtime.execute_product(source, "p4-two-days-graph-ownership", "main", actor)
+    assert outcome["status"] == "completed", outcome
+    flow = outcome["execution_flow"]
+    assert flow["input"] == source and len(flow["routes"]) == 1
+    route = flow["routes"][0]
+    assert route["capability"] == "core" and route["status"] == "completed"
+    assert "depends_on" not in route
+    assert len(route["writes"]) == 2
+    assert {entry["target"] for entry in route["writes"]} == {
+        "date:2026-10-16",
+        "date:2026-10-17",
+    }
+    assert all(
+        stage.get("route_index", 0) == 0
+        for stage in outcome["operational"]["stages"]
+        if stage.get("route_index") is not None
+    )
+    from subprocess import run
+
+    contract = ROOT / "tests/p4_single_core_n8n_flow_contract.mjs"
+    bridge = run(
+        ["node", str(contract)],
+        input=json.dumps(outcome, ensure_ascii=False),
+        capture_output=True,
+        text=True,
+        timeout=12,
+        check=False,
+    )
+    assert bridge.returncode == 0, bridge.stderr or bridge.stdout
+    assert "comprado pan" in repo.read_text("calendar/days/2026-10-16.md")
+    assert "leche" in repo.read_text("calendar/days/2026-10-17.md")
 
 
 def test_real_p4_day_fact_normalizes_microsecond_clock_before_write(tmp_path):
@@ -749,7 +795,7 @@ def test_dev_parallel_speaker_reviewers_both_run_and_remain_source_verified(tmp_
         < 0.055
     )
     spans = result["operational"]["stages"][0]["substeps"]
-    assert len(spans) == 5
+    assert len([span for span in spans if span["name"].startswith("provider.")]) == 5
     assert len([span for span in spans if "odyssey_speaker_full_" in span["name"]]) == 2
     assert result["execution_flow"]["routes"][0]["capability"] == "core"
     assert "(yo:" in repo.read_text("calendar/days/2026-10-15.md")

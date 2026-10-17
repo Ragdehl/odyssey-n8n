@@ -327,6 +327,16 @@ class WholeSourceLightExecutor:
             )
         return first, second
 
+    @staticmethod
+    def _measure_local(name: str, operation: Callable, *args: Any, **kwargs: Any) -> Any:
+        """Trace one deterministic Core boundary without exposing user data."""
+        recorder = _P4_PROVIDER_SPANS.get()
+        return (
+            recorder.invoke(f"local.{name}", operation, *args, **kwargs)
+            if recorder is not None
+            else operation(*args, **kwargs)
+        )
+
     def _note_hints(self, source: str) -> list[dict]:
         # The existing derived context index is only a bounded hint source.
         # Core subsequently resolves ALL identities against live Markdown.
@@ -392,6 +402,34 @@ class WholeSourceLightExecutor:
             router_stage = OperationalStage(
                 "application.router", OperationalOutcome.COMPLETED, first_router_ms
             )
+            # Project actual SUCCEEDED Core unit receipts, never Planner
+            # intentions. Each item is physically postwrite; no identity
+            # inferred from text. The browser supports up to eight entries.
+            verified_writes = [
+                {
+                    "status": unit.status.value,
+                    "operation": unit.operation[:48],
+                    "target": unit.stable_note_id[:160],
+                }
+                for action in result.action_results
+                for unit in action.unit_results
+                if unit.status.value == "succeeded"
+                and unit.materially_affected
+                and unit.stable_note_id in result.affected_stable_note_ids
+                and isinstance(unit.operation, str)
+                and unit.operation
+                and isinstance(unit.stable_note_id, str)
+                and unit.stable_note_id
+            ]
+            # Prior per-operation route_index values are action ordinals,
+            # not Router-proven source subroutes. One complete Core source
+            # route owns all those actions, so retain the action ordering and
+            # normalize only its presentation route ownership to index zero.
+            # Physical unit receipts remain independently visible above.
+            stages = tuple(
+                replace(stage, route_index=0) if stage.route_index is not None else stage
+                for stage in stages
+            )
             flow = {
                 "version": 1,
                 "input": source,
@@ -403,6 +441,7 @@ class WholeSourceLightExecutor:
                         "stage_count": len(stages),
                         "status": result.status.value,
                         "temporal": [],
+                        **({"writes": verified_writes} if 0 < len(verified_writes) <= 8 else {}),
                     }
                 ],
             }
@@ -646,7 +685,7 @@ class WholeSourceLightExecutor:
         # unresolved identity, unsupported Task operation, speaker conflict or
         # any delivery after Core could already have persisted a note.
         reviewed_ok = False
-        known_notes = self._note_hints(source)
+        known_notes = self._measure_local("source_name_hints", self._note_hints, source)
         for attempt in range(2):
             proposed = self._ask(
                 PLANNER_MODEL,
@@ -721,7 +760,13 @@ class WholeSourceLightExecutor:
             names = tuple(
                 sorted({name for fact in review["facts"] for name in fact["reference_names"]})
             )
-            reject_unproven_person_collisions(self.repository, self.schema, names)
+            self._measure_local(
+                "identity_collision_preflight",
+                reject_unproven_person_collisions,
+                self.repository,
+                self.schema,
+                names,
+            )
             speaker_payload = {
                 "original_source": source,
                 "facts": [
@@ -739,17 +784,24 @@ class WholeSourceLightExecutor:
         # Task lifecycle or invalid last fact cannot leave a partially
         # persisted multi-capability message behind.
         try:
-            operations = compile_reviewed_operations(
-                review, tuple(attested.requires_self_link(i) for i in range(len(attested.facts)))
+            operations = self._measure_local(
+                "compile_reviewed_operations",
+                compile_reviewed_operations,
+                review,
+                tuple(attested.requires_self_link(i) for i in range(len(attested.facts))),
             )
         except WholeSourceCompilationError:
             return self._abstain(delivery)
         if self.progress is not None:
             self.progress("planner.ready", {})
             self.progress("action.write.started", {})
-        before = {
-            path: self.repository.read_text(path) for path in self.repository.list_markdown_paths()
-        }
+        before = self._measure_local(
+            "prewrite_source_snapshot",
+            lambda: {
+                path: self.repository.read_text(path)
+                for path in self.repository.list_markdown_paths()
+            },
+        )
         results: list[ApplicationResult] = []
 
         def execute_one(plan: Any, locator: str, task: bool = False) -> ApplicationResult:
@@ -803,7 +855,9 @@ class WholeSourceLightExecutor:
                     )
                 except (WholeSourceRelationshipError, ValueError):
                     return self._partial(delivery, results) if results else self._abstain(delivery)
-            result = execute_one(
+            result = self._measure_local(
+                "core_writer_action",
+                execute_one,
                 operation.plan,
                 f"{delivery}-{operation.locator_suffix}",
                 task=operation.task_create,
@@ -812,16 +866,25 @@ class WholeSourceLightExecutor:
             if result.status is not ApplicationStatus.COMPLETED:
                 break
             if result.affected_stable_note_ids:
-                self.refresh_affected_indexes(result.affected_stable_note_ids)
+                self._measure_local(
+                    "synchronous_index_refresh",
+                    self.refresh_affected_indexes,
+                    result.affected_stable_note_ids,
+                )
         candidate = self._partial(delivery, results)
         if candidate.status is not ApplicationStatus.COMPLETED:
             return candidate
         try:
-            after = {
-                path: self.repository.read_text(path)
-                for path in self.repository.list_markdown_paths()
-            }
-            proof = assert_reviewed_markdown(
+            after = self._measure_local(
+                "postwrite_source_snapshot",
+                lambda: {
+                    path: self.repository.read_text(path)
+                    for path in self.repository.list_markdown_paths()
+                },
+            )
+            proof = self._measure_local(
+                "canonical_markdown_readback",
+                assert_reviewed_markdown,
                 repository=self.repository,
                 schema=self.schema,
                 context_index=self.context_index,
