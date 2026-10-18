@@ -498,3 +498,225 @@ def test_incremental_round_status_and_failure_preservation(monkeypatch, tmp_path
         assert all(v["verdict"] == "pass" for v in result["reviews"].values())
         assert (root / "round-1" / (roles[-1] + "-completed.json")).exists()
     assert not result["ready_for_user"]
+
+
+@pytest.mark.parametrize(
+    ("role", "risk", "paths", "round_number", "expected_model", "expected_effort"),
+    [
+        ("builder", "normal", (), 1, "gpt-6-luna", "low"),
+        ("generality", "normal", ("scripts/tool.py",), 1, "gpt-6-luna", "low"),
+        ("performance", "normal", ("tests/core/test_example.py",), 1, "gpt-6-luna", "low"),
+        ("builder", "normal", ("odyssey_core/identity.py",), 1, "gpt-6-sol", "medium"),
+        ("generality", "normal", ("odyssey_runtime/composition.py",), 1, "gpt-6-sol", "medium"),
+        ("quality", "normal", ("odyssey_apps/custom.py",), 1, "gpt-6-sol", "medium"),
+        ("testing", "high", ("scripts/tool.py",), 1, "gpt-6-sol", "medium"),
+        ("builder", "normal", ("scripts/tool.py",), 2, "gpt-6-sol", "medium"),
+        ("builder", "high", ("odyssey_core/writer.py",), 2, "gpt-6-sol", "high"),
+        ("quality", "critical", ("scripts/tool.py",), 1, "gpt-6-sol", "high"),
+        ("performance", "normal", ("odyssey_core/writer.py",), 1, "gpt-6-luna", "low"),
+    ],
+)
+def test_model_routing_by_impact_role_and_repair(
+    monkeypatch, tmp_path, role, risk, paths, round_number, expected_model, expected_effort
+):
+    monkeypatch.setattr(cycle, "touched_paths", lambda _dest, _base: paths)
+    choice = cycle.select_agent_model(
+        role,
+        {"risk": risk, "round": round_number, "baseline_commit": "a" * 40},
+        tmp_path,
+    )
+    assert (choice["model"], choice["effort"]) == (expected_model, expected_effort)
+    assert choice["changed_files_count"] == len(paths)
+
+
+def test_model_selector_refuses_unapproved_role_and_invalid_risk(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "touched_paths", lambda *_: ())
+    with pytest.raises(cycle.CycleError, match="role"):
+        cycle.select_agent_model("invented-app", {"baseline_commit": "a" * 40}, tmp_path)
+    with pytest.raises(cycle.CycleError, match="risk"):
+        cycle.select_agent_model(
+            "quality", {"baseline_commit": "a" * 40, "risk": "unbounded"}, tmp_path
+        )
+
+
+@pytest.mark.parametrize("value", [0, 5000, 19999, 300001, "110000", True])
+def test_model_budget_configuration_rejects_invalid_values(monkeypatch, value):
+    monkeypatch.setattr(cycle, "check_repository", lambda: None)
+    with pytest.raises(cycle.CycleError, match="Token budget"):
+        cycle.plan(cycle.ROLES / "pilot-p4.md", "invalid-budget-test", token_budget=value)
+
+
+def test_codex_reported_tokens_parser_handles_real_cli_footer(tmp_path):
+    log = tmp_path / "cli.log"
+    log.write_text("model: gpt-6-luna\nreasoning effort: low\ntokens used\n9,278\nMODEL_OK\n")
+    assert cycle.reported_token_count(log) == 9278
+    log.write_text("tokens used\n9,278\n...\ntokens used\n13,541\n")
+    assert cycle.reported_token_count(log) == 13541
+    log.write_text("response without reliable accounting")
+    assert cycle.reported_token_count(log) is None
+
+
+def test_shared_reported_token_ledger_stops_at_budget_and_keeps_receipts(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    job = "bounded-cost-job"
+    path = cycle.job_path(job)
+    path.mkdir(parents=True)
+    state = {
+        "phase": "reviewing",
+        "round": 1,
+        "reported_token_budget": 20000,
+        "token_usage": {"reported_total": 0, "sessions": []},
+    }
+    cycle.atomic_json(path / "status.json", state)
+    cycle.record_agent_usage(
+        job,
+        state,
+        "builder",
+        {
+            "reported_tokens": 12000,
+            "model": "gpt-6-luna",
+            "tier": "economy",
+            "routing_reason": "routine",
+        },
+    )
+    assert state["token_usage"]["reported_total"] == 12000
+    with pytest.raises(cycle.CycleError, match="budget"):
+        cycle.record_agent_usage(
+            job,
+            state,
+            "generality",
+            {
+                "reported_tokens": 10000,
+                "model": "gpt-6-sol",
+                "tier": "standard",
+                "routing_reason": "contract_change",
+            },
+        )
+    persisted = cycle.load(job)["token_usage"]
+    assert persisted["reported_total"] == 22000
+    assert [x["role"] for x in persisted["sessions"]] == ["builder", "generality"]
+
+
+def test_pinned_luna_and_sol_policy_exists_and_is_not_supplied_by_untrusted_app():
+    policy = cycle.model_policy()
+    assert policy["models"]["economy"]["id"] == "gpt-6-luna"
+    assert policy["models"]["standard"]["id"] == "gpt-6-sol"
+    assert policy["models"]["deep"]["effort"] == "high"
+    assert "odyssey_core/" in policy["architectural_change_prefixes"]
+    assert "odyssey_runtime/" in policy["architectural_change_prefixes"]
+    assert policy["default_reported_token_budget"] < 249201
+
+
+@pytest.mark.parametrize(
+    ("risk", "changed", "expected_model", "expected_effort"),
+    [
+        ("normal", ("scripts/agent_tool.py",), "gpt-6-luna", "low"),
+        ("normal", ("odyssey_core/writer.py",), "gpt-6-sol", "medium"),
+        ("critical", ("scripts/agent_tool.py",), "gpt-6-sol", "high"),
+    ],
+)
+def test_actual_codex_cli_command_routes_model_and_records_reported_tokens(
+    monkeypatch, tmp_path, risk, changed, expected_model, expected_effort
+):
+    import io
+
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1600)
+    monkeypatch.setattr(cycle, "touched_paths", lambda *_: changed)
+    job = "model-profile-fixture"
+    run_root = cycle.job_path(job)
+    work = run_root / "round-1"
+    work.mkdir(parents=True)
+    cycle.atomic_json(
+        run_root / "status.json",
+        {
+            "phase": "reviewing",
+            "risk": risk,
+            "round": 1,
+            "baseline_commit": "a" * 40,
+            "reported_token_budget": 20000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+        },
+    )
+    observed = {}
+
+    class FakeProc:
+        def __init__(self, command, **kwargs):
+            observed["command"] = command
+            self.stdin = io.StringIO()
+            self.returncode = 0
+            output = Path(command[command.index("--output-last-message") + 1])
+            output.write_text(
+                json.dumps({"verdict": "pass", "summary": "OK", "findings": [], "evidence": []})
+            )
+            kwargs["stdout"].write(
+                "OpenAI Codex test\nmodel: "
+                + expected_model
+                + "\nreasoning effort: "
+                + expected_effort
+                + "\n\ntokens used\n9,278\n"
+            )
+            kwargs["stdout"].flush()
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(cycle.subprocess, "Popen", FakeProc)
+    receipt = cycle.codex(
+        "generality",
+        "Review scoped current Git diff only",
+        tmp_path,
+        work,
+        read_only=True,
+    )
+    argv = observed["command"]
+    assert argv[argv.index("--model") + 1] == expected_model
+    assert 'model_reasoning_effort="' + expected_effort + '"' in argv
+    assert "--ephemeral" in argv
+    assert argv[argv.index("--sandbox") + 1] == "read-only"
+    assert receipt["reported_tokens"] == 9278
+    assert receipt["model"] == expected_model
+    assert receipt["tier"] in {"economy", "standard", "deep"}
+    cycle.record_agent_usage(job, cycle.load(job), "generality", receipt)
+    assert cycle.load(job)["token_usage"]["reported_total"] == 9278
+
+
+def test_codex_cli_refuses_unverified_model_substitution(monkeypatch, tmp_path):
+    import io
+
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1600)
+    monkeypatch.setattr(cycle, "touched_paths", lambda *_: ())
+    job = "wrong-model-fixture"
+    run_root = cycle.job_path(job)
+    work = run_root / "round-1"
+    work.mkdir(parents=True)
+    cycle.atomic_json(
+        run_root / "status.json",
+        {
+            "phase": "reviewing",
+            "round": 1,
+            "risk": "normal",
+            "baseline_commit": "a" * 40,
+            "reported_token_budget": 20000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+        },
+    )
+
+    class WrongModel:
+        def __init__(self, command, **kwargs):
+            self.stdin = io.StringIO()
+            self.returncode = 0
+            output = Path(command[command.index("--output-last-message") + 1])
+            output.write_text(
+                json.dumps({"verdict": "pass", "summary": "OK", "findings": [], "evidence": []})
+            )
+            kwargs["stdout"].write("model: gpt-6-sol\ntokens used\n9,278\n")
+            kwargs["stdout"].flush()
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(cycle.subprocess, "Popen", WrongModel)
+    with pytest.raises(cycle.CycleError, match="not verified"):
+        cycle.codex("generality", "Review", tmp_path, work, read_only=True)

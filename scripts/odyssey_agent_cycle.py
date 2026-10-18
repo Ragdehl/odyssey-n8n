@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROLES = ROOT / "ops/agent-team"
 STATE = ROOT.parent / ".odyssey-agent-runs"
 SCHEMA = ROLES / "review.schema.json"
+MODEL_POLICY = ROLES / "model-policy.json"
 CHECKOUT_EXCLUDE = ("odyssey-dev", "odyssey-prod-release", "odyssey-prod-venv")
 REVIEW_ROLES = ("generality", "quality", "testing", "performance")
 TIMEOUT = 1200
@@ -119,9 +120,130 @@ def require_budget(job: str) -> None:
         raise CycleError(f"Memory protection: only {available} MiB available")
 
 
+def model_policy() -> dict:
+    """Load a locally owned, validated model and budget policy."""
+    policy = json.loads(MODEL_POLICY.read_text(encoding="utf-8"))
+    if policy.get("version") != 1:
+        raise CycleError("Unsupported agent model policy")
+    allowed_models = {"gpt-6-luna", "gpt-6-sol"}
+    levels = policy.get("models", {})
+    if set(levels) != {"economy", "standard", "deep"}:
+        raise CycleError("Incomplete approved model tiers")
+    for tier in levels.values():
+        if tier.get("id") not in allowed_models or tier.get("effort") not in {
+            "low",
+            "medium",
+            "high",
+        }:
+            raise CycleError("Unapproved model or reasoning effort")
+    limit = policy.get("default_reported_token_budget")
+    if not isinstance(limit, int) or not 20000 <= limit <= 300000:
+        raise CycleError("Unsafe or missing token budget")
+    prefixes = policy.get("architectural_change_prefixes")
+    if (
+        not isinstance(prefixes, list)
+        or not prefixes
+        or any(not isinstance(item, str) or not item.endswith("/") for item in prefixes)
+    ):
+        raise CycleError("Invalid architectural risk classifier")
+    if set(policy.get("high_risk_roles", [])) - {"builder", *REVIEW_ROLES}:
+        raise CycleError("Unrecognized expensive model role")
+    return policy
+
+
+def touched_paths(dest: Path, base: str) -> tuple[str, ...]:
+    """Scope model risk to real source changes; no model-needed classifier."""
+    changed = running(["git", "-C", str(dest), "diff", "--name-only", base], timeout=10)
+    new = running(
+        ["git", "-C", str(dest), "ls-files", "--others", "--exclude-standard"], timeout=10
+    )
+    if changed.returncode or new.returncode:
+        raise CycleError("Cannot inspect agent scope for model risk")
+    return tuple(sorted({line for line in (changed.stdout + new.stdout).splitlines() if line}))
+
+
+def select_agent_model(role: str, state: dict, dest: Path) -> dict:
+    """Choose a tier from contract impact, declared risk and repair history."""
+    if role not in ("builder", *REVIEW_ROLES):
+        raise CycleError("Unexpected agent role")
+    policy = model_policy()
+    declared = state.get("risk", "normal")
+    if declared not in {"normal", "high", "critical"}:
+        raise CycleError("Unknown feature risk declaration")
+    base = state.get("review_base") or state.get("baseline_commit")
+    if not isinstance(base, str) or not re.fullmatch(r"[0-9a-f]{40}", base):
+        raise CycleError("Missing immutable source baseline for routing")
+    paths = touched_paths(dest, base)
+    architectural = any(
+        name.startswith(tuple(policy["architectural_change_prefixes"])) for name in paths
+    )
+    high_risk = declared in {"high", "critical"} or architectural
+    repair = int(state.get("round") or 0) > 1
+    tier = "economy"
+    if (high_risk and role in policy["high_risk_roles"]) or (repair and role == "builder"):
+        tier = "standard"
+    if (
+        declared == "critical"
+        and role in policy["high_risk_roles"]
+        or (repair and high_risk and role == "builder")
+    ):
+        tier = "deep"
+    selected = policy["models"][tier]
+    return {
+        "model": selected["id"],
+        "effort": selected["effort"],
+        "tier": tier,
+        "reason": "retry"
+        if repair and role == "builder"
+        else (
+            "contract_change" if architectural else ("declared_risk" if high_risk else "routine")
+        ),
+        "changed_files_count": len(paths),
+    }
+
+
+def reported_token_count(logfile: Path) -> int | None:
+    """Extract CLI accounting, including its internal context; not API billing."""
+    if not logfile.exists():
+        return None
+    with logfile.open("rb") as stream:
+        stream.seek(0, 2)
+        stream.seek(max(0, stream.tell() - 8192))
+        tail = stream.read().decode("utf-8", errors="replace")
+    values = re.findall(r"(?m)^tokens used\s*\n([0-9][0-9,]*)\s*$", tail)
+    return int(values[-1].replace(",", "")) if values else None
+
+
+def record_agent_usage(job: str, state: dict, role: str, receipt: dict) -> None:
+    """Persist actual per-role usage and stop BEFORE the next model call."""
+    if "reported_tokens" not in receipt:
+        return  # Mocked offline reviewer in deterministic supervisor tests.
+    tokens = receipt["reported_tokens"]
+    if not isinstance(tokens, int) or tokens < 0:
+        raise CycleError("Codex usage telemetry unavailable; cannot enforce budget")
+    ledger = state.setdefault("token_usage", {"reported_total": 0, "sessions": []})
+    ledger["reported_total"] += tokens
+    ledger["sessions"].append(
+        {
+            "role": role,
+            "round": state.get("round"),
+            "model": receipt.get("model"),
+            "tier": receipt.get("tier"),
+            "reason": receipt.get("routing_reason"),
+            "reported_tokens": tokens,
+        }
+    )
+    update(job, state, state["phase"])
+    if ledger["reported_total"] > state.get(
+        "reported_token_budget", model_policy()["default_reported_token_budget"]
+    ):
+        raise CycleError("Codex reported-token budget exhausted")
+
+
 def doctor() -> dict:
     check_repository()
     assert SCHEMA.is_file()
+    policy = model_policy()
     for role in ("builder", *REVIEW_ROLES):
         if not (ROLES / (role + ".md")).is_file():
             raise CycleError(f"Role missing: {role}")
@@ -136,6 +258,8 @@ def doctor() -> dict:
         "default_live": False,
         "production_deploy_allowed": False,
         "active_roles": ["supervisor", "builder", *REVIEW_ROLES],
+        "models": policy["models"],
+        "reported_token_budget": policy["default_reported_token_budget"],
     }
 
 
@@ -150,7 +274,13 @@ def resolve_commit(revision: str) -> str:
 
 
 def plan(
-    spec: Path, job: str, *, implemented_by: str = "codex", against: str | None = None
+    spec: Path,
+    job: str,
+    *,
+    implemented_by: str = "codex",
+    against: str | None = None,
+    risk: str = "normal",
+    token_budget: int | None = None,
 ) -> dict:
     check_repository()
     slug(job)
@@ -159,6 +289,17 @@ def plan(
     brief = spec.resolve().read_text(encoding="utf-8")
     if not 40 <= len(brief) <= 25000:
         raise CycleError("Feature brief must be 40 to 25000 characters")
+    policy = model_policy()
+    if risk not in {"normal", "high", "critical"}:
+        raise CycleError("Invalid declared impact/risk")
+    if token_budget is None:
+        token_budget = policy["default_reported_token_budget"]
+    if (
+        isinstance(token_budget, bool)
+        or not isinstance(token_budget, int)
+        or not 20000 <= token_budget <= 300000
+    ):
+        raise CycleError("Token budget must be 20000 to 300000 reported tokens")
     if implemented_by not in {"codex", "chatgpt"}:
         raise CycleError("Only Codex or ChatGPT can be the development source")
     if implemented_by == "codex" and against is not None:
@@ -216,6 +357,9 @@ def plan(
         "ready_for_user": False,
         "reviews": {},
         "gate": {},
+        "risk": risk,
+        "reported_token_budget": token_budget,
+        "token_usage": {"reported_total": 0, "sessions": []},
         "deployment": "forbidden",
         "last_error": None,
     }
@@ -267,12 +411,23 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     """One actual Codex CLI process, bounded and cancellable by the supervisor."""
     job = evidence.parent.name
     require_budget(job)
+    state = load(job)
+    used = state.get("token_usage", {}).get("reported_total", 0)
+    cap = state.get("reported_token_budget", model_policy()["default_reported_token_budget"])
+    if used >= cap:
+        raise CycleError("Reported-token budget reached; refusing another model session")
+    choice = select_agent_model(role, state, dest)
     artifact = evidence / (role + ".json" if read_only else "builder.md")
     stdout_log = evidence / (role + ".log")
     cmd = [
         "codex",
         "exec",
         "--ignore-user-config",
+        "--ephemeral",
+        "--model",
+        choice["model"],
+        "--config",
+        'model_reasoning_effort="' + choice["effort"] + '"',
         "--sandbox",
         "read-only" if read_only else "workspace-write",
         "--cd",
@@ -338,13 +493,27 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
         "available_ram_mib_after": mem_available(),
         "minimum_available_ram_mib_during": minimum_available,
         "artifact": str(artifact),
+        "model": choice["model"],
+        "effort": choice["effort"],
+        "tier": choice["tier"],
+        "routing_reason": choice["reason"],
+        "reported_tokens": reported_token_count(stdout_log),
     }
+    # The CLI must not silently downgrade/replace our security-reviewed
+    # model mapping, even if a future provider changes its fallbacks.
+    with stdout_log.open("rb") as trace:
+        header = trace.read(2048).decode("utf-8", errors="replace")
+    matched = re.search(r"(?m)^model:\s*(\S+)\s*$", header)
     if process.returncode or not artifact.is_file():
         raise CycleError(f"{role} failed; see {stdout_log}")
+    if matched is None or matched.group(1) != choice["model"]:
+        raise CycleError("Codex model routing is not verified; refusing review")
     if read_only:
         record["verdict"] = json.loads(artifact.read_text(encoding="utf-8"))
         if record["verdict"].get("verdict") not in {"pass", "fail", "blocked"}:
             raise CycleError(role + " returned unknown verdict")
+    if record["reported_tokens"] is None:
+        raise CycleError("Codex CLI did not report tokens; cannot enforce budget")
     return record
 
 
@@ -353,7 +522,14 @@ def instructions(role: str, spec: str, baseline: str, reviews: dict | None = Non
     return (
         content + "\n\nMANDATORY SOURCE OF TRUTH: first read AGENTS.md, "
         "docs/architecture/functional-roadmap.md and "
-        "docs/architecture/application-extensibility-plan.md. "
+        "docs/architecture/application-extensibility-plan.md, scoped to the active "
+        "section and changed contracts; avoid re-reading long histories. "
+        "Do not run entire pytest/cross-surface suite inside Codex sandbox: "
+        "socket tests will fail due to isolation; the supervisor runs that "
+        "gate ONCE in the verified host environment. Run only relevant "
+        "focused tests; review the gate receipt rather than rerunning it. "
+        "When reviewing, begin with git diff against source baseline and read "
+        "only files needed to support concrete findings. "
         "Work ONLY in this temporary worktree/agent branch; no deploy, "
         "no production/private vault, no secrets, no changing Git remotes, "
         "no approval bypasses, no push or merge.\n"
@@ -477,7 +653,7 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 )
             else:
                 update(job, state, "implementing", round=attempt, active_role="builder")
-                codex(
+                builder_receipt = codex(
                     "builder",
                     instructions(
                         "builder", brief, review_base or state["baseline_commit"], findings
@@ -487,6 +663,7 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                     evidence,
                     read_only=False,
                 )
+                record_agent_usage(job, state, "builder", builder_receipt)
             safe_worktree(dest, job)
             update(job, state, "testing", active_role="deterministic_gates")
             gates = deterministic_gates(dest, evidence)
@@ -515,8 +692,9 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 artifact = evidence / (role + "-completed.json")
                 atomic_json(artifact, review)
                 state["review_artifacts"][role] = str(artifact)
-                # Only publish after the read-only guard and durable artifact succeed.
+                # Preserve a valid review before applying the shared usage cap.
                 update(job, state, "reviewing", reviews=dict(reviews), active_role=None)
+                record_agent_usage(job, state, role, review)
             findings = {"gates": gates, "reviews": reviews}
             succeeded = all(check["pass"] for check in gates.values()) and all(
                 v["verdict"] == "pass" for v in reviews.values()
@@ -600,12 +778,21 @@ def main() -> int:
     p.add_argument("--job", required=True)
     p.add_argument("--implemented-by", choices=("codex", "chatgpt"), default="codex")
     p.add_argument("--against", help="Existing parent Git SHA of ChatGPT-authored changes")
+    p.add_argument("--risk", choices=("normal", "high", "critical"), default="normal")
+    p.add_argument(
+        "--token-budget",
+        type=int,
+        default=None,
+        help="Maximum cumulative CLI-reported tokens (default from policy)",
+    )
     r = actions.add_parser("run")
     r.add_argument("--job", required=True)
     r.add_argument("--max-rounds", type=int, default=2)
     r.add_argument("--live", action="store_true")
     st = actions.add_parser("status")
     st.add_argument("--job", required=True)
+    route = actions.add_parser("route")
+    route.add_argument("--job", required=True)
     stop = actions.add_parser("stop")
     stop.add_argument("--job", required=True)
     args = parser.parse_args()
@@ -614,7 +801,12 @@ def main() -> int:
             value = doctor()
         elif args.action == "plan":
             value = plan(
-                args.spec, args.job, implemented_by=args.implemented_by, against=args.against
+                args.spec,
+                args.job,
+                implemented_by=args.implemented_by,
+                against=args.against,
+                risk=args.risk,
+                token_budget=args.token_budget,
             )
         elif args.action == "run":
             STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -627,6 +819,27 @@ def main() -> int:
                 value = run(args.job, args.max_rounds, args.live)
         elif args.action == "status":
             value = load(args.job)
+        elif args.action == "route":
+            state = load(args.job)
+            checkout = Path(state["worktree"]) if state.get("worktree") else ROOT
+            if state.get("worktree"):
+                safe_worktree(checkout, args.job)
+            value = {
+                "job": args.job,
+                "risk": state.get("risk", "normal"),
+                "round": state.get("round", 0),
+                "reported_token_budget": state.get(
+                    "reported_token_budget", model_policy()["default_reported_token_budget"]
+                ),
+                "used_reported_tokens": (
+                    state["token_usage"]["reported_total"] if "token_usage" in state else None
+                ),
+                "choices": {
+                    role: select_agent_model(role, state, checkout)
+                    for role in ("builder", *REVIEW_ROLES)
+                },
+                "models_launched": False,
+            }
         else:
             path = job_path(args.job)
             if not (path / "status.json").exists():

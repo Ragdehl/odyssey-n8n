@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "models": {
+    "economy": {"id": "gpt-6-luna", "effort": "low"},
+    "standard": {"id": "gpt-6-sol", "effort": "medium"},
+    "deep": {"id": "gpt-6-sol", "effort": "high"}
+  },
+  "default_reported_token_budget": 110000,
+  "architectural_change_prefixes": [
+    "odyssey_core/",
+    "odyssey_runtime/",
+    "odyssey_apps/",
+    "config/",
+    "workflows/",
+    "odyssey_web/"
+  ],
+  "high_risk_roles": ["builder", "generality", "quality", "testing"]
+}
