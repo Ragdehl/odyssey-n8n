@@ -106,6 +106,36 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             """Validate one request payload, execute Core, and return public evidence."""
             parsed = urlsplit(self.path)
+            if parsed.path == "/conversation/presence":
+                try:
+                    payload = self._read_payload()
+                    if (
+                        set(payload)
+                        - {
+                            "operation",
+                            "session_id",
+                            "state",
+                            "authenticated_actor",
+                            "external_principal",
+                        }
+                        or payload.get("operation") != "presence"
+                        or (("authenticated_actor" in payload) == ("external_principal" in payload))
+                        or not isinstance(payload.get("session_id"), str)
+                        or _REQUEST_ID_PATTERN.fullmatch(payload["session_id"]) is None
+                        or payload.get("state") not in ("active", "heartbeat", "inactive")
+                    ):
+                        raise ValueError("Presence payload is invalid")
+                    self._write_json(
+                        HTTPStatus.OK,
+                        runtime.embedding_presence(
+                            payload["session_id"],
+                            payload["state"],
+                            *self._identity_from_payload(payload),
+                        ),
+                    )
+                except (IdentityBoundaryError, TypeError, ValueError):
+                    self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid presence request"})
+                return
             if parsed.path == "/conversation/main":
                 try:
                     payload = self._read_payload()

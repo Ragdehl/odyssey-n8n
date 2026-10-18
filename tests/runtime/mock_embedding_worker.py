@@ -14,6 +14,11 @@ def main() -> int:
     for line in sys.stdin:
         request = json.loads(line)
         texts = request["texts"]
+        if request["mode"] == "warm":
+            assert texts == []
+            sys.stdout.write('{"ready":true}\n')
+            sys.stdout.flush()
+            continue
         if "FAIL_WORKER" in texts:
             return 8
         vectors = [[float(len(text)), float(sum(map(ord, text)) % 1000 + 1)] for text in texts]

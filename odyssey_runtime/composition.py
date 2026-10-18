@@ -2243,6 +2243,29 @@ class RuntimeComposition:
         del authenticated_actor, external_principal
         raise ValueError("only the main conversation is available")
 
+    def embedding_presence(
+        self,
+        session_id: str,
+        state: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """DEV-only browser presence: schedule ONNX loading without delaying UI.
+
+        This is a performance signal, never identity/knowledge evidence.
+        """
+        from odyssey_runtime.isolated_embeddings import IsolatedFastEmbedTextEmbedder
+
+        if (
+            os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+            or not isinstance(self.notes_embedder, IsolatedFastEmbedTextEmbedder)
+            or (authenticated_actor is None and external_principal is None)
+        ):
+            raise ValueError("Embedding presence is unavailable")
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        self.notes_embedder.presence(actor, session_id, state)
+        return {"ok": True}
+
     def main_conversation(
         self,
         authenticated_actor: AuthenticatedActorContext | None = None,

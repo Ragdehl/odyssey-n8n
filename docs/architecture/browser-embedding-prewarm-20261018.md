@@ -1,0 +1,21 @@
+
+## 18-10-2026 — Precarga al entrar en Odyssey, mantener caliente hasta 15 min tras salir
+
+### Necesidad funcional del usuario
+La primera consulta semántica NO debería pagar el tiempo de cargar pesos ONNX si la app lleva abierta unos segundos. Precargar en segundo plano al abrir y reactivar la pestaña, sin bloquear la vista de chat. Mientras la app permanezca visible, el usuario debe poder consultar durante más de 15min sin que el worker se apague. Una vez sale/cierra o se oculta, conservar ONNX **hasta 15 minutos desde esa actividad** y liberarlo si no hay consultas. Cuando el móvil cierra la app abruptamente sin emitir evento, evitar sesión fantasma perpetua.
+
+### Implementación experimental solo DEV
+- El navegador `odyssey_web/presence.js` emite `POST /api/conversation` con `operation=presence`, `session_id` UUID **efímero por pestaña**, `state=active|heartbeat|inactive`. Módulo iniciado de forma no bloqueante al cargar `app.js` **solo si el marcador autenticado muestra DEV**. `active` en apertura, retorno de segundo plano o `pageshow`; heartbeat cada 60s mientras visible; `inactive` con `keepalive` en `visibilitychange` oculto y `pagehide`. Error de red no bloquea chat ni escritor. Cada pestaña tiene su token distinto.
+- Reutiliza el webhook autorizado `/api/conversation` y la identidad n8n existente, sin ruta pública o servidor extra. La operación se comprueba y limita también en el adapter HTTP privado `/conversation/presence` (ID estricto, estados, actor obligatorio y DEV only). No toca Markdown, notas, Planner ni tablas.
+- `IsolatedFastEmbedTextEmbedder.presence(actor,session,state)` conserva leases efímeros (máx. 32 simultáneos), prewarm daemon deduplicado y handshake privado `{"mode":"warm","texts":[]}` con el proceso hijo. El propio worker carga FastEmbed **sin calcular vectores de Notes/consulta** y responde `{"ready":true}`. El HTTP devuelve `{"ok":true}` sin esperar la carga ONNX. El resto de embeddings sigue usando el mismo proceso y protocolo serializado.
+- Los heartbeats mantienen el proceso vivo mientras haya alguna pestaña activa. `inactive` del último tab reinicia el contador de inactividad de **900 segundos** que ya estaba configurado. Si Android pierde el cierre, un lease sin heartbeat caduca en ~150s y empieza entonces el período de 15min. Una segunda pestaña evita que se descargue el modelo al cerrar la primera. Sin consultas no es necesario ejecutar embeddings nuevos para mantenerlo caliente.
+- Rutas estáticas actualizadas para servir el nuevo módulo `presence.js` desde n8n; `deploy/odyssey-dev-product-routes.tsv` y tests de inventario para no dejar un import inservible. No se añaden dependencias externas.
+
+### Evidencia
+- Tests Python `tests/runtime/test_embedding_browser_presence.py`: ruta HTTP autorizada, primera apertura no espera al warmup, estado caliente por heartbeat, salir y liberar tras grace (con idle acortado para test), dos pestañas, rechazo actor/payload/PROD, expiración de tab perdida. Casos de adapter heredado y tests del protocolo en `tests/runtime/test_isolated_embedding_worker.py`.
+- Tests Node `tests/odyssey_web_presence.test.mjs`: apertura, heartbeat, ocultación, reaparición, pagehide, keepalive, errores de red ignorados y cierre. Estática y seguridad n8n: `tests/test_odyssey_online_workflow.py`, `tests/test_odyssey_web_static.py`.
+- Suite focal 52 PASS; gate transversal y desplegar/prueba n8n+browser en DEV pendientes de cierre.
+
+### Limitaciones importantes
+- No se puede prometer 0ms en una búsqueda enviada inmediatamente al primer frame, porque la precarga ONNX aún puede estar en curso y compite por CPU durante unos 2–3s. No bloquear el chat esperando ready para ocultar ese hecho. La UX debe aprovechar el tiempo habitual de lectura/conversación antes de la primera búsqueda; medir cold/warm en DEV.
+- Mientras la app esté abierta, ONNX mantiene ~650 MiB RAM. Después de salir, hasta 15min (hasta ~17.5min si cierre perdido y heartbeat TTL). Esta política prioriza latencia/UX; no resuelve el consumo máximo de memoria durante búsquedas ni el requisito de móvil. El siguiente esfuerzo es búsqueda determinista sin ONNX y evaluación de un modelo multilingüe más ligero, no multiplicar procesos prewarming.

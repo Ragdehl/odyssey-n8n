@@ -7,6 +7,7 @@ import {
   requestConversation,
 } from "./client.js";
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
+import {startEmbeddingPresence} from "./presence.js";
 import {mountCalendar} from "./calendar.js";
 import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";
 
@@ -65,6 +66,11 @@ function showDeploymentMarker() {
 }
 
 showDeploymentMarker();
+
+// DEV pilot: start loading local ONNX on page entry without delaying chat UI.
+if (globalThis.ODYSSEY_DEPLOYMENT?.environment === "DEV") {
+  startEmbeddingPresence({endpoint: conversationEndpoint});
+}
 
 // Application controllers remain mounted for the page lifetime so each surface keeps its local state.
 const notesController = notesSurface

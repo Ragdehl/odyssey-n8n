@@ -28,6 +28,10 @@ def main() -> int:
         try:
             request = json.loads(line)
             mode, texts = request["mode"], request["texts"]
+            if mode == "warm" and texts == []:
+                sys.stdout.buffer.write(b'{"ready":true}\n')
+                sys.stdout.buffer.flush()
+                continue
             if (
                 mode not in ("documents", "queries")
                 or not isinstance(texts, list)

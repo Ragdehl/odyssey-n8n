@@ -43,12 +43,64 @@ class IsolatedFastEmbedTextEmbedder:
         self._request_timeout = request_timeout_seconds
         self._lock = threading.RLock()
         self._worker: subprocess.Popen[bytes] | None = None
+        # Volatile foreground browser leases, not canonical user state.
+        self._sessions: dict[tuple[str, str], float] = {}
+        self._warm_pending = False
         self._closed = False
         self._last_used = time.monotonic()
         self._reaper = threading.Thread(
             target=self._idle_reaper, daemon=True, name="odyssey-embedding-idle-reaper"
         )
         self._reaper.start()
+
+    def presence(self, actor: str, session_id: str, state: str) -> None:
+        """An authenticated browser tab keeps ONNX hot; leaving starts the idle grace.
+
+        A lost pagehide/connection is bounded by a two-minute heartbeat lease.
+        The browser never blocks on the first model load.
+        """
+        if state not in ("active", "heartbeat", "inactive"):
+            raise ValueError("Invalid presence state")
+        with self._lock:
+            if self._closed:
+                raise SemanticIndexError("Embedding worker is closed")
+            key = (actor, session_id)
+            now = time.monotonic()
+            self._prune_sessions(now)
+            if state == "inactive":
+                removed = self._sessions.pop(key, None)
+                if removed is not None and not self._sessions:
+                    self._last_used = now
+                return
+            if key not in self._sessions and len(self._sessions) >= 32:
+                raise ValueError("Too many open Odyssey sessions")
+            self._sessions[key] = now
+            if (self._worker is None or self._worker.poll() is not None) and not self._warm_pending:
+                self._warm_pending = True
+                threading.Thread(
+                    target=self._prewarm_in_background,
+                    daemon=True,
+                    name="odyssey-embedding-browser-prewarm",
+                ).start()
+
+    def _prune_sessions(self, now: float) -> None:
+        if not self._sessions:
+            return
+        for key, last_ping in tuple(self._sessions.items()):
+            if now - last_ping > 150:
+                del self._sessions[key]
+        if not self._sessions:
+            self._last_used = now
+
+    def _prewarm_in_background(self) -> None:
+        try:
+            self._call("warm", ())
+        except SemanticIndexError:
+            # A failed optimization never suppresses later normal embedding errors.
+            pass
+        finally:
+            with self._lock:
+                self._warm_pending = False
 
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         """Compute canonical document vectors, preserving order."""
@@ -68,7 +120,7 @@ class IsolatedFastEmbedTextEmbedder:
 
     def _call(self, mode: str, texts: Sequence[str]) -> list[list[float]]:
         values = list(texts)
-        if not values:
+        if not values and mode != "warm":
             return []
         if not all(isinstance(item, str) for item in values):
             raise ValueError("Embedding texts must be strings")
@@ -107,6 +159,10 @@ class IsolatedFastEmbedTextEmbedder:
                     if response.endswith(b"\n"):
                         break
                 outcome = json.loads(response)
+                if mode == "warm":
+                    if outcome != {"ready": True}:
+                        raise ValueError("Embedding worker warmup failed")
+                    return []
                 vectors = outcome["vectors"]
                 if not isinstance(vectors, list) or len(vectors) != len(values):
                     raise ValueError("Embedding worker returned incorrect vector cardinality")
@@ -182,9 +238,12 @@ class IsolatedFastEmbedTextEmbedder:
             with self._lock:
                 if self._closed:
                     return
+                now = time.monotonic()
+                self._prune_sessions(now)
                 if (
                     self._worker is not None
-                    and time.monotonic() - self._last_used >= self._idle_seconds
+                    and not self._sessions
+                    and now - self._last_used >= self._idle_seconds
                 ):
                     self._stop_worker()
 
