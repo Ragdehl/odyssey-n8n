@@ -24,3 +24,5 @@ The prior offline Bubblewrap sandbox hides host files and blocks network, but a 
 ## Verificación final
 
 Gate transversal en la Pi: **1156 Python PASS + 7 subtests PASS + 178 JavaScript PASS**; controles deterministas del proxy incluidos en los 178. No se ejecutaron nuevas llamadas GPT. El comando exploratorio `codex sandbox` mostró que esta versión del CLI exige un `--sandbox-state-json` o perfil explícito y, sin esa configuración, falló cerrado (RC=2); no se verificó el aislamiento de lectura de su sandbox nativo. Por tanto la afirmación de que las sesiones Codex online están totalmente aisladas sigue sin estar sustentada.
+
+Al explorar el sandbox nativo Codex sin invocar modelos se confirmó que los perfiles del CLI requieren una tabla `[permissions]` explícita; el perfil de prueba de solo lectura abortó sin ejecutarse, y no validó por tanto la inexistencia de acceso al HOME desde las sesiones online. No se deduce de este rechazo una garantía de aislamiento.

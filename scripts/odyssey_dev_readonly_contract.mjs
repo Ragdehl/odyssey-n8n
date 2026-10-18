@@ -1,7 +1,7 @@
 // Read-only n8n proxy contract for browser smoke testing.
 // No authentication, persistence, product mutation or write endpoints.
 export const OPERATIONS = Object.freeze({
-  "/api/conversation": Object.freeze(["main", "progress", "history"]),
+  "/api/conversation": Object.freeze(["main", "progress"]),
   "/api/notes": Object.freeze(["query", "capabilities", "detail", "backlinks"]),
   "/api/calendar": Object.freeze(["month", "day", "schedule"]),
 });
