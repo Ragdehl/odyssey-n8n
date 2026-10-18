@@ -56,8 +56,9 @@ def test_dev_workflow_pricing_uses_runtime_snapshot_with_gpt6_luna() -> None:
     )
     assert "DEV_PRICING=$DEV_SOURCE/config/runtime-pricing-snapshot.json" in source
     assert "phase20_answerer/pricing_snapshot.json" not in source
-    assert '"gpt-6-luna"' in pricing
-    assert '"as_of": "2026-10-02"' in pricing
+    assert "gpt-6-luna" in json.loads(pricing)["models"]
+    # A newer approved runtime pricing snapshot must not fail a stale date pin.
+    assert json.loads(pricing)["as_of"] >= "2026-10-02"
 
 
 def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
@@ -305,6 +306,7 @@ def valid_publication_rows() -> list[dict[str, object]]:
                 ("GET", "calendar.js"),
                 ("GET", "calendar-client.js"),
                 ("GET", "progress.js"),
+                ("GET", "presence.js"),
             ),
         },
     ]

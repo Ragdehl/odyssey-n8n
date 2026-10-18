@@ -26,6 +26,8 @@ _ALLOWED_GATES = frozenset(
         "task_scope_verdict",
         "task_scope_rejected",
         "task_batch_plan_rejected",
+        "task_second_scope_verdict",
+        "task_cardinality_disagreed",
         "speaker_count_retry",
     }
 )

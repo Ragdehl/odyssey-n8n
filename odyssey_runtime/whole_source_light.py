@@ -810,9 +810,39 @@ class WholeSourceLightExecutor:
             if scope.get("only_task_semantics") is not True or scope.get("source_quote") != source:
                 self._observe_prewrite(delivery, "task_scope_rejected")
                 return self._abstain(delivery)
-            if scope.get("exactly_one_operation") is True:
-                # Exactly one domain operation retains the standard Task app
-                # interpreter, including lifecycle and work sessions.
+            single_operation = scope.get("exactly_one_operation") is True
+            if single_operation and self.task_create_batch_enabled:
+                # A single-scope hypothesis cannot authorize dropping a
+                # second obligation. Seek INDEPENDENT source-wide cardinality
+                # evidence before calling the single-operation Task delegate.
+                # Only the exact unchanged source passes to the second
+                # auditor; neither reviewer receives the other's judgment.
+                independent = self._ask(
+                    ROUTER_MODEL,
+                    TASK_ONLY_SCOPE_PROMPT,
+                    {"original_source": source},
+                    TASK_ONLY_SCOPE_SCHEMA,
+                    "odyssey_task_only_scope_v1",
+                )
+                self._observe_prewrite(
+                    delivery,
+                    "task_second_scope_verdict",
+                    task_only=independent.get("only_task_semantics") is True,
+                    one_operation=independent.get("exactly_one_operation") is True,
+                    source_aligned=independent.get("source_quote") == source,
+                )
+                if (
+                    independent.get("only_task_semantics") is not True
+                    or independent.get("source_quote") != source
+                ):
+                    self._observe_prewrite(delivery, "task_scope_rejected")
+                    return self._abstain(delivery)
+                if independent.get("exactly_one_operation") is not True:
+                    self._observe_prewrite(delivery, "task_cardinality_disagreed")
+                    single_operation = False
+            if single_operation:
+                # Exactly one independently corroborated operation retains
+                # the standard Task interpreter including lifecycle/sessions.
                 if self.progress is not None:
                     self.progress("action.delegate.started", {})
                 return self.task_delegate(source, delivery, actor)

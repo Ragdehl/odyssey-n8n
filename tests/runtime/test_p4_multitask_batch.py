@@ -144,3 +144,79 @@ def test_batch_cannot_downgrade_work_session_commands_to_task_create(tmp_path):
     result = runtime.execute_product(SOURCE, "two-task-lifecycle-veto", "main", actor)
     assert result["status"] == "needs_attention"
     assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_first_scope_misclassifies_two_tasks_but_second_detects_both(tmp_path):
+    """A single Task delegate must never drop an independently found second action."""
+    repo, actor, service, runtime = _fixture(tmp_path)
+    service.task_create_batch_enabled = True
+    first = {**SCOPE, "exactly_one_operation": True}
+    independent = copy.deepcopy(SCOPE)
+    rows = [copy.deepcopy(ROUTE), first, independent, *_rows()[2:]]
+    service.client = RecordedClient(rows)
+    result = runtime.execute_product(SOURCE, "two-task-auditor-disagreement", "main", actor)
+    assert result["status"] == "completed", result
+    assert (
+        len(
+            [
+                parse_note(repo.read_text(p))
+                for p in repo.list_markdown_paths()
+                if parse_note(repo.read_text(p)).metadata["type"] == "task"
+            ]
+        )
+        == 2
+    )
+    assert service.client.calls.count("odyssey_task_only_scope_v1") == 2
+
+
+def test_unverified_single_scope_never_calls_legacy_task_delegate(tmp_path):
+    from odyssey_core.application import ApplicationResult, ApplicationStatus
+
+    calls = []
+
+    def delegate(*args):
+        calls.append(args)
+        return ApplicationResult("unexpected", ApplicationStatus.COMPLETED, (), ())
+
+    repo, actor, service, runtime = _fixture(tmp_path, task_delegate=delegate)
+    service.task_create_batch_enabled = True
+    source = "Inicia la sesión de trabajo de una tarea."
+    route = {**ROUTE, "capabilities": ["tasks"]}
+    claimed = {
+        "only_task_semantics": True,
+        "exactly_one_operation": True,
+        "source_quote": source,
+    }
+    independently_rejected = {**claimed, "only_task_semantics": False}
+    service.client = RecordedClient([route, claimed, independently_rejected])
+    result = runtime.execute_product(source, "unsafe-one-scope", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert calls == []
+    assert len(repo.list_markdown_paths()) == 1
+
+
+def test_two_independent_single_task_scopes_preserve_normal_task_delegate(tmp_path):
+    from odyssey_core.application import ApplicationResult, ApplicationStatus
+
+    calls = []
+
+    def delegate(*args):
+        calls.append(args)
+        # This is a routing spy, not a persistent Task execution: without a
+        # canonical durable write/receipt it must not claim COMPLETED.
+        return ApplicationResult(args[1], ApplicationStatus.NEEDS_ATTENTION, (), ())
+
+    repo, actor, service, runtime = _fixture(tmp_path, task_delegate=delegate)
+    service.task_create_batch_enabled = True
+    source = "Completa la tarea de hoy."
+    route = {**ROUTE, "capabilities": ["tasks"]}
+    verified = {
+        "only_task_semantics": True,
+        "exactly_one_operation": True,
+        "source_quote": source,
+    }
+    service.client = RecordedClient([route, verified, verified])
+    result = runtime.execute_product(source, "verified-single", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert len(calls) == 1
+    assert len(repo.list_markdown_paths()) == 1
