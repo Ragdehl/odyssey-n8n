@@ -516,7 +516,41 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                     last_error="Authenticated live browser and deployment must be verified separately",
                 )
                 return state
-            if any(v["verdict"] == "blocked" for v in reviews.values()):
+            # A reviewer can simultaneously find a fixable defect and lack
+            # an external browser or benchmark. Repair code findings within
+            # budget; do NOT interpret an external blocker as another coding
+            # failure. Conversely do not silently skip a fixable blocker just
+            # because an unrelated external gate was also unavailable.
+            fixable = any(not gate.get("pass", False) for gate in gates.values()) or any(
+                judgment.get("verdict") == "fail"
+                or any(
+                    row.get("severity") == "blocking" and row.get("actionability") == "repairable"
+                    for row in judgment.get("findings", [])
+                )
+                for judgment in reviews.values()
+            )
+            external = any(
+                judgment.get("verdict") == "blocked"
+                or any(
+                    row.get("severity") == "blocking" and row.get("actionability") == "external"
+                    for row in judgment.get("findings", [])
+                )
+                for judgment in reviews.values()
+            )
+            if fixable and attempt < max_rounds:
+                update(job, state, "repair_needed", active_role=None, ready_for_user=False)
+                continue
+            if fixable:
+                update(
+                    job,
+                    state,
+                    "blocked_repair_budget",
+                    active_role=None,
+                    ready_for_user=False,
+                    last_error="Repairable errors remain after the bounded iteration budget",
+                )
+                return state
+            if external:
                 update(
                     job,
                     state,
@@ -526,8 +560,15 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                     last_error="An independent auditor requires a non-automated external gate",
                 )
                 return state
-            update(job, state, "repair_needed", active_role=None, ready_for_user=False)
-        update(job, state, "blocked", last_error="Bounded repair budget exhausted")
+            update(
+                job,
+                state,
+                "blocked_review_uncertain",
+                active_role=None,
+                ready_for_user=False,
+                last_error="Reviewers did not grant a clear proof of completion",
+            )
+            return state
     except (CycleError, OSError, ValueError) as err:
         update(job, state, "blocked", ready_for_user=False, last_error=str(err))
     return state
@@ -576,7 +617,9 @@ def main() -> int:
             (path / "STOP").touch()
             value = {"job": args.job, "stop_requested": True}
         print(json.dumps(value, ensure_ascii=False, indent=2))
-        return 0
+        # A successful shell invocation is not a completed feature. CI/n8n
+        # must also check the JSON phase; return nonzero for blocked pilots.
+        return 3 if args.action == "run" and value.get("phase", "").startswith("blocked") else 0
     except CycleError as err:
         print(f"Odyssey agent-team: {err}", file=sys.stderr)
         return 2

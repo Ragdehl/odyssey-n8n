@@ -32,13 +32,21 @@
           },
           "action": {
             "type": "string"
+          },
+          "actionability": {
+            "type": "string",
+            "enum": [
+              "repairable",
+              "external"
+            ]
           }
         },
         "required": [
           "severity",
           "path",
           "reason",
-          "action"
+          "action",
+          "actionability"
         ],
         "additionalProperties": false
       }

@@ -297,3 +297,121 @@ def test_chatgpt_failed_review_invokes_builder_only_on_second_round(monkeypatch,
     assert result["phase"] == "reviewed_browser_gate_pending"
     assert calls == [*cycle.REVIEW_ROLES, "builder", *cycle.REVIEW_ROLES]
     assert result["round"] == 2
+
+
+def test_repairable_review_finding_is_not_suppressed_by_external_blocker(monkeypatch, tmp_path):
+    """One reviewer can report code fault and browser dependency at once."""
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 2000)
+    monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda _path, _job: None)
+    monkeypatch.setattr(
+        cycle,
+        "running",
+        lambda *_args, **_kw: type("Git", (), {"returncode": 0, "stdout": ""})(),
+    )
+    (tmp_path / "isolated").mkdir()
+    job = "p4-mixed-review"
+    state_root = cycle.job_path(job)
+    state_root.mkdir(parents=True)
+    (state_root / "brief.md").write_text(
+        "Test a code issue plus missing external acceptance without user intervention."
+    )
+    cycle.atomic_json(
+        state_root / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "b" * 40,
+            "review_base": "a" * 40,
+            "feature_commit": "b" * 40,
+            "implemented_by": "chatgpt",
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+    calls = []
+
+    def reviewer(role, *_args, **_kwargs):
+        calls.append(role)
+        if role == "builder":
+            return {"role": role}
+        if role == "testing":
+            findings = (
+                [
+                    {
+                        "severity": "blocking",
+                        "path": "test.py",
+                        "reason": "Fake regression",
+                        "action": "Repair test",
+                        "actionability": "repairable",
+                    },
+                    {
+                        "severity": "blocking",
+                        "path": "browser",
+                        "reason": "No authenticated browser",
+                        "action": "External gate",
+                        "actionability": "external",
+                    },
+                ]
+                if calls.count("builder") == 0
+                else [
+                    {
+                        "severity": "blocking",
+                        "path": "browser",
+                        "reason": "No authenticated browser",
+                        "action": "External gate",
+                        "actionability": "external",
+                    },
+                ]
+            )
+            return {"verdict": {"verdict": "blocked", "findings": findings}}
+        return {"verdict": {"verdict": "pass", "findings": []}}
+
+    monkeypatch.setattr(cycle, "codex", reviewer)
+    monkeypatch.setattr(
+        cycle,
+        "deterministic_gates",
+        lambda *_: {"cross_surface": {"pass": True}},
+    )
+    state = cycle.run(job, 3, live=True)
+    assert calls == [*cycle.REVIEW_ROLES, "builder", *cycle.REVIEW_ROLES]
+    assert state["phase"] == "blocked_external_evidence"
+    assert state["round"] == 2
+    assert not state["ready_for_user"]
+
+
+def test_supervisor_review_schema_distinguishes_fixable_and_external_findings():
+    schema = json.loads(cycle.SCHEMA.read_text())
+    item = schema["properties"]["findings"]["items"]
+    assert "actionability" in item["required"]
+    assert set(item["properties"]["actionability"]["enum"]) == {
+        "repairable",
+        "external",
+    }
+
+
+def test_cli_blocked_cycle_exits_nonzero_for_shell_orchestration(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(
+        cycle,
+        "run",
+        lambda _job, _rounds, _live: {
+            "phase": "blocked_external_evidence",
+            "ready_for_user": False,
+        },
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "odyssey_agent_cycle.py",
+            "run",
+            "--job",
+            "safe-test-job",
+            "--live",
+        ],
+    )
+    assert cycle.main() == 3
