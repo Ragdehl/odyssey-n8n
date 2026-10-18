@@ -81,7 +81,15 @@ def test_acceptance_profile_is_validated_and_persisted_for_each_author(
         cycle.plan(cycle.ROLES / "pilot-p4.md", "invalid-profile-job", acceptance="future")
 
 
-def test_successful_tooling_review_is_ready_only_for_allowlisted_diff(monkeypatch, tmp_path):
+@pytest.fixture
+def mocked_review_snapshot(monkeypatch):
+    """Keep supervisor flow tests independent of a physical Git fixture."""
+    monkeypatch.setattr(cycle, "review_snapshot", lambda *_: b"unchanged")
+
+
+def test_successful_tooling_review_is_ready_only_for_allowlisted_diff(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
     monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
@@ -191,7 +199,7 @@ def test_tooling_product_path_tampering_blocks_before_gates_or_reviewers(monkeyp
     assert all("deploy" not in " ".join(args) for args in calls)
 
 
-def test_tooling_profile_rejects_a_blocked_reviewer(monkeypatch, tmp_path):
+def test_tooling_profile_rejects_a_blocked_reviewer(monkeypatch, tmp_path, mocked_review_snapshot):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
     monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
@@ -252,7 +260,7 @@ def test_live_never_runs_implicitly(monkeypatch):
 
 
 def test_bounded_repair_and_external_browser_blocks_do_not_claim_product_ready(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, mocked_review_snapshot
 ):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 2100)
@@ -296,7 +304,9 @@ def test_bounded_repair_and_external_browser_blocks_do_not_claim_product_ready(
     assert roles == [("builder", False)] + [(x, True) for x in cycle.REVIEW_ROLES]
 
 
-def test_a_blocked_independent_reviewer_stops_repair_loop(monkeypatch, tmp_path):
+def test_a_blocked_independent_reviewer_stops_repair_loop(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
     monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
@@ -384,7 +394,9 @@ def test_chatgpt_handoff_rejects_untrusted_git_revision(tmp_path, monkeypatch, b
         )
 
 
-def test_chatgpt_first_iteration_skips_codex_builder_but_same_reviewers_run(monkeypatch, tmp_path):
+def test_chatgpt_first_iteration_skips_codex_builder_but_same_reviewers_run(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1800)
     monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
@@ -429,7 +441,9 @@ def test_chatgpt_first_iteration_skips_codex_builder_but_same_reviewers_run(monk
     assert "builder.md" not in [p.name for p in (state_root / "round-1").iterdir()]
 
 
-def test_chatgpt_failed_review_invokes_builder_only_on_second_round(monkeypatch, tmp_path):
+def test_chatgpt_failed_review_invokes_builder_only_on_second_round(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1800)
     monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
@@ -482,7 +496,9 @@ def test_chatgpt_failed_review_invokes_builder_only_on_second_round(monkeypatch,
     assert result["round"] == 2
 
 
-def test_repairable_review_finding_is_not_suppressed_by_external_blocker(monkeypatch, tmp_path):
+def test_repairable_review_finding_is_not_suppressed_by_external_blocker(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
     """One reviewer can report code fault and browser dependency at once."""
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 2000)
@@ -634,6 +650,7 @@ def test_incremental_round_status_and_failure_preservation(monkeypatch, tmp_path
         return type("Git", (), {"returncode": 0, "stdout": "modified" if changed else ""})()
 
     monkeypatch.setattr(cycle, "running", git)
+    monkeypatch.setattr(cycle, "review_snapshot", lambda *_: b"modified" if changed else b"")
     monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"offline": {"pass": True}})
     seen = []
 
@@ -960,7 +977,9 @@ def test_failing_offline_gate_skips_all_model_reviewers_and_preserves_logs(monke
     assert "insufficient token headroom" in status["last_error"].lower()
 
 
-def test_failing_gates_go_straight_to_bounded_builder_repair_without_review(monkeypatch, tmp_path):
+def test_failing_gates_go_straight_to_bounded_builder_repair_without_review(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
     monkeypatch.setattr(cycle, "workspace", lambda *_: tmp_path / "isolated")
@@ -1131,3 +1150,161 @@ def test_dirty_tracked_file_mutation_by_readonly_reviewer_is_detected_even_when_
     assert result["phase"] == "blocked"
     assert "changed" in result["last_error"].lower() or "mutat" in result["last_error"].lower()
     assert list(result["reviews"]) == []  # No approval of mutated worktree.
+
+
+def _disposable_git_repo(path):
+    """Create a synthetic repository for real content-snapshot tests."""
+    import subprocess
+
+    path.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@invalid.example"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Disposable Test"], cwd=path, check=True)
+    tracked = path / "existing.py"
+    tracked.write_text("value = 1\n")
+    subprocess.run(["git", "add", "existing.py"], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-qm", "synthetic base"], cwd=path, check=True)
+    return tracked
+
+
+@pytest.mark.parametrize("mutation", ["content", "staging", "mode", "deletion", "addition"])
+def test_review_snapshot_detects_tracked_content_and_index_mutations(tmp_path, mutation):
+    """Content, index state, paths, and mode all belong to the read-only boundary."""
+    import os
+    import subprocess
+
+    repo = tmp_path / "repo"
+    tracked = _disposable_git_repo(repo)
+    tracked.write_text("value = 2\n")
+    before = cycle.review_snapshot(repo)
+    if mutation == "content":
+        tracked.write_text("value = 3\n")
+    elif mutation == "staging":
+        subprocess.run(["git", "add", "existing.py"], cwd=repo, check=True)
+    elif mutation == "mode":
+        os.chmod(tracked, 0o755)
+    elif mutation == "deletion":
+        tracked.unlink()
+    else:
+        (repo / "added.txt").write_text("new")
+        subprocess.run(["git", "add", "added.txt"], cwd=repo, check=True)
+    assert cycle.review_snapshot(repo) != before
+
+
+def test_review_snapshot_hashes_untracked_content_without_following_symlinks(tmp_path):
+    """Same Git path listing cannot hide untracked edits or a changed symlink target."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    _disposable_git_repo(repo)
+    extra = repo / "untracked.txt"
+    extra.write_text("first")
+    before = cycle.review_snapshot(repo)
+    extra.write_text("other")
+    assert cycle.review_snapshot(repo) != before
+    extra.unlink()
+    private = tmp_path / "outside.txt"
+    private.write_text("private fixture")
+    extra.symlink_to(private)
+    linked = cycle.review_snapshot(repo)
+    private.write_text("different private fixture")
+    assert cycle.review_snapshot(repo) == linked  # Only link metadata, never target contents.
+    extra.unlink()
+    extra.symlink_to(tmp_path / "other-outside.txt")
+    assert cycle.review_snapshot(repo) != linked
+    assert (
+        subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        == "?? untracked.txt\n"
+    )
+
+
+def test_review_snapshot_fails_closed_when_untracked_content_exceeds_limit(monkeypatch, tmp_path):
+    repo = tmp_path / "repo"
+    _disposable_git_repo(repo)
+    (repo / "large.bin").write_bytes(b"abcd")
+    monkeypatch.setattr(cycle, "REVIEW_UNTRACKED_FILE_LIMIT", 3)
+    with pytest.raises(cycle.CycleError, match="too large"):
+        cycle.review_snapshot(repo)
+
+
+def test_untracked_file_mutation_by_readonly_reviewer_blocks_before_next_review(
+    monkeypatch, tmp_path
+):
+    """An unchanged untracked path listing cannot produce a reviewer approval."""
+    import subprocess
+
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    repo = tmp_path / "repo"
+    _disposable_git_repo(repo)
+    extra = repo / "untracked.txt"
+    extra.write_text("first")
+    monkeypatch.setattr(cycle, "workspace", lambda *_: repo)
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    job = "untracked-mutation-guard"
+    root = cycle.job_path(job)
+    root.mkdir(parents=True)
+    (root / "brief.md").write_text("Require content integrity for independent read-only reviews.")
+    cycle.atomic_json(
+        root / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "a" * 40,
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+    roles = []
+
+    def reviewer(role, _prompt, _dest, _evidence, *, read_only):
+        roles.append(role)
+        if read_only:
+            extra.write_text("other")
+            return {
+                "verdict": {"verdict": "pass", "findings": []},
+                "reported_tokens": 123,
+                "model": "gpt-6-luna",
+                "tier": "economy",
+                "routing_reason": "routine",
+            }
+        return {"role": role}
+
+    monkeypatch.setattr(cycle, "codex", reviewer)
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"offline": {"pass": True}})
+    before = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout
+    result = cycle.run(job, 1, live=True)
+    after = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout
+    assert before == after
+    assert roles == ["builder", "generality"]
+    assert result["phase"] == "blocked"
+    assert result["ready_for_user"] is False
+    assert result["reviews"] == {}
+    assert result["token_usage"]["sessions"] == [
+        {
+            "role": "generality",
+            "round": 1,
+            "model": "gpt-6-luna",
+            "tier": "economy",
+            "reason": "routine",
+            "reported_tokens": 123,
+        }
+    ]
+
+
+def test_semantic_qa_knows_own_review_cannot_depend_on_future_reviewers():
+    qa_contract = (cycle.ROLES / "testing.md").read_text()
+    assert "future reviewer" in qa_contract
+    assert "Never mark the feature FAIL or BLOCKED" in qa_contract
+    assert "--acceptance tooling" in qa_contract
+    assert "--acceptance product" in qa_contract

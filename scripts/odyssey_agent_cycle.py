@@ -17,11 +17,14 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 import re
+import select
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -46,6 +49,10 @@ TOOLING_PATHS = (
 )
 TIMEOUT = 1200
 MIN_MEMORY_MIB = 650
+REVIEW_GIT_OUTPUT_LIMIT = 64 * 1024 * 1024
+REVIEW_UNTRACKED_NAMES_LIMIT = 8 * 1024 * 1024
+REVIEW_UNTRACKED_FILE_LIMIT = 64 * 1024 * 1024
+REVIEW_UNTRACKED_TOTAL_LIMIT = 256 * 1024 * 1024
 
 
 class CycleError(RuntimeError):
@@ -73,6 +80,150 @@ def running(command: list[str], *, cwd: Path | None = None, timeout=30, text=Non
         timeout=timeout,
         check=False,
     )
+
+
+def _bounded_git_output(command: list[str], dest: Path, limit: int) -> bytes:
+    """Read Git output with a hard byte and time bound; reject incomplete snapshots."""
+    process = subprocess.Popen(
+        command,
+        cwd=dest,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    output = bytearray()
+    deadline = time.monotonic() + 30
+    try:
+        assert process.stdout is not None
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([process.stdout], [], [], remaining)[0]:
+                raise CycleError(
+                    "Cannot establish bounded read-only review snapshot: Git timed out"
+                )
+            chunk = os.read(process.stdout.fileno(), min(65536, limit + 1 - len(output)))
+            if not chunk:
+                break
+            output.extend(chunk)
+            if len(output) > limit:
+                raise CycleError(
+                    "Cannot establish bounded read-only review snapshot: Git output too large"
+                )
+        if process.wait(timeout=max(0.001, deadline - time.monotonic())):
+            raise CycleError("Cannot establish read-only review snapshot: Git failed")
+        return bytes(output)
+    except subprocess.TimeoutExpired as err:
+        raise CycleError(
+            "Cannot establish bounded read-only review snapshot: Git timed out"
+        ) from err
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        if process.stdout is not None:
+            process.stdout.close()
+
+
+def _untracked_fingerprint(dest: Path, name: bytes, remaining: int) -> tuple[bytes, int]:
+    """Hash one untracked regular file or symlink without following links outside the worktree."""
+    parts = os.fsdecode(name).split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise CycleError("Cannot establish read-only review snapshot: unsafe untracked path")
+    directory = os.open(dest, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in parts[:-1]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        name_part = parts[-1]
+        before = os.stat(name_part, dir_fd=directory, follow_symlinks=False)
+        fingerprint = hashlib.sha256()
+        fingerprint.update(str(stat.S_IMODE(before.st_mode)).encode("ascii"))
+        if stat.S_ISLNK(before.st_mode):
+            fingerprint.update(b"link\0")
+            fingerprint.update(os.fsencode(os.readlink(name_part, dir_fd=directory)))
+            size = 0
+        elif stat.S_ISREG(before.st_mode):
+            if before.st_size > min(REVIEW_UNTRACKED_FILE_LIMIT, remaining):
+                raise CycleError(
+                    "Cannot establish bounded read-only review snapshot: untracked file too large"
+                )
+            fingerprint.update(b"file\0")
+            file_descriptor = os.open(
+                name_part, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory
+            )
+            try:
+                if not stat.S_ISREG(os.fstat(file_descriptor).st_mode):
+                    raise CycleError("Cannot establish read-only review snapshot: file changed")
+                size = 0
+                while chunk := os.read(file_descriptor, 65536):
+                    size += len(chunk)
+                    if size > min(REVIEW_UNTRACKED_FILE_LIMIT, remaining):
+                        raise CycleError(
+                            "Cannot establish bounded read-only review snapshot: untracked file too large"
+                        )
+                    fingerprint.update(chunk)
+                opened = os.fstat(file_descriptor)
+            finally:
+                os.close(file_descriptor)
+            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                raise CycleError("Cannot establish read-only review snapshot: file changed")
+        else:
+            raise CycleError(
+                "Cannot establish read-only review snapshot: unsupported untracked entry"
+            )
+        after = os.stat(name_part, dir_fd=directory, follow_symlinks=False)
+
+        def stable(value):
+            return (
+                value.st_dev,
+                value.st_ino,
+                value.st_mode,
+                value.st_size,
+                value.st_mtime_ns,
+                value.st_ctime_ns,
+            )
+
+        if stable(before) != stable(after):
+            raise CycleError("Cannot establish read-only review snapshot: file changed")
+        return fingerprint.digest(), size
+    finally:
+        os.close(directory)
+
+
+def review_snapshot(dest: Path) -> bytes:
+    """Fingerprint HEAD, staged/unstaged tracked content, and all visible untracked content.
+
+    A snapshot that exceeds explicit resource limits or cannot be read fails closed.
+    Git's binary diffs cover tracked content, mode changes, additions and deletions;
+    separate index and worktree diffs also detect staged/unstaged rearrangement.
+    """
+    digest = hashlib.sha256()
+    commands = (
+        ["git", "rev-parse", "--verify", "HEAD"],
+        ["git", "diff", "--binary", "--no-ext-diff", "--no-textconv", "HEAD", "--"],
+        ["git", "diff", "--binary", "--no-ext-diff", "--no-textconv", "--cached", "HEAD", "--"],
+        ["git", "diff", "--binary", "--no-ext-diff", "--no-textconv", "--"],
+    )
+    for command in commands:
+        value = _bounded_git_output(command, dest, REVIEW_GIT_OUTPUT_LIMIT)
+        digest.update(len(value).to_bytes(8, "big"))
+        digest.update(value)
+    names = _bounded_git_output(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+        dest,
+        REVIEW_UNTRACKED_NAMES_LIMIT,
+    )
+    if names and not names.endswith(b"\0"):
+        raise CycleError("Cannot establish read-only review snapshot: invalid Git path list")
+    remaining = REVIEW_UNTRACKED_TOTAL_LIMIT
+    for name in sorted(value for value in names.split(b"\0") if value):
+        value, size = _untracked_fingerprint(dest, name, remaining)
+        remaining -= size
+        digest.update(len(name).to_bytes(8, "big"))
+        digest.update(name)
+        digest.update(value)
+    return digest.digest()
 
 
 def check_repository() -> None:
@@ -765,11 +916,7 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
             reviews = {}
             for role in REVIEW_ROLES:
                 update(job, state, "reviewing", active_role=role)
-                before = running(
-                    ["git", "status", "--porcelain", "--untracked-files=all"], cwd=dest
-                )
-                if before.returncode:
-                    raise CycleError("Cannot record review-only Git baseline")
+                before = review_snapshot(dest)
                 review = codex(
                     role,
                     instructions(role, brief, review_base or state["baseline_commit"], gates)
@@ -778,16 +925,16 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                     evidence,
                     read_only=True,
                 )
-                after = running(["git", "status", "--porcelain", "--untracked-files=all"], cwd=dest)
-                if after.returncode or after.stdout != before.stdout:
-                    raise CycleError("Read-only agent unexpectedly changed repository files")
+                # Account for a completed model session even when its review is rejected.
+                record_agent_usage(job, state, role, review)
+                if review_snapshot(dest) != before:
+                    raise CycleError("Read-only agent unexpectedly changed repository content")
                 reviews[role] = review["verdict"]
                 artifact = evidence / (role + "-completed.json")
                 atomic_json(artifact, review)
                 state["review_artifacts"][role] = str(artifact)
-                # Preserve a valid review before applying the shared usage cap.
+                # Publish only a review whose repository snapshot was unchanged.
                 update(job, state, "reviewing", reviews=dict(reviews), active_role=None)
-                record_agent_usage(job, state, role, review)
             findings = {"gates": gates, "reviews": reviews}
             succeeded = all(check["pass"] for check in gates.values()) and all(
                 v["verdict"] == "pass" for v in reviews.values()
