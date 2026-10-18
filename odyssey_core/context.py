@@ -926,18 +926,22 @@ class ContextIndex:
         current: dict[str, tuple[Any, ...]] = {}
         inventory_current: dict[str, tuple[str, str, str, str, str, str, str]] = {}
         seen_ids: set[str] = set()
+        unchanged_requested: set[str] = set()
         for path in repository.list_markdown_paths():
             before_version = repository.file_version(path)
             previous = old_inventory.get(path)
-            if (
-                previous is not None
-                and previous[2] == json.dumps(before_version, ensure_ascii=False)
-                and previous[1] not in requested
+            if previous is not None and previous[2] == json.dumps(
+                before_version, ensure_ascii=False
             ):
                 if previous[1] in seen_ids:
                     raise ContextIndexError("Incremental source contains duplicate IDs")
                 seen_ids.add(previous[1])
                 inventory_current[previous[1]] = previous
+                if previous[1] in requested:
+                    # The physical source is unchanged. Preserve its vector,
+                    # deterministic projection, facts and aliases as-is.
+                    # Wikilink resolution is still globally refreshed below.
+                    unchanged_requested.add(previous[1])
                 continue
             raw = repository.read_text(path)
             try:
@@ -1019,8 +1023,13 @@ class ContextIndex:
                 fact_state,
             )
 
+        changed_requested = tuple(
+            note_id for note_id in requested if note_id not in unchanged_requested
+        )
         selected = [(note_id, current[note_id]) for note_id in requested if note_id in current]
-        vectors = list(embedder.embed_documents([item[1][5] for item in selected]))
+        vectors = (
+            list(embedder.embed_documents([item[1][5] for item in selected])) if selected else []
+        )
         if len(vectors) != len(selected):
             raise ContextIndexError("Embedding runtime returned the wrong number of vectors")
         normalized = [_normalized_vector(vector) for vector in vectors]
@@ -1028,7 +1037,9 @@ class ContextIndex:
         if len(dimensions) > 1:
             raise ContextIndexError("Embedding runtime returned inconsistent dimensions")
 
-        affected = frozenset(requested)
+        # Unchanged requested Notes are just as bound to current SQL as
+        # unrelated Notes; missing/corrupt indexed rows must fail closed.
+        affected = frozenset(changed_requested)
         try:
             with sqlite3.connect(self.path) as connection:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
@@ -1105,17 +1116,17 @@ class ContextIndex:
                     )
                 connection.executemany(
                     "DELETE FROM vault_inventory WHERE note_id = ?",
-                    ((note_id,) for note_id in requested),
+                    ((note_id,) for note_id in changed_requested),
                 )
                 connection.executemany(
                     "DELETE FROM vault_aliases WHERE note_id = ?",
-                    ((note_id,) for note_id in requested),
+                    ((note_id,) for note_id in changed_requested),
                 )
                 connection.executemany(
                     "INSERT INTO vault_inventory VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         inventory_current[note_id]
-                        for note_id in requested
+                        for note_id in changed_requested
                         if note_id in inventory_current
                     ),
                 )
@@ -1123,7 +1134,7 @@ class ContextIndex:
                     "INSERT INTO vault_aliases VALUES (?, ?, ?)",
                     (
                         (note_id, alias, exact_key(alias))
-                        for note_id in requested
+                        for note_id in changed_requested
                         if note_id in inventory_current
                         for alias in json.loads(inventory_current[note_id][4]).get("aliases", [])
                     ),
@@ -1136,19 +1147,19 @@ class ContextIndex:
                 ):
                     connection.executemany(
                         f"DELETE FROM {derived_table} WHERE note_id = ?",
-                        ((note_id,) for note_id in requested),
+                        ((note_id,) for note_id in changed_requested),
                     )
                 connection.executemany(
                     "DELETE FROM properties WHERE note_id = ?",
-                    ((note_id,) for note_id in requested),
+                    ((note_id,) for note_id in changed_requested),
                 )
                 connection.executemany(
                     "DELETE FROM note_projection WHERE note_id = ?",
-                    ((note_id,) for note_id in requested),
+                    ((note_id,) for note_id in changed_requested),
                 )
                 connection.executemany(
                     "DELETE FROM notes WHERE id = ?",
-                    ((note_id,) for note_id in requested),
+                    ((note_id,) for note_id in changed_requested),
                 )
 
                 for (note_id, item), vector in zip(selected, normalized, strict=True):

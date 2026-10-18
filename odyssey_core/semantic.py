@@ -475,7 +475,9 @@ class SemanticEntityIndex:
                 )
 
         selected = [current[note_id] for note_id in requested if note_id in current]
-        vectors = list(embedder.embed_documents([item.text for item in selected]))
+        vectors = (
+            list(embedder.embed_documents([item.text for item in selected])) if selected else []
+        )
         if len(vectors) != len(selected):
             raise SemanticIndexError("Embedding runtime returned the wrong number of vectors")
         normalized = [_normalized_vector(vector) for vector in vectors]
