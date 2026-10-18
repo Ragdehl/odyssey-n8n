@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
@@ -111,6 +112,7 @@ def preflight_write_action(
     span_recorder: SpanRecorder | None = None,
     clarification_choice: ClarificationChoice | None = None,
     semantic_set_selector: Any | None = None,
+    parallel_target_decisions: bool = False,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Decide every ordered unit once and preallocate safe CREATE identities without writing.
 
@@ -150,6 +152,7 @@ def preflight_write_action(
         span_recorder=span_recorder,
         clarification_choice=clarification_choice,
         semantic_set_selector=semantic_set_selector,
+        parallel_target_decisions=parallel_target_decisions,
     )
 
 
@@ -170,6 +173,7 @@ def _preflight_write_action(
     semantic_set_selector: Any | None = None,
     _validated_reference_targets: Mapping[int, str] | None = None,
     _validated_relationship_targets: Mapping[int, str] | None = None,
+    parallel_target_decisions: bool = False,
 ) -> tuple[UnitTargetPreflight, ...]:
     """Implement preflight with private, relationship-validated target bindings."""
     if not isinstance(action, WriteAction):
@@ -199,6 +203,77 @@ def _preflight_write_action(
         for index, stable_id in relationship_targets.items()
     ) or set(relationship_targets).intersection(resolved_targets):
         raise ReferencePreflightError("Validated relationship write targets are invalid")
+    parallel_results: tuple[WriteTargetDecision, ...] | None = None
+    can_parallel = (
+        parallel_target_decisions
+        and 2 <= len(action.units) <= 8
+        and clarification_choice is None
+        and not resolved_targets
+        and not relationship_targets
+        and all(
+            unit.cardinality == "one"
+            and not unit.reference_lookup_only
+            and unit.target.relational_reference is None
+            for unit in action.units
+        )
+        and callable(getattr(contextual_reasoner, "fork_for_parallel_read", None))
+        and getattr(contextual_reasoner, "supports_parallel_target_decisions", False)
+        and callable(getattr(embedder, "fork_for_parallel_read", None))
+    )
+    if can_parallel:
+        # This entire phase is read-only. Decisions depend on CURRENT vault
+        # identities, not on provisional IDs allocated by sibling units.
+        # No one can write until ALL decisions have completed successfully.
+        before_versions = repository.note_version_snapshot()
+        parent_spans = span_recorder
+
+        def resolve_one(index_unit: tuple[int, KnowledgeUnit]):
+            unit_index, unit = index_unit
+            child_spans = (
+                SpanRecorder(parent_spans.origin, parent_spans.monotonic)
+                if parent_spans is not None
+                else None
+            )
+            child_embedder = embedder.fork_for_parallel_read(child_spans)
+            child_reasoner = contextual_reasoner.fork_for_parallel_read()
+            decision_function = decide_write_target
+            target_kwargs = {
+                "repository": repository,
+                "schema": schema,
+                "semantic_index": semantic_index,
+                "embedder": child_embedder,
+                "contextual_reasoner": child_reasoner,
+                "semantic_limit": semantic_limit,
+                "authenticated_actor": authenticated_actor,
+                "self_binding_repository": self_binding_repository,
+            }
+            decision = (
+                child_spans.invoke(
+                    f"preflight.unit[{unit_index}].target",
+                    decision_function,
+                    unit,
+                    **target_kwargs,
+                )
+                if child_spans is not None
+                else decision_function(unit, **target_kwargs)
+            )
+            return decision, child_spans.spans if child_spans is not None else ()
+
+        with ThreadPoolExecutor(
+            max_workers=min(4, len(action.units)), thread_name_prefix="odyssey-core-target"
+        ) as pool:
+            prepared = tuple(pool.map(resolve_one, enumerate(action.units)))
+        if repository.note_version_snapshot() != before_versions:
+            raise ReferencePreflightError("Canonical sources changed during target resolution")
+        parallel_results = tuple(decision for decision, _ in prepared)
+        if span_recorder is not None:
+            span_recorder.spans += tuple(
+                sorted(
+                    (span for _, child_spans in prepared for span in child_spans),
+                    key=lambda span: span.start_offset_ms,
+                )
+            )
+
     for unit_index, unit in enumerate(action.units):
         if unit.cardinality == "all_matching":
             raise ReferencePreflightError(
@@ -253,7 +328,9 @@ def _preflight_write_action(
         if unit.reference_lookup_only:
             target_kwargs["semantic_set_selector"] = semantic_set_selector
         decision = (
-            span_recorder.invoke(
+            parallel_results[unit_index]
+            if parallel_results is not None
+            else span_recorder.invoke(
                 f"preflight.unit[{unit_index}].target", decision_function, unit, **target_kwargs
             )
             if span_recorder is not None

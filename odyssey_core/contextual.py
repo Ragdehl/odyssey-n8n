@@ -334,6 +334,16 @@ class OpenAIContextualReasoner:
         self.last_usage: dict[str, Any] | None = None
         self.last_call = False
 
+    def fork_for_parallel_read(self) -> OpenAIContextualReasoner:
+        """Separate mutable provider usage state for independent target reads."""
+        return OpenAIContextualReasoner(
+            self.model,
+            reasoning_effort=self.reasoning_effort,
+            timeout_seconds=self.timeout_seconds,
+            examples=self.examples,
+            max_output_tokens=self.max_output_tokens,
+        )
+
     def resolve(
         self, request: ContextualResolutionRequest
     ) -> tuple[dict[str, Any], dict[str, Any]]:

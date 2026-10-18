@@ -7,8 +7,9 @@ materialization, and bulk membership remain in their existing Phase 13--16 bound
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from threading import Lock
 from time import perf_counter
 from typing import Any, Protocol, cast
 from uuid import uuid4
@@ -395,6 +396,7 @@ def execute_request(
     | None = None,
     candidate_pending_recorder: Callable[[Any], str] | None = None,
     known_fact_verifier: Any | None = None,
+    parallel_write_target_decisions: bool = False,
 ) -> ApplicationResult:
     """Plan and execute one raw request through existing Odyssey Core primitives.
 
@@ -833,6 +835,7 @@ def execute_request(
                 clarification_choice,
                 write_preflight_guard,
                 known_fact_verifier,
+                parallel_write_target_decisions,
             )
         elif isinstance(action, DelegateAction):
             result = ActionResult(
@@ -1521,6 +1524,7 @@ def _execute_write(
     clarification_choice: ClarificationChoice | None = None,
     write_preflight_guard: WritePreflightGuard | None = None,
     known_fact_verifier: Any | None = None,
+    parallel_write_target_decisions: bool = False,
 ) -> ActionResult:
     """Execute one write action without reopening target decisions or reference binding."""
     complete_set_references = tuple(
@@ -1723,6 +1727,7 @@ def _execute_write(
                 self_binding_repository=self_binding_repository,
                 span_recorder=spans,
                 semantic_set_selector=semantic_set_selector,
+                parallel_target_decisions=parallel_write_target_decisions,
                 **kwargs,
             )
         if write_preflight_guard is not None:
@@ -2811,6 +2816,7 @@ class _ProviderCallRecorder:
     monotonic: Callable[[], float]
     origin: float
     calls: tuple[ProviderCallEvidence, ...] = ()
+    _lock: Any = field(default_factory=Lock, repr=False, compare=False)
 
     def invoke(self, name: str, provider: Any, operation: Callable[..., Any], *args: Any) -> Any:
         """Invoke one provider operation and retain only safe boundary metadata."""
@@ -2818,11 +2824,13 @@ class _ProviderCallRecorder:
         try:
             result = operation(*args)
         except Exception as error:
-            self.calls += (
-                self._evidence(provider, name, OperationalOutcome.FAILED, started, error),
-            )
+            evidence = self._evidence(provider, name, OperationalOutcome.FAILED, started, error)
+            with self._lock:
+                self.calls += (evidence,)
             raise
-        self.calls += (self._evidence(provider, name, OperationalOutcome.COMPLETED, started),)
+        evidence = self._evidence(provider, name, OperationalOutcome.COMPLETED, started)
+        with self._lock:
+            self.calls += (evidence,)
         return result
 
     def _evidence(
@@ -2929,6 +2937,9 @@ class _MeasuredEmbedder:
         """Forward model metadata and other read-only embedder attributes."""
         return getattr(self._embedder, name)
 
+    def fork_for_parallel_read(self, spans: SpanRecorder | None) -> _MeasuredEmbedder:
+        return _MeasuredEmbedder(self._embedder, spans) if spans is not None else self
+
     def embed_queries(self, texts: Any) -> Any:
         """Retain one span per query embedding invocation."""
         ordinal = self._query_count
@@ -2952,6 +2963,17 @@ class _MeasuredContextualReasoner:
     def __init__(self, provider: Any, recorder: _ProviderCallRecorder) -> None:
         self._provider = provider
         self._recorder = recorder
+
+    @property
+    def supports_parallel_target_decisions(self) -> bool:
+        return callable(getattr(self._provider, "fork_for_parallel_read", None))
+
+    def fork_for_parallel_read(self) -> _MeasuredContextualReasoner:
+        """Give every independent target its OWN mutable model call metadata."""
+        fork = getattr(self._provider, "fork_for_parallel_read", None)
+        if not callable(fork):
+            raise ValueError("Contextual provider cannot safely fork for parallel decisions")
+        return _MeasuredContextualReasoner(fork(), self._recorder)
 
     def resolve(self, request: Any) -> Any:
         """Resolve one target through the provider and record its bounded evidence."""

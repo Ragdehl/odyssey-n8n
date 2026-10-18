@@ -163,6 +163,7 @@ class WholeSourceLightExecutor:
     # Coverage and independent speaker reviews use the SAME proposed facts.
     # They can overlap BEFORE any mutations; approvals remain compulsory.
     parallel_coverage_speaker_reviews: bool = False
+    parallel_target_decisions: bool = False
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
     pending_recorder: Any | None = None
@@ -904,6 +905,7 @@ class WholeSourceLightExecutor:
                 write_preflight_guard=TaskLifecycleGuard(TaskOperation.CREATE) if task else None,
                 pending_recorder=self.pending_recorder,
                 request_id_factory=lambda: locator,
+                parallel_write_target_decisions=self.parallel_target_decisions,
             )
 
         # A SELF fact/member set might change while GPT is reasoning or between
