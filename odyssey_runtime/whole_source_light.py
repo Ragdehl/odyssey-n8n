@@ -115,11 +115,15 @@ from odyssey_runtime.whole_source_model_contract import (
     INDEPENDENT_SCOPE_REVIEW_SCHEMA,
     MIXED_TASK_CREATE_PROMPT,
     MIXED_TASK_CREATE_SCHEMA,
+    PLAN_CORE_ANCHORED_SCHEMA,
     PLAN_SCHEMA,
+    PLANNER_CORE_ANCHORED_INSTRUCTIONS,
     PLANNER_INSTRUCTIONS,
     PROMPT_SOURCE_REVIEW,
+    PROMPT_SOURCE_REVIEW_CORE_ANCHORED,
     PROMPT_SPEAKER_A,
     PROMPT_SPEAKER_B,
+    REVIEW_CORE_ANCHORED_SCHEMA,
     REVIEW_SCHEMA,
     ROUTE_SCHEMA,
     ROUTER_INSTRUCTIONS,
@@ -165,6 +169,9 @@ class WholeSourceLightExecutor:
     parallel_coverage_speaker_reviews: bool = False
     parallel_target_decisions: bool = False
     task_create_batch_enabled: bool = False
+    # Experimental across ALL Core/Tasks source-reviewed routes, not a Task
+    # cardinality special case; frozen provider contracts retain v1 by default.
+    core_anchored_coverage_enabled: bool = False
     prewrite_diagnostic: Callable[[str, str, dict[str, int | bool]], None] | None = None
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
@@ -444,7 +451,11 @@ class WholeSourceLightExecutor:
             speaker_future = pool.submit(run_speakers)
             coverage = self._ask(
                 PLANNER_MODEL,
-                PROMPT_SOURCE_REVIEW,
+                (
+                    PROMPT_SOURCE_REVIEW_CORE_ANCHORED
+                    if self.core_anchored_coverage_enabled
+                    else PROMPT_SOURCE_REVIEW
+                ),
                 {
                     "source": source,
                     "clock": clock,
@@ -452,8 +463,16 @@ class WholeSourceLightExecutor:
                     "proposed_entities": proposed.get("entities"),
                     "core_verified_self_relationship": group_members or None,
                 },
-                REVIEW_SCHEMA,
-                "odyssey_p2_source_coverage_v1",
+                (
+                    REVIEW_CORE_ANCHORED_SCHEMA
+                    if self.core_anchored_coverage_enabled
+                    else REVIEW_SCHEMA
+                ),
+                (
+                    "odyssey_p4_source_coverage_v2"
+                    if self.core_anchored_coverage_enabled
+                    else "odyssey_p2_source_coverage_v1"
+                ),
             )
             speakers, speaker_spans = speaker_future.result()
         if parent_recorder is not None:
@@ -869,7 +888,11 @@ class WholeSourceLightExecutor:
             concurrent_speakers = None
             proposed = self._ask(
                 PLANNER_MODEL,
-                PLANNER_INSTRUCTIONS,
+                (
+                    PLANNER_CORE_ANCHORED_INSTRUCTIONS
+                    if self.core_anchored_coverage_enabled
+                    else PLANNER_INSTRUCTIONS
+                ),
                 {
                     "original_source": source,
                     "clock": clock,
@@ -878,8 +901,12 @@ class WholeSourceLightExecutor:
                     "verified_family": group_members,
                     "prior_independent_coverage_rejected": bool(attempt),
                 },
-                PLAN_SCHEMA,
-                "odyssey_light_shared_semantic_plan_v1",
+                (PLAN_CORE_ANCHORED_SCHEMA if self.core_anchored_coverage_enabled else PLAN_SCHEMA),
+                (
+                    "odyssey_light_shared_semantic_plan_v2"
+                    if self.core_anchored_coverage_enabled
+                    else "odyssey_light_shared_semantic_plan_v1"
+                ),
             )
             proposed["_allowed_capabilities"] = capabilities
             if task_only_batch and (
@@ -940,7 +967,11 @@ class WholeSourceLightExecutor:
             else:
                 review = self._ask(
                     PLANNER_MODEL,
-                    PROMPT_SOURCE_REVIEW,
+                    (
+                        PROMPT_SOURCE_REVIEW_CORE_ANCHORED
+                        if self.core_anchored_coverage_enabled
+                        else PROMPT_SOURCE_REVIEW
+                    ),
                     {
                         "source": source,
                         "clock": clock,
@@ -948,8 +979,16 @@ class WholeSourceLightExecutor:
                         "proposed_entities": proposed.get("entities"),
                         "core_verified_self_relationship": group_members or None,
                     },
-                    REVIEW_SCHEMA,
-                    "odyssey_p2_source_coverage_v1",
+                    (
+                        REVIEW_CORE_ANCHORED_SCHEMA
+                        if self.core_anchored_coverage_enabled
+                        else REVIEW_SCHEMA
+                    ),
+                    (
+                        "odyssey_p4_source_coverage_v2"
+                        if self.core_anchored_coverage_enabled
+                        else "odyssey_p2_source_coverage_v1"
+                    ),
                 )
             self._observe_prewrite(
                 delivery,
@@ -989,6 +1028,7 @@ class WholeSourceLightExecutor:
                 verified_relationship_members=tuple(name for _id, name in relationship.members)
                 if relationship is not None
                 else (),
+                core_anchored_evidence=self.core_anchored_coverage_enabled,
             )
             names = tuple(
                 sorted({name for fact in review["facts"] for name in fact["reference_names"]})

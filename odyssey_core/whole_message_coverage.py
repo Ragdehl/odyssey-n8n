@@ -19,6 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from .source_provenance import SourceEvidenceError, anchor_literal_evidence
 from .temporal import normalize_iso_date
 
 _REF = re.compile(r"\{\{ref:(\d+)\}\}")
@@ -40,6 +41,9 @@ class ReviewedFullSourceFact:
     date: str | None
     reference_names: tuple[str, ...]
     dependency: int | None
+    # Original-source character offsets, allowing many supporting spans per
+    # fact and shared spans across independent facts without note-type logic.
+    source_spans: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +72,7 @@ def validate_whole_message_coverage(
     capabilities: Sequence[str],
     *,
     verified_relationship_members: Sequence[str] = (),
+    core_anchored_evidence: bool = False,
 ) -> ReviewedFullSource:
     """Verify semantic proposal/reviewer agreement and literal source provenance.
 
@@ -102,11 +107,14 @@ def validate_whole_message_coverage(
         raise WholeMessageCoverageError("Invalid relationship evidence")
     output: list[ReviewedFullSourceFact] = []
     evidence_spans: list[tuple[int, int]] = []
+
     for index, (fact, claim) in enumerate(zip(facts, judgments, strict=True)):
         if not isinstance(fact, Mapping) or not isinstance(claim, Mapping):
             raise WholeMessageCoverageError("Missing atomic fact shape")
         requested = fact.get("source_evidence")
-        quote = claim.get("source_quote")
+        quote = requested if core_anchored_evidence else claim.get("source_quote")
+        if core_anchored_evidence and "source_quote" in claim:
+            raise WholeMessageCoverageError("Reviewer cannot author canonical evidence")
         text = claim.get("reviewed_text")
         kind = fact.get("kind")
         date = fact.get("date")
@@ -116,8 +124,8 @@ def validate_whole_message_coverage(
             or not isinstance(quote, str)
             or not quote.strip()
             or len(quote) > _MAX_SOURCE
-            or requested not in quote
-            or quote not in source
+            or (not core_anchored_evidence and requested not in quote)
+            or (not core_anchored_evidence and quote not in source)
             or not isinstance(text, str)
             or not text.strip()
             or len(text) > 320
@@ -139,11 +147,15 @@ def validate_whole_message_coverage(
                 normalize_iso_date(date)
             except ValueError as error:
                 raise WholeMessageCoverageError("Invalid canonical date") from error
-        # A source review cannot map a fact to a wholly different sentence.
-        occurrences = list(re.finditer(re.escape(quote), source))
-        if len(occurrences) != 1:
-            raise WholeMessageCoverageError("Source quote is ambiguous or absent")
-        span = occurrences[0].span()
+        # Source anchoring is shared with all future Note/App domains; it has
+        # zero knowledge of task, day, project, person or mutation semantics.
+        supports = fact.get("source_evidence_fragments") if core_anchored_evidence else ()
+        try:
+            anchor = anchor_literal_evidence(source, quote, supports)
+        except SourceEvidenceError as error:
+            raise WholeMessageCoverageError(str(error)) from error
+        span = anchor.all_spans[0]
+        support_spans = anchor.all_spans
         # Multiple facts may quote overlapping spans only if each records an
         # independently meaningful source assertion. This gate records evidence,
         # not a grammar-dependent assertion that overlaps are always invalid.
@@ -181,7 +193,11 @@ def validate_whole_message_coverage(
             raise WholeMessageCoverageError("Invalid cross-operation dependency")
         if dependency is not None and not (set(names) & set(output[dependency].reference_names)):
             raise WholeMessageCoverageError("Cross-operation identity handoff has no shared person")
-        output.append(ReviewedFullSourceFact(quote, text, kind, date, tuple(names), dependency))
+        output.append(
+            ReviewedFullSourceFact(
+                quote, text, kind, date, tuple(names), dependency, tuple(support_spans)
+            )
+        )
     if evidence_spans != sorted(evidence_spans):
         raise WholeMessageCoverageError("Fact evidence order differs from source order")
     return ReviewedFullSource(
