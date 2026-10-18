@@ -19,7 +19,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from .source_provenance import SourceEvidenceError, anchor_literal_evidence
+from .source_provenance import (
+    AnchoredEvidence,
+    SourceEvidenceError,
+    anchor_literal_evidence,
+)
 from .temporal import normalize_iso_date
 
 _REF = re.compile(r"\{\{ref:(\d+)\}\}")
@@ -65,6 +69,47 @@ def _digest(value: object) -> str:
     return hashlib.sha256(repr(value).encode("utf-8")).hexdigest()
 
 
+def anchor_planned_source_evidence(
+    original: str, proposal: Mapping[str, Any]
+) -> tuple[AnchoredEvidence, ...]:
+    """Core preflight of *all* Planner literal evidence before another GPT call.
+
+    Scope-independent: no note type, app, number-of-actions branching or
+    semantic authority. A model cannot assert that Core has anchored evidence
+    before this function succeeds on the exact original message.
+    """
+    if not isinstance(original, str) or not original.strip() or len(original) > _MAX_SOURCE:
+        raise WholeMessageCoverageError("Invalid unchanged original source")
+    if not isinstance(proposal, Mapping):
+        raise WholeMessageCoverageError("Invalid typed original-source proposal")
+    facts = proposal.get("facts")
+    if not isinstance(facts, list) or not 1 <= len(facts) <= _MAX_FACTS:
+        raise WholeMessageCoverageError("Invalid original-source cardinality")
+    anchored = []
+    for fact in facts:
+        if not isinstance(fact, Mapping) or not {
+            "source_evidence",
+            "source_evidence_fragments",
+            "source_evidence_context",
+            "source_evidence_fragment_contexts",
+        }.issubset(fact):
+            raise WholeMessageCoverageError("Missing typed original-source evidence")
+        try:
+            anchored.append(
+                anchor_literal_evidence(
+                    original,
+                    fact["source_evidence"],
+                    fact["source_evidence_fragments"],
+                    primary_context=fact["source_evidence_context"],
+                    supporting_contexts=fact["source_evidence_fragment_contexts"],
+                )
+            )
+        except SourceEvidenceError as error:
+            raise WholeMessageCoverageError(str(error)) from error
+    # No mutations to the untrusted proposal and no canonical identity claims.
+    return tuple(anchored)
+
+
 def validate_whole_message_coverage(
     source: str,
     proposal: Mapping[str, Any],
@@ -107,6 +152,7 @@ def validate_whole_message_coverage(
         raise WholeMessageCoverageError("Invalid relationship evidence")
     output: list[ReviewedFullSourceFact] = []
     evidence_spans: list[tuple[int, int]] = []
+    anchored = anchor_planned_source_evidence(source, proposal) if core_anchored_evidence else ()
 
     for index, (fact, claim) in enumerate(zip(facts, judgments, strict=True)):
         if not isinstance(fact, Mapping) or not isinstance(claim, Mapping):
@@ -147,13 +193,15 @@ def validate_whole_message_coverage(
                 normalize_iso_date(date)
             except ValueError as error:
                 raise WholeMessageCoverageError("Invalid canonical date") from error
-        # Source anchoring is shared with all future Note/App domains; it has
-        # zero knowledge of task, day, project, person or mutation semantics.
-        supports = fact.get("source_evidence_fragments") if core_anchored_evidence else ()
-        try:
-            anchor = anchor_literal_evidence(source, quote, supports)
-        except SourceEvidenceError as error:
-            raise WholeMessageCoverageError(str(error)) from error
+        # The exact same generic Core provenance check ran BEFORE semantic
+        # review. Re-evaluate from untrusted data here to defend the write gate.
+        if core_anchored_evidence:
+            anchor = anchored[index]
+        else:
+            try:
+                anchor = anchor_literal_evidence(source, quote)
+            except SourceEvidenceError as error:
+                raise WholeMessageCoverageError(str(error)) from error
         span = anchor.all_spans[0]
         support_spans = anchor.all_spans
         # Multiple facts may quote overlapping spans only if each records an

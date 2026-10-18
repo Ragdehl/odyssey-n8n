@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .source_provenance import SourceEvidenceError, anchor_original_partition
+
 
 class IndependentSourceScopesError(ValueError):
     """Reject missing, reordered, or overlapping full-source semantic evidence."""
@@ -68,11 +70,14 @@ def verify_independent_source_scopes(
     if {item["capability"] for item in parts} != permitted_capabilities:
         raise IndependentSourceScopesError("Source parts omit a declared capability")
     quotes = [item["source_quote"] for item in parts]
-    if (
-        not all(isinstance(q, str) and q.strip() and len(q) <= 4096 for q in quotes)
-        or "".join(quotes) != source
-    ):
+    if not all(isinstance(q, str) and q.strip() and len(q) <= 4096 for q in quotes) or not quotes:
         raise IndependentSourceScopesError("Original bytes were lost, duplicated or reordered")
+    try:
+        anchor_original_partition(source, quotes)
+    except SourceEvidenceError as error:
+        raise IndependentSourceScopesError(
+            "Original bytes were lost, duplicated or reordered"
+        ) from error
     return tuple(
         IndependentSourceScope(item["capability"], quote, i)
         for i, (item, quote) in enumerate(zip(parts, quotes, strict=True))

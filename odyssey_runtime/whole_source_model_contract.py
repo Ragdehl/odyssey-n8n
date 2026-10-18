@@ -295,6 +295,12 @@ _ANCHORED_FACT["properties"]["source_evidence_fragments"] = {
     "items": {"type": "string"},
 }
 _ANCHORED_FACT["required"].append("source_evidence_fragments")
+_ANCHORED_FACT["properties"]["source_evidence_context"] = {"type": ["string", "null"]}
+_ANCHORED_FACT["properties"]["source_evidence_fragment_contexts"] = {
+    "type": "array",
+    "items": {"type": ["string", "null"]},
+}
+_ANCHORED_FACT["required"].extend(["source_evidence_context", "source_evidence_fragment_contexts"])
 
 REVIEW_CORE_ANCHORED_SCHEMA = copy.deepcopy(REVIEW_SCHEMA)
 _ANCHORED_REVIEW = REVIEW_CORE_ANCHORED_SCHEMA["properties"]["facts"]["items"]
@@ -310,7 +316,16 @@ PLANNER_CORE_ANCHORED_INSTRUCTIONS = (
     "or pronoun antecedents. A fragment may support MANY facts; a fact may "
     "depend on MANY fragments. Never reconstruct a phrase that is not present "
     "in the source. Preserve source order and all independently asserted facts. "
-    "Do not branch behavior on app, note type or number of actions."
+    "Do not branch behavior on app, note type or number of actions. "
+    "For every fact, also return source_evidence_context and "
+    "source_evidence_fragment_contexts. The contexts array has EXACTLY one "
+    "string-or-null item per source_evidence_fragments entry. Use null when "
+    "the literal fragment occurs exactly once in the full original source. "
+    "If literal words occur MORE THAN ONCE, copy a longer UNIQUE contiguous "
+    "ORIGINAL-source snippet that CONTAINS that precise literal occurrence "
+    "EXACTLY ONCE. Never invent or rewrite a contextual snippet; null is "
+    "unsafe for repeated fragments and must be rejected by Core. These "
+    "contexts distinguish source OCCURRENCES, not facts or note types."
 )
 
 PROMPT_SOURCE_REVIEW_CORE_ANCHORED = (

@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .source_provenance import SourceEvidenceError, anchor_original_partition
+
 REVIEW_REASONS = frozenset(
     {
         "APPROVED",
@@ -112,8 +114,12 @@ def verify_dependent_group_graph(
         for group in raw_groups
     ):
         raise DependentGroupGraphError("Unrecognized source group or operation")
-    if "".join(group["source_quote"] for group in raw_groups) != original:
-        raise DependentGroupGraphError("Source spans omit, duplicate, or reorder characters")
+    try:
+        anchor_original_partition(original, [group["source_quote"] for group in raw_groups])
+    except SourceEvidenceError as error:
+        raise DependentGroupGraphError(
+            "Source spans omit, duplicate, or reorder characters"
+        ) from error
     groups = []
     has_dependency = False
     for i, group in enumerate(raw_groups):

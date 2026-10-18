@@ -4615,6 +4615,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
             parallel_coverage_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_target_decisions=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             task_create_batch_enabled=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
+            core_anchored_coverage_enabled=(
+                os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+                and os.environ.get("ODYSSEY_P4_SOURCE_ANCHORS_V2") == "1"
+            ),
             prewrite_diagnostic=(
                 record_dev_p4_prewrite_gate
                 if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"

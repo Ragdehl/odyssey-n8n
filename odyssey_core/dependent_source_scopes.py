@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from .source_provenance import SourceEvidenceError, anchor_original_partition
+
 
 class DependentSourceScopesError(ValueError):
     """The proposed handoff lacks complete, exact source provenance."""
@@ -48,8 +50,11 @@ def verify_dependent_source_scopes(
         or not after.strip()
         or not mention.strip()
         or len(mention) > 120
-        or before + after != original
         or after.strip().count(mention) != 1
     ):
         raise DependentSourceScopesError("Changed or ambiguous dependent source")
+    try:
+        anchor_original_partition(original, (before, after))
+    except SourceEvidenceError as error:
+        raise DependentSourceScopesError("Changed or ambiguous dependent source") from error
     return DependentSourceScopes(original, before, after, mention)

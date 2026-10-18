@@ -31,6 +31,8 @@ def _case():
             {
                 "source_evidence": literal,
                 "source_evidence_fragments": supporting,
+                "source_evidence_context": None,
+                "source_evidence_fragment_contexts": [None] * len(supporting),
                 "meaning": literal,
                 "kind": kind,
                 "date": date,
@@ -172,3 +174,170 @@ def test_anchoring_has_no_app_or_note_type_dependency(note_domain):
     assert original[exact.primary.start : exact.primary.end] == "pinté una mesa"
     assert len(exact.supporting) == 2
     assert note_domain
+
+
+def test_repeated_primary_occurrences_are_disambiguated_by_unique_literal_context():
+    source = "Mañana llamo a Ana. Mañana llamo a Bea."
+    first = anchor_literal_evidence(source, "Mañana", primary_context="Mañana llamo a Ana")
+    second = anchor_literal_evidence(source, "Mañana", primary_context="Mañana llamo a Bea")
+    assert first.primary != second.primary
+    assert first.primary.start == 0
+    assert second.primary.start == source.index("Mañana", 1)
+    assert source[first.primary.start : first.primary.end] == "Mañana"
+    assert source[second.primary.start : second.primary.end] == "Mañana"
+
+
+def test_shared_repeated_context_can_support_different_notes_without_type_checks():
+    source = "Hoy conocí a Marta. Hoy llamé a Marta."
+    a = anchor_literal_evidence(
+        source,
+        "conocí a Marta",
+        ["Hoy", "Marta"],
+        supporting_contexts=["Hoy conocí", "conocí a Marta"],
+    )
+    b = anchor_literal_evidence(
+        source,
+        "llamé a Marta",
+        ["Hoy", "Marta"],
+        supporting_contexts=["Hoy llamé", "llamé a Marta"],
+    )
+    assert a.primary != b.primary
+    assert a.supporting[0] != b.supporting[0]
+    assert a.supporting[1] != b.supporting[1]
+
+
+@pytest.mark.parametrize(
+    ("primary", "context", "supports", "contexts"),
+    [
+        ("Mañana", None, [], []),
+        ("Mañana", "Mañana", [], []),
+        ("Mañana", "Mañana llamo a Ana. Mañana llamo a Bea", [], []),
+        ("Mañana", "Mañana llamaré a Ana", [], []),
+        ("Mañana", "Mañana llamo a Cora", [], []),
+        ("Mañana", 12, [], []),
+        ("Mañana", "Mañana llamo a Ana", ["llamo"], []),
+        ("Mañana", "Mañana llamo a Ana", ["llamo"], ["inventado"]),
+        ("Mañana", "Mañana llamo a Ana", ["llamo"], ["Mañana llamo a Beatriz"]),
+    ],
+)
+def test_ambiguous_edited_or_misaligned_contexts_fail_closed(primary, context, supports, contexts):
+    source = "Mañana llamo a Ana. Mañana llamo a Bea."
+    with pytest.raises(ValueError):
+        anchor_literal_evidence(
+            source,
+            primary,
+            supports,
+            primary_context=context,
+            supporting_contexts=contexts,
+        )
+
+
+def test_typed_core_review_anchors_two_identical_original_fragments_on_distinct_facts():
+    source = "Hoy leí. Hoy leí."
+    proposal = {
+        "entities": [],
+        "unresolved": [],
+        "facts": [
+            {
+                "source_evidence": "Hoy leí",
+                "source_evidence_fragments": [],
+                "source_evidence_context": scope,
+                "source_evidence_fragment_contexts": [],
+                "kind": "record",
+                "date": "2026-10-18",
+                "participants": [],
+                "needs_clarification": False,
+                "dependent_on_fact_index": None,
+            }
+            for scope in ("Hoy leí.", "Hoy leí.")
+        ],
+    }
+    review = {
+        "approved": True,
+        "complete": True,
+        "facts": [
+            {
+                "ordinal": i,
+                "kind": "record",
+                "date": "2026-10-18",
+                "reviewed_text": "Hoy leí",
+                "reference_names": [],
+                "supported": True,
+            }
+            for i in range(2)
+        ],
+    }
+    # An exact context that is repeated is NOT a unique occurrence proof.
+    with pytest.raises(ValueError, match="ambiguous"):
+        _validate(source, proposal, review)
+    proposal["facts"][0]["source_evidence"] = "Hoy leí."
+    proposal["facts"][0]["source_evidence_context"] = None
+    with pytest.raises(ValueError, match="ambiguous"):
+        _validate(source, proposal, review)
+
+
+def test_unicode_character_offsets_are_from_exact_unmodified_source():
+    original = "Mañana hablaré con Chloé. Mañana escribiré a Inés."
+    one = anchor_literal_evidence(original, "Mañana", primary_context="Mañana hablaré con Chloé")
+    two = anchor_literal_evidence(original, "Mañana", primary_context="Mañana escribiré a Inés")
+    assert original[one.primary.start : one.primary.end] == "Mañana"
+    assert original[two.primary.start : two.primary.end] == "Mañana"
+    assert two.primary.start == original.index("Mañana", one.primary.end)
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        ("Hoy compré pan. ", "Mañana hago deporte."),
+        ("Hoy compré ", "pan. Mañana ", "hago deporte."),
+        ("Hoy compré pan. Mañana hago deporte.",),
+    ],
+)
+def test_one_shared_core_source_partition_for_arbitrary_group_counts(parts):
+    from odyssey_core.source_provenance import anchor_original_partition
+
+    original = "Hoy compré pan. Mañana hago deporte."
+    anchors = anchor_original_partition(original, parts)
+    assert len(anchors) == len(parts)
+    assert tuple(original[a.start : a.end] for a in anchors) == parts
+    assert anchors[0].start == 0 and anchors[-1].end == len(original)
+
+
+@pytest.mark.parametrize(
+    "parts",
+    [
+        ("Hoy compré pan. ", "Mañana hago deport."),
+        ("Hoy compré pan.", "Mañana hago deporte."),
+        ("Hoy compré pan. ", " Mañana hago deporte."),
+        ("Hoy compré pan. Mañana hago deporte.", ""),
+        ("Mañana hago deporte.", "Hoy compré pan. "),
+    ],
+)
+def test_shared_partition_refuses_gaps_duplication_reorder_or_empty_spans(parts):
+    from odyssey_core.source_provenance import anchor_original_partition
+
+    with pytest.raises(ValueError):
+        anchor_original_partition("Hoy compré pan. Mañana hago deporte.", parts)
+
+
+def test_whole_core_review_with_repeated_primary_and_distinct_verified_contexts():
+    source = "Hoy fui al parque. Hoy fui al cine."
+    proposal, review = _case()
+    proposal["facts"] = proposal["facts"][:2]
+    review["facts"] = review["facts"][:2]
+    for fact, judgment, context in zip(
+        proposal["facts"], review["facts"], ("Hoy fui al parque", "Hoy fui al cine"), strict=True
+    ):
+        fact.update(
+            kind="record",
+            date="2026-10-18",
+            source_evidence="Hoy fui",
+            source_evidence_context=context,
+            source_evidence_fragments=["Hoy"],
+            source_evidence_fragment_contexts=[context],
+        )
+        judgment.update(kind="record", date="2026-10-18", reviewed_text=context)
+    proof = _validate(source, proposal, review)
+    assert len(proof.reviewed_facts) == 2
+    assert proof.reviewed_facts[0].source_spans[0] != proof.reviewed_facts[1].source_spans[0]
+    assert proof.reviewed_facts[0].source_spans[1] != proof.reviewed_facts[1].source_spans[1]

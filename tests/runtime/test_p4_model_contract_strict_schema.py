@@ -13,7 +13,9 @@ from odyssey_runtime import whole_source_model_contract as contract
 SCHEMAS = (
     contract.ROUTE_SCHEMA,
     contract.PLAN_SCHEMA,
+    contract.PLAN_CORE_ANCHORED_SCHEMA,
     contract.REVIEW_SCHEMA,
+    contract.REVIEW_CORE_ANCHORED_SCHEMA,
     contract.SPEAKER_SCHEMA,
     contract.TASK_ONLY_SCOPE_SCHEMA,
     contract.MIXED_TASK_CREATE_SCHEMA,
@@ -53,7 +55,9 @@ def _check(schema, depth=0):
     ids=(
         "router",
         "semantic-planner",
+        "original-source-anchored-planner-v2",
         "whole-source-review",
+        "original-source-anchored-review-v2",
         "speaker-proof",
         "tasks-only-scope",
         "mixed-task-lifecycle-audit",

@@ -75,6 +75,7 @@ from odyssey_core.temporal_interpretation import TemporalInterpretation
 from odyssey_core.verified_metadata_catalog import scoped_verified_metadata_catalog
 from odyssey_core.whole_message_coverage import (
     WholeMessageCoverageError,
+    anchor_planned_source_evidence,
     validate_whole_message_coverage,
 )
 from odyssey_core.whole_message_identity_guard import (
@@ -321,6 +322,40 @@ class WholeSourceLightExecutor:
             raise WholeSourceLightError("Provider response shape is invalid")
         return result
 
+    def _speaker_occurrence_instructions(self) -> str:
+        if not self.core_anchored_coverage_enabled:
+            return ""
+        return (
+            " EVIDENCE V2: For repeated words or assertions, each fact has "
+            "optional ORIGINAL-source context anchoring its specific occurrence "
+            "and extra literal supporting fragments. Use that typed context to "
+            "interpret exactly that fact, not another occurrence of the same "
+            "words. Return source_quote exactly equal to source_evidence, "
+            "not the context, and never claim a canonical identity."
+        )
+
+    def _speaker_source_rows(self, proposed: dict) -> list[dict[str, object]]:
+        """Supply every attestor the same Core-anchored original occurrence.
+
+        This is generic to any factual domain; the model still cannot bind a
+        canonical SELF id and must quote the original primary unchanged.
+        """
+        rows = []
+        for fact in proposed["facts"]:
+            row = {"source_evidence": fact["source_evidence"]}
+            if self.core_anchored_coverage_enabled:
+                row.update(
+                    {
+                        "source_evidence_context": fact["source_evidence_context"],
+                        "source_evidence_fragments": fact["source_evidence_fragments"],
+                        "source_evidence_fragment_contexts": fact[
+                            "source_evidence_fragment_contexts"
+                        ],
+                    }
+                )
+            rows.append(row)
+        return rows
+
     def _independent_speaker_reviews(self, payload: dict) -> tuple[dict, dict]:
         """Run independently required attestations concurrently, never skip one.
 
@@ -332,14 +367,14 @@ class WholeSourceLightExecutor:
             return (
                 self._ask(
                     PLANNER_MODEL,
-                    PROMPT_SPEAKER_A,
+                    (PROMPT_SPEAKER_A + self._speaker_occurrence_instructions()),
                     payload,
                     SPEAKER_SCHEMA,
                     "odyssey_speaker_full_A",
                 ),
                 self._ask(
                     ROUTER_MODEL,
-                    PROMPT_SPEAKER_B,
+                    (PROMPT_SPEAKER_B + self._speaker_occurrence_instructions()),
                     payload,
                     SPEAKER_SCHEMA,
                     "odyssey_speaker_full_B",
@@ -360,9 +395,17 @@ class WholeSourceLightExecutor:
 
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="odyssey-p4-review") as pool:
             future_a = pool.submit(
-                review, PLANNER_MODEL, PROMPT_SPEAKER_A, "odyssey_speaker_full_A"
+                review,
+                PLANNER_MODEL,
+                PROMPT_SPEAKER_A + self._speaker_occurrence_instructions(),
+                "odyssey_speaker_full_A",
             )
-            future_b = pool.submit(review, ROUTER_MODEL, PROMPT_SPEAKER_B, "odyssey_speaker_full_B")
+            future_b = pool.submit(
+                review,
+                ROUTER_MODEL,
+                PROMPT_SPEAKER_B + self._speaker_occurrence_instructions(),
+                "odyssey_speaker_full_B",
+            )
             first, first_spans = future_a.result()
             second, second_spans = future_b.result()
         if parent_recorder is not None:
@@ -402,7 +445,7 @@ class WholeSourceLightExecutor:
         if redo_a:
             first = self._ask(
                 PLANNER_MODEL,
-                PROMPT_SPEAKER_A,
+                PROMPT_SPEAKER_A + self._speaker_occurrence_instructions(),
                 payload,
                 SPEAKER_SCHEMA,
                 "odyssey_speaker_full_A",
@@ -410,7 +453,7 @@ class WholeSourceLightExecutor:
         if redo_b:
             second = self._ask(
                 ROUTER_MODEL,
-                PROMPT_SPEAKER_B,
+                PROMPT_SPEAKER_B + self._speaker_occurrence_instructions(),
                 payload,
                 SPEAKER_SCHEMA,
                 "odyssey_speaker_full_B",
@@ -434,7 +477,7 @@ class WholeSourceLightExecutor:
         origin = parent_recorder.origin if parent_recorder is not None else perf_counter()
         speaker_payload = {
             "original_source": source,
-            "facts": [{"source_evidence": fact["source_evidence"]} for fact in proposed["facts"]],
+            "facts": self._speaker_source_rows(proposed),
             "clock": clock,
         }
 
@@ -909,6 +952,16 @@ class WholeSourceLightExecutor:
                 ),
             )
             proposed["_allowed_capabilities"] = capabilities
+            if self.core_anchored_coverage_enabled:
+                try:
+                    anchor_planned_source_evidence(source, proposed)
+                except WholeMessageCoverageError as error:
+                    self._observe_prewrite(
+                        delivery,
+                        "coverage_contract",
+                        reason_code=self._prewrite_reason_code(error),
+                    )
+                    return self._abstain(delivery)
             if task_only_batch and (
                 not isinstance(proposed.get("facts"), list)
                 or len(proposed["facts"]) < 2
@@ -1042,9 +1095,7 @@ class WholeSourceLightExecutor:
             )
             speaker_payload = {
                 "original_source": source,
-                "facts": [
-                    {"source_evidence": fact["source_evidence"]} for fact in proposed["facts"]
-                ],
+                "facts": self._speaker_source_rows(proposed),
                 "clock": clock,
             }
             speaker_a, speaker_b = (
@@ -1524,15 +1575,23 @@ class WholeSourceLightExecutor:
                 or (
                     part.capability == "tasks"
                     and (
-                        len(_split_task_edges(part)[0]) != 1
+                        len(_split_task_edges(part)[0]) > 1
                         or len(_split_task_edges(part)[1]) > 1
-                        or len(part.dependencies) not in (1, 2)
+                        or (not _split_task_edges(part)[0] and bool(part.dependencies))
+                        or (
+                            bool(_split_task_edges(part)[0])
+                            and len(part.dependencies) not in (1, 2)
+                        )
                     )
                 )
                 for part in graph.groups
             )
         ):
             return self._abstain(delivery, "DEPENDENT_N_GRAPH_UNREPRESENTABLE")
+        if any(part.capability == "tasks" and not part.dependencies for part in graph.groups) and (
+            self.independent_task_prepare is None or self.independent_task_delegate is None
+        ):
+            return self._abstain(delivery, "DEPENDENT_N_INDEPENDENT_TASK_ADAPTER_UNAVAILABLE")
         # A Task->Task edge can only mean one subsequent consumer of a
         # same-delivery Work Session START, on the very same Core Task.
         if any(_split_task_edges(part)[1] for part in graph.groups):
@@ -1558,9 +1617,18 @@ class WholeSourceLightExecutor:
                 continue
             segment = part.source.strip()
             core_dependencies, session_dependencies = _split_task_edges(part)
-            dependency = core_dependencies[0]
+            dependency = core_dependencies[0] if core_dependencies else None
             try:
-                interpretation, temporal = self.dependent_task_prepare(segment, delivery_instant)
+                # Zero inbound edges are genuine independent app operations.
+                # They still receive full Tasks domain prewrite and E3, but
+                # must NEVER inherit a canonical Core target.
+                prepare = (
+                    self.dependent_task_prepare
+                    if dependency is not None
+                    else self.independent_task_prepare
+                )
+                assert prepare is not None
+                interpretation, temporal = prepare(segment, delivery_instant)
                 if (
                     not isinstance(interpretation, TaskInterpretation)
                     or interpretation.source_text != segment
@@ -1573,7 +1641,7 @@ class WholeSourceLightExecutor:
                 ):
                     return self._abstain(delivery, "DEPENDENT_N_TASK_PREWRITE_UNAVAILABLE")
                 prepared_subtask: PreparedDependentSubtask | None = None
-                if interpretation.operation is TaskOperation.CREATE:
+                if interpretation.operation is TaskOperation.CREATE and dependency is not None:
                     if self.dependent_subtask_prepare is None:
                         return self._abstain(delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE")
                     prepared_subtask = self.dependent_subtask_prepare(
@@ -1597,6 +1665,12 @@ class WholeSourceLightExecutor:
                 or task_only.get("source_quote") != segment
             ):
                 return self._abstain(delivery, "DEPENDENT_N_TASK_SOURCE_UNVERIFIED")
+            if dependency is None:
+                # No dependent target reviews apply: there is no edge.
+                # Task-only full-scope semantics were independently reviewed
+                # above, and ordinary Tasks service will preflight its target.
+                prepared[part.ordinal] = (interpretation, temporal, None)
+                continue
             payload = {
                 "original_source": source,
                 "antecedent_source": graph.groups[dependency.predecessor_index].source,
@@ -1741,61 +1815,87 @@ class WholeSourceLightExecutor:
                 )
             else:
                 core_dependencies, session_dependencies = _split_task_edges(part)
-                dependency = core_dependencies[0]
-                try:
-                    # The Core verifier only handles Core-authored note links,
-                    # never interpret a Tasks-produced session as a Core link.
-                    core_only_group = replace(part, dependencies=core_dependencies)
-                    core_only_graph = replace(
-                        graph,
-                        groups=tuple(
-                            core_only_group if item.ordinal == part.ordinal else item
-                            for item in graph.groups
-                        ),
-                    )
-                    handoff = prove_canonical_group_handoff(
-                        graph=core_only_graph,
-                        consumer_index=part.ordinal,
-                        predecessors=predecessors,
-                        repository=self.repository,
-                        schema=self.schema,
-                    )
-                    if len(handoff.edges) != 1:
-                        raise CanonicalGroupEvidenceError("Task has no unique target")
-                    edge = handoff.edges[0]
-                    if edge.evidence.note_type != "task":
-                        raise CanonicalGroupEvidenceError("Dependent target is not a task")
-                    task, temporal, subtask = prepared[part.ordinal]
-                    target = TaskDependentTarget(
-                        SourceBoundDependency(
-                            graph.groups[dependency.predecessor_index].source,
-                            part.source,
-                            dependency.mention,
-                            edge.evidence,
-                        ),
-                        task.operation,
-                    )
-                    if subtask is not None:
-                        target = target.with_prepared_subtask(subtask)
-                    # Recheck at the consumption boundary even if the Core
-                    # backlink was valid when the prior group returned.
-                    handoff.require_all_current(self.repository, self.schema)
-                except (CanonicalGroupEvidenceError, TaskDependentTargetError):
-                    outcome = self._abstain(locator, "DEPENDENT_N_CANONICAL_EDGE_UNVERIFIED")
-                else:
+                if not core_dependencies:
+                    task, temporal, _ = prepared[part.ordinal]
+                    assert self.independent_task_delegate is not None
                     if self.progress is not None:
                         self.progress("action.delegate.started", {})
-                    if part.ordinal in reviewed_session_links:
-                        prior_proof = session_proofs.get(reviewed_session_links[part.ordinal])
-                        if prior_proof is None or prior_proof.task_id != target.require_current(
-                            self.repository, self.schema
-                        ):
-                            outcome = self._abstain(
-                                locator, "DEPENDENT_N_SESSION_RECEIPT_UNAVAILABLE"
-                            )
-                        else:
+                    outcome = self.independent_task_delegate(
+                        part.source.strip(),
+                        locator,
+                        actor,
+                        task,
+                        temporal,
+                        delivery_instant,
+                    )
+                else:
+                    dependency = core_dependencies[0]
+                    try:
+                        # The Core verifier only handles Core-authored note links,
+                        # never interpret a Tasks-produced session as a Core link.
+                        core_only_group = replace(part, dependencies=core_dependencies)
+                        core_only_graph = replace(
+                            graph,
+                            groups=tuple(
+                                core_only_group if item.ordinal == part.ordinal else item
+                                for item in graph.groups
+                            ),
+                        )
+                        handoff = prove_canonical_group_handoff(
+                            graph=core_only_graph,
+                            consumer_index=part.ordinal,
+                            predecessors=predecessors,
+                            repository=self.repository,
+                            schema=self.schema,
+                        )
+                        if len(handoff.edges) != 1:
+                            raise CanonicalGroupEvidenceError("Task has no unique target")
+                        edge = handoff.edges[0]
+                        if edge.evidence.note_type != "task":
+                            raise CanonicalGroupEvidenceError("Dependent target is not a task")
+                        task, temporal, subtask = prepared[part.ordinal]
+                        target = TaskDependentTarget(
+                            SourceBoundDependency(
+                                graph.groups[dependency.predecessor_index].source,
+                                part.source,
+                                dependency.mention,
+                                edge.evidence,
+                            ),
+                            task.operation,
+                        )
+                        if subtask is not None:
+                            target = target.with_prepared_subtask(subtask)
+                        # Recheck at the consumption boundary even if the Core
+                        # backlink was valid when the prior group returned.
+                        handoff.require_all_current(self.repository, self.schema)
+                    except (CanonicalGroupEvidenceError, TaskDependentTargetError):
+                        outcome = self._abstain(locator, "DEPENDENT_N_CANONICAL_EDGE_UNVERIFIED")
+                    else:
+                        if self.progress is not None:
+                            self.progress("action.delegate.started", {})
+                        if part.ordinal in reviewed_session_links:
+                            prior_proof = session_proofs.get(reviewed_session_links[part.ordinal])
+                            if prior_proof is None or prior_proof.task_id != target.require_current(
+                                self.repository, self.schema
+                            ):
+                                outcome = self._abstain(
+                                    locator, "DEPENDENT_N_SESSION_RECEIPT_UNAVAILABLE"
+                                )
+                            else:
+                                assert self.dependent_session_delegate is not None
+                                outcome, _ = self.dependent_session_delegate(
+                                    part.source.strip(),
+                                    locator,
+                                    actor,
+                                    task,
+                                    temporal,
+                                    target,
+                                    delivery_instant,
+                                    prior_proof,
+                                )
+                        elif part.ordinal in session_producers:
                             assert self.dependent_session_delegate is not None
-                            outcome, _ = self.dependent_session_delegate(
+                            outcome, new_proof = self.dependent_session_delegate(
                                 part.source.strip(),
                                 locator,
                                 actor,
@@ -1803,36 +1903,24 @@ class WholeSourceLightExecutor:
                                 temporal,
                                 target,
                                 delivery_instant,
-                                prior_proof,
+                                None,
                             )
-                    elif part.ordinal in session_producers:
-                        assert self.dependent_session_delegate is not None
-                        outcome, new_proof = self.dependent_session_delegate(
-                            part.source.strip(),
-                            locator,
-                            actor,
-                            task,
-                            temporal,
-                            target,
-                            delivery_instant,
-                            None,
-                        )
-                        if outcome.status is ApplicationStatus.COMPLETED:
-                            if not isinstance(new_proof, CanonicalSessionEvidence):
-                                raise WholeSourceLightError(
-                                    "A completed START is missing physical session evidence"
-                                )
-                            session_proofs[part.ordinal] = new_proof
-                    else:
-                        outcome = self.dependent_task_delegate(
-                            part.source.strip(),
-                            locator,
-                            actor,
-                            task,
-                            temporal,
-                            target,
-                            delivery_instant,
-                        )
+                            if outcome.status is ApplicationStatus.COMPLETED:
+                                if not isinstance(new_proof, CanonicalSessionEvidence):
+                                    raise WholeSourceLightError(
+                                        "A completed START is missing physical session evidence"
+                                    )
+                                session_proofs[part.ordinal] = new_proof
+                        else:
+                            outcome = self.dependent_task_delegate(
+                                part.source.strip(),
+                                locator,
+                                actor,
+                                task,
+                                temporal,
+                                target,
+                                delivery_instant,
+                            )
             if self.operation_manifest_observe is not None:
                 self.operation_manifest_observe(
                     delivery, source, actor, part.ordinal, part.capability, outcome
