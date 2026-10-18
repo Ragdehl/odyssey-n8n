@@ -71,6 +71,8 @@ def test_refresh_reports_real_incremental_work_and_no_private_paths(tmp_path, mo
     assert log.stat().st_mode & 0o077 == 0
     assert event["outcome"] == "incremental"
     assert event["note_count"] == 1
+    assert event["context_embedded_notes"] == 1
+    assert event["stages_ms"]["context.embedding"] >= 0
     assert all(name in event["stages_ms"] for name in ("context", "semantic", "semantic.tasks"))
     assert "full_rebuild" not in event["stages_ms"]
     assert "ordinary" not in json.dumps(event)
@@ -127,3 +129,14 @@ def test_dev_telemetry_is_bounded_and_rotates(tmp_path, monkeypatch, capsys):
     assert log.stat().st_size < 4096
     assert "incremental" in log.read_text()
     assert "index-refresh-events" not in capsys.readouterr().err
+
+
+def test_context_instrumentation_proves_zero_embedded_unchanged_notes(
+    tmp_path, monkeypatch, capsys
+):
+    runtime, _repo = _runtime(tmp_path, monkeypatch)
+    runtime.refresh_affected_indexes(("lucia",))
+    event = _only_event(capsys)
+    assert event["outcome"] == "incremental"
+    assert event["context_embedded_notes"] == 0
+    assert "context.embedding" not in event["stages_ms"]

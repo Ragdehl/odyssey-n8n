@@ -369,6 +369,7 @@ def _emit_dev_index_refresh_diagnostic(
     note_count: int,
     duration_ms: float,
     stages_ms: Mapping[str, float],
+    context_embedded_notes: int | None = None,
     failure_stage: str | None = None,
     failure_class: str | None = None,
 ) -> None:
@@ -384,6 +385,8 @@ def _emit_dev_index_refresh_diagnostic(
         "duration_ms": round(max(0.0, duration_ms), 1),
         "stages_ms": {stage: round(max(0.0, duration), 1) for stage, duration in stages_ms.items()},
     }
+    if context_embedded_notes is not None:
+        event["context_embedded_notes"] = context_embedded_notes
     if failure_stage is not None:
         event["failure_stage"] = failure_stage
     if failure_class is not None:
@@ -2872,6 +2875,27 @@ def build_runtime_from_environment() -> RuntimeComposition:
         failure_stage: str | None = None
         failure_class: str | None = None
         expanded: tuple[str, ...] = ()
+        context_embedded_notes: int | None = None
+
+        class TimedContextEmbedder:
+            """Measure ONNX inside the existing context refresh, without duplicating it."""
+
+            model_name = embedder.model_name
+            model_version = embedder.model_version
+            document_count = 0
+
+            def embed_documents(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+                self.document_count += len(texts)
+                start_embedding = perf_counter()
+                try:
+                    return embedder.embed_documents(texts)
+                finally:
+                    durations_ms["context.embedding"] = (perf_counter() - start_embedding) * 1000
+
+            def embed_queries(self, texts: Sequence[str]) -> Sequence[Sequence[float]]:
+                return embedder.embed_queries(texts)
+
+        context_embedder = TimedContextEmbedder()
 
         def measure(name: str, refresh: Callable[[], object]) -> object:
             nonlocal stage
@@ -2892,10 +2916,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 )
             )
             try:
-                measure(
+                context_embedded_notes = measure(
                     "context",
                     lambda: context_index.refresh_notes(
-                        repository, schema, embedder, note_ids=expanded
+                        repository, schema, context_embedder, note_ids=expanded
                     ),
                 )
                 verified_inventory = measure(
@@ -2944,6 +2968,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 note_count=len(expanded),
                 duration_ms=(perf_counter() - started) * 1000,
                 stages_ms=durations_ms,
+                context_embedded_notes=context_embedded_notes,
                 failure_stage=failure_stage,
                 failure_class=failure_class,
             )
