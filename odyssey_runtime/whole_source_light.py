@@ -164,6 +164,7 @@ class WholeSourceLightExecutor:
     # They can overlap BEFORE any mutations; approvals remain compulsory.
     parallel_coverage_speaker_reviews: bool = False
     parallel_target_decisions: bool = False
+    prewrite_diagnostic: Callable[[str, str, dict[str, int | bool]], None] | None = None
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
     pending_recorder: Any | None = None
@@ -239,6 +240,14 @@ class WholeSourceLightExecutor:
         ]
         | None
     ) = None
+
+    def _observe_prewrite(self, delivery: str, gate: str, **values: int | bool) -> None:
+        """Prewrite telemetry never grants write authority."""
+        if self.prewrite_diagnostic is not None:
+            try:
+                self.prewrite_diagnostic(delivery, gate, values)
+            except Exception:
+                pass
 
     def _ask(self, model: str, instructions: str, payload: dict, schema: dict, name: str) -> dict:
         # Same strict provider contract in production and frozen tests. Only
@@ -744,6 +753,7 @@ class WholeSourceLightExecutor:
         concurrent_speakers: tuple[dict, dict] | None = None
         known_notes = self._measure_local("source_name_hints", self._note_hints, source)
         for attempt in range(2):
+            concurrent_speakers = None
             proposed = self._ask(
                 PLANNER_MODEL,
                 PLANNER_INSTRUCTIONS,
@@ -759,6 +769,16 @@ class WholeSourceLightExecutor:
                 "odyssey_light_shared_semantic_plan_v1",
             )
             proposed["_allowed_capabilities"] = capabilities
+            self._observe_prewrite(
+                delivery,
+                "proposal",
+                attempt=attempt,
+                facts=len(proposed.get("facts")) if isinstance(proposed.get("facts"), list) else 0,
+                entities=len(proposed.get("entities"))
+                if isinstance(proposed.get("entities"), list)
+                else 0,
+                unresolved=bool(proposed.get("unresolved")),
+            )
             if any(
                 isinstance(item, dict) and item.get("kind") == "task"
                 for item in proposed.get("facts", ())
@@ -808,6 +828,18 @@ class WholeSourceLightExecutor:
                     REVIEW_SCHEMA,
                     "odyssey_p2_source_coverage_v1",
                 )
+            self._observe_prewrite(
+                delivery,
+                "coverage_verdict",
+                attempt=attempt,
+                approved=review.get("approved") is True,
+                complete=review.get("complete") is True,
+                facts=len(candidate_facts) if isinstance(candidate_facts, list) else 0,
+                reviewed_facts=len(review.get("facts"))
+                if isinstance(review.get("facts"), list)
+                else 0,
+                overlapping=can_overlap,
+            )
             if review.get("approved") is True and review.get("complete") is True:
                 reviewed_ok = True
                 break
@@ -820,8 +852,10 @@ class WholeSourceLightExecutor:
                     if isinstance(f, dict)
                 )
             ):
+                self._observe_prewrite(delivery, "coverage_rejected", attempt=attempt)
                 return self._abstain(delivery)
         if not reviewed_ok:
+            self._observe_prewrite(delivery, "coverage_retry_exhausted")
             return self._abstain(delivery)
         try:
             validate_whole_message_coverage(
@@ -858,8 +892,21 @@ class WholeSourceLightExecutor:
             attested = validate_dual_speaker_review(source, proposed["facts"], speaker_a, speaker_b)
             if any(f.assertion not in {"asserted", "planned"} for f in attested.facts):
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
-        except (WholeMessageCoverageError, UnprovenPersonIdentityError, WholeMessageSpeakerError):
+        except (
+            WholeMessageCoverageError,
+            UnprovenPersonIdentityError,
+            WholeMessageSpeakerError,
+        ) as error:
+            category = (
+                "coverage_contract"
+                if isinstance(error, WholeMessageCoverageError)
+                else "identity_collision"
+                if isinstance(error, UnprovenPersonIdentityError)
+                else "speaker_contract"
+            )
+            self._observe_prewrite(delivery, category)
             return self._abstain(delivery)
+        self._observe_prewrite(delivery, "prewrite_accepted", facts=len(proposed["facts"]))
         # Compile ALL actions before ANY write. A missing owner, unsupported
         # Task lifecycle or invalid last fact cannot leave a partially
         # persisted multi-capability message behind.
@@ -871,6 +918,7 @@ class WholeSourceLightExecutor:
                 tuple(attested.requires_self_link(i) for i in range(len(attested.facts))),
             )
         except WholeSourceCompilationError:
+            self._observe_prewrite(delivery, "compile_rejected")
             return self._abstain(delivery)
         if self.progress is not None:
             self.progress("planner.ready", {})

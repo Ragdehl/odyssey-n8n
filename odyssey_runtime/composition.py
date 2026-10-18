@@ -4599,6 +4599,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             raise ValueError("P4 requires authenticated canonical SELF binding")
         from openai import OpenAI
 
+        from odyssey_runtime.dev_p4_diagnostics import record_dev_p4_prewrite_gate
         from odyssey_runtime.whole_source_light import WholeSourceLightExecutor
 
         light_source_execute = WholeSourceLightExecutor(
@@ -4613,6 +4614,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
             parallel_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_coverage_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_target_decisions=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
+            prewrite_diagnostic=(
+                record_dev_p4_prewrite_gate
+                if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+                else None
+            ),
             refresh_affected_indexes=refresh_affected_indexes,
             refresh_between_independent_scopes=lambda ids: refresh_affected_indexes(
                 ids, allow_full_rebuild=False
