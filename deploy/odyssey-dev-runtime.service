@@ -25,9 +25,10 @@ Environment=ODYSSEY_ACTOR=odyssey-dev
 Environment=ODYSSEY_ENABLED_APPLICATIONS=tasks
 Environment=ODYSSEY_LIGHT_SOURCE_V1=1
 Environment=ODYSSEY_DEPLOYMENT_ENV=DEV
-# DEV-only: ONNX in a disposable local child rather than main web/Writer runtime.
+# DEV-only: keep ONNX hot for a user session to avoid repeated 2-3s cold starts.
+# Temporary UX-first compromise; investigate smaller multilingual models.
 Environment=ODYSSEY_EMBEDDING_SUBPROCESS=1
-Environment=ODYSSEY_EMBEDDING_IDLE_SECONDS=30
+Environment=ODYSSEY_EMBEDDING_IDLE_SECONDS=900
 Environment=ODYSSEY_HYBRID_DEV_ENABLED=1
 Environment=ODYSSEY_HYBRID_SOURCE_REVIEW_ENABLED=1
 Environment=ODYSSEY_PARALLEL_ROUTE_PREPARATION=1

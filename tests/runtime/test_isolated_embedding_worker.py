@@ -42,6 +42,16 @@ def test_parent_serializes_simultaneous_calls_without_mixups(adapter):
     assert [row[0][0] for row in outputs] == [2.0, 3.0, 1.0, 1.0]
 
 
+def test_warm_worker_is_reused_for_repeated_queries_within_session(adapter):
+    assert adapter.embed_queries(["primera pregunta"])[0][0] > 0
+    initial = adapter._worker
+    assert initial is not None
+    time.sleep(0.07)
+    assert adapter.embed_queries(["segunda pregunta"])[0][0] > 0
+    assert adapter._worker is initial
+    assert initial.poll() is None
+
+
 def test_worker_reaps_after_inactivity_and_respawns(adapter):
     assert adapter.embed_documents(["old"])[0][0] == 3
     first = adapter._worker

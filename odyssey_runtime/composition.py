@@ -2593,7 +2593,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
         embedder = IsolatedFastEmbedTextEmbedder(
             cache_dir=embedding_cache,
-            idle_seconds=float(os.environ.get("ODYSSEY_EMBEDDING_IDLE_SECONDS", "120")),
+            idle_seconds=float(os.environ.get("ODYSSEY_EMBEDDING_IDLE_SECONDS", "900")),
         )
     else:
         embedder = FastEmbedTextEmbedder(cache_dir=embedding_cache, local_files_only=True)
