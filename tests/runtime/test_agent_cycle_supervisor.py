@@ -42,11 +42,194 @@ def test_plan_dry_run_is_persistent_does_not_create_worktree_and_cannot_reuse_id
     brief = cycle.ROLES / "pilot-p4.md"
     report = cycle.plan(brief, "agent-dry-run-1")
     assert report["phase"] == "planned"
+    assert report["acceptance_profile"] == "product"
     assert report["ready_for_user"] is False
     assert not (cycle.ROOT.parent / "odyssey-agent-work-agent-dry-run-1").exists()
     assert cycle.load("agent-dry-run-1") == report
     with pytest.raises(cycle.CycleError, match="already exists"):
         cycle.plan(brief, "agent-dry-run-1")
+
+
+@pytest.mark.parametrize("author", ["codex", "chatgpt"])
+def test_acceptance_profile_is_validated_and_persisted_for_each_author(
+    monkeypatch, tmp_path, author
+):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "check_repository", lambda: None)
+    previous, feature = "a" * 40, "b" * 40
+
+    def git_call(args, **_kwargs):
+        if "status" in args:
+            value = ""
+        elif "diff" in args:
+            value = "scripts/odyssey_agent_cycle.py\n"
+        elif "HEAD" in args:
+            value = feature + "\n"
+        else:
+            value = previous + "\n"
+        return type("Git", (), {"returncode": 0, "stdout": value})()
+
+    monkeypatch.setattr(cycle, "running", git_call)
+    kwargs = {"implemented_by": author, "acceptance": "tooling"}
+    if author == "chatgpt":
+        kwargs["against"] = previous
+    state = cycle.plan(cycle.ROLES / "pilot-p4.md", "tooling-profile-job", **kwargs)
+    assert state["acceptance_profile"] == "tooling"
+    assert cycle.load("tooling-profile-job")["acceptance_profile"] == "tooling"
+    assert state["ready_for_user"] is False
+    with pytest.raises(cycle.CycleError, match="Acceptance"):
+        cycle.plan(cycle.ROLES / "pilot-p4.md", "invalid-profile-job", acceptance="future")
+
+
+def test_successful_tooling_review_is_ready_only_for_allowlisted_diff(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda _dest, _job: None)
+    (tmp_path / "isolated").mkdir()
+    job = "tooling-ready-job"
+    path = cycle.job_path(job)
+    path.mkdir(parents=True)
+    (path / "brief.md").write_text("Disposable tooling review brief.")
+    cycle.atomic_json(
+        path / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "a" * 40,
+            "acceptance_profile": "tooling",
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+
+    def git_call(args, **_kwargs):
+        output = "scripts/odyssey_agent_cycle.py\0" if "--name-only" in args else ""
+        return type("Git", (), {"returncode": 0, "stdout": output})()
+
+    monkeypatch.setattr(cycle, "running", git_call)
+    monkeypatch.setattr(
+        cycle,
+        "codex",
+        lambda role, *_args, read_only: (
+            {"verdict": {"verdict": "pass"}} if read_only else {"role": role}
+        ),
+    )
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"focused": {"pass": True}})
+    result = cycle.run(job, 1, live=True)
+    assert result["phase"] == "reviewed_tooling_ready"
+    assert len(result["reviews"]) == 4
+    assert result["ready_for_user"] is True
+    assert "no deploy" in result["readiness_meaning"]
+    assert cycle.load(job) == result
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        "odyssey_core/domain.py",
+        "future_apps/custom/app.py",
+        "docs/architecture/odyssey-acceptance-contracts.json",
+    ],
+)
+def test_tooling_profile_fails_closed_on_product_or_unknown_paths(monkeypatch, tmp_path, changed):
+    workspace = tmp_path / "worktree"
+    workspace.mkdir()
+
+    def git_call(args, **_kwargs):
+        if "--name-only" in args:
+            output = changed + "\0"
+        elif "--others" in args:
+            output = "untracked-product.py\0"
+        else:
+            output = ""
+        return type("Git", (), {"returncode": 0, "stdout": output})()
+
+    monkeypatch.setattr(cycle, "running", git_call)
+    assert cycle.tooling_scope_is_safe(workspace, "a" * 40) is False
+
+
+def test_tooling_product_path_tampering_blocks_before_gates_or_reviewers(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda _dest, _job: None)
+    (tmp_path / "isolated").mkdir()
+    path = cycle.job_path("tooling-tamper-job")
+    path.mkdir(parents=True)
+    (path / "brief.md").write_text("Disposable tooling tamper brief.")
+    cycle.atomic_json(
+        path / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "a" * 40,
+            "acceptance_profile": "tooling",
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+    calls = []
+
+    def git_call(args, **_kwargs):
+        calls.append(args)
+        output = "odyssey_runtime/runtime.py\0" if "--name-only" in args else ""
+        return type("Git", (), {"returncode": 0, "stdout": output})()
+
+    monkeypatch.setattr(cycle, "running", git_call)
+    monkeypatch.setattr(
+        cycle,
+        "codex",
+        lambda role, *_args, read_only: (
+            pytest.fail("review launched") if read_only else {"role": role}
+        ),
+    )
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: pytest.fail("gate launched"))
+    result = cycle.run("tooling-tamper-job", 1, live=True)
+    assert result["phase"] == "blocked_acceptance_scope"
+    assert result["ready_for_user"] is False
+    assert all("deploy" not in " ".join(args) for args in calls)
+
+
+def test_tooling_profile_rejects_a_blocked_reviewer(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    monkeypatch.setattr(cycle, "workspace", lambda _job, _sha: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda _dest, _job: None)
+    (tmp_path / "isolated").mkdir()
+    path = cycle.job_path("tooling-review-blocked")
+    path.mkdir(parents=True)
+    (path / "brief.md").write_text("Disposable blocked review brief.")
+    cycle.atomic_json(
+        path / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "a" * 40,
+            "acceptance_profile": "tooling",
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+
+    def git_call(args, **_kwargs):
+        output = "tests/runtime/test_agent_cycle_supervisor.py\0" if "--name-only" in args else ""
+        return type("Git", (), {"returncode": 0, "stdout": output})()
+
+    monkeypatch.setattr(cycle, "running", git_call)
+    monkeypatch.setattr(
+        cycle,
+        "codex",
+        lambda role, *_args, read_only: (
+            {"verdict": {"verdict": "blocked" if role == "testing" else "pass"}}
+            if read_only
+            else {"role": role}
+        ),
+    )
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"focused": {"pass": True}})
+    result = cycle.run("tooling-review-blocked", 1, live=True)
+    assert result["phase"] == "blocked_external_evidence"
+    assert result["ready_for_user"] is False
 
 
 @pytest.mark.parametrize("job", ["../prod", "x", "WITH-SPACES", "odyssey-prod-release"])
@@ -843,3 +1026,23 @@ def test_headroom_guard_stops_before_spawning_codex(monkeypatch, tmp_path):
     )
     with pytest.raises(cycle.CycleError, match="headroom"):
         cycle.codex("generality", "Review", tmp_path, directory / "round-1", read_only=True)
+
+
+def test_tooling_scope_rejects_similar_named_docs_outside_exact_namespace(monkeypatch, tmp_path):
+    """An arbitrary product doc named agent-team is NOT supervisor documentation."""
+
+    def fake_git(args, **_kwargs):
+        out = "docs/product/agent-team.md\0" if "--name-only" in args else ""
+        return type("Git", (), {"returncode": 0, "stdout": out})()
+
+    monkeypatch.setattr(cycle, "running", fake_git)
+    assert cycle.tooling_scope_is_safe(tmp_path, "a" * 40) is False
+
+
+def test_tooling_scope_accepts_exact_designated_architecture_report(monkeypatch, tmp_path):
+    def fake_git(args, **_kwargs):
+        out = "docs/architecture/agent-team-pilot-20261018.md\0" if "--name-only" in args else ""
+        return type("Git", (), {"returncode": 0, "stdout": out})()
+
+    monkeypatch.setattr(cycle, "running", fake_git)
+    assert cycle.tooling_scope_is_safe(tmp_path, "a" * 40) is True

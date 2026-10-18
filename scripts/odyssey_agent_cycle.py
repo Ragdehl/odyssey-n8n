@@ -35,6 +35,15 @@ SCHEMA = ROLES / "review.schema.json"
 MODEL_POLICY = ROLES / "model-policy.json"
 CHECKOUT_EXCLUDE = ("odyssey-dev", "odyssey-prod-release", "odyssey-prod-venv")
 REVIEW_ROLES = ("generality", "quality", "testing", "performance")
+ACCEPTANCE_PROFILES = {
+    "product": {"ready_phase": "reviewed_browser_gate_pending", "ready_for_user": False},
+    "tooling": {"ready_phase": "reviewed_tooling_ready", "ready_for_user": True},
+}
+TOOLING_PATHS = (
+    "scripts/odyssey_agent_cycle.py",
+    "tests/runtime/test_agent_cycle_supervisor.py",
+    "docs/architecture/agent-team-pilot-20261018.md",
+)
 TIMEOUT = 1200
 MIN_MEMORY_MIB = 650
 
@@ -280,6 +289,30 @@ def resolve_commit(revision: str) -> str:
     return result.stdout.strip()
 
 
+def tooling_scope_is_safe(worktree: Path, baseline: str) -> bool:
+    """Allow tooling readiness only when all changed paths belong to the supervisor.
+
+    Tracked changes are compared with the immutable job baseline; untracked files
+    are included because a builder can create files after planning. Unknown paths
+    fail closed, including future application directories.
+    """
+    tracked = running(["git", "diff", "--name-only", "-z", baseline, "--"], cwd=worktree)
+    untracked = running(["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=worktree)
+    if tracked.returncode or untracked.returncode:
+        return False
+    paths = {
+        value
+        for output in (tracked.stdout, untracked.stdout)
+        for value in output.split("\0")
+        if value
+    }
+
+    def permitted(path: str) -> bool:
+        return path in TOOLING_PATHS or path.startswith("ops/agent-team/")
+
+    return bool(paths) and all(permitted(path) for path in paths)
+
+
 def plan(
     spec: Path,
     job: str,
@@ -288,6 +321,7 @@ def plan(
     against: str | None = None,
     risk: str = "normal",
     token_budget: int | None = None,
+    acceptance: str = "product",
 ) -> dict:
     check_repository()
     slug(job)
@@ -309,6 +343,8 @@ def plan(
         raise CycleError("Token budget must be 20000 to 300000 reported tokens")
     if implemented_by not in {"codex", "chatgpt"}:
         raise CycleError("Only Codex or ChatGPT can be the development source")
+    if acceptance not in ACCEPTANCE_PROFILES:
+        raise CycleError("Acceptance must be product or tooling")
     if implemented_by == "codex" and against is not None:
         raise CycleError("A comparison base is only meaningful for existing ChatGPT code")
     if implemented_by == "chatgpt" and against is None:
@@ -365,6 +401,7 @@ def plan(
         "reviews": {},
         "gate": {},
         "risk": risk,
+        "acceptance_profile": acceptance,
         "reported_token_budget": token_budget,
         "token_usage": {"reported_total": 0, "sessions": []},
         "deployment": "forbidden",
@@ -601,6 +638,9 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     state = load(job)
     if state["phase"] != "planned":
         raise CycleError("Job is not planned; refusing duplicate or concurrent launch")
+    acceptance = state.get("acceptance_profile", "product")
+    if acceptance not in ACCEPTANCE_PROFILES:
+        raise CycleError("Stored acceptance profile is invalid")
     if mem_available() < MIN_MEMORY_MIB:
         raise CycleError("Not enough memory to launch Codex safely")
     run_dir = job_path(job)
@@ -672,6 +712,18 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 )
                 record_agent_usage(job, state, "builder", builder_receipt)
             safe_worktree(dest, job)
+            if acceptance == "tooling":
+                scope_baseline = review_base or state["baseline_commit"]
+                if not tooling_scope_is_safe(dest, scope_baseline):
+                    update(
+                        job,
+                        state,
+                        "blocked_acceptance_scope",
+                        active_role=None,
+                        ready_for_user=False,
+                        last_error="Tooling acceptance includes a path outside the supervisor allowlist",
+                    )
+                    return state
             update(job, state, "testing", active_role="deterministic_gates")
             gates = deterministic_gates(dest, evidence)
             state["gate"] = gates
@@ -741,14 +793,27 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 v["verdict"] == "pass" for v in reviews.values()
             )
             if succeeded:
-                # A code-only review is never a genuine browser->n8n->Writer
-                # acceptance. Record the required external gate explicitly.
+                profile = ACCEPTANCE_PROFILES[acceptance]
+                if acceptance == "tooling":
+                    update(
+                        job,
+                        state,
+                        profile["ready_phase"],
+                        active_role=None,
+                        ready_for_user=profile["ready_for_user"],
+                        readiness_meaning=(
+                            "Internal CLI feature ready for maintainer; no deploy, merge, or push authority"
+                        ),
+                        last_error=None,
+                    )
+                    return state
+                # Product readiness still requires genuine browser->n8n->Writer evidence.
                 update(
                     job,
                     state,
-                    "reviewed_browser_gate_pending",
+                    profile["ready_phase"],
                     active_role=None,
-                    ready_for_user=False,
+                    ready_for_user=profile["ready_for_user"],
                     last_error="Authenticated live browser and deployment must be verified separately",
                 )
                 return state
@@ -818,6 +883,7 @@ def main() -> int:
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--job", required=True)
     p.add_argument("--implemented-by", choices=("codex", "chatgpt"), default="codex")
+    p.add_argument("--acceptance", choices=("product", "tooling"), default="product")
     p.add_argument("--against", help="Existing parent Git SHA of ChatGPT-authored changes")
     p.add_argument("--risk", choices=("normal", "high", "critical"), default="normal")
     p.add_argument(
@@ -848,6 +914,7 @@ def main() -> int:
                 against=args.against,
                 risk=args.risk,
                 token_budget=args.token_budget,
+                acceptance=args.acceptance,
             )
         elif args.action == "run":
             STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
