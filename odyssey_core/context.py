@@ -11,6 +11,7 @@ import sqlite3
 import tempfile
 from array import array
 from collections.abc import Mapping, Sequence
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time
 from pathlib import Path
@@ -588,6 +589,41 @@ class ContextIndex:
             raise TypeError("Context index path must be a pathlib.Path")
         self.path = path
 
+    def enable_concurrent_reads(self) -> None:
+        """Enable WAL only for a complete and compatible context index."""
+        if not self.path.is_file():
+            raise ContextIndexError("Cannot configure a missing context index")
+        try:
+            with closing(sqlite3.connect(self.path)) as connection:
+                markers = dict(connection.execute("SELECT key, value FROM metadata"))
+                if any(markers.get(key) != value for key, value in _INDEX_MARKERS.items()):
+                    raise ContextIndexError("Cannot configure unverified context index")
+                mode = connection.execute("PRAGMA journal_mode=WAL").fetchone()
+                if mode != ("wal",):
+                    raise ContextIndexError("Unable to enable context index concurrent reads")
+        except ContextIndexError:
+            raise
+        except sqlite3.Error as error:
+            raise ContextIndexError("Unable to configure context index concurrent reads") from error
+
+    def _publish_rebuild(self, temporary: Path) -> None:
+        """Publish a rebuild safely through the original DB while in WAL mode.
+
+        An os.replace of a WAL database could pair an old WAL sidecar with a
+        different DB inode. SQLite backup publishes into the existing logical
+        database, preserving concurrent readers' snapshots. DELETE mode keeps
+        the original atomic-rename implementation.
+        """
+        if self.path.exists():
+            with closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as db:
+                wal_mode = db.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+            if wal_mode:
+                with closing(sqlite3.connect(temporary)) as source:
+                    with closing(sqlite3.connect(self.path)) as destination:
+                        source.backup(destination)
+                return
+        os.replace(temporary, self.path)
+
     def rebuild(
         self, repository: VaultRepository, schema: dict[str, Any], embedder: TextEmbedder
     ) -> int:
@@ -872,7 +908,7 @@ class ContextIndex:
                     raise ContextIndexError(
                         "Canonical source changed before publishing rebuilt index"
                     )
-            os.replace(temporary, self.path)
+            self._publish_rebuild(temporary)
         except (OSError, sqlite3.Error) as error:
             raise ContextIndexError("Unable to rebuild context index") from error
         finally:
@@ -1456,10 +1492,15 @@ class ContextIndex:
         if not self.path.exists():
             return
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+            with closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as connection:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
             if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                 raise ContextIndexError("Refusing to delete an unverified context index")
+            # Closing WAL via SQLite also removes sidecars before unlinking.
+            with closing(sqlite3.connect(self.path)) as connection:
+                if connection.execute("PRAGMA journal_mode").fetchone() == ("wal",):
+                    if connection.execute("PRAGMA journal_mode=DELETE").fetchone() != ("delete",):
+                        raise ContextIndexError("Unable to close context WAL before deleting")
             self.path.unlink(missing_ok=True)
         except ContextIndexError:
             raise

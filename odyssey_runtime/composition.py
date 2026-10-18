@@ -14,7 +14,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from threading import Condition, RLock, Thread
-from time import perf_counter
+from time import perf_counter, thread_time
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -369,6 +369,7 @@ def _emit_dev_index_refresh_diagnostic(
     note_count: int,
     duration_ms: float,
     stages_ms: Mapping[str, float],
+    stages_cpu_ms: Mapping[str, float] | None = None,
     context_embedded_notes: int | None = None,
     failure_stage: str | None = None,
     failure_class: str | None = None,
@@ -385,6 +386,10 @@ def _emit_dev_index_refresh_diagnostic(
         "duration_ms": round(max(0.0, duration_ms), 1),
         "stages_ms": {stage: round(max(0.0, duration), 1) for stage, duration in stages_ms.items()},
     }
+    if stages_cpu_ms is not None:
+        event["stages_cpu_ms"] = {
+            stage: round(max(0.0, duration), 1) for stage, duration in stages_cpu_ms.items()
+        }
     if context_embedded_notes is not None:
         event["context_embedded_notes"] = context_embedded_notes
     if failure_stage is not None:
@@ -2870,6 +2875,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         """
         started = perf_counter()
         durations_ms: dict[str, float] = {}
+        cpu_durations_ms: dict[str, float] = {}
         stage = "resolve_affected"
         outcome = "incremental"
         failure_stage: str | None = None
@@ -2901,10 +2907,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
             nonlocal stage
             stage = name
             t0 = perf_counter()
+            c0 = thread_time()
             try:
                 return refresh()
             finally:
                 durations_ms[name] = (perf_counter() - t0) * 1000
+                cpu_durations_ms[name] = (thread_time() - c0) * 1000
 
         try:
             expanded = tuple(
@@ -2968,6 +2976,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 note_count=len(expanded),
                 duration_ms=(perf_counter() - started) * 1000,
                 stages_ms=durations_ms,
+                stages_cpu_ms=cpu_durations_ms,
                 context_embedded_notes=context_embedded_notes,
                 failure_stage=failure_stage,
                 failure_class=failure_class,
@@ -3113,6 +3122,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
             refresh_indexes()
     else:
         refresh_indexes()
+
+    # Optional DEV experiment: WAL improves reader/writer coexistence without
+    # changing the context SQL schema, canonical markdown, or PROD behavior.
+    if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV" and light_source_enabled:
+        context_index.enable_concurrent_reads()
 
     def notes_mutation_actor(
         authenticated_actor: AuthenticatedActorContext | None,
