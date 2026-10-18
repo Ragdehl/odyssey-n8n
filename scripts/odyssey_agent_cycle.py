@@ -323,6 +323,23 @@ def model_policy() -> dict:
         for value in reservations.values()
     ):
         raise CycleError("Invalid reviewer reservation tokens")
+    sensitive = policy.get("security_sensitive_tooling_paths")
+    required_sensitive = {
+        "scripts/odyssey_agent_cycle.py",
+        "ops/agent-team/model-policy.json",
+        "ops/agent-team/review.schema.json",
+        *(f"ops/agent-team/{role}.md" for role in ("builder", *REVIEW_ROLES)),
+    }
+    if (
+        not isinstance(sensitive, list)
+        or len(set(sensitive)) != len(sensitive)
+        or not required_sensitive.issubset(sensitive)
+        or any(
+            not isinstance(name, str) or name.startswith("/") or ".." in Path(name).parts
+            for name in sensitive
+        )
+    ):
+        raise CycleError("Security-sensitive tooling classification cannot be weakened")
     by_profile = policy.get("required_reviews")
     if not isinstance(by_profile, dict) or set(by_profile) != set(ACCEPTANCE_PROFILES):
         raise CycleError("Invalid review-profile policy")
@@ -342,19 +359,36 @@ def model_policy() -> dict:
     return policy
 
 
-def select_review_roles(state: dict) -> tuple[str, ...]:
-    """Policy-defined minimum: all product reviewers; bounded routine tooling pair."""
+def effective_review_risk(state: dict, dest: Path | None = None) -> tuple[str, list[str]]:
+    """Escalate real supervisor code/policy edits regardless of a user-supplied risk label."""
     profile = state.get("acceptance_profile", "product")
-    risk = state.get("risk", "normal")
-    if profile not in ACCEPTANCE_PROFILES or risk not in {"normal", "high", "critical"}:
+    declared = state.get("risk", "normal")
+    if profile not in ACCEPTANCE_PROFILES or declared not in {"normal", "high", "critical"}:
         raise CycleError("Invalid review profile or risk")
+    if dest is None or profile != "tooling":
+        return declared, []
+    base = state.get("review_base") or state.get("baseline_commit")
+    if not isinstance(base, str) or not re.fullmatch(r"[0-9a-f]{40}", base):
+        raise CycleError("Cannot verify risk without pinned source baseline")
+    sensitive = set(model_policy()["security_sensitive_tooling_paths"])
+    paths = sorted(name for name in touched_paths(dest, base) if name in sensitive)
+    return ("high" if declared == "normal" and paths else declared), paths
+
+
+def select_review_roles(state: dict, dest: Path | None = None) -> tuple[str, ...]:
+    """Product always gets four; sensitive tooling is automatically high-risk."""
+    profile = state.get("acceptance_profile", "product")
+    risk, _sensitive = effective_review_risk(state, dest)
     return tuple(model_policy()["required_reviews"][profile][risk])
 
 
-def review_budget_quote(state: dict, *, include_builder: bool = False) -> dict:
+def review_budget_quote(
+    state: dict, *, include_builder: bool = False, dest: Path | None = None
+) -> dict:
     """Deterministic lower-bound quote, not a hard in-session consumption limit."""
     policy = model_policy()
-    selected = select_review_roles(state)
+    selected = select_review_roles(state, dest)
+    effective, sensitive_paths = effective_review_risk(state, dest)
     minimums = policy["minimum_review_tokens_by_role"]
     reservations = {role: minimums[role] for role in selected}
     if include_builder:
@@ -367,6 +401,8 @@ def review_budget_quote(state: dict, *, include_builder: bool = False) -> dict:
     return {
         "profile": state.get("acceptance_profile", "product"),
         "risk": state.get("risk", "normal"),
+        "effective_risk": effective,
+        "auto_escalated_by": sensitive_paths,
         "roles": list(selected),
         "omitted_roles": [
             {
@@ -419,6 +455,7 @@ def select_agent_model(role: str, state: dict, dest: Path) -> dict:
     declared = state.get("risk", "normal")
     if declared not in {"normal", "high", "critical"}:
         raise CycleError("Unknown feature risk declaration")
+    declared, _elevated = effective_review_risk(state, dest)
     base = state.get("review_base") or state.get("baseline_commit")
     if not isinstance(base, str) or not re.fullmatch(r"[0-9a-f]{40}", base):
         raise CycleError("Missing immutable source baseline for routing")
@@ -877,12 +914,15 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     if mem_available() < MIN_MEMORY_MIB:
         raise CycleError("Not enough memory to launch Codex safely")
     run_dir = job_path(job)
-    selected_roles = select_review_roles(state)
+    initial_scope = ROOT if state.get("implemented_by") == "chatgpt" else None
+    selected_roles = select_review_roles(state, initial_scope)
     # Jobs created by plan() always have a full per-session ledger. Stop before
     # Builder if a full mandatory review set could not fit even at the minimum.
     if "reported_token_budget" in state and "token_usage" in state:
         initial_quote = review_budget_quote(
-            state, include_builder=state.get("implemented_by", "codex") == "codex"
+            state,
+            include_builder=state.get("implemented_by", "codex") == "codex",
+            dest=initial_scope,
         )
         state["review_plan"] = initial_quote
         if not initial_quote["can_start"]:
@@ -1019,8 +1059,9 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
             # Gate passed. Recalculate the minimum for all outstanding audits
             # after the Builder's actual measured consumption. No partial
             # reviewing if the remaining job budget is already insufficient.
+            selected_roles = select_review_roles(state, dest)
             if "reported_token_budget" in state and "token_usage" in state:
-                quote = review_budget_quote(state)
+                quote = review_budget_quote(state, dest=dest)
                 state["review_plan"] = quote
                 if not quote["can_start"]:
                     update(
@@ -1229,6 +1270,11 @@ def main() -> int:
                     include_builder=(
                         state.get("implemented_by", "codex") == "codex"
                         and state.get("round", 0) == 0
+                    ),
+                    dest=(
+                        checkout
+                        if state.get("worktree") or state.get("implemented_by") == "chatgpt"
+                        else None
                     ),
                 ),
                 "models_launched": False,

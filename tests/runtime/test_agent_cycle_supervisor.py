@@ -627,7 +627,7 @@ def test_incremental_round_status_and_failure_preservation(monkeypatch, tmp_path
     monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
     roles = ("audit-alpha", "audit-beta", "audit-gamma", "audit-delta", "audit-epsilon")
     monkeypatch.setattr(cycle, "REVIEW_ROLES", roles)
-    monkeypatch.setattr(cycle, "select_review_roles", lambda _state: roles)
+    monkeypatch.setattr(cycle, "select_review_roles", lambda _state, _dest=None: roles)
     monkeypatch.setattr(cycle, "instructions", lambda *_: "Synthetic audit")
     job = "synthetic-progress"
     root = cycle.job_path(job)
@@ -1473,3 +1473,54 @@ def test_routine_tooling_zero_cost_mock_checks_only_selected_independent_roles(
     assert len(state["review_plan"]["omitted_roles"]) == 2
     assert state["review_artifacts"].keys() == set(roles)
     assert state["gate"]["offline"]["pass"] is True
+
+
+@pytest.mark.parametrize(
+    ("paths", "risk", "expected"),
+    [
+        (("ops/agent-team/README.md",), "normal", ("generality", "quality")),
+        (("ops/agent-team/pilot-budget-preflight-proof.md",), "normal", ("generality", "quality")),
+        (("scripts/odyssey_agent_cycle.py",), "high", cycle.REVIEW_ROLES),
+        (("ops/agent-team/model-policy.json",), "high", cycle.REVIEW_ROLES),
+        (("ops/agent-team/quality.md",), "high", cycle.REVIEW_ROLES),
+        (("ops/agent-team/testing.md",), "high", cycle.REVIEW_ROLES),
+        (("ops/agent-team/review.schema.json",), "high", cycle.REVIEW_ROLES),
+    ],
+)
+def test_security_sensitive_tooling_files_auto_escalate_actual_review_scope(
+    monkeypatch, tmp_path, paths, risk, expected
+):
+    monkeypatch.setattr(cycle, "touched_paths", lambda _dest, _base: paths)
+    state = {
+        "risk": "normal",
+        "acceptance_profile": "tooling",
+        "review_base": "a" * 40,
+        "baseline_commit": "b" * 40,
+        "reported_token_budget": 110000,
+        "token_usage": {"reported_total": 0, "sessions": []},
+    }
+    chosen, triggering_files = cycle.effective_review_risk(state, tmp_path)
+    assert chosen == risk
+    assert set(triggering_files).issubset(paths)
+    assert cycle.select_review_roles(state, tmp_path) == expected
+    quote = cycle.review_budget_quote(state, dest=tmp_path)
+    assert quote["effective_risk"] == risk
+    if risk == "high":
+        assert quote["can_start"] is False
+        assert quote["minimum_remaining_reported_tokens"] == 205000
+        assert cycle.select_agent_model("generality", state, tmp_path)["model"] == "gpt-6-sol"
+    else:
+        assert quote["can_start"] is True
+        assert quote["minimum_remaining_reported_tokens"] == 100000
+
+
+def test_sensitive_policy_catalog_cannot_omit_core_supervisor_code(monkeypatch, tmp_path):
+    import json
+
+    policy = cycle.model_policy()
+    policy["security_sensitive_tooling_paths"].remove("scripts/odyssey_agent_cycle.py")
+    filename = tmp_path / "insecure.json"
+    filename.write_text(json.dumps(policy))
+    monkeypatch.setattr(cycle, "MODEL_POLICY", filename)
+    with pytest.raises(cycle.CycleError, match="cannot be weakened"):
+        cycle.model_policy()

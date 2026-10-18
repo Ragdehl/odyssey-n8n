@@ -75,5 +75,15 @@
         "performance"
       ]
     }
-  }
+  },
+  "security_sensitive_tooling_paths": [
+    "scripts/odyssey_agent_cycle.py",
+    "ops/agent-team/model-policy.json",
+    "ops/agent-team/review.schema.json",
+    "ops/agent-team/builder.md",
+    "ops/agent-team/generality.md",
+    "ops/agent-team/quality.md",
+    "ops/agent-team/testing.md",
+    "ops/agent-team/performance.md"
+  ]
 }
