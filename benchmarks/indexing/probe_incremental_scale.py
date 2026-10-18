@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import resource
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from odyssey_core.notes import serialize_note
 from odyssey_core.schema_types import planning_schema_for_capability
 from odyssey_core.semantic import SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
+from odyssey_core.verified_source_inventory import verified_context_source_inventory
 from tests.core.test_context import KeywordEmbedder, note
 
 schema = compose_application_schema(
@@ -95,24 +97,68 @@ def measure(size):
             ),
         )
         measurements = []
+        r.reset()
+        tick = time.perf_counter()
+        count = c.refresh_notes(r, schema, e, note_ids=("synthetic-00000",))
+        measurements.append(
+            {
+                "kind": "context",
+                "seconds": round(time.perf_counter() - tick, 3),
+                "embedded_note_count": count,
+                "read_text": r.reads,
+                "file_version": r.stats,
+                "listings": r.listings,
+            }
+        )
+        r.reset()
+        tick = time.perf_counter()
+        manifest = verified_context_source_inventory(r, schema, c.path)
+        measurements.append(
+            {
+                "kind": "verified_inventory",
+                "seconds": round(time.perf_counter() - tick, 3),
+                "embedded_note_count": 0,
+                "read_text": r.reads,
+                "file_version": r.stats,
+                "listings": r.listings,
+            }
+        )
         for kind, index, sc in [
-            ("context", c, schema),
             ("semantic", s, schema),
             ("semantic-tasks", a, task_schema),
         ]:
-            r.reset()
-            tick = time.perf_counter()
-            count = index.refresh_notes(r, sc, e, note_ids=("synthetic-00000",))
-            measurements.append(
-                {
-                    "kind": kind,
-                    "seconds": round(time.perf_counter() - tick, 3),
-                    "embedded_note_count": count,
-                    "read_text": r.reads,
-                    "file_version": r.stats,
-                    "listings": r.listings,
-                }
-            )
+            fast = SemanticEntityIndex(root / f"{kind}-fast.sqlite3")
+            shutil.copy2(index.path, fast.path)
+            for mode, target, extra in (
+                ("legacy", index, {}),
+                ("shared", fast, {"verified_inventory": manifest}),
+            ):
+                r.reset()
+                tick = time.perf_counter()
+                count = target.refresh_notes(r, sc, e, note_ids=("synthetic-00000",), **extra)
+                measurements.append(
+                    {
+                        "kind": kind,
+                        "mode": mode,
+                        "seconds": round(time.perf_counter() - tick, 3),
+                        "embedded_note_count": count,
+                        "read_text": r.reads,
+                        "file_version": r.stats,
+                        "listings": r.listings,
+                    }
+                )
+                # Equivalent source identity and vectors; only SQL storage order may vary.
+                import sqlite3
+
+                with (
+                    sqlite3.connect(index.path) as legacy_db,
+                    sqlite3.connect(fast.path) as fast_db,
+                ):
+                    if mode == "shared":
+                        assert (
+                            legacy_db.execute("select * from notes order by id").fetchall()
+                            == fast_db.execute("select * from notes order by id").fetchall()
+                        )
         print(
             json.dumps(
                 {

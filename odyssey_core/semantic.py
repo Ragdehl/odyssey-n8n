@@ -18,6 +18,7 @@ from typing import Any, Protocol, cast
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.schema_types import referenceable_type_ids
 from odyssey_core.storage import VaultRepository
+from odyssey_core.verified_source_inventory import VerifiedSourceInventory
 
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 _INDEX_MARKERS = {
@@ -390,6 +391,7 @@ class SemanticEntityIndex:
         embedder: TextEmbedder,
         *,
         note_ids: Sequence[str],
+        verified_inventory: VerifiedSourceInventory | None = None,
     ) -> int:
         """Incrementally reconcile affected semantic rows against authoritative Markdown.
 
@@ -407,30 +409,70 @@ class SemanticEntityIndex:
         canonical_types = _canonical_types(schema)
         current: dict[str, _ProjectedNote] = {}
         seen_ids: set[str] = set()
-        for path in repository.list_markdown_paths():
-            raw = repository.read_text(path)
+        manifest_identities: dict[str, tuple[str, str, str, str]] | None = None
+        if verified_inventory is not None:
             try:
-                note = parse_note(raw)
-                validate_note(note, schema)
-            except (NoteFormatError, NoteValidationError) as error:
-                raise SemanticIndexError(f"Cannot safely index invalid note: {path}") from error
-            note_id = cast(str, note.metadata["id"])
-            if note_id in seen_ids:
-                raise SemanticIndexError(f"Cannot safely index duplicate note ID: {note_id}")
-            seen_ids.add(note_id)
-            if note.metadata.get("deleted") is True:
-                continue
-            note_type = cast(str, note.metadata["type"])
-            if note_type not in canonical_types:
-                continue
-            current[note_id] = _ProjectedNote(
-                path=path,
-                id=note_id,
-                type=note_type,
-                primary_name=cast(str, note.metadata["name"]),
-                source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
-                text=build_semantic_retrieval_text(note, path),
-            )
+                verified_inventory.assert_unchanged(repository)
+                manifest_identities = {}
+                for record in verified_inventory.records:
+                    if record.deleted or record.type not in canonical_types:
+                        continue
+                    manifest_identities[record.id] = (
+                        record.path,
+                        record.type,
+                        record.name,
+                        record.source_hash,
+                    )
+                    if record.id not in requested:
+                        continue
+                    if repository.file_version(record.path) != record.version:
+                        raise SemanticIndexError("Source changed before selected semantic read")
+                    raw = repository.read_text(record.path)
+                    note = parse_note(raw)
+                    validate_note(note, schema)
+                    if (
+                        note.metadata["id"] != record.id
+                        or note.metadata["type"] != record.type
+                        or note.metadata["name"] != record.name
+                        or hashlib.sha256(raw.encode("utf-8")).hexdigest() != record.source_hash
+                        or repository.file_version(record.path) != record.version
+                    ):
+                        raise SemanticIndexError("Selected canonical source differs from inventory")
+                    current[record.id] = _ProjectedNote(
+                        path=record.path,
+                        id=record.id,
+                        type=record.type,
+                        primary_name=record.name,
+                        source_hash=record.source_hash,
+                        text=build_semantic_retrieval_text(note, record.path),
+                    )
+            except (ValueError, NoteFormatError, NoteValidationError) as error:
+                raise SemanticIndexError("Verified inventory is stale or invalid") from error
+        else:
+            for path in repository.list_markdown_paths():
+                raw = repository.read_text(path)
+                try:
+                    note = parse_note(raw)
+                    validate_note(note, schema)
+                except (NoteFormatError, NoteValidationError) as error:
+                    raise SemanticIndexError(f"Cannot safely index invalid note: {path}") from error
+                note_id = cast(str, note.metadata["id"])
+                if note_id in seen_ids:
+                    raise SemanticIndexError(f"Cannot safely index duplicate note ID: {note_id}")
+                seen_ids.add(note_id)
+                if note.metadata.get("deleted") is True:
+                    continue
+                note_type = cast(str, note.metadata["type"])
+                if note_type not in canonical_types:
+                    continue
+                current[note_id] = _ProjectedNote(
+                    path=path,
+                    id=note_id,
+                    type=note_type,
+                    primary_name=cast(str, note.metadata["name"]),
+                    source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                    text=build_semantic_retrieval_text(note, path),
+                )
 
         selected = [current[note_id] for note_id in requested if note_id in current]
         vectors = list(embedder.embed_documents([item.text for item in selected]))
@@ -463,10 +505,14 @@ class SemanticEntityIndex:
                         "SELECT id, path, type, primary_name, source_hash FROM notes"
                     )
                 }
-                current_identity = {
-                    note_id: (item.path, item.type, item.primary_name, item.source_hash)
-                    for note_id, item in current.items()
-                }
+                current_identity = (
+                    manifest_identities
+                    if manifest_identities is not None
+                    else {
+                        note_id: (item.path, item.type, item.primary_name, item.source_hash)
+                        for note_id, item in current.items()
+                    }
+                )
                 for note_id, identity in current_identity.items():
                     if note_id not in affected and indexed.get(note_id) != identity:
                         raise SemanticIndexError(
@@ -479,6 +525,14 @@ class SemanticEntityIndex:
                     raise SemanticIndexError(
                         "Incremental semantic refresh detected unrelated index drift"
                     )
+
+                if verified_inventory is not None:
+                    try:
+                        verified_inventory.assert_unchanged(repository)
+                    except ValueError as error:
+                        raise SemanticIndexError(
+                            "Verified source changed before semantic index publication"
+                        ) from error
 
                 connection.executemany(
                     "DELETE FROM notes WHERE id = ?",

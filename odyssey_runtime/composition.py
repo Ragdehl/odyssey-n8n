@@ -149,6 +149,7 @@ from odyssey_core.temporal_interpretation import (
     TemporalInterpreterError,
 )
 from odyssey_core.temporal_resolution import TemporalResolutionKind
+from odyssey_core.verified_source_inventory import verified_context_source_inventory
 
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
@@ -2897,10 +2898,20 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         repository, schema, embedder, note_ids=expanded
                     ),
                 )
+                verified_inventory = measure(
+                    "verified_inventory",
+                    lambda: verified_context_source_inventory(
+                        repository, schema, context_index.path
+                    ),
+                )
                 measure(
                     "semantic",
                     lambda: semantic_index.refresh_notes(
-                        repository, schema, embedder, note_ids=expanded
+                        repository,
+                        schema,
+                        embedder,
+                        note_ids=expanded,
+                        verified_inventory=verified_inventory,
                     ),
                 )
                 for capability_id, index in application_semantic_indexes.items():
@@ -2911,6 +2922,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                             planning_schema_for_capability(schema, capability_id),
                             embedder,
                             note_ids=expanded,
+                            verified_inventory=verified_inventory,
                         ),
                     )
             except (ContextIndexError, SemanticIndexError, ValueError) as error:
