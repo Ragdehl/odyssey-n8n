@@ -5,7 +5,7 @@ A supervised, bounded **development workflow**, not a new Odyssey user-facing Ap
 ## Owner and roles
 
 Supervisor: `scripts/odyssey_agent_cycle.py` is a deterministic state machine that checks gates, records status/receipts, bounds attempts and protects DEV/PROD. Five Codex specialists run *one at a time* in a fresh `agent/<job>` Git worktree:
-1. Builder — implementation and focused tests (only editing specialist).
+1. Builder — implementation and focused tests when Codex is the primary developer, or repairs after independently reviewing a change authored by ChatGPT (only editing specialist during the agent cycle).
 2. Generality — reusable Core contracts, arbitrary future App audit.
 3. Quality — security, E2/E3, canonical Writer, maintainability.
 4. Testing — adversarial, full-source and genuine end-to-end evidence.
@@ -20,6 +20,10 @@ cd /home/ragdehl/projects/odyssey-e3-mutation
 python3 scripts/odyssey_agent_cycle.py doctor
 python3 scripts/odyssey_agent_cycle.py plan --spec ops/agent-team/pilot-p4.md --job p4-agents-pilot-20261018
 python3 scripts/odyssey_agent_cycle.py status --job p4-agents-pilot-20261018
+# To independently review a feature already written by ChatGPT in a clean, committed branch:
+# BASE=$(git rev-parse <parent-commit>); TIP=$(git rev-parse HEAD)
+# python3 scripts/odyssey_agent_cycle.py plan --spec ops/agent-team/pilot-source-overlap.md --job unique-job --implemented-by chatgpt --against "$BASE"
+# python3 scripts/odyssey_agent_cycle.py run --job unique-job --max-rounds 1 --live
 # Do NOT execute unsupervised until sandbox and real browser gate are evaluated:
 python3 scripts/odyssey_agent_cycle.py run --job p4-agents-pilot-20261018 --max-rounds 2 --live
 python3 scripts/odyssey_agent_cycle.py stop --job p4-agents-pilot-20261018
@@ -40,3 +44,9 @@ The full offline gate is `scripts/odyssey_cross_surface_gate.py`, plus accepted-
 ## Next adoption gate
 
 Pilot with ONE bounded, READ-ONLY architecture/generalization review. Verify actual Codex CLI JSON output, cancellation, Git worktree isolation, and resource reporting. Then run a tiny expendable feature through implementer→reviewers on a dedicated worktree. Integrate browser E2E and notifications before running substantial unattended loops. **Do not start the complete live loop without these proofs.**
+
+## ChatGPT as the developer (same QA pipeline)
+
+If ChatGPT produces code through the authorized remote session, commit that code on a feature branch after deterministic focused tests. Create a **new** job with `plan --implemented-by chatgpt --against <full-parent-SHA>`. The supervisor requires a clean committed source snapshot, verifies the comparison SHA is a genuine ancestor with a nonempty diff, pins the feature commit, and creates the same isolated audit worktree. On the first round the Builder role is SKIPPED, conserving Codex quota; all deterministic gates and independent reviewers still run. If a review FAILS on a repairable issue, the Builder gets the findings and works in that same isolated worktree on the next round. If the test/browser gate is blocked, it must not call Builder pointlessly. Never claim model review is equivalent to live user UI E2E.
+
+For first pilot use `--max-rounds 1`: independent read-only audits **only**. A later unattended repair cycle requires separately verified OS/container isolation from personal vaults, credentials, tunnel and deployment rights. `status` never triggers models, and the chat may inspect the persistent report when asked. No automatic messages to this conversation are implied.

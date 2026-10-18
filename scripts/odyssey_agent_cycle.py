@@ -4,7 +4,8 @@
 Usage:
   python scripts/odyssey_agent_cycle.py doctor
   python scripts/odyssey_agent_cycle.py plan --spec <markdown> --job <slug>
-  python scripts/odyssey_agent_cycle.py run --spec <markdown> --job <slug> --live
+  python scripts/odyssey_agent_cycle.py plan --spec <markdown> --job <slug> --implemented-by chatgpt --against <commit>
+  python scripts/odyssey_agent_cycle.py run --job <slug> --live
   python scripts/odyssey_agent_cycle.py status --job <slug>
   python scripts/odyssey_agent_cycle.py stop --job <slug>
 
@@ -138,7 +139,19 @@ def doctor() -> dict:
     }
 
 
-def plan(spec: Path, job: str) -> dict:
+def resolve_commit(revision: str) -> str:
+    """Accept only existing unambiguous SHAs, never Git option or ref injection."""
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{7,40}", revision):
+        raise CycleError("Comparison base must be a literal Git SHA")
+    result = running(["git", "-C", str(ROOT), "rev-parse", "--verify", revision + "^{commit}"])
+    if result.returncode or not re.fullmatch(r"[0-9a-f]{40}\n?", result.stdout):
+        raise CycleError("Comparison base must resolve to a local commit")
+    return result.stdout.strip()
+
+
+def plan(
+    spec: Path, job: str, *, implemented_by: str = "codex", against: str | None = None
+) -> dict:
     check_repository()
     slug(job)
     if not spec.is_file() or not spec.resolve().is_relative_to(ROOT):
@@ -146,18 +159,57 @@ def plan(spec: Path, job: str) -> dict:
     brief = spec.resolve().read_text(encoding="utf-8")
     if not 40 <= len(brief) <= 25000:
         raise CycleError("Feature brief must be 40 to 25000 characters")
+    if implemented_by not in {"codex", "chatgpt"}:
+        raise CycleError("Only Codex or ChatGPT can be the development source")
+    if implemented_by == "codex" and against is not None:
+        raise CycleError("A comparison base is only meaningful for existing ChatGPT code")
+    if implemented_by == "chatgpt" and against is None:
+        raise CycleError("ChatGPT handoff requires an explicit committed Git base")
+    baseline = running(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
+    if baseline.returncode or not re.fullmatch(r"[0-9a-f]{40}\n?", baseline.stdout):
+        raise CycleError("Cannot anchor the source commit")
+    status = running(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=all"])
+    if status.returncode or status.stdout.strip():
+        raise CycleError("Handoff requires committed files and a clean Git source snapshot")
+    review_base = None
+    if against is not None:
+        review_base = resolve_commit(against)
+        verify = running(
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "merge-base",
+                "--is-ancestor",
+                review_base,
+                baseline.stdout.strip(),
+            ]
+        )
+        changed = running(
+            [
+                "git",
+                "-C",
+                str(ROOT),
+                "diff",
+                "--name-only",
+                review_base,
+                baseline.stdout.strip(),
+            ]
+        )
+        if verify.returncode or changed.returncode or not changed.stdout.strip():
+            raise CycleError("Comparison must be an ancestor with committed feature changes")
     run_dir = job_path(job)
     if (run_dir / "status.json").exists():
         raise CycleError("Job already exists: never overwrite evidence or re-run an ID")
     run_dir.mkdir(parents=True, exist_ok=False, mode=0o700)
     (run_dir / "brief.md").write_text(brief, encoding="utf-8")
-    baseline = running(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
-    if baseline.returncode:
-        raise CycleError("Cannot anchor the source commit")
     state = {
         "job": job,
         "phase": "planned",
         "baseline_commit": baseline.stdout.strip(),
+        "implemented_by": implemented_by,
+        "review_base": review_base,
+        "feature_commit": baseline.stdout.strip() if implemented_by == "chatgpt" else None,
         "created_at": now(),
         "updated_at": now(),
         "round": 0,
@@ -374,19 +426,54 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     state["worktree"] = str(dest)
     brief = (run_dir / "brief.md").read_text(encoding="utf-8")
     findings = {}
+    review_base = state.get("review_base")
+    if state.get("implemented_by", "codex") == "chatgpt" and not review_base:
+        raise CycleError("A ChatGPT-originated feature requires independent comparison base")
+    compare = (
+        "\nIndependent review scope: validate Git changes since "
+        + review_base
+        + ". Inspect `git diff "
+        + review_base
+        + "` and any current uncommitted"
+        " changes. Do NOT equate historical unrelated product gaps with"
+        " newly introduced regressions; report unresolved preexisting blockers"
+        " as non-blocking findings unless the feature actually promises to fix them."
+        if review_base
+        else ""
+    )
     update(job, state, "running")
     try:
         for attempt in range(1, max_rounds + 1):
             evidence = run_dir / f"round-{attempt}"
             evidence.mkdir(parents=True)
-            update(job, state, "implementing", round=attempt, active_role="builder")
-            codex(
-                "builder",
-                instructions("builder", brief, state["baseline_commit"], findings),
-                dest,
-                evidence,
-                read_only=False,
-            )
+            if state.get("implemented_by", "codex") == "chatgpt" and attempt == 1:
+                # A real human-facing ChatGPT session ALREADY authored and
+                # committed this exact source snapshot. Never bill Codex to
+                # implement the same feature a second time.
+                update(job, state, "reviewing_chatgpt_change", round=attempt, active_role=None)
+                (evidence / "handoff.json").write_text(
+                    json.dumps(
+                        {
+                            "developer": "chatgpt",
+                            "feature_commit": state["feature_commit"],
+                            "review_base": review_base,
+                        },
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+            else:
+                update(job, state, "implementing", round=attempt, active_role="builder")
+                codex(
+                    "builder",
+                    instructions(
+                        "builder", brief, review_base or state["baseline_commit"], findings
+                    )
+                    + compare,
+                    dest,
+                    evidence,
+                    read_only=False,
+                )
             safe_worktree(dest, job)
             update(job, state, "testing", active_role="deterministic_gates")
             gates = deterministic_gates(dest, evidence)
@@ -402,7 +489,8 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                     raise CycleError("Cannot record review-only Git baseline")
                 review = codex(
                     role,
-                    instructions(role, brief, state["baseline_commit"], gates),
+                    instructions(role, brief, review_base or state["baseline_commit"], gates)
+                    + compare,
                     dest,
                     evidence,
                     read_only=True,
@@ -452,6 +540,8 @@ def main() -> int:
     p = actions.add_parser("plan")
     p.add_argument("--spec", type=Path, required=True)
     p.add_argument("--job", required=True)
+    p.add_argument("--implemented-by", choices=("codex", "chatgpt"), default="codex")
+    p.add_argument("--against", help="Existing parent Git SHA of ChatGPT-authored changes")
     r = actions.add_parser("run")
     r.add_argument("--job", required=True)
     r.add_argument("--max-rounds", type=int, default=2)
@@ -465,7 +555,9 @@ def main() -> int:
         if args.action == "doctor":
             value = doctor()
         elif args.action == "plan":
-            value = plan(args.spec, args.job)
+            value = plan(
+                args.spec, args.job, implemented_by=args.implemented_by, against=args.against
+            )
         elif args.action == "run":
             STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
             # Process-level exclusivity ACROSS job IDs on this Raspberry.
