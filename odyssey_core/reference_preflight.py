@@ -211,9 +211,7 @@ def _preflight_write_action(
         and not resolved_targets
         and not relationship_targets
         and all(
-            unit.cardinality == "one"
-            and not unit.reference_lookup_only
-            and unit.target.relational_reference is None
+            unit.cardinality == "one" and unit.target.relational_reference is None
             for unit in action.units
         )
         and callable(getattr(contextual_reasoner, "fork_for_parallel_read", None))
@@ -236,7 +234,9 @@ def _preflight_write_action(
             )
             child_embedder = embedder.fork_for_parallel_read(child_spans)
             child_reasoner = contextual_reasoner.fork_for_parallel_read()
-            decision_function = decide_write_target
+            decision_function = (
+                _decide_reference_only_target if unit.reference_lookup_only else decide_write_target
+            )
             target_kwargs = {
                 "repository": repository,
                 "schema": schema,
@@ -247,6 +247,8 @@ def _preflight_write_action(
                 "authenticated_actor": authenticated_actor,
                 "self_binding_repository": self_binding_repository,
             }
+            if unit.reference_lookup_only:
+                target_kwargs["semantic_set_selector"] = semantic_set_selector
             decision = (
                 child_spans.invoke(
                     f"preflight.unit[{unit_index}].target",
