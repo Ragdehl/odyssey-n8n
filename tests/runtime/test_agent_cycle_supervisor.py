@@ -1046,3 +1046,88 @@ def test_tooling_scope_accepts_exact_designated_architecture_report(monkeypatch,
 
     monkeypatch.setattr(cycle, "running", fake_git)
     assert cycle.tooling_scope_is_safe(tmp_path, "a" * 40) is True
+
+
+def test_dirty_tracked_file_mutation_by_readonly_reviewer_is_detected_even_when_git_status_matches(
+    monkeypatch, tmp_path
+):
+    """A dirty file can change content while its ' M' porcelain flag stays identical.
+
+    This is an independent security regression: reviewers cannot rewrite source
+    and still get a PASS merely because the file was dirty before review.
+    """
+    import subprocess
+
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    repo = tmp_path / "isolated"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "fixture@invalid.example"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Disposable Test"], cwd=repo, check=True)
+    tracked = repo / "existing.py"
+    tracked.write_text("value = 1\n")
+    subprocess.run(["git", "add", "existing.py"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "synthetic base"], cwd=repo, check=True)
+    tracked.write_text("value = 2\n")
+    assert (
+        subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        == " M existing.py\n"
+    )
+
+    monkeypatch.setattr(cycle, "workspace", lambda *_: repo)
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    job = "dirty-tracked-mutation-guard"
+    root = cycle.job_path(job)
+    root.mkdir(parents=True)
+    (root / "brief.md").write_text("Require content integrity for independent read-only reviews.")
+    cycle.atomic_json(
+        root / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "a" * 40,
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+
+    def fake_codex(role, _prompt, _dest, _evidence, *, read_only):
+        if read_only:
+            if role == "generality":
+                tracked.write_text("value = 999\n")
+            return {"verdict": {"verdict": "pass", "findings": []}}
+        return {"role": role}
+
+    monkeypatch.setattr(cycle, "codex", fake_codex)
+    monkeypatch.setattr(
+        cycle,
+        "deterministic_gates",
+        lambda *_: {"offline": {"pass": True}},
+    )
+    before = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    result = cycle.run(job, 1, live=True)
+    after = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert before == after  # Git flags by themselves miss a real content mutation.
+    assert result["ready_for_user"] is False
+    assert result["phase"] == "blocked"
+    assert "changed" in result["last_error"].lower() or "mutat" in result["last_error"].lower()
+    assert list(result["reviews"]) == []  # No approval of mutated worktree.
