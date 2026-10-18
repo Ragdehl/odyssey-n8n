@@ -25,9 +25,12 @@ _ALLOWED_GATES = frozenset(
         "compile_rejected",
         "task_scope_verdict",
         "task_scope_rejected",
+        "speaker_count_retry",
     }
 )
-_ALLOWED_COUNTS = frozenset({"attempt", "facts", "entities", "reviewed_facts", "reason_code"})
+_ALLOWED_COUNTS = frozenset(
+    {"attempt", "facts", "entities", "reviewed_facts", "reason_code", "expected_facts"}
+)
 _ALLOWED_FLAGS = frozenset(
     {
         "unresolved",

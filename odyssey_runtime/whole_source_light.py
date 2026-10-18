@@ -363,6 +363,52 @@ class WholeSourceLightExecutor:
             )
         return first, second
 
+    def _complete_bounded_speaker_counts(
+        self,
+        delivery: str,
+        payload: dict,
+        first: dict,
+        second: dict,
+    ) -> tuple[dict, dict]:
+        """One independent PREWRITE redo for omitted rows, never disagreements.
+
+        A missing reviewer row is a mechanical incomplete provider output,
+        not a second opinion. A retry never sees the other reviewer's answer
+        and cannot override dual-source attestation or a semantic veto.
+        """
+        expected = len(payload["facts"])
+
+        def incomplete(candidate: dict) -> bool:
+            rows = candidate.get("facts")
+            return not isinstance(rows, list) or len(rows) != expected
+
+        redo_a, redo_b = incomplete(first), incomplete(second)
+        if redo_a or redo_b:
+            self._observe_prewrite(
+                delivery,
+                "speaker_count_retry",
+                reviewer_a=redo_a,
+                reviewer_b=redo_b,
+                expected_facts=expected,
+            )
+        if redo_a:
+            first = self._ask(
+                PLANNER_MODEL,
+                PROMPT_SPEAKER_A,
+                payload,
+                SPEAKER_SCHEMA,
+                "odyssey_speaker_full_A",
+            )
+        if redo_b:
+            second = self._ask(
+                ROUTER_MODEL,
+                PROMPT_SPEAKER_B,
+                payload,
+                SPEAKER_SCHEMA,
+                "odyssey_speaker_full_B",
+            )
+        return first, second
+
     def _review_and_attest_concurrently(
         self,
         source: str,
@@ -919,6 +965,9 @@ class WholeSourceLightExecutor:
                 concurrent_speakers
                 if concurrent_speakers is not None
                 else self._independent_speaker_reviews(speaker_payload)
+            )
+            speaker_a, speaker_b = self._complete_bounded_speaker_counts(
+                delivery, speaker_payload, speaker_a, speaker_b
             )
             attested = validate_dual_speaker_review(source, proposed["facts"], speaker_a, speaker_b)
             if any(f.assertion not in {"asserted", "planned"} for f in attested.facts):
