@@ -446,6 +446,19 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
         for attempt in range(1, max_rounds + 1):
             evidence = run_dir / f"round-{attempt}"
             evidence.mkdir(parents=True)
+            # Publish the new evidence scope before any repair or handoff work.
+            # Prior verdicts remain in their round files and in `findings` for repair.
+            update(
+                job,
+                state,
+                "starting_round",
+                round=attempt,
+                active_role=None,
+                reviews={},
+                review_artifacts={},
+                gate={},
+                ready_for_user=False,
+            )
             if state.get("implemented_by", "codex") == "chatgpt" and attempt == 1:
                 # A real human-facing ChatGPT session ALREADY authored and
                 # committed this exact source snapshot. Never bill Codex to
@@ -499,7 +512,11 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 if after.returncode or after.stdout != before.stdout:
                     raise CycleError("Read-only agent unexpectedly changed repository files")
                 reviews[role] = review["verdict"]
-            state["reviews"] = reviews
+                artifact = evidence / (role + "-completed.json")
+                atomic_json(artifact, review)
+                state["review_artifacts"][role] = str(artifact)
+                # Only publish after the read-only guard and durable artifact succeed.
+                update(job, state, "reviewing", reviews=dict(reviews), active_role=None)
             findings = {"gates": gates, "reviews": reviews}
             succeeded = all(check["pass"] for check in gates.values()) and all(
                 v["verdict"] == "pass" for v in reviews.values()

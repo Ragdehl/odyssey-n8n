@@ -415,3 +415,86 @@ def test_cli_blocked_cycle_exits_nonzero_for_shell_orchestration(monkeypatch, tm
         ],
     )
     assert cycle.main() == 3
+
+
+@pytest.mark.parametrize("author", ["codex", "chatgpt"])
+@pytest.mark.parametrize("failure", [None, "exception", "mutation", "verdict"])
+def test_incremental_round_status_and_failure_preservation(monkeypatch, tmp_path, author, failure):
+    """Real JSON reads expose only guarded completions from the active round."""
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 2000)
+    monkeypatch.setattr(cycle, "workspace", lambda *_: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    roles = ("audit-alpha", "audit-beta", "audit-gamma", "audit-delta", "audit-epsilon")
+    monkeypatch.setattr(cycle, "REVIEW_ROLES", roles)
+    monkeypatch.setattr(cycle, "instructions", lambda *_: "Synthetic audit")
+    job = "synthetic-progress"
+    root = cycle.job_path(job)
+    root.mkdir(parents=True)
+    (root / "brief.md").write_text("Synthetic supervisor progress feature.")
+    cycle.atomic_json(
+        root / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "b" * 40,
+            "review_base": "a" * 40,
+            "feature_commit": "b" * 40,
+            "implemented_by": author,
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+    changed = False
+
+    def git(*_args, **_kwargs):
+        return type("Git", (), {"returncode": 0, "stdout": "modified" if changed else ""})()
+
+    monkeypatch.setattr(cycle, "running", git)
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"offline": {"pass": True}})
+    seen = []
+
+    def agent(role, _prompt, _dest, evidence, *, read_only):
+        nonlocal changed
+        status = cycle.load(job)
+        assert not status["ready_for_user"]
+        if not read_only:
+            assert status["reviews"] == status["review_artifacts"] == status["gate"] == {}
+            if status["round"] == 2:
+                assert (
+                    json.loads((root / "round-1" / (roles[0] + "-completed.json")).read_text())[
+                        "verdict"
+                    ]["verdict"]
+                    == "fail"
+                )
+            return {"role": role}
+        index = roles.index(role)
+        assert list(status["reviews"]) == list(roles[:index])
+        assert status["round"] == int(evidence.name.split("-")[1])
+        for completed in roles[:index]:
+            record = json.loads(Path(status["review_artifacts"][completed]).read_text())
+            assert record["verdict"] == status["reviews"][completed]
+        seen.append((status["round"], index))
+        if index == 2 and failure == "exception":
+            raise cycle.CycleError("Synthetic reviewer failure")
+        if index == 2 and failure == "mutation":
+            changed = True
+        verdict = "fail" if failure == "verdict" and status["round"] == 1 and index == 0 else "pass"
+        return {
+            "verdict": {"verdict": verdict, "findings": [{"reason": "synthetic evidence"}]},
+            "elapsed_s": 1,
+        }
+
+    monkeypatch.setattr(cycle, "codex", agent)
+    result = cycle.run(job, 2, live=True)
+    assert cycle.load(job) == result
+    assert (1, 1) in seen and (1, 2) in seen
+    if failure in {"exception", "mutation"}:
+        assert result["phase"] == "blocked"
+        assert list(result["reviews"]) == list(roles[:2])
+        assert roles[2] not in result["review_artifacts"]
+    elif failure == "verdict":
+        assert result["round"] == 2
+        assert all(v["verdict"] == "pass" for v in result["reviews"].values())
+        assert (root / "round-1" / (roles[-1] + "-completed.json")).exists()
+    assert not result["ready_for_user"]
