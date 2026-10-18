@@ -2586,7 +2586,17 @@ def build_runtime_from_environment() -> RuntimeComposition:
     schema = compose_application_schema(base_schema, application_schema_extensions)
 
     repository = VaultRepository(vault_root)
-    embedder = FastEmbedTextEmbedder(cache_dir=embedding_cache, local_files_only=True)
+    if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
+        if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or not light_source_enabled:
+            raise ValueError("Isolated embedding experiment requires DEV light source")
+        from odyssey_runtime.isolated_embeddings import IsolatedFastEmbedTextEmbedder
+
+        embedder = IsolatedFastEmbedTextEmbedder(
+            cache_dir=embedding_cache,
+            idle_seconds=float(os.environ.get("ODYSSEY_EMBEDDING_IDLE_SECONDS", "120")),
+        )
+    else:
+        embedder = FastEmbedTextEmbedder(cache_dir=embedding_cache, local_files_only=True)
     context_index = ContextIndex(runtime_root / "context.sqlite3")
     semantic_index = SemanticEntityIndex(runtime_root / "semantic.sqlite3")
     application_semantic_indexes = {

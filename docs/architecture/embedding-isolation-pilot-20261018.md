@@ -1,0 +1,26 @@
+# Odyssey — SQLite concurrent reads and out-of-process embeddings pilot (18-10-2026)
+
+## Boundaries and evidence
+Only DEV opt-in and synthetic/in-memory tests. PROD canonical Markdown and services remain untouched. The working branch is the hybrid P4 branch. Full safety gate before pilot deployment: **964 Python tests + 171 JavaScript tests PASS**, including 17 focused subprocess/WAL tests.
+
+## SQLite cause reproduced
+- On a **copy** of the DEV context index, hold a read-only SQLite transaction open for 850 ms, then call incremental `ContextIndex.refresh_notes` with no new vectors.
+- Existing `journal_mode=DELETE`: **865 ms** wall. `journal_mode=WAL`: **36.3 ms** wall, old reader still sees its original consistent snapshot.
+- DEV pilot commit `73fde2a` enables WAL only in P4 DEV after validating a compatible context index. Full rebuild in WAL mode uses `sqlite3.Connection.backup` into the existing database, never renames an index file while old `-wal`/ `-shm` might still be attached. Original DELETE-mode os.replace preserved; deleting a derived WAL index converts mode through SQLite and fails closed if locked. Test: reader + writer, reader + rebuild, reader snapshot preserved, invalid rebuild preserved, delete cleanup.
+- Real DEV E2E `p4dev20261018-wal11` passed: COMPLETED 19.2s client, index `outcome=incremental`, 3 affected, 2 context new embeddings; index 1543.3 ms (context wall 1399 ms, ONNX 747.4 ms, context *thread CPU* 333 ms). SQLite context PRAGMA WAL confirmed. This does not prove all previous stalls were SQLite locks; ONNX inference uses other threads, so thread CPU != total ONNX CPU.
+
+## Out-of-process memory pilot
+- Earlier direct FastEmbed profiles: local MiniLM-L12-v2 ONNX raised Python RSS ~74 MiB -> ~630–660 MiB, even with only a few Notes; model on disk ~241 MiB. Thread count/lazy_load alone cannot reclaim RSS after use.
+- New optional `IsolatedFastEmbedTextEmbedder` in `odyssey_runtime/isolated_embeddings.py`, JSON-over-stdio local child `embedding_worker.py`. No HTTP service, no new database, no mutation privileges, no external model download (FastEmbed `local_files_only=True`). The parent sends only text and mode `documents`/`queries`; the child returns vectors. Credentials are excluded from the child's whitelist environment. The existing model name and fastembed version markers remain unchanged to reuse persisted indexes.
+- Worker is created only when the first real query or embedding is required, serializes parallel requests, bounds IPC batches (64 texts), validates vector count/types, and raises a fail-closed `SemanticIndexError` on worker death or timeout. It automatically exits after configurable idle time and can be restarted. Unsupported or absent cache fails rather than downloading.
+- **Real Raspberry Pi smoke using local cached ONNX (separate controlled process)**: parent RSS before ~34.5 MiB, after subprocess creation ~34.6 MiB, during two embeddings ~34.7 MiB; child RSS ~655.8 MiB. First child request ~2.82s (model startup+inference), warm query ~0.01s. Idle 1.5s caused child to terminate, parent remained ~34.7MiB. Restarted child on later query (~1.88s). This is a process-only smoke, not yet an integrated DEV measurement; full runtime has additional memory.
+- The optional adapter is only permitted with `ODYSSEY_DEPLOYMENT_ENV=DEV` and `ODYSSEY_LIGHT_SOURCE_V1=1`; otherwise raises. The DEV unit template explicitly enables `ODYSSEY_EMBEDDING_SUBPROCESS=1` and `ODYSSEY_EMBEDDING_IDLE_SECONDS=30` for first integration. PROD never enables it.
+- Tests `tests/runtime/test_isolated_embedding_worker.py`: lazy creation, count/order/versions, parallel calls, idle exit+restart, fail-closed crash, explicit close, IPC batches >64, no credential inheritance, DEV-only guard and factory composition. 17 tests combined with WAL focal pass; full gate 964 Python +171 JS PASS.
+
+## Before accepting DEV pilot
+Confirm successful DEV deployment/marker with no PROD changes. Execute 2+ real E2E messages through n8n with canonical Markdown writes and correct graph, verify `outcome=incremental`, no unexpected full rebuild; inspect parent and worker RSS during and after idle; check startup reuses indexes (same model markers), worker recovers on a second message after idle. Compare client/provider/runtime latencies with earlier 15–27s baseline. If the worker breaks functional correctness or introduces prohibitive request latency, revert the DEV runtime code to `73fde2a` before further work.
+
+## Limitations and next steps
+- Startup of the first semantic lookup now costs a few seconds by design. Repeated requests during a warm window reuse the worker; idle exit reclaims hundreds of MiB. Need user-visible latency tradeoff evaluation and tune idle window.
+- This does **not** remove every O(N) stat inventory verification or make the overall application mobile-native. A mobile backend may use an OS-managed worker/API with the same abstract TextEmbedder contract, while canonical Writer/graph stays lightweight.
+- Worker protocol is local-only via pipes, not authenticated across a network; text processing stays local. Future state recovery after process death still relies on strict startup source/index checks and fail-closed missing embeddings.
