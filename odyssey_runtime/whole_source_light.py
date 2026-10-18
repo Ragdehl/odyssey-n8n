@@ -241,6 +241,29 @@ class WholeSourceLightExecutor:
         | None
     ) = None
 
+    @staticmethod
+    def _prewrite_reason_code(error: Exception) -> int:
+        """Only own fixed contract errors may become bounded numeric codes."""
+        fixed = {
+            "Non-affirmative input is not a completed event": 10,
+            "Atomic source evidence mismatch": 11,
+            "Source reviewer invented a participant": 12,
+            "Participant absent from original source": 13,
+            "Symbolic Core references missing or repeated": 14,
+            "Fact evidence order differs from source order": 15,
+            "Independent reviewers disagree on speaker or assertion": 21,
+            "Source-attested grammatical claim is invalid": 22,
+            "Model ordinal sequence is incomplete": 23,
+            "Independent source review count changed": 24,
+            "An uncertain assertion cannot authorize a speaker link": 25,
+        }
+        message = str(error)
+        if message.startswith("UNPROVEN_PARTIAL_CANONICAL_IDENTITY: "):
+            return 31
+        if message.startswith("AMBIGUOUS_CANONICAL_PERSON: "):
+            return 32
+        return fixed.get(message, 0)
+
     def _observe_prewrite(self, delivery: str, gate: str, **values: int | bool) -> None:
         """Prewrite telemetry never grants write authority."""
         if self.prewrite_diagnostic is not None:
@@ -729,11 +752,19 @@ class WholeSourceLightExecutor:
                     TASK_ONLY_SCOPE_SCHEMA,
                     "odyssey_task_only_scope_v1",
                 )
+            self._observe_prewrite(
+                delivery,
+                "task_scope_verdict",
+                task_only=scope.get("only_task_semantics") is True,
+                one_operation=scope.get("exactly_one_operation") is True,
+                source_aligned=scope.get("source_quote") == source,
+            )
             if (
                 scope.get("only_task_semantics") is not True
                 or scope.get("exactly_one_operation") is not True
                 or scope.get("source_quote") != source
             ):
+                self._observe_prewrite(delivery, "task_scope_rejected")
                 return self._abstain(delivery)
             # Share the SAME domain service with Task UI for WORK SESSION;
             # ordinary task lifecycle remains Tasks interpreter → Core writer.
@@ -904,7 +935,9 @@ class WholeSourceLightExecutor:
                 if isinstance(error, UnprovenPersonIdentityError)
                 else "speaker_contract"
             )
-            self._observe_prewrite(delivery, category)
+            self._observe_prewrite(
+                delivery, category, reason_code=self._prewrite_reason_code(error)
+            )
             return self._abstain(delivery)
         self._observe_prewrite(delivery, "prewrite_accepted", facts=len(proposed["facts"]))
         # Compile ALL actions before ANY write. A missing owner, unsupported

@@ -23,10 +23,22 @@ _ALLOWED_GATES = frozenset(
         "speaker_contract",
         "prewrite_accepted",
         "compile_rejected",
+        "task_scope_verdict",
+        "task_scope_rejected",
     }
 )
-_ALLOWED_COUNTS = frozenset({"attempt", "facts", "entities", "reviewed_facts"})
-_ALLOWED_FLAGS = frozenset({"unresolved", "approved", "complete", "overlapping"})
+_ALLOWED_COUNTS = frozenset({"attempt", "facts", "entities", "reviewed_facts", "reason_code"})
+_ALLOWED_FLAGS = frozenset(
+    {
+        "unresolved",
+        "approved",
+        "complete",
+        "overlapping",
+        "task_only",
+        "one_operation",
+        "source_aligned",
+    }
+)
 
 
 def record_dev_p4_prewrite_gate(delivery: str, gate: str, values: dict[str, int | bool]) -> None:

@@ -88,3 +88,49 @@ def test_dev_log_is_bounded_and_ignores_invalid_gate_and_source_content(tmp_path
     (root / "p4-prewrite-gates.jsonl").write_bytes(b"x" * 263_000)
     record_dev_p4_prewrite_gate("id-2", "proposal", {"facts": 1})
     assert (root / "p4-prewrite-gates.jsonl").stat().st_size < 1000
+
+
+def test_reason_codes_are_static_and_never_include_person_name():
+    from odyssey_core.whole_message_coverage import WholeMessageCoverageError
+    from odyssey_core.whole_message_identity_guard import UnprovenPersonIdentityError
+    from odyssey_core.whole_message_speaker_proof import WholeMessageSpeakerError
+    from odyssey_runtime.whole_source_light import WholeSourceLightExecutor
+
+    code = WholeSourceLightExecutor._prewrite_reason_code
+    assert (
+        code(WholeMessageSpeakerError("Independent reviewers disagree on speaker or assertion"))
+        == 21
+    )
+    assert code(WholeMessageCoverageError("Non-affirmative input is not a completed event")) == 10
+    assert (
+        code(UnprovenPersonIdentityError("UNPROVEN_PARTIAL_CANONICAL_IDENTITY: name private")) == 31
+    )
+    assert code(UnprovenPersonIdentityError("AMBIGUOUS_CANONICAL_PERSON: name private")) == 32
+    assert code(UnprovenPersonIdentityError("USER INPUT CAN NEVER BE LOGGED")) == 0
+
+
+def test_only_task_source_with_two_operations_has_visible_scope_veto_without_writes(tmp_path):
+    repo, actor, service, runtime = _fixture(tmp_path)
+    source = "Llamar al electricista y revisar factura"
+    route = {
+        "capabilities": ["tasks"],
+        "interpretation": "joint",
+        "reason": "single",
+        "app_scopes": [],
+        "self_relation_span": None,
+    }
+    task_only = {
+        "only_task_semantics": True,
+        "exactly_one_operation": False,
+        "source_quote": source,
+    }
+    service.client = RecordedClient([route, task_only])
+    gates = []
+    service.prewrite_diagnostic = lambda delivery, gate, values: gates.append((gate, values))
+    response = runtime.execute_product(source, "p4-diagnostic-two-tasks", "main", actor)
+    assert response["status"] == "needs_attention"
+    assert gates == [
+        ("task_scope_verdict", {"task_only": True, "one_operation": False, "source_aligned": True}),
+        ("task_scope_rejected", {}),
+    ]
+    assert not any("odyssey:fact" in repo.read_text(p) for p in repo.list_markdown_paths())
