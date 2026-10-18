@@ -160,6 +160,9 @@ class WholeSourceLightExecutor:
     # the DEV provider. The frozen provider client stays sequential by default.
     # This does not remove either attestation or allow a write before both.
     parallel_speaker_reviews: bool = False
+    # Coverage and independent speaker reviews use the SAME proposed facts.
+    # They can overlap BEFORE any mutations; approvals remain compulsory.
+    parallel_coverage_speaker_reviews: bool = False
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
     pending_recorder: Any | None = None
@@ -326,6 +329,58 @@ class WholeSourceLightExecutor:
                 sorted((*first_spans, *second_spans), key=lambda span: span.start_offset_ms)
             )
         return first, second
+
+    def _review_and_attest_concurrently(
+        self,
+        source: str,
+        clock: dict[str, str],
+        proposed: dict,
+        group_members: list[dict],
+    ) -> tuple[dict, tuple[dict, dict]]:
+        """Overlap independent prewrite attestations, preserving every veto.
+
+        Coverage reviews proposal/source, speakers review the SAME proposal.
+        None can authorize a write alone; the existing validators run AFTER
+        all three provider calls finish. DEV-only; false by default.
+        """
+        parent_recorder = _P4_PROVIDER_SPANS.get()
+        origin = parent_recorder.origin if parent_recorder is not None else perf_counter()
+        speaker_payload = {
+            "original_source": source,
+            "facts": [{"source_evidence": fact["source_evidence"]} for fact in proposed["facts"]],
+            "clock": clock,
+        }
+
+        def run_speakers() -> tuple[tuple[dict, dict], tuple]:
+            local_recorder = SpanRecorder(origin, perf_counter)
+            token = _P4_PROVIDER_SPANS.set(local_recorder)
+            try:
+                result = self._independent_speaker_reviews(speaker_payload)
+            finally:
+                _P4_PROVIDER_SPANS.reset(token)
+            return result, local_recorder.spans
+
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="odyssey-p4-prewrite") as pool:
+            speaker_future = pool.submit(run_speakers)
+            coverage = self._ask(
+                PLANNER_MODEL,
+                PROMPT_SOURCE_REVIEW,
+                {
+                    "source": source,
+                    "clock": clock,
+                    "proposed_facts": proposed.get("facts"),
+                    "proposed_entities": proposed.get("entities"),
+                    "core_verified_self_relationship": group_members or None,
+                },
+                REVIEW_SCHEMA,
+                "odyssey_p2_source_coverage_v1",
+            )
+            speakers, speaker_spans = speaker_future.result()
+        if parent_recorder is not None:
+            parent_recorder.spans += tuple(
+                sorted(speaker_spans, key=lambda span: span.start_offset_ms)
+            )
+        return coverage, speakers
 
     @staticmethod
     def _measure_local(name: str, operation: Callable, *args: Any, **kwargs: Any) -> Any:
@@ -685,6 +740,7 @@ class WholeSourceLightExecutor:
         # unresolved identity, unsupported Task operation, speaker conflict or
         # any delivery after Core could already have persisted a note.
         reviewed_ok = False
+        concurrent_speakers: tuple[dict, dict] | None = None
         known_notes = self._measure_local("source_name_hints", self._note_hints, source)
         for attempt in range(2):
             proposed = self._ask(
@@ -719,19 +775,38 @@ class WholeSourceLightExecutor:
                     or mixed_task_review.get("source_quote") != source
                 ):
                     return self._abstain(delivery)
-            review = self._ask(
-                PLANNER_MODEL,
-                PROMPT_SOURCE_REVIEW,
-                {
-                    "source": source,
-                    "clock": clock,
-                    "proposed_facts": proposed.get("facts"),
-                    "proposed_entities": proposed.get("entities"),
-                    "core_verified_self_relationship": group_members or None,
-                },
-                REVIEW_SCHEMA,
-                "odyssey_p2_source_coverage_v1",
+            candidate_facts = proposed.get("facts")
+            can_overlap = (
+                self.parallel_coverage_speaker_reviews
+                and not proposed.get("unresolved")
+                and isinstance(candidate_facts, list)
+                and bool(candidate_facts)
+                and all(
+                    isinstance(fact, dict)
+                    and isinstance(fact.get("source_evidence"), str)
+                    and fact["source_evidence"]
+                    and fact.get("needs_clarification") is not True
+                    for fact in candidate_facts
+                )
             )
+            if can_overlap:
+                review, concurrent_speakers = self._review_and_attest_concurrently(
+                    source, clock, proposed, group_members
+                )
+            else:
+                review = self._ask(
+                    PLANNER_MODEL,
+                    PROMPT_SOURCE_REVIEW,
+                    {
+                        "source": source,
+                        "clock": clock,
+                        "proposed_facts": proposed.get("facts"),
+                        "proposed_entities": proposed.get("entities"),
+                        "core_verified_self_relationship": group_members or None,
+                    },
+                    REVIEW_SCHEMA,
+                    "odyssey_p2_source_coverage_v1",
+                )
             if review.get("approved") is True and review.get("complete") is True:
                 reviewed_ok = True
                 break
@@ -774,7 +849,11 @@ class WholeSourceLightExecutor:
                 ],
                 "clock": clock,
             }
-            speaker_a, speaker_b = self._independent_speaker_reviews(speaker_payload)
+            speaker_a, speaker_b = (
+                concurrent_speakers
+                if concurrent_speakers is not None
+                else self._independent_speaker_reviews(speaker_payload)
+            )
             attested = validate_dual_speaker_review(source, proposed["facts"], speaker_a, speaker_b)
             if any(f.assertion not in {"asserted", "planned"} for f in attested.facts):
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
