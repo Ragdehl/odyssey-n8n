@@ -126,7 +126,7 @@ def test_successful_tooling_review_is_ready_only_for_allowlisted_diff(
     monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"focused": {"pass": True}})
     result = cycle.run(job, 1, live=True)
     assert result["phase"] == "reviewed_tooling_ready"
-    assert len(result["reviews"]) == 4
+    assert list(result["reviews"]) == ["generality", "quality"]
     assert result["ready_for_user"] is True
     assert "no deploy" in result["readiness_meaning"]
     assert cycle.load(job) == result
@@ -214,6 +214,7 @@ def test_tooling_profile_rejects_a_blocked_reviewer(monkeypatch, tmp_path, mocke
             "phase": "planned",
             "baseline_commit": "a" * 40,
             "acceptance_profile": "tooling",
+            "risk": "high",
             "ready_for_user": False,
             "reviews": {},
             "gate": {},
@@ -626,6 +627,7 @@ def test_incremental_round_status_and_failure_preservation(monkeypatch, tmp_path
     monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
     roles = ("audit-alpha", "audit-beta", "audit-gamma", "audit-delta", "audit-epsilon")
     monkeypatch.setattr(cycle, "REVIEW_ROLES", roles)
+    monkeypatch.setattr(cycle, "select_review_roles", lambda _state: roles)
     monkeypatch.setattr(cycle, "instructions", lambda *_: "Synthetic audit")
     job = "synthetic-progress"
     root = cycle.job_path(job)
@@ -969,12 +971,11 @@ def test_failing_offline_gate_skips_all_model_reviewers_and_preserves_logs(monke
         },
     )
     status = cycle.run(job, 2, live=True)
-    assert calls == ["builder"]
-    assert status["phase"] == "blocked_insufficient_token_headroom"
-    assert status["gate"]["cross_surface"]["pass"] is False
-    assert status["token_usage"]["reported_total"] == 85844
+    assert calls == []  # Foresee an impossible full review before using a single token.
+    assert status["phase"] == "blocked_insufficient_review_budget"
+    assert status["token_usage"]["reported_total"] == 0
     assert status["reviews"] == {}
-    assert "insufficient token headroom" in status["last_error"].lower()
+    assert "shortfall" in status["last_error"].lower()
 
 
 def test_failing_gates_go_straight_to_bounded_builder_repair_without_review(
@@ -1000,7 +1001,7 @@ def test_failing_gates_go_straight_to_bounded_builder_repair_without_review(
             "ready_for_user": False,
             "reviews": {},
             "gate": {},
-            "reported_token_budget": 110000,
+            "reported_token_budget": 300000,
             "token_usage": {"reported_total": 0, "sessions": []},
         },
     )
@@ -1308,3 +1309,167 @@ def test_semantic_qa_knows_own_review_cannot_depend_on_future_reviewers():
     assert "Never mark the feature FAIL or BLOCKED" in qa_contract
     assert "--acceptance tooling" in qa_contract
     assert "--acceptance product" in qa_contract
+
+
+@pytest.mark.parametrize(
+    ("profile", "risk", "expected"),
+    [
+        ("tooling", "normal", ("generality", "quality")),
+        ("tooling", "high", cycle.REVIEW_ROLES),
+        ("tooling", "critical", cycle.REVIEW_ROLES),
+        ("product", "normal", cycle.REVIEW_ROLES),
+        ("product", "high", cycle.REVIEW_ROLES),
+        ("product", "critical", cycle.REVIEW_ROLES),
+    ],
+)
+def test_risk_based_review_minimums_never_skip_product_or_high_risk_roles(profile, risk, expected):
+    assert cycle.select_review_roles({"acceptance_profile": profile, "risk": risk}) == expected
+
+
+def test_default_product_budget_refuses_before_starting_builder(monkeypatch, tmp_path):
+    """Default 110k cannot possibly fund full product audit after a Builder."""
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    monkeypatch.setattr(
+        cycle,
+        "workspace",
+        lambda *_: pytest.fail("Worktree would spend host IO on an impossible budget"),
+    )
+    job = "product-budget-preflight"
+    home = cycle.job_path(job)
+    home.mkdir(parents=True)
+    (home / "brief.md").write_text("No model should launch at an impossible budget.")
+    cycle.atomic_json(
+        home / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "a" * 40,
+            "implemented_by": "codex",
+            "acceptance_profile": "product",
+            "risk": "normal",
+            "reported_token_budget": 110000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+            "reviews": {},
+            "gate": {},
+            "ready_for_user": False,
+        },
+    )
+    result = cycle.run(job, 2, live=True)
+    assert result["phase"] == "blocked_insufficient_review_budget"
+    assert result["ready_for_user"] is False
+    quote = result["review_plan"]
+    assert quote["roles"] == list(cycle.REVIEW_ROLES)
+    assert quote["omitted_roles"] == []
+    assert quote["minimum_remaining_reported_tokens"] == 245000
+    assert quote["reported_token_budget"] == 110000
+    assert not quote["can_start"]
+    assert result["token_usage"]["sessions"] == []
+
+
+def test_routine_tooling_budget_preflight_has_true_multi_role_reservation():
+    status = {
+        "acceptance_profile": "tooling",
+        "risk": "normal",
+        "implemented_by": "chatgpt",
+        "reported_token_budget": 110000,
+        "token_usage": {"reported_total": 0, "sessions": []},
+    }
+    quote = cycle.review_budget_quote(status)
+    assert quote["can_start"] is True
+    assert quote["roles"] == ["generality", "quality"]
+    assert [row["role"] for row in quote["omitted_roles"]] == ["testing", "performance"]
+    assert quote["minimum_by_role"] == {"generality": 55000, "quality": 45000}
+    assert quote["minimum_remaining_reported_tokens"] == 100000
+    assert cycle.review_budget_quote(status, include_builder=True)["can_start"] is False
+    status["token_usage"]["reported_total"] = 70000
+    assert not cycle.review_budget_quote(status)["can_start"]
+
+
+def test_remaining_review_budget_reserves_all_outstanding_roles(tmp_path):
+    state = {
+        "reported_token_budget": 110000,
+        "token_usage": {"reported_total": 44000},
+        "acceptance_profile": "tooling",
+        "risk": "normal",
+    }
+    cycle.check_review_reserve("safe-budget-test", state, ("quality",))
+    with pytest.raises(cycle.CycleError, match="Review reservation shortfall"):
+        cycle.check_review_reserve("safe-budget-test", state, ("generality", "quality"))
+
+
+def test_tooling_high_risk_must_not_masquerade_as_low_risk_for_cost_savings(monkeypatch, tmp_path):
+    policy_path = tmp_path / "policy.json"
+    import json
+
+    original = json.loads(cycle.MODEL_POLICY.read_text())
+    original["required_reviews"]["product"]["normal"] = ["generality", "quality"]
+    policy_path.write_text(json.dumps(original))
+    monkeypatch.setattr(cycle, "MODEL_POLICY", policy_path)
+    with pytest.raises(cycle.CycleError, match="requires all"):
+        cycle.model_policy()
+    original["required_reviews"]["product"]["normal"] = list(cycle.REVIEW_ROLES)
+    original["required_reviews"]["tooling"]["high"] = ["generality", "quality"]
+    policy_path.write_text(json.dumps(original))
+    with pytest.raises(cycle.CycleError, match="requires all"):
+        cycle.model_policy()
+
+
+def test_routine_tooling_zero_cost_mock_checks_only_selected_independent_roles(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 2000)
+    monkeypatch.setattr(cycle, "workspace", lambda *_: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    (tmp_path / "isolated").mkdir()
+    job = "routed-two-roles"
+    path = cycle.job_path(job)
+    path.mkdir(parents=True)
+    (path / "brief.md").write_text(
+        "A pre-implemented low-risk tooling change under independent review."
+    )
+    cycle.atomic_json(
+        path / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "b" * 40,
+            "implemented_by": "chatgpt",
+            "review_base": "a" * 40,
+            "feature_commit": "b" * 40,
+            "acceptance_profile": "tooling",
+            "risk": "normal",
+            "reported_token_budget": 110000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+    monkeypatch.setattr(
+        cycle,
+        "running",
+        lambda args, **_kw: type(
+            "Git",
+            (),
+            {
+                "returncode": 0,
+                "stdout": "ops/agent-team/builder.md\\0" if "--name-only" in args else "",
+            },
+        )(),
+    )
+    roles = []
+
+    def reviewer(role, *_args, **_kwargs):
+        roles.append(role)
+        return {"verdict": {"verdict": "pass", "findings": []}}
+
+    monkeypatch.setattr(cycle, "codex", reviewer)
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"offline": {"pass": True}})
+    state = cycle.run(job, 1, live=True)
+    assert roles == ["generality", "quality"]
+    assert state["phase"] == "reviewed_tooling_ready"
+    assert state["ready_for_user"] is True
+    assert state["review_plan"]["roles"] == roles
+    assert len(state["review_plan"]["omitted_roles"]) == 2
+    assert state["review_artifacts"].keys() == set(roles)
+    assert state["gate"]["offline"]["pass"] is True

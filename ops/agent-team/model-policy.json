@@ -1,9 +1,18 @@
 {
   "version": 1,
   "models": {
-    "economy": {"id": "gpt-6-luna", "effort": "low"},
-    "standard": {"id": "gpt-6-sol", "effort": "medium"},
-    "deep": {"id": "gpt-6-sol", "effort": "high"}
+    "economy": {
+      "id": "gpt-6-luna",
+      "effort": "low"
+    },
+    "standard": {
+      "id": "gpt-6-sol",
+      "effort": "medium"
+    },
+    "deep": {
+      "id": "gpt-6-sol",
+      "effort": "high"
+    }
   },
   "default_reported_token_budget": 110000,
   "minimum_session_headroom": 40000,
@@ -15,5 +24,56 @@
     "workflows/",
     "odyssey_web/"
   ],
-  "high_risk_roles": ["builder", "generality", "quality", "testing"]
+  "high_risk_roles": [
+    "builder",
+    "generality",
+    "quality",
+    "testing"
+  ],
+  "minimum_review_tokens_by_role": {
+    "generality": 55000,
+    "quality": 45000,
+    "testing": 55000,
+    "performance": 50000
+  },
+  "required_reviews": {
+    "product": {
+      "normal": [
+        "generality",
+        "quality",
+        "testing",
+        "performance"
+      ],
+      "high": [
+        "generality",
+        "quality",
+        "testing",
+        "performance"
+      ],
+      "critical": [
+        "generality",
+        "quality",
+        "testing",
+        "performance"
+      ]
+    },
+    "tooling": {
+      "normal": [
+        "generality",
+        "quality"
+      ],
+      "high": [
+        "generality",
+        "quality",
+        "testing",
+        "performance"
+      ],
+      "critical": [
+        "generality",
+        "quality",
+        "testing",
+        "performance"
+      ]
+    }
+  }
 }

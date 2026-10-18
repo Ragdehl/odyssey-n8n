@@ -315,7 +315,89 @@ def model_policy() -> dict:
         raise CycleError("Invalid architectural risk classifier")
     if set(policy.get("high_risk_roles", [])) - {"builder", *REVIEW_ROLES}:
         raise CycleError("Unrecognized expensive model role")
+    reservations = policy.get("minimum_review_tokens_by_role")
+    if not isinstance(reservations, dict) or set(reservations) != set(REVIEW_ROLES):
+        raise CycleError("Incomplete per-review token reservation policy")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or not 10000 <= value <= 100000
+        for value in reservations.values()
+    ):
+        raise CycleError("Invalid reviewer reservation tokens")
+    by_profile = policy.get("required_reviews")
+    if not isinstance(by_profile, dict) or set(by_profile) != set(ACCEPTANCE_PROFILES):
+        raise CycleError("Invalid review-profile policy")
+    for profile, levels in by_profile.items():
+        if not isinstance(levels, dict) or set(levels) != {"normal", "high", "critical"}:
+            raise CycleError("Incomplete review risk tiers")
+        for risk, roles in levels.items():
+            if not isinstance(roles, list) or not roles or len(set(roles)) != len(roles):
+                raise CycleError("Review role selection must be explicit and unique")
+            if any(role not in REVIEW_ROLES for role in roles):
+                raise CycleError("Unknown reviewer in profile policy")
+            if profile == "product" or risk != "normal":
+                if tuple(roles) != REVIEW_ROLES:
+                    raise CycleError("Product or high-risk work requires all independent reviewers")
+            elif not {"generality", "quality"}.issubset(roles):
+                raise CycleError("Routine tooling requires generality and security review")
     return policy
+
+
+def select_review_roles(state: dict) -> tuple[str, ...]:
+    """Policy-defined minimum: all product reviewers; bounded routine tooling pair."""
+    profile = state.get("acceptance_profile", "product")
+    risk = state.get("risk", "normal")
+    if profile not in ACCEPTANCE_PROFILES or risk not in {"normal", "high", "critical"}:
+        raise CycleError("Invalid review profile or risk")
+    return tuple(model_policy()["required_reviews"][profile][risk])
+
+
+def review_budget_quote(state: dict, *, include_builder: bool = False) -> dict:
+    """Deterministic lower-bound quote, not a hard in-session consumption limit."""
+    policy = model_policy()
+    selected = select_review_roles(state)
+    minimums = policy["minimum_review_tokens_by_role"]
+    reservations = {role: minimums[role] for role in selected}
+    if include_builder:
+        reservations = {"builder": policy["minimum_session_headroom"], **reservations}
+    total = sum(reservations.values())
+    used = state.get("token_usage", {}).get("reported_total", 0)
+    cap = state.get("reported_token_budget", policy["default_reported_token_budget"])
+    if isinstance(used, bool) or not isinstance(used, int) or used < 0:
+        raise CycleError("Invalid reported usage")
+    return {
+        "profile": state.get("acceptance_profile", "product"),
+        "risk": state.get("risk", "normal"),
+        "roles": list(selected),
+        "omitted_roles": [
+            {
+                "role": role,
+                "reason": "Routine CLI tooling: offline gates and mandatory architect/security audits",
+            }
+            for role in REVIEW_ROLES
+            if role not in selected
+        ],
+        "minimum_by_role": reservations,
+        "minimum_remaining_reported_tokens": total,
+        "reported_token_budget": cap,
+        "reported_tokens_used": used,
+        "reported_tokens_available": cap - used,
+        "can_start": cap - used >= total,
+    }
+
+
+def check_review_reserve(job: str, state: dict, roles: tuple[str, ...]) -> None:
+    """Require enough estimated budget for ALL remaining reviewers, before each launch."""
+    # Historical offline unit fixtures without a ledger represent mock no-cost models.
+    if "reported_token_budget" not in state or "token_usage" not in state:
+        return
+    minimums = model_policy()["minimum_review_tokens_by_role"]
+    required = sum(minimums[role] for role in roles)
+    available = state["reported_token_budget"] - state["token_usage"]["reported_total"]
+    if available < required:
+        raise CycleError(
+            f"Review reservation shortfall: {available} reported tokens available, "
+            f"{required} required for {', '.join(roles)}; no next Codex reviewer launched"
+        )
 
 
 def touched_paths(dest: Path, base: str) -> tuple[str, ...]:
@@ -795,6 +877,28 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     if mem_available() < MIN_MEMORY_MIB:
         raise CycleError("Not enough memory to launch Codex safely")
     run_dir = job_path(job)
+    selected_roles = select_review_roles(state)
+    # Jobs created by plan() always have a full per-session ledger. Stop before
+    # Builder if a full mandatory review set could not fit even at the minimum.
+    if "reported_token_budget" in state and "token_usage" in state:
+        initial_quote = review_budget_quote(
+            state, include_builder=state.get("implemented_by", "codex") == "codex"
+        )
+        state["review_plan"] = initial_quote
+        if not initial_quote["can_start"]:
+            update(
+                job,
+                state,
+                "blocked_insufficient_review_budget",
+                ready_for_user=False,
+                last_error=(
+                    f"Review capacity shortfall before starting: "
+                    f"{initial_quote['reported_tokens_available']} available vs "
+                    f"{initial_quote['minimum_remaining_reported_tokens']} reserved. "
+                    "Choose a smaller tool-only scope or explicitly approve a higher job budget."
+                ),
+            )
+            return state
     dest = workspace(job, state["baseline_commit"])
     safe_worktree(dest, job)
     state["worktree"] = str(dest)
@@ -912,15 +1016,42 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                     return state
                 update(job, state, "repair_needed", active_role=None, ready_for_user=False)
                 continue
+            # Gate passed. Recalculate the minimum for all outstanding audits
+            # after the Builder's actual measured consumption. No partial
+            # reviewing if the remaining job budget is already insufficient.
+            if "reported_token_budget" in state and "token_usage" in state:
+                quote = review_budget_quote(state)
+                state["review_plan"] = quote
+                if not quote["can_start"]:
+                    update(
+                        job,
+                        state,
+                        "blocked_insufficient_review_budget",
+                        active_role=None,
+                        ready_for_user=False,
+                        last_error=(
+                            f"Review capacity shortfall after gate: "
+                            f"{quote['reported_tokens_available']} available vs "
+                            f"{quote['minimum_remaining_reported_tokens']} reserved"
+                        ),
+                    )
+                    return state
             update(job, state, "reviewing", active_role=None)
             reviews = {}
-            for role in REVIEW_ROLES:
+            for i, role in enumerate(selected_roles):
+                check_review_reserve(job, state, selected_roles[i:])
                 update(job, state, "reviewing", active_role=role)
                 before = review_snapshot(dest)
                 review = codex(
                     role,
                     instructions(role, brief, review_base or state["baseline_commit"], gates)
-                    + compare,
+                    + compare
+                    + "\nREVIEW CONTRACT: assess YOUR specialist responsibility only. "
+                    "The deterministic supervisor checks all the selected reviewers. "
+                    "Do not fail because an unselected reviewer was intentionally "
+                    "omitted by policy, or because future reviews are not yet completed. "
+                    "Review selection with explicit scope: "
+                    + json.dumps(state.get("review_plan", {}), ensure_ascii=False),
                     dest,
                     evidence,
                     read_only=True,
@@ -1093,6 +1224,13 @@ def main() -> int:
                     role: select_agent_model(role, state, checkout)
                     for role in ("builder", *REVIEW_ROLES)
                 },
+                "review_budget_quote": review_budget_quote(
+                    state,
+                    include_builder=(
+                        state.get("implemented_by", "codex") == "codex"
+                        and state.get("round", 0) == 0
+                    ),
+                ),
                 "models_launched": False,
             }
         else:
