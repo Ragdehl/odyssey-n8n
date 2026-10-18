@@ -1,0 +1,26 @@
+# DEV read-only browser gate and safe proxy (19 Oct 2026)
+
+## Purpose
+
+The older disposable loopback proxy `/tmp/odyssey-p4-browser-proxy.mjs` forwarded **any** `/api/*` request to the DEV n8n port, even while using a browser only to inspect persisted messages. This created an accidental mutation risk. The durable test-only replacement implements a strict **deny-by-default API operation allowlist** and continues to use the already cached arm64 Chromium; it cannot access PROD.
+
+- `scripts/odyssey_dev_readonly_contract.mjs`: only `conversation.main/progress`, `notes.query/capabilities/detail/backlinks` and `calendar.month/day/schedule`. Any other operation, GET mutation, unknown endpoint, payload with `write`/`action`/`events`/`mutations`, malformed JSON or excessive body is rejected. Presence heartbeat is intercepted and answered synthetically, **never forwarded** to n8n. Page-initiated `/api/request` writes and note/task mutation operations receive HTTP 403.
+- `scripts/odyssey_dev_readonly_proxy.mjs`: ephemeral **127.0.0.1** TCP listener on OS-allocated port, fixed upstream `172.18.0.1:28780` (DEV only), fixed assets from `/data/odyssey-dev/runtime/web`, path traversal blocked, symlinks resolved before opening and limited body/response sizes. No new auth headers, no PROD destination, no n8n admin access. The server closes at the end of the browser test.
+- `scripts/odyssey_dev_browser_readonly.cjs`: automatically opens mobile (390×844) and desktop (1280×960) Chromium against the new proxy, loads the deployed frontend, checks conversation counts and 20 technical views/graphs in each viewport, reloads and compares counts, checks duplicate write receipts and incorrect legacy warnings, and tests four forbidden API mutations. Output is **aggregate counts only**; never prints message text, note contents, model prompts, tokens, personal IDs or screenshot images. Emits unambiguous `cloudflare_access_checked=false` and `live_p4_browser_write_checked=false`.
+- `tests/odyssey_dev_readonly_proxy.test.mjs`: deterministic Node tests for every admitted read operation, many mutation denials, path traversal, and real loopback denial of seven fake write requests plus oversized bodies. New tests discovered automatically by `scripts/odyssey_cross_surface_gate.py`.
+
+## Result on Raspberry Pi, 19 October 2026
+
+Read-only Chromium gate **PASS** on DEV commit `b0fc9b21da613bff4aeccf5466a18da8b18426e2` (which is NOT branch P4). Each viewport showed 41 messages before and after reload, 20 buttons with 20 SVG-rendered details, 5 route flow views, and 10 Core write receipts. Duplicated Core receipts **0**, false legacy warnings **0**, page JavaScript exceptions **0**. The proxy itself recorded **34 read-only upstream requests**, **8 synthetic presence responses** (never forwarded), and **4 denied mutation attempts** with status 403 (execute request, delete note, change task, append conversation turn). Machine-readable evidence `/tmp/odyssey-readonly-browser-safeproxy-20261019.json`. The four Node contract tests also passed against the proxy without touching n8n.
+
+To rerun on this Pi (uses local already cached browser dependencies, no install or deployment): `LD_LIBRARY_PATH=/tmp/odyssey-p4-browser-deps/root/usr/lib/aarch64-linux-gnu node scripts/odyssey_dev_browser_readonly.cjs`.
+
+**This is an optional DEV read-only gate, not a substitute for product acceptance.** It does not establish a live authenticated browser→n8n→GPT→P4 Writer→Markdown→graph on newly written data. It does not test Cloudflare Access or any P4 branch changes not installed in DEV. It is intentionally **not** part of automatic CI because it needs a running local DEV fixture, local Chromium and a browser-specific library cache. The offline Node contract is included in CI/gate. No new writes or deployments were performed.
+
+## Boundary for secure Codex model sessions
+
+The prior offline Bubblewrap sandbox hides host files and blocks network, but a Codex model agent needs provider communication. Keeping all outbound network open in its namespace defeats isolation against PROD, and mounting a long-lived login file can expose authentication. A dedicated network broker with strict destination egress and credential separation, or OpenAI self-hosted sandbox with restricted executor-key permissions, needs independent provisioning/validation before enabling unattended Codex to access project source and tools. Neither was configured in this session. This does **not** authorize production access, make the assistant capable of autonomous future execution, or justify deploying P4. Avoid introducing a new paid API workflow or switching away from the user's ChatGPT Codex authentication without agreement.
+
+## Verificación final
+
+Gate transversal en la Pi: **1156 Python PASS + 7 subtests PASS + 178 JavaScript PASS**; controles deterministas del proxy incluidos en los 178. No se ejecutaron nuevas llamadas GPT. El comando exploratorio `codex sandbox` mostró que esta versión del CLI exige un `--sandbox-state-json` o perfil explícito y, sin esa configuración, falló cerrado (RC=2); no se verificó el aislamiento de lectura de su sandbox nativo. Por tanto la afirmación de que las sesiones Codex online están totalmente aisladas sigue sin estar sustentada.
