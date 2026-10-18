@@ -139,6 +139,13 @@ def model_policy() -> dict:
     limit = policy.get("default_reported_token_budget")
     if not isinstance(limit, int) or not 20000 <= limit <= 300000:
         raise CycleError("Unsafe or missing token budget")
+    headroom = policy.get("minimum_session_headroom")
+    if (
+        isinstance(headroom, bool)
+        or not isinstance(headroom, int)
+        or not 10000 <= headroom <= 100000
+    ):
+        raise CycleError("Unsafe model session headroom budget")
     prefixes = policy.get("architectural_change_prefixes")
     if (
         not isinstance(prefixes, list)
@@ -414,8 +421,8 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     state = load(job)
     used = state.get("token_usage", {}).get("reported_total", 0)
     cap = state.get("reported_token_budget", model_policy()["default_reported_token_budget"])
-    if used >= cap:
-        raise CycleError("Reported-token budget reached; refusing another model session")
+    if cap - used < model_policy()["minimum_session_headroom"]:
+        raise CycleError("Insufficient reported-token headroom for another Codex session")
     choice = select_agent_model(role, state, dest)
     artifact = evidence / (role + ".json" if read_only else "builder.md")
     stdout_log = evidence / (role + ".log")
@@ -668,6 +675,40 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
             update(job, state, "testing", active_role="deterministic_gates")
             gates = deterministic_gates(dest, evidence)
             state["gate"] = gates
+            if not all(check.get("pass") is True for check in gates.values()):
+                # Fail FAST on deterministic defects. Independent GPT reviews
+                # at 30-50k tokens/session cannot usefully approve broken tests.
+                # Feed the gate logs directly to the next Builder, without
+                # spending more on architecture/QA/performance first.
+                findings = {"gates": gates, "reviews": {}}
+                remaining = state.get(
+                    "reported_token_budget", model_policy()["default_reported_token_budget"]
+                ) - state.get("token_usage", {}).get("reported_total", 0)
+                if attempt >= max_rounds:
+                    update(
+                        job,
+                        state,
+                        "blocked_repair_budget",
+                        active_role=None,
+                        ready_for_user=False,
+                        last_error="Deterministic gates failed; no repair rounds remain",
+                    )
+                    return state
+                if remaining < model_policy()["minimum_session_headroom"]:
+                    update(
+                        job,
+                        state,
+                        "blocked_insufficient_token_headroom",
+                        active_role=None,
+                        ready_for_user=False,
+                        last_error=(
+                            "Deterministic gates failed; insufficient token headroom "
+                            "for a safe repair attempt"
+                        ),
+                    )
+                    return state
+                update(job, state, "repair_needed", active_role=None, ready_for_user=False)
+                continue
             update(job, state, "reviewing", active_role=None)
             reviews = {}
             for role in REVIEW_ROLES:

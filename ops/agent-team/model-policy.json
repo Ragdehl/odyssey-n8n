@@ -6,6 +6,7 @@
     "deep": {"id": "gpt-6-sol", "effort": "high"}
   },
   "default_reported_token_budget": 110000,
+  "minimum_session_headroom": 40000,
   "architectural_change_prefixes": [
     "odyssey_core/",
     "odyssey_runtime/",

@@ -634,7 +634,7 @@ def test_actual_codex_cli_command_routes_model_and_records_reported_tokens(
             "risk": risk,
             "round": 1,
             "baseline_commit": "a" * 40,
-            "reported_token_budget": 20000,
+            "reported_token_budget": 110000,
             "token_usage": {"reported_total": 0, "sessions": []},
         },
     )
@@ -698,7 +698,7 @@ def test_codex_cli_refuses_unverified_model_substitution(monkeypatch, tmp_path):
             "round": 1,
             "risk": "normal",
             "baseline_commit": "a" * 40,
-            "reported_token_budget": 20000,
+            "reported_token_budget": 110000,
             "token_usage": {"reported_total": 0, "sessions": []},
         },
     )
@@ -720,3 +720,126 @@ def test_codex_cli_refuses_unverified_model_substitution(monkeypatch, tmp_path):
     monkeypatch.setattr(cycle.subprocess, "Popen", WrongModel)
     with pytest.raises(cycle.CycleError, match="not verified"):
         cycle.codex("generality", "Review", tmp_path, work, read_only=True)
+
+
+def test_failing_offline_gate_skips_all_model_reviewers_and_preserves_logs(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    monkeypatch.setattr(cycle, "workspace", lambda *_: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    (tmp_path / "isolated").mkdir()
+    monkeypatch.setattr(
+        cycle, "running", lambda *_args, **_kw: type("Git", (), {"returncode": 0, "stdout": ""})()
+    )
+    job = "failfast-pilot"
+    base = cycle.job_path(job)
+    base.mkdir(parents=True)
+    (base / "brief.md").write_text("Prove deterministic failures skip LLM reviewers.")
+    cycle.atomic_json(
+        base / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "b" * 40,
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+            "reported_token_budget": 110000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+        },
+    )
+    calls = []
+
+    def fake_model(role, *_args, **_kw):
+        calls.append(role)
+        return {
+            "role": "builder",
+            "reported_tokens": 85844,
+            "model": "gpt-6-luna",
+            "tier": "economy",
+            "routing_reason": "routine",
+        }
+
+    monkeypatch.setattr(cycle, "codex", fake_model)
+    monkeypatch.setattr(
+        cycle,
+        "deterministic_gates",
+        lambda *_: {
+            "cross_surface": {"pass": False, "log": "/tmp/failed.log"},
+            "acceptance": {"pass": True},
+        },
+    )
+    status = cycle.run(job, 2, live=True)
+    assert calls == ["builder"]
+    assert status["phase"] == "blocked_insufficient_token_headroom"
+    assert status["gate"]["cross_surface"]["pass"] is False
+    assert status["token_usage"]["reported_total"] == 85844
+    assert status["reviews"] == {}
+    assert "insufficient token headroom" in status["last_error"].lower()
+
+
+def test_failing_gates_go_straight_to_bounded_builder_repair_without_review(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    monkeypatch.setattr(cycle, "workspace", lambda *_: tmp_path / "isolated")
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    monkeypatch.setattr(
+        cycle, "running", lambda *_args, **_kw: type("Git", (), {"returncode": 0, "stdout": ""})()
+    )
+    (tmp_path / "isolated").mkdir()
+    job = "repair-without-review"
+    path = cycle.job_path(job)
+    path.mkdir(parents=True)
+    (path / "brief.md").write_text("Repair an offline failure without GPT review first.")
+    cycle.atomic_json(
+        path / "status.json",
+        {
+            "phase": "planned",
+            "baseline_commit": "b" * 40,
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+            "reported_token_budget": 110000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+        },
+    )
+    roles, gate_calls = [], []
+
+    def fake_model(role, *_args, **_kw):
+        roles.append(role)
+        return {"verdict": {"verdict": "pass"}} if role != "builder" else {"role": role}
+
+    def gates(*_args):
+        gate_calls.append(1)
+        return {"focused": {"pass": len(gate_calls) > 1}}
+
+    monkeypatch.setattr(cycle, "codex", fake_model)
+    monkeypatch.setattr(cycle, "deterministic_gates", gates)
+    result = cycle.run(job, 2, live=True)
+    assert result["phase"] == "reviewed_browser_gate_pending"
+    assert result["round"] == 2
+    assert roles == ["builder", "builder", *cycle.REVIEW_ROLES]
+    assert len(gate_calls) == 2
+    assert list(result["reviews"]) == list(cycle.REVIEW_ROLES)
+
+
+def test_headroom_guard_stops_before_spawning_codex(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    job = "headroom-guard"
+    directory = cycle.job_path(job)
+    (directory / "round-1").mkdir(parents=True)
+    cycle.atomic_json(
+        directory / "status.json",
+        {
+            "phase": "reviewing",
+            "round": 1,
+            "baseline_commit": "a" * 40,
+            "reported_token_budget": 110000,
+            "token_usage": {"reported_total": 85844, "sessions": []},
+        },
+    )
+    monkeypatch.setattr(
+        cycle.subprocess, "Popen", lambda *_args, **_kwargs: pytest.fail("Should not call Codex")
+    )
+    with pytest.raises(cycle.CycleError, match="headroom"):
+        cycle.codex("generality", "Review", tmp_path, directory / "round-1", read_only=True)
