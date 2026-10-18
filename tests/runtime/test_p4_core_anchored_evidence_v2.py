@@ -157,6 +157,9 @@ def test_overlapping_literal_veto_happens_before_review_or_any_writer(tmp_path):
     source = "Hoy escribí aaa."
     _original, route, raw_plan, raw_review = _actual_snapshot("two_dates")
     plan, _review = _anchored(raw_plan, raw_review)
+    # Keep ONE otherwise structurally valid fact. A second, unrelated
+    # planner fact with an absent literal would make this veto inconclusive.
+    plan["facts"] = plan["facts"][:1]
     plan["facts"][0]["source_evidence"] = "aa"
     plan["facts"][0]["source_evidence_context"] = None
     repo, actor, service, runtime = _fixture(tmp_path)
