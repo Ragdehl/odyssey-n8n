@@ -4614,6 +4614,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             parallel_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_coverage_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_target_decisions=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
+            task_create_batch_enabled=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             prewrite_diagnostic=(
                 record_dev_p4_prewrite_gate
                 if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"

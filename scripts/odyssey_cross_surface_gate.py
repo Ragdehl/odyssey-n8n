@@ -92,6 +92,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_p4_parallel_coverage.py",
         "tests/runtime/test_p4_prewrite_diagnostics.py",
         "tests/runtime/test_p4_speaker_incomplete_retry.py",
+        "tests/runtime/test_p4_multitask_batch.py",
         "tests/runtime/test_p4_model_contract_strict_schema.py",
         "tests/runtime/test_p4_independent_mixed_scopes.py",
         "tests/runtime/test_p4_dependent_task_target.py",

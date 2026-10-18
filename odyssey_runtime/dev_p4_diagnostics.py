@@ -25,6 +25,7 @@ _ALLOWED_GATES = frozenset(
         "compile_rejected",
         "task_scope_verdict",
         "task_scope_rejected",
+        "task_batch_plan_rejected",
         "speaker_count_retry",
     }
 )

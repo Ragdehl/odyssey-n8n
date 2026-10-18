@@ -164,6 +164,7 @@ class WholeSourceLightExecutor:
     # They can overlap BEFORE any mutations; approvals remain compulsory.
     parallel_coverage_speaker_reviews: bool = False
     parallel_target_decisions: bool = False
+    task_create_batch_enabled: bool = False
     prewrite_diagnostic: Callable[[str, str, dict[str, int | bool]], None] | None = None
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
@@ -785,6 +786,7 @@ class WholeSourceLightExecutor:
                 router_started=router_started,
                 route_scopes=scopes,
             )
+        task_only_batch = False
         if "tasks" in capabilities and "core" not in capabilities:
             # The router is a fallible hypothesis, NOT source coverage proof.
             # An independent model must attest this is exactly one Tasks-only
@@ -805,19 +807,23 @@ class WholeSourceLightExecutor:
                 one_operation=scope.get("exactly_one_operation") is True,
                 source_aligned=scope.get("source_quote") == source,
             )
-            if (
-                scope.get("only_task_semantics") is not True
-                or scope.get("exactly_one_operation") is not True
-                or scope.get("source_quote") != source
-            ):
+            if scope.get("only_task_semantics") is not True or scope.get("source_quote") != source:
                 self._observe_prewrite(delivery, "task_scope_rejected")
                 return self._abstain(delivery)
-            # Share the SAME domain service with Task UI for WORK SESSION;
-            # ordinary task lifecycle remains Tasks interpreter → Core writer.
-            if self.progress is not None:
-                self.progress("action.delegate.started", {})
-            return self.task_delegate(source, delivery, actor)
-        if "core" not in capabilities:
+            if scope.get("exactly_one_operation") is True:
+                # Exactly one domain operation retains the standard Task app
+                # interpreter, including lifecycle and work sessions.
+                if self.progress is not None:
+                    self.progress("action.delegate.started", {})
+                return self.task_delegate(source, delivery, actor)
+            if not self.task_create_batch_enabled:
+                self._observe_prewrite(delivery, "task_scope_rejected")
+                return self._abstain(delivery)
+            # Multi-Task CREATE uses the same Core compiler and canonical
+            # Writer as a mixed Core+Task source. Never delegate only the
+            # first task or convert a lifecycle action to Task CREATE.
+            task_only_batch = True
+        if "core" not in capabilities and not task_only_batch:
             return self._abstain(delivery)
         if self.progress is not None:
             self.progress("planner.started", {})
@@ -846,6 +852,16 @@ class WholeSourceLightExecutor:
                 "odyssey_light_shared_semantic_plan_v1",
             )
             proposed["_allowed_capabilities"] = capabilities
+            if task_only_batch and (
+                not isinstance(proposed.get("facts"), list)
+                or len(proposed["facts"]) < 2
+                or any(
+                    not isinstance(fact, dict) or fact.get("kind") != "task"
+                    for fact in proposed["facts"]
+                )
+            ):
+                self._observe_prewrite(delivery, "task_batch_plan_rejected")
+                return self._abstain(delivery)
             self._observe_prewrite(
                 delivery,
                 "proposal",
