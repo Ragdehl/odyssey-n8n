@@ -151,3 +151,19 @@ def test_no_note_is_written_when_anchored_provenance_is_untrusted(tmp_path, faul
             "odyssey_task_only_scope_v1",
             "odyssey_light_shared_semantic_plan_v2",
         ]
+
+
+def test_overlapping_literal_veto_happens_before_review_or_any_writer(tmp_path):
+    source = "Hoy escribí aaa."
+    _original, route, raw_plan, raw_review = _actual_snapshot("two_dates")
+    plan, _review = _anchored(raw_plan, raw_review)
+    plan["facts"][0]["source_evidence"] = "aa"
+    plan["facts"][0]["source_evidence_context"] = None
+    repo, actor, service, runtime = _fixture(tmp_path)
+    service.core_anchored_coverage_enabled = True
+    service.client = RecordedClient([route, plan])
+    initial = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "p4-overlap-fail-closed", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert initial == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    assert len(service.client.calls) == 2

@@ -7,7 +7,6 @@ cardinality, scope, permission and write authority belong elsewhere in Core.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -74,22 +73,34 @@ def anchor_literal_evidence(
     ):
         raise SourceEvidenceError("Invalid source occurrence contexts")
 
+    def unique_occurrence(text: str, literal: str) -> int:
+        """Locate exactly one occurrence, including overlapping occurrences.
+
+        Non-overlapping regex iterators miss that aa occurs twice in aaa.
+        Two bounded substring searches suffice without creating a match list.
+        """
+        start = text.find(literal)
+        if start < 0 or text.find(literal, start + 1) >= 0:
+            raise SourceEvidenceError("Source evidence ambiguous or absent")
+        return start
+
     def locate(literal: str, context: str | None) -> SourceAnchor:
         if not isinstance(literal, str) or not literal.strip():
             raise SourceEvidenceError("Missing original source evidence")
         if context is None:
-            matches = list(re.finditer(re.escape(literal), original))
-            if len(matches) != 1:
-                raise SourceEvidenceError("Source evidence ambiguous or absent")
-            start, end = matches[0].span()
+            start = unique_occurrence(original, literal)
+            end = start + len(literal)
         else:
             if not context.strip():
                 raise SourceEvidenceError("Missing disambiguating original source context")
-            original_matches = list(re.finditer(re.escape(context), original))
-            contained = list(re.finditer(re.escape(literal), context))
-            if len(original_matches) != 1 or len(contained) != 1:
-                raise SourceEvidenceError("Source occurrence context ambiguous or absent")
-            start = original_matches[0].start() + contained[0].start()
+            try:
+                context_start = unique_occurrence(original, context)
+                within_context = unique_occurrence(context, literal)
+            except SourceEvidenceError as error:
+                raise SourceEvidenceError(
+                    "Source occurrence context ambiguous or absent"
+                ) from error
+            start = context_start + within_context
             end = start + len(literal)
             if original[start:end] != literal:
                 raise SourceEvidenceError("Source occurrence changed")

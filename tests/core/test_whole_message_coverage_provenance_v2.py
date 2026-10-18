@@ -341,3 +341,33 @@ def test_whole_core_review_with_repeated_primary_and_distinct_verified_contexts(
     assert len(proof.reviewed_facts) == 2
     assert proof.reviewed_facts[0].source_spans[0] != proof.reviewed_facts[1].source_spans[0]
     assert proof.reviewed_facts[0].source_spans[1] != proof.reviewed_facts[1].source_spans[1]
+
+
+@pytest.mark.parametrize(
+    ("original", "literal", "context"),
+    [
+        ("aaa", "aa", None),
+        ("banana", "ana", None),
+        ("aaaa", "aaa", None),
+        ("äää", "ää", None),
+        ("abaXaba", "aba", "abaXaba"),
+        ("aaaaX", "aa", "aaaaX"),
+        ("ababab", "ab", "abab"),
+    ],
+)
+def test_provenance_rejects_all_overlapping_source_occurrences(original, literal, context):
+    with pytest.raises(ValueError, match="ambiguous"):
+        anchor_literal_evidence(original, literal, primary_context=context)
+
+
+def test_overlapping_text_outside_unique_context_does_not_invalidate_inner_quote():
+    original = "aaaXaa"
+    anchored = anchor_literal_evidence(original, "aa", primary_context="Xaa")
+    assert anchored.primary.start == original.index("Xaa") + 1
+    assert original[anchored.primary.start : anchored.primary.end] == "aa"
+
+
+def test_genuine_single_literal_still_anchors_without_context_after_overlap_fix():
+    original = "Mañana veré a Chloé y por la tarde llamaré a Lucía."
+    anchor = anchor_literal_evidence(original, "llamaré a Lucía")
+    assert original[anchor.primary.start : anchor.primary.end] == "llamaré a Lucía"
