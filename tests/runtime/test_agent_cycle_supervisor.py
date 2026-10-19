@@ -1562,6 +1562,89 @@ def test_remaining_review_budget_reserves_all_outstanding_roles(tmp_path):
         cycle.check_review_reserve("safe-budget-test", state, ("generality", "quality"))
 
 
+def test_resume_review_quote_without_completed_reviewers_keeps_full_reservation():
+    state = {
+        "phase": "paused_daily_budget",
+        "resume_checkpoint": {"stage": "reviewing"},
+        "reviews": {},
+    }
+    quote = {
+        "roles": ["generality", "quality", "testing"],
+        "minimum_by_role": {"generality": 55, "quality": 45, "testing": 35},
+        "minimum_remaining_reported_tokens": 135,
+        "reported_tokens_available": 120,
+        "can_start": False,
+    }
+
+    remaining = cycle.remaining_resume_review_quote(state, quote)
+
+    assert remaining["completed_roles"] == []
+    assert remaining["roles"] == ["generality", "quality", "testing"]
+    assert remaining["minimum_by_role"] == {
+        "generality": 55,
+        "quality": 45,
+        "testing": 35,
+    }
+    assert remaining["minimum_remaining_reported_tokens"] == 135
+    assert remaining["can_start"] is False
+
+
+def test_resume_review_quote_deducts_completed_prefix_without_mutating_inputs():
+    state = {
+        "phase": "paused_daily_budget",
+        "resume_checkpoint": {"stage": "reviewing"},
+        "reviews": {"generality": {"verdict": "pass"}},
+    }
+    quote = {
+        "roles": ["generality", "quality", "testing"],
+        "minimum_by_role": {"generality": 55, "quality": 45, "testing": 35},
+        "minimum_remaining_reported_tokens": 135,
+        "reported_tokens_available": 80,
+        "can_start": False,
+    }
+    original_state = {
+        **state,
+        "resume_checkpoint": dict(state["resume_checkpoint"]),
+        "reviews": dict(state["reviews"]),
+    }
+    original_quote = {
+        **quote,
+        "roles": list(quote["roles"]),
+        "minimum_by_role": dict(quote["minimum_by_role"]),
+    }
+
+    remaining = cycle.remaining_resume_review_quote(state, quote)
+
+    assert remaining["completed_roles"] == ["generality"]
+    assert remaining["roles"] == ["quality", "testing"]
+    assert remaining["minimum_by_role"] == {"quality": 45, "testing": 35}
+    assert remaining["minimum_remaining_reported_tokens"] == 80
+    assert remaining["can_start"] is True
+    assert state == original_state
+    assert quote == original_quote
+    assert remaining is not quote
+    assert remaining["roles"] is not quote["roles"]
+    assert remaining["minimum_by_role"] is not quote["minimum_by_role"]
+
+
+def test_resume_review_quote_rejects_out_of_order_completed_reviewers():
+    state = {
+        "phase": "paused_daily_budget",
+        "resume_checkpoint": {"stage": "reviewing"},
+        "reviews": {"quality": {"verdict": "pass"}},
+    }
+    quote = {
+        "roles": ["generality", "quality", "testing"],
+        "minimum_by_role": {"generality": 55, "quality": 45, "testing": 35},
+        "minimum_remaining_reported_tokens": 135,
+        "reported_tokens_available": 120,
+        "can_start": False,
+    }
+
+    with pytest.raises(cycle.CycleError, match="out-of-order or unknown"):
+        cycle.remaining_resume_review_quote(state, quote)
+
+
 def test_tooling_high_risk_must_not_masquerade_as_low_risk_for_cost_savings(monkeypatch, tmp_path):
     policy_path = tmp_path / "policy.json"
     import json
