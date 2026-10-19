@@ -436,6 +436,32 @@ def review_budget_quote(
     }
 
 
+def remaining_resume_review_quote(state: dict, quote: dict) -> dict:
+    """Read-only estimate for unfinished roles (no discount for a pending Builder)."""
+    checkpoint = state.get("resume_checkpoint")
+    if state.get("phase") != "paused_daily_budget" or not isinstance(checkpoint, dict):
+        return quote
+    if checkpoint.get("stage") != "reviewing":
+        return quote
+    completed = state.get("reviews")
+    if not isinstance(completed, dict):
+        raise CycleError("Missing completed reviewer ledger for resume quote")
+    roles = quote["roles"]
+    if list(completed) != roles[: len(completed)]:
+        raise CycleError("Cannot quote out-of-order or unknown completed reviews")
+    pending = roles[len(completed) :]
+    remaining = {role: quote["minimum_by_role"][role] for role in pending}
+    minimum = sum(remaining.values())
+    return {
+        **quote,
+        "completed_roles": list(completed),
+        "roles": pending,
+        "minimum_by_role": remaining,
+        "minimum_remaining_reported_tokens": minimum,
+        "can_start": quote["reported_tokens_available"] >= minimum,
+    }
+
+
 def check_review_reserve(job: str, state: dict, roles: tuple[str, ...]) -> None:
     """Require enough estimated budget for ALL remaining reviewers, before each launch."""
     # Historical offline unit fixtures without a ledger represent mock no-cost models.
@@ -750,13 +776,7 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     # Direct Python unit tests may call this with a fixture ledger. Real CLI
     # run --live refuses to start unless pacing is configured. For configured
     # installations, protect each agent session, including reviewer retries.
-    try:
-        if pacing.load_policy(STATE) is not None:
-            pacing.require_session_headroom(
-                STATE, minimum=model_policy()["minimum_session_headroom"]
-            )
-    except pacing.PacingError as exc:
-        raise DailyBudgetPause(str(exc)) from exc
+    require_daily_model_start()
     choice = select_agent_model(role, state, dest)
     # Codex :read-only only prevents writes, NOT reading ~/private, /data, or
     # authenticated Codex files. Enforce a scoped named native permission
@@ -1004,6 +1024,115 @@ def validate_review_resume(job: str, state: dict, dest: Path) -> tuple[int, tupl
     return number, expected_roles
 
 
+def require_daily_model_start() -> None:
+    """Shared additional per-model preflight; no account-quota claims."""
+    try:
+        if pacing.load_policy(STATE) is not None:
+            pacing.require_session_headroom(
+                STATE, minimum=model_policy()["minimum_session_headroom"]
+            )
+    except pacing.PacingError as exc:
+        raise DailyBudgetPause(str(exc)) from exc
+
+
+def checkpoint_daily_builder(
+    job: str,
+    state: dict,
+    dest: Path,
+    *,
+    attempt: int,
+    findings: dict,
+    brief: str,
+    before: bytes,
+    error: DailyBudgetPause,
+) -> None:
+    """Only pre-launch, unchanged Builder can be recovered; never a partial execution."""
+    if (
+        state.get("round") != attempt
+        or state.get("active_role") not in {None, "builder"}
+        or state.get("phase") not in {"starting_round", "implementing"}
+        or state.get("gate") != {}
+        or state.get("reviews") != {}
+        or state.get("review_artifacts") != {}
+        or review_snapshot(dest) != before
+    ):
+        update(
+            job,
+            state,
+            "blocked",
+            ready_for_user=False,
+            last_error="Unsafe or changed Builder boundary: manual review required",
+        )
+        return
+    quote = review_budget_quote(state, include_builder=True, dest=dest)
+    if not quote["can_start"]:
+        update(
+            job,
+            state,
+            "blocked_insufficient_review_budget",
+            ready_for_user=False,
+            active_role=None,
+            last_error="Per-job reserve insufficient: daily reset cannot fix this",
+        )
+        return
+    update(
+        job,
+        state,
+        "paused_daily_budget",
+        ready_for_user=False,
+        active_role=None,
+        last_error=str(error),
+        resume_checkpoint={
+            "stage": "builder",
+            "round": attempt,
+            "snapshot_sha256": before.hex(),
+            "brief_sha256": hashlib.sha256(brief.encode("utf-8")).hexdigest(),
+            "review_roles": list(select_review_roles(state, dest)),
+            "reported_tokens_total": state.get("token_usage", {}).get("reported_total", 0),
+            "findings": findings,
+        },
+    )
+
+
+def validate_builder_resume(job: str, state: dict, dest: Path) -> tuple[int, dict]:
+    """Validate pre-launch Builder evidence before spending even one model token."""
+    checkpoint = state.get("resume_checkpoint")
+    if state.get("phase") != "paused_daily_budget" or not isinstance(checkpoint, dict):
+        raise CycleError("No paused daily Builder to resume")
+    if checkpoint.get("stage") != "builder":
+        raise CycleError("Not a Builder daily checkpoint")
+    number = checkpoint.get("round")
+    if type(number) is not int or not 1 <= number <= 3 or state.get("round") != number:
+        raise CycleError("Invalid Builder checkpoint round")
+    if state.get("worktree") != str(dest):
+        raise CycleError("Builder checkpoint checkout mismatch")
+    safe_worktree(dest, job)
+    if any(state.get(field) != {} for field in ("gate", "reviews", "review_artifacts")):
+        raise CycleError("Partial Builder/review execution cannot be resumed")
+    brief = (job_path(job) / "brief.md").read_text(encoding="utf-8")
+    if hashlib.sha256(brief.encode("utf-8")).hexdigest() != checkpoint.get("brief_sha256"):
+        raise CycleError("Feature brief changed since Builder checkpoint")
+    if review_snapshot(dest).hex() != checkpoint.get("snapshot_sha256"):
+        raise CycleError("Builder worktree changed since safe checkpoint")
+    if checkpoint.get("review_roles") != list(select_review_roles(state, dest)):
+        raise CycleError("Builder review policy changed since pause")
+    if checkpoint.get("reported_tokens_total") != state.get("token_usage", {}).get(
+        "reported_total", 0
+    ):
+        raise CycleError("Agent token ledger changed after Builder checkpoint")
+    findings = checkpoint.get("findings")
+    if not isinstance(findings, dict) or (number == 1 and findings):
+        raise CycleError("Untrusted repair findings at Builder checkpoint")
+    if number > 1 and (
+        not isinstance(findings.get("gates"), dict) or not isinstance(findings.get("reviews"), dict)
+    ):
+        raise CycleError("Missing previous-round repair evidence")
+    quote = review_budget_quote(state, include_builder=True, dest=dest)
+    if not quote["can_start"]:
+        raise CycleError("Insufficient remaining per-job reserve for resumed Builder")
+    return number, findings
+
+
 def checkpoint_daily_review(job: str, state: dict, dest: Path, exc: DailyBudgetPause) -> None:
     """Pause only at a proven model-free reviewer boundary."""
     role = state.get("active_role")
@@ -1082,14 +1211,22 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
         pending_round = state.get("resume_checkpoint", {}).get("round")
         if type(pending_round) is int and max_rounds < pending_round:
             raise CycleError("Resume round exceeds requested maximum")
-        first_round, _saved_roles = validate_review_resume(job, state, dest)
+        stage = state.get("resume_checkpoint", {}).get("stage")
+        if stage == "reviewing":
+            first_round, _saved_roles = validate_review_resume(job, state, dest)
+            resume_findings = {}
+        elif stage == "builder":
+            first_round, resume_findings = validate_builder_resume(job, state, dest)
+        else:
+            raise CycleError("Unknown or unsafe daily checkpoint stage")
     else:
         dest = workspace(job, state["baseline_commit"])
         safe_worktree(dest, job)
         state["worktree"] = str(dest)
         first_round = 1
+        resume_findings = {}
     brief = (run_dir / "brief.md").read_text(encoding="utf-8")
-    findings = {}
+    findings = resume_findings
     review_base = state.get("review_base")
     if state.get("implemented_by", "codex") == "chatgpt" and not review_base:
         raise CycleError("A ChatGPT-originated feature requires independent comparison base")
@@ -1108,10 +1245,12 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
     update(job, state, "running")
     try:
         for attempt in range(first_round, max_rounds + 1):
-            continuing_review = resume and attempt == first_round
+            continuing_review = resume and attempt == first_round and stage == "reviewing"
+            continuing_builder = resume and attempt == first_round and stage == "builder"
             if (
                 attempt > 1
                 and not continuing_review
+                and not continuing_builder
                 and "reported_token_budget" in state
                 and "token_usage" in state
             ):
@@ -1139,20 +1278,20 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                     return state
             if not continuing_review:
                 evidence = run_dir / f"round-{attempt}"
-                evidence.mkdir(parents=True)
-                # Publish the new evidence scope before any repair or handoff work.
-                # Prior verdicts remain in their round files and in `findings` for repair.
-                update(
-                    job,
-                    state,
-                    "starting_round",
-                    round=attempt,
-                    active_role=None,
-                    reviews={},
-                    review_artifacts={},
-                    gate={},
-                    ready_for_user=False,
-                )
+                evidence.mkdir(parents=True, exist_ok=continuing_builder)
+                if not continuing_builder:
+                    # Previously completed evidence remains on disk for repair context.
+                    update(
+                        job,
+                        state,
+                        "starting_round",
+                        round=attempt,
+                        active_role=None,
+                        reviews={},
+                        review_artifacts={},
+                        gate={},
+                        ready_for_user=False,
+                    )
                 if state.get("implemented_by", "codex") == "chatgpt" and attempt == 1:
                     # A real human-facing ChatGPT session ALREADY authored and
                     # committed this exact source snapshot. Never bill Codex to
@@ -1170,17 +1309,42 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                         encoding="utf-8",
                     )
                 else:
-                    update(job, state, "implementing", round=attempt, active_role="builder")
-                    builder_receipt = codex(
-                        "builder",
-                        instructions(
-                            "builder", brief, review_base or state["baseline_commit"], findings
-                        )
-                        + compare,
-                        dest,
-                        evidence,
-                        read_only=False,
+                    # Capture the precise source before Builder starts. Only a
+                    # pre-launch pacing refusal can be resumed, not a partial write.
+                    # Legacy offline fixtures without a configured pacing
+                    # policy do not claim resumability or require Git snapshots.
+                    before_builder = (
+                        review_snapshot(dest) if pacing.load_policy(STATE) is not None else None
                     )
+                    update(job, state, "implementing", round=attempt, active_role="builder")
+                    try:
+                        require_daily_model_start()
+                        builder_receipt = codex(
+                            "builder",
+                            instructions(
+                                "builder", brief, review_base or state["baseline_commit"], findings
+                            )
+                            + compare,
+                            dest,
+                            evidence,
+                            read_only=False,
+                        )
+                    except DailyBudgetPause as error:
+                        if before_builder is None:
+                            raise CycleError(
+                                "Cannot checkpoint Builder without verified pacing"
+                            ) from error
+                        checkpoint_daily_builder(
+                            job,
+                            state,
+                            dest,
+                            attempt=attempt,
+                            findings=findings,
+                            brief=brief,
+                            before=before_builder,
+                            error=error,
+                        )
+                        return state
                     record_agent_usage(job, state, "builder", builder_receipt)
                 safe_worktree(dest, job)
                 if acceptance == "tooling":
@@ -1195,7 +1359,9 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                             last_error="Tooling acceptance includes a path outside the supervisor allowlist",
                         )
                         return state
-                update(job, state, "testing", active_role="deterministic_gates")
+                update(
+                    job, state, "testing", active_role="deterministic_gates", resume_checkpoint=None
+                )
                 gates = deterministic_gates(dest, evidence)
                 state["gate"] = gates
                 if not all(check.get("pass") is True for check in gates.values()):
@@ -1267,20 +1433,27 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                 check_review_reserve(job, state, selected_roles[i:])
                 update(job, state, "reviewing", active_role=role)
                 before = review_snapshot(dest)
-                review = codex(
-                    role,
-                    instructions(role, brief, review_base or state["baseline_commit"], gates)
-                    + compare
-                    + "\nREVIEW CONTRACT: assess YOUR specialist responsibility only. "
-                    "The deterministic supervisor checks all the selected reviewers. "
-                    "Do not fail because an unselected reviewer was intentionally "
-                    "omitted by policy, or because future reviews are not yet completed. "
-                    "Review selection with explicit scope: "
-                    + json.dumps(state.get("review_plan", {}), ensure_ascii=False),
-                    dest,
-                    evidence,
-                    read_only=True,
-                )
+                try:
+                    review = codex(
+                        role,
+                        instructions(role, brief, review_base or state["baseline_commit"], gates)
+                        + compare
+                        + "\nREVIEW CONTRACT: assess YOUR specialist responsibility only. "
+                        "The deterministic supervisor checks all the selected reviewers. "
+                        "Do not fail because an unselected reviewer was intentionally "
+                        "omitted by policy, or because future reviews are not yet completed. "
+                        "Review selection with explicit scope: "
+                        + json.dumps(state.get("review_plan", {}), ensure_ascii=False),
+                        dest,
+                        evidence,
+                        read_only=True,
+                    )
+                except DailyBudgetPause:
+                    if review_snapshot(dest) != before:
+                        raise CycleError(
+                            "Reviewer modified source before daily budget refusal; no safe resume"
+                        ) from None
+                    raise
                 # Account for a completed model session even when its review is rejected.
                 record_agent_usage(job, state, role, review)
                 if review_snapshot(dest) != before:
@@ -1308,6 +1481,7 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                             "Internal CLI feature ready for maintainer; no deploy, merge, or push authority"
                         ),
                         last_error=None,
+                        resume_checkpoint=None,
                     )
                     return state
                 # Product readiness still requires genuine browser->n8n->Writer evidence.
@@ -1318,6 +1492,7 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                     active_role=None,
                     ready_for_user=profile["ready_for_user"],
                     last_error="Authenticated live browser and deployment must be verified separately",
+                    resume_checkpoint=None,
                 )
                 return state
             # A reviewer can simultaneously find a fixable defect and lack
@@ -1482,16 +1657,25 @@ def main() -> int:
                     role: select_agent_model(role, state, checkout)
                     for role in ("builder", *REVIEW_ROLES)
                 },
-                "review_budget_quote": review_budget_quote(
+                "review_budget_quote": remaining_resume_review_quote(
                     state,
-                    include_builder=(
-                        state.get("implemented_by", "codex") == "codex"
-                        and state.get("round", 0) == 0
-                    ),
-                    dest=(
-                        checkout
-                        if state.get("worktree") or state.get("implemented_by") == "chatgpt"
-                        else None
+                    review_budget_quote(
+                        state,
+                        include_builder=(
+                            state.get("implemented_by", "codex") == "codex"
+                            and (
+                                state.get("round", 0) == 0
+                                or (
+                                    state.get("phase") == "paused_daily_budget"
+                                    and state.get("resume_checkpoint", {}).get("stage") == "builder"
+                                )
+                            )
+                        ),
+                        dest=(
+                            checkout
+                            if state.get("worktree") or state.get("implemented_by") == "chatgpt"
+                            else None
+                        ),
                     ),
                 ),
                 "models_launched": False,

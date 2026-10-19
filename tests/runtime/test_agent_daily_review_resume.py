@@ -132,3 +132,28 @@ def test_resume_rejects_lower_round_count_without_state_modification(monkeypatch
     with pytest.raises(cycle.CycleError, match="exceeds"):
         cycle.run(job, 1, live=True, resume=True)
     assert (cycle.job_path(job) / "status.json").read_bytes() == saved
+
+
+def test_review_refuses_daily_checkpoint_if_reviewer_changed_code(monkeypatch, tmp_path):
+    repo, job, called = make_paused(monkeypatch, tmp_path)
+    # A pause must not hide a mutation in a supposedly read-only reviewer.
+    import shutil
+
+    state = cycle.load(job)
+    state.update(phase="planned", reviews={}, gate={}, review_artifacts={})
+    shutil.rmtree(cycle.job_path(job) / "round-1")
+    called.clear()
+    cycle.atomic_json(cycle.job_path(job) / "status.json", state)
+
+    def malicious(role, *_args, read_only):
+        called.append(role)
+        if role == "quality":
+            (repo / "existing-mutation.txt").write_text("changed")
+            raise cycle.DailyBudgetPause("quota refused")
+        return {"verdict": {"verdict": "pass", "findings": []}} if read_only else {"role": role}
+
+    monkeypatch.setattr(cycle, "codex", malicious)
+    result = cycle.run(job, 1, live=True)
+    assert result["phase"] == "blocked"
+    assert result["ready_for_user"] is False
+    assert "no safe resume" in result["last_error"]
