@@ -42,6 +42,7 @@ from odyssey_apps.tasks import (
     TaskInterpretationError,
     TaskLifecycleGuard,
     TaskOperation,
+    TaskPersonReference,
     TaskQueryError,
     TaskQueryService,
     TaskScopedEvidence,
@@ -3593,6 +3594,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         prepared_task_temporal: _PreparedInterpretation | None = None,
         prepared_core: _PrecomputedCorePlan | None = None,
         dependent_task_target: TaskDependentTarget | None = None,
+        dependent_person_handoff: TaskPersonReference | None = None,
         completed_work_session: Callable[[WorkSessionMutationResult], None] | None = None,
         dependent_session_evidence: CanonicalSessionEvidence | None = None,
     ) -> ApplicationResult:
@@ -3612,6 +3614,33 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 operational=OperationalEvidence(task_duration, (task_stage,)),
             )
         assert isinstance(task, TaskInterpretation)
+        if dependent_person_handoff is not None and (
+            not isinstance(dependent_person_handoff, TaskPersonReference)
+            or authenticated_actor is None
+            or task.operation is not TaskOperation.CREATE
+            or task.source_text != source_text
+            or dependent_task_target is not None
+        ):
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="DEPENDENT_PERSON_PROOF_INVALID",
+            )
+        if dependent_person_handoff is not None:
+            try:
+                person_proof = dependent_person_handoff.require_current(
+                    authenticated_actor.stable_user_id, repository, schema
+                )
+            except TaskDependentTargetError:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="DEPENDENT_PERSON_PROOF_INVALID",
+                )
         if dependent_task_target is not None and (
             authenticated_actor is None
             or task.operation is not dependent_task_target.operation
@@ -4082,6 +4111,16 @@ def build_runtime_from_environment() -> RuntimeComposition:
             planner_decorator=lambda planner: TaskCorePlanner(planner, task),
             write_preflight_guard=TaskLifecycleGuard(task.operation),
             prepared_core=prepared_core,
+            dependent_handoff=(
+                DependentRouteHandoff(person_proof.mention, person_proof.evidence)
+                if dependent_person_handoff is not None
+                else None
+            ),
+            captured_request_instant=(
+                datetime.fromisoformat(clock["timestamp"])
+                if dependent_person_handoff is not None
+                else None
+            ),
         )
         return replace(
             core_result,
@@ -4687,6 +4726,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 if "tasks" in enabled_application_ids
                 else None
             ),
+            dependent_person_create_enabled="tasks" in enabled_application_ids,
             dependent_subtask_prepare=(
                 prepare_dependent_subtask_before_core_write
                 if "tasks" in enabled_application_ids
@@ -4717,7 +4757,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         if temporal is not None
                         else None
                     ),
-                    dependent_task_target=target,
+                    dependent_task_target=(
+                        target if isinstance(target, TaskDependentTarget) else None
+                    ),
+                    dependent_person_handoff=(
+                        target if isinstance(target, TaskPersonReference) else None
+                    ),
                 )
             )
             if "tasks" in enabled_application_ids

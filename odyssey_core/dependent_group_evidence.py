@@ -18,6 +18,7 @@ from .application import (
     ApplicationStatus,
     CanonicalReferenceEvidence,
     DependentReferenceGuard,
+    UnitStatus,
     _dependent_evidence_is_current,
 )
 from .dependent_group_graph import ReviewedSourceGraph
@@ -117,13 +118,30 @@ def prove_canonical_group_handoff(
             proof
             for action in result.action_results
             if action.status is ActionStatus.COMPLETED
-            for proof in action.canonical_reference_evidence
+            for proof in (
+                *action.canonical_reference_evidence,
+                *action.canonical_direct_target_evidence,
+            )
             if isinstance(proof, CanonicalReferenceEvidence)
             and proof.action_index == action.action_index
             and proof.source_mention == dependency.antecedent_mention
             and proof.canonical_name == dependency.antecedent_mention
-            and proof.source_reference_index >= 0
+            and proof.source_reference_index >= -1
             and proof.source_note_id in result.affected_stable_note_ids
+            and (
+                proof.source_reference_index >= 0
+                or (
+                    proof.source_note_id == proof.stable_note_id
+                    and proof.source_content_guard == proof.canonical_content_guard
+                    and any(
+                        unit.unit_index == proof.source_unit_index
+                        and unit.status is UnitStatus.SUCCEEDED
+                        and unit.operation == "CREATED"
+                        and unit.stable_note_id == proof.stable_note_id
+                        for unit in action.unit_results
+                    )
+                )
+            )
         )
         # A result's top-level proof is optional (may be absent when multiple
         # actions linked different targets), but if present it must agree with

@@ -330,6 +330,7 @@ class ActionResult:
     clarification: ClarificationPresentation | None = None
     # Internal-only; runtime serializers intentionally do not project this field.
     canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
+    canonical_direct_target_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
     # Read-only evidence for a set mention expanded into multiple proven member links.
     observed_set_members: tuple[tuple[str, str], ...] = ()
     # Internal only: each skipped mutation needs exact canonical existing support.
@@ -1845,6 +1846,17 @@ def _execute_write(
         repository,
         schema,
     )
+    direct_target_evidence = _collect_persisted_direct_target_evidence(
+        action_index,
+        evidence_action,
+        preflight,
+        rendering.rendered_facts,
+        results,
+        executable_ordinals,
+        request_id,
+        repository,
+        schema,
+    )
     if (
         relational_helper is not None
         and clarification_choice is None
@@ -1893,6 +1905,7 @@ def _execute_write(
         _action_status(results),
         unit_results=tuple(results),
         canonical_reference_evidence=reference_evidence,
+        canonical_direct_target_evidence=direct_target_evidence,
         known_fact_evidence=known_proofs,
         observed_set_members=tuple(
             (
@@ -2220,6 +2233,76 @@ def _execute_bulk(
         else (ActionStatus.FAILED if result.status == "FAILURE" else ActionStatus.DEFERRED)
     )
     return ActionResult(action_index, action.kind, status, bulk_result=result)
+
+
+def _collect_persisted_direct_target_evidence(
+    action_index: int,
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+    rendered_facts: tuple[tuple[str, ...], ...],
+    results: list[UnitResult],
+    unit_ordinals: tuple[tuple[int, ...], ...],
+    request_id: str,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> tuple[CanonicalReferenceEvidence, ...]:
+    """Prove one newly created direct target from its Writer receipt and Markdown.
+
+    This generic receipt carries no routing decision. A later source reviewer
+    and dependent preflight must still prove the exact mention and link.
+    """
+    if (
+        len(preflight) != len(action.units)
+        or len(results) != len(action.units)
+        or len(rendered_facts) != len(action.units)
+        or len(unit_ordinals) != len(action.units)
+    ):
+        return ()
+    evidence: list[CanonicalReferenceEvidence] = []
+    for index, (unit, selected, result) in enumerate(
+        zip(action.units, preflight, results, strict=True)
+    ):
+        if (
+            unit.reference_lookup_only
+            or selected.outcome is not WriteTargetOutcome.CREATE
+            or result.status is not UnitStatus.SUCCEEDED
+            or result.operation != "CREATED"
+            or not result.materially_affected
+            or result.stable_note_id != selected.stable_id
+            or not selected.canonical_name
+            or not unit.facts
+            or not rendered_facts[index]
+        ):
+            continue
+        persisted = _persisted_source_note(
+            repository,
+            schema,
+            result.stable_note_id,
+            rendered_facts[index],
+            request_id,
+            unit_ordinals[index],
+        )
+        canonical = _current_canonical_reference(repository, schema, result.stable_note_id)
+        if persisted is None or canonical is None or persisted[1] != canonical[2]:
+            continue
+        note_type, name, guard = canonical
+        if name != selected.canonical_name:
+            continue
+        evidence.append(
+            CanonicalReferenceEvidence(
+                action_index,
+                index,
+                -1,
+                name,
+                result.stable_note_id,
+                note_type,
+                name,
+                result.stable_note_id,
+                guard,
+                guard,
+            )
+        )
+    return tuple(evidence)
 
 
 def _collect_persisted_reference_evidence(

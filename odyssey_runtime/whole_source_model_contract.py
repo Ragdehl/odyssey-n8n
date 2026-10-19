@@ -512,6 +512,7 @@ DEPENDENT_TASK_TARGET_REVIEW_SCHEMA = {
                 "EDIT_WORK_SESSION",
                 "ADD_WORK_SESSION_ACTIVITY",
                 "CREATE_SUBTASK",
+                "CREATE",
                 "UNKNOWN",
             ],
         },
@@ -532,13 +533,16 @@ DEPENDENT_TASK_TARGET_REVIEW_SCHEMA = {
 }
 DEPENDENT_TASK_TARGET_REVIEW_A = (
     "Independently audit the complete ORIGINAL Spanish/French/English message: "
-    "the first source segment mentions one Task (not a person), and a second "
-    "segment explicitly refers to that same Task through the exact supplied "
+    "the first source segment mentions one canonical candidate, and a second "
+    "segment explicitly refers to that same candidate through the exact supplied "
     "dependent mention. Do not treat a reference to a person or project as a "
-    "Task target. Copy original source and both quotes byte for byte, keep "
+    "Task target. For ordinary Task CREATE referring to a Person, report "
+    "target_type=person and operation=CREATE only when the new Task itself "
+    "and that one Person referent are unequivocal; do not infer assignee or "
+    "parent relation. Copy original source and both quotes byte for byte, keep "
     "all original whitespace. `one_target` and `same_target` are true ONLY "
-    "if the anaphoric/elliptic reference has exactly one unequivocal Task "
-    "antecedent. Independently validate which Work Session operation "
+    "if the anaphoric/elliptic reference has exactly one unequivocal typed "
+    "antecedent. Independently validate which Tasks operation "
     "the user ACTUALLY requests; operation_supported=true ONLY when its "
     "kind is explicitly supported by the source. CREATE_SUBTASK means an "
     "explicit new child task associated to the previous canonical parent "
@@ -554,13 +558,15 @@ DEPENDENT_TASK_TARGET_REVIEW_B = (
     "proposer. Verify the entire exact source, scope boundary, referent and "
     "referent TYPE and Work Session operation without relying on the first "
     "reviewer. Reject an unsupported or mismatched START/STOP/EDIT/ACTIVITY "
-    "operation or unsupported subtask parent relation, and set "
-    "operation_supported=false. One Task must be "
+    "operation, unsupported ordinary CREATE, or subtask parent relation, and set "
+    "operation_supported=false. One typed antecedent must be "
     "mentioned in the antecedent and the exact dependent phrase must refer "
-    "to THAT Task, with no other plausible task/person antecedent. Return all "
+    "to THAT candidate, with no other plausible task/person antecedent. "
+    "For ordinary CREATE with a Person referent, report person/CREATE only "
+    "when source meaning is unequivocal; never infer assignee, parent or time. Return all "
     "source quotes unchanged and the mention unchanged; never copy, resolve "
     "or output canonical IDs. A person mentioned in an earlier fact does NOT "
-    "prove a task target and must lead to one_target=false. If uncertain, "
+    "prove a Task target; it can be a Person referent for ordinary CREATE only. If uncertain, "
     "return false/unknown. Neither this output nor the first output may "
     "authorize a Task or Work Session write."
 )
@@ -584,14 +590,16 @@ DEPENDENT_TASK_PARTITION_PROMPT = (
     "You are a cautious, non-authoritative source segment proposer. For an "
     "ORIGINAL message that first asserts a personal Core fact mentioning an "
     "EXISTING Task and then asks to modify that SAME Task via Work Session or "
-    "explicit subtask, propose two exact, consecutive source quotes: one "
+    "explicit subtask, OR first asserts a Core fact naming one Person and then "
+    "asks to CREATE an ordinary Task referring to that same Person, propose "
+    "two exact, consecutive source quotes: one "
     "Core antecedent and one Tasks operation. Their concatenation MUST "
     "reproduce every original character, including whitespace, punctuation "
     "and conjunctions. Return dependent_mention as the exact phrase in the "
-    "second quote referring to the Task in the first quote. Never emit a Note "
+    "second quote referring to the Task or Person in the first quote. Never emit a Note "
     "ID, title or resolved entity. If there is no unique such partition, "
-    "return empty antecedent_quote/dependent_quote/dependent_mention. A person "
-    "in a prior fact is NOT a Task antecedent. Do not turn ordinary future "
+    "return empty antecedent_quote/dependent_quote/dependent_mention. A Person "
+    "in a prior fact is never a Task target. Do not turn ordinary future "
     "indicative plans into Tasks. No output authorizes mutations or source loss."
 )
 
@@ -646,7 +654,7 @@ DEPENDENT_GRAPH_PARTITION_PROMPT = (
     "an actual requested lifecycle, work-session or task-create operation. For every "
     "later group that refers to a prior Core group, emit an edge with the "
     "earlier predecessor_index, the exact dependent 'mention' in the later "
-    "group, and exact 'antecedent_mention' of the SAME existing entity in "
+    "group, and exact 'antecedent_mention' of the SAME source-referred entity in "
     "the earlier group. Do not infer a stable Note ID or invent a name. "
     "Preserve multiple edges, including different entities in the SAME "
     "antecedent. When a later STOP explicitly refers to a Work Session "

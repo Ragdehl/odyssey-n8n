@@ -13,10 +13,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from .application import (
+    ActionStatus,
     ApplicationResult,
     ApplicationStatus,
     CanonicalReferenceEvidence,
     DependentReferenceGuard,
+    UnitStatus,
     _dependent_evidence_is_current,
 )
 from .storage import VaultRepository
@@ -81,22 +83,64 @@ def prove_source_bound_dependency(
         raise SourceBoundDependencyError("Dependent source has changed or is incomplete")
     if predecessor.status is not ApplicationStatus.COMPLETED:
         raise SourceBoundDependencyError("A pending predecessor has no handoff authority")
-    proofs = predecessor.canonical_reference_evidence
-    if len(proofs) != 1 or not isinstance(proofs[0], CanonicalReferenceEvidence):
-        raise SourceBoundDependencyError("Exactly one Core-proven antecedent required")
-    evidence = proofs[0]
-    # The private carrier must ALSO agree with the actual completed Core
-    # action and materialized source Note, not merely an attached tuple of
-    # CoreReferenceEvidence values from an arbitrary earlier response.
+    # Select by the reviewed antecedent occurrence, never by result order or
+    # the last referenced identity. A direct newly created Note has its own
+    # Writer receipt, separate from ordinary materialized backlink proofs.
     action_proofs = tuple(
         proof
         for action in predecessor.action_results
-        for proof in action.canonical_reference_evidence
+        if action.status is ActionStatus.COMPLETED
+        for proof in (
+            *action.canonical_reference_evidence,
+            *action.canonical_direct_target_evidence,
+        )
+        if proof.action_index == action.action_index
+        and proof.source_mention == proof.canonical_name
+        and len(
+            re.findall(
+                r"(?<!\w)" + re.escape(proof.source_mention) + r"(?!\w)",
+                antecedent_quote,
+            )
+        )
+        == 1
     )
+    # An explicit reviewed dependent name can select one of several Core-created
+    # people. An anaphoric mention cannot: with multiple receipts its identity
+    # is not proven by the source alone, so fail closed.
+    explicitly_named = tuple(
+        proof for proof in action_proofs if proof.canonical_name == exact_dependent_mention
+    )
+    if explicitly_named:
+        action_proofs = explicitly_named
+    if len(action_proofs) != 1 or not isinstance(action_proofs[0], CanonicalReferenceEvidence):
+        raise SourceBoundDependencyError("Predecessor has no unique materialized Core fact")
+    evidence = action_proofs[0]
     if (
-        len(action_proofs) != 1
-        or action_proofs[0] != evidence
-        or evidence.source_note_id not in predecessor.affected_stable_note_ids
+        evidence.source_note_id not in predecessor.affected_stable_note_ids
+        or evidence.source_reference_index < -1
+        or (
+            evidence.source_reference_index >= 0
+            and predecessor.canonical_reference_evidence.count(evidence) != 1
+        )
+        or (
+            evidence.source_reference_index == -1
+            and not (
+                evidence.source_note_id == evidence.stable_note_id
+                and evidence.source_content_guard == evidence.canonical_content_guard
+                and any(
+                    proof == evidence
+                    and any(
+                        unit.unit_index == evidence.source_unit_index
+                        and unit.status is UnitStatus.SUCCEEDED
+                        and unit.operation == "CREATED"
+                        and unit.stable_note_id == evidence.stable_note_id
+                        for unit in action.unit_results
+                    )
+                    for action in predecessor.action_results
+                    for proof in action.canonical_direct_target_evidence
+                )
+            )
+        )
     ):
         raise SourceBoundDependencyError("Predecessor has no unique materialized Core fact")
     if (

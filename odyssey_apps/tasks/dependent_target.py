@@ -35,6 +35,28 @@ class TaskDependentTargetError(ValueError):
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class TaskPersonReference:
+    """Private actor-bound Person handoff for ordinary Task CREATE."""
+
+    source_dependency: SourceBoundDependency
+    actor_id: str
+
+    def require_current(
+        self, actor_id: str, repository: VaultRepository, schema: dict[str, Any]
+    ) -> SourceBoundDependency:
+        """Reject actor changes and stale Core Markdown before Tasks planning."""
+        proof = self.source_dependency.evidence
+        if (
+            not self.actor_id
+            or self.actor_id != actor_id
+            or proof.note_type != "person"
+            or not _dependent_evidence_is_current(proof, repository, schema)
+        ):
+            raise TaskDependentTargetError("Person handoff is stale or belongs to another actor")
+        return self.source_dependency
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class PreparedDependentSubtask:
     """One source-bound child title prepared by the ordinary Core planner.
 
@@ -186,7 +208,15 @@ def verify_dependent_task_semantics(
     """
     if not isinstance(interpretation, TaskInterpretation):
         raise TaskDependentTargetError("Typed Tasks interpretation required")
-    parent_create = interpretation.operation is TaskOperation.CREATE
+    parent_create = (
+        interpretation.operation is TaskOperation.CREATE
+        and len(interpretation.relationship_mentions) == 1
+        and interpretation.relationship_mentions[0].role is TaskRelationshipRole.PARENT_TASK
+    )
+    person_create = (
+        interpretation.operation is TaskOperation.CREATE
+        and not interpretation.relationship_mentions
+    )
     if (
         interpretation.source_text != dependent_source.strip()
         or dependent_source.strip().count(dependent_mention) != 1
@@ -199,8 +229,10 @@ def verify_dependent_task_semantics(
                 or interpretation.relationship_mentions[0].text != dependent_mention
             )
         )
+        or (person_create and interpretation.task_reference is not None)
         or (
             not parent_create
+            and not person_create
             and (
                 interpretation.task_reference != dependent_mention
                 or interpretation.operation
@@ -227,8 +259,14 @@ def verify_dependent_task_semantics(
         "dependent_mention": dependent_mention,
         "one_target": True,
         "same_target": True,
-        "target_type": TASK_TYPE,
-        "operation": "CREATE_SUBTASK" if parent_create else interpretation.operation.value,
+        "target_type": "person" if person_create else TASK_TYPE,
+        "operation": (
+            "CREATE"
+            if person_create
+            else "CREATE_SUBTASK"
+            if parent_create
+            else interpretation.operation.value
+        ),
         "operation_supported": True,
     }
     if any(not isinstance(att, Mapping) or dict(att) != required for att in attestations):
@@ -276,3 +314,43 @@ def prove_dependent_task_target(
     if source_proof.evidence.note_type != TASK_TYPE:
         raise TaskDependentTargetError("Core linked a non-Task canonical identity")
     return TaskDependentTarget(source_proof, interpretation.operation)
+
+
+def prove_dependent_person_reference(
+    *,
+    full_source: str,
+    antecedent_source: str,
+    dependent_source: str,
+    dependent_mention: str,
+    core_predecessor: ApplicationResult,
+    interpretation: TaskInterpretation,
+    attestations: tuple[Mapping[str, object], Mapping[str, object]],
+    repository: VaultRepository,
+    schema: dict[str, Any],
+) -> SourceBoundDependency:
+    """Bind reviewed Task CREATE wording to one current Core Person receipt."""
+    verify_dependent_task_semantics(
+        full_source=full_source,
+        antecedent_source=antecedent_source,
+        dependent_source=dependent_source,
+        dependent_mention=dependent_mention,
+        interpretation=interpretation,
+        attestations=attestations,
+    )
+    if interpretation.operation is not TaskOperation.CREATE or interpretation.relationship_mentions:
+        raise TaskDependentTargetError("Dependent Person requires ordinary Task CREATE")
+    try:
+        proof = prove_source_bound_dependency(
+            complete_original_source=full_source,
+            antecedent_quote=antecedent_source,
+            dependent_quote=dependent_source,
+            exact_dependent_mention=dependent_mention,
+            predecessor=core_predecessor,
+            repository=repository,
+            schema=schema,
+        )
+    except SourceBoundDependencyError as error:
+        raise TaskDependentTargetError("Core Person receipt is not current") from error
+    if proof.evidence.note_type != "person":
+        raise TaskDependentTargetError("Core receipt does not identify a Person")
+    return proof

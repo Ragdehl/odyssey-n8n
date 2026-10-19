@@ -37,6 +37,8 @@ from odyssey_apps.tasks import (
     TaskInterpretation,
     TaskLifecycleGuard,
     TaskOperation,
+    TaskPersonReference,
+    prove_dependent_person_reference,
     prove_dependent_task_target,
     validate_task_batch_prewrite,
     verify_dependent_task_semantics,
@@ -213,6 +215,8 @@ class WholeSourceLightExecutor:
     dependent_core_delegate: (
         Callable[[str, str, AuthenticatedActorContext, datetime], ApplicationResult] | None
     ) = None
+    # Enables ordinary Task CREATE with a current Core Person receipt.
+    dependent_person_create_enabled: bool = False
     dependent_task_prepare: (
         Callable[[str, datetime], tuple[TaskInterpretation, TemporalInterpretation | None]] | None
     ) = None
@@ -242,7 +246,8 @@ class WholeSourceLightExecutor:
                 str,
                 AuthenticatedActorContext,
                 TaskInterpretation,
-                TaskDependentTarget,
+                TemporalInterpretation | None,
+                TaskDependentTarget | TaskPersonReference,
                 datetime,
             ],
             ApplicationResult,
@@ -1269,10 +1274,10 @@ class WholeSourceLightExecutor:
     ) -> ApplicationResult | None:
         """One narrow source-exact Core→Task chain, with E2 prewrite reviews.
 
-        The normal Core planner must physically link an EXISTING Task in the
-        antecedent. A later target/operation is selected ONLY by typed Tasks
-        interpretation and corroborated source reviews. More than two
-        dependent groups remain unsupported and cannot silently be dropped.
+        The normal Core Writer must physically prove the antecedent's Task
+        link or newly created Person identity. Typed Tasks interpretation and
+        two source reviews select the later operation; Core still selects and
+        validates the canonical Task CREATE reference.
         """
         if (
             self.dependent_core_delegate is None
@@ -1328,10 +1333,13 @@ class WholeSourceLightExecutor:
                     )
                 except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
                     return self._abstain(delivery, "DEPENDENT_SUBTASK_PREWRITE_UNAVAILABLE")
-            # Ordinary dependent Task CREATE (an obligation after meeting)
-            # remains owned by the existing whole-source Core compiler.
-            elif not interpretation.relationship_mentions:
+            elif (
+                not interpretation.relationship_mentions
+                and not self.dependent_person_create_enabled
+            ):
                 return None
+            elif interpretation.relationship_mentions:
+                return self._abstain(delivery, "DEPENDENT_CREATE_ROLE_UNSUPPORTED")
         # Audit the dependent segment's complete single-operation semantics
         # independently from both its Router label and the Tasks interpreter.
         # Two Work Session operations in the same fragment must never be
@@ -1414,7 +1422,12 @@ class WholeSourceLightExecutor:
         # schedules ONE incremental refresh of the combined affected IDs at
         # the outer boundary, avoiding needless Raspberry index/CPU churn.
         try:
-            target = prove_dependent_task_target(
+            prove_target = (
+                prove_dependent_person_reference
+                if interpretation.operation is TaskOperation.CREATE and prepared_subtask is None
+                else prove_dependent_task_target
+            )
+            target = prove_target(
                 full_source=source,
                 antecedent_source=scope.antecedent,
                 dependent_source=scope.dependent,
@@ -1425,6 +1438,8 @@ class WholeSourceLightExecutor:
                 repository=self.repository,
                 schema=self.schema,
             )
+            if isinstance(target, SourceBoundDependency):
+                target = TaskPersonReference(target, actor.stable_user_id)
             if prepared_subtask is not None:
                 target = target.with_prepared_subtask(prepared_subtask)
         except TaskDependentTargetError:
@@ -1642,14 +1657,29 @@ class WholeSourceLightExecutor:
                     return self._abstain(delivery, "DEPENDENT_N_TASK_PREWRITE_UNAVAILABLE")
                 prepared_subtask: PreparedDependentSubtask | None = None
                 if interpretation.operation is TaskOperation.CREATE and dependency is not None:
-                    if self.dependent_subtask_prepare is None:
-                        return self._abstain(delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE")
-                    prepared_subtask = self.dependent_subtask_prepare(
-                        segment, interpretation, delivery_instant
-                    )
-                    if not isinstance(prepared_subtask, PreparedDependentSubtask):
-                        return self._abstain(delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE")
-                    prepared_subtask.require_matches(segment, interpretation.operation)
+                    if any(
+                        getattr(mention.role, "value", None) == "PARENT_TASK"
+                        for mention in interpretation.relationship_mentions
+                    ):
+                        if self.dependent_subtask_prepare is None:
+                            return self._abstain(
+                                delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE"
+                            )
+                        prepared_subtask = self.dependent_subtask_prepare(
+                            segment, interpretation, delivery_instant
+                        )
+                        if not isinstance(prepared_subtask, PreparedDependentSubtask):
+                            return self._abstain(
+                                delivery, "DEPENDENT_N_SUBTASK_PREWRITE_UNAVAILABLE"
+                            )
+                        prepared_subtask.require_matches(segment, interpretation.operation)
+                    elif (
+                        not interpretation.relationship_mentions
+                        and not self.dependent_person_create_enabled
+                    ):
+                        return self._abstain(delivery, "DEPENDENT_N_PERSON_CREATE_UNAVAILABLE")
+                    elif interpretation.relationship_mentions:
+                        return self._abstain(delivery, "DEPENDENT_N_CREATE_ROLE_UNSUPPORTED")
             except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
                 return self._abstain(delivery, "DEPENDENT_N_TASK_PREWRITE_UNAVAILABLE")
             task_only = self._ask(
@@ -1851,20 +1881,23 @@ class WholeSourceLightExecutor:
                         if len(handoff.edges) != 1:
                             raise CanonicalGroupEvidenceError("Task has no unique target")
                         edge = handoff.edges[0]
-                        if edge.evidence.note_type != "task":
-                            raise CanonicalGroupEvidenceError("Dependent target is not a task")
                         task, temporal, subtask = prepared[part.ordinal]
-                        target = TaskDependentTarget(
-                            SourceBoundDependency(
-                                graph.groups[dependency.predecessor_index].source,
-                                part.source,
-                                dependency.mention,
-                                edge.evidence,
-                            ),
-                            task.operation,
+                        source_proof = SourceBoundDependency(
+                            graph.groups[dependency.predecessor_index].source,
+                            part.source,
+                            dependency.mention,
+                            edge.evidence,
                         )
-                        if subtask is not None:
-                            target = target.with_prepared_subtask(subtask)
+                        if task.operation is TaskOperation.CREATE and subtask is None:
+                            if edge.evidence.note_type != "person":
+                                raise CanonicalGroupEvidenceError("Dependent Person is unverified")
+                            target = TaskPersonReference(source_proof, actor.stable_user_id)
+                        else:
+                            if edge.evidence.note_type != "task":
+                                raise CanonicalGroupEvidenceError("Dependent Task is unverified")
+                            target = TaskDependentTarget(source_proof, task.operation)
+                            if subtask is not None:
+                                target = target.with_prepared_subtask(subtask)
                         # Recheck at the consumption boundary even if the Core
                         # backlink was valid when the prior group returned.
                         handoff.require_all_current(self.repository, self.schema)

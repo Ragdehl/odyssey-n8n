@@ -134,6 +134,7 @@ def test_one_bounded_task_target_review_supports_work_sessions_and_subtask_paren
         "EDIT_WORK_SESSION",
         "ADD_WORK_SESSION_ACTIVITY",
         "CREATE_SUBTASK",
+        "CREATE",  # Ordinary Task CREATE with verified Core Person receipt.
         "UNKNOWN",
     }
     assert "CREATE_SUBTASK" in contract.DEPENDENT_TASK_TARGET_REVIEW_A
