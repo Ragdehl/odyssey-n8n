@@ -108,6 +108,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_p4_verified_group_e2.py",
         "tests/runtime/test_p4_taskonly_real_session_parity.py",
         "tests/runtime/test_p4_chat_to_ui_http_flow.py",
+        "tests/runtime/test_browser_synthetic_p4_contract.py",
         "tests/benchmarks/test_cross_surface_gate_contract.py",
         "tests/benchmarks/test_odyssey_acceptance_contracts.py",
         "tests/benchmarks/test_odyssey_operator_status.py",
