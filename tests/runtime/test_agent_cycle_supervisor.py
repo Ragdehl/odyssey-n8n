@@ -824,6 +824,23 @@ def test_actual_codex_cli_command_routes_model_and_records_reported_tokens(
 
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1600)
+    monkeypatch.setattr(
+        cycle,
+        "probe_native_profile",
+        lambda *_args, **kwargs: {
+            "profile": "odyssey-scope-read",
+            "scope_verified": True,
+            "workspace_read_only": kwargs["read_only"],
+        },
+    )
+    monkeypatch.setattr(
+        cycle,
+        "permission_overrides",
+        lambda *_args, **kwargs: (
+            "odyssey-scope-read",
+            ["--config", 'default_permissions="odyssey-scope-read"'],
+        ),
+    )
     monkeypatch.setattr(cycle, "touched_paths", lambda *_: changed)
     job = "model-profile-fixture"
     run_root = cycle.job_path(job)
@@ -875,7 +892,10 @@ def test_actual_codex_cli_command_routes_model_and_records_reported_tokens(
     assert argv[argv.index("--model") + 1] == expected_model
     assert 'model_reasoning_effort="' + expected_effort + '"' in argv
     assert "--ephemeral" in argv
-    assert argv[argv.index("--sandbox") + 1] == "read-only"
+    assert "--sandbox" not in argv
+    assert 'default_permissions="odyssey-scope-read"' in argv
+    assert receipt["permissions"]["scope_verified"] is True
+    assert receipt["permissions"]["workspace_read_only"] is True
     assert receipt["reported_tokens"] == 9278
     assert receipt["model"] == expected_model
     assert receipt["tier"] in {"economy", "standard", "deep"}
@@ -888,6 +908,23 @@ def test_codex_cli_refuses_unverified_model_substitution(monkeypatch, tmp_path):
 
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
     monkeypatch.setattr(cycle, "mem_available", lambda: 1600)
+    monkeypatch.setattr(
+        cycle,
+        "probe_native_profile",
+        lambda *_args, **kwargs: {
+            "profile": "odyssey-scope-read",
+            "scope_verified": True,
+            "workspace_read_only": kwargs["read_only"],
+        },
+    )
+    monkeypatch.setattr(
+        cycle,
+        "permission_overrides",
+        lambda *_args, **kwargs: (
+            "odyssey-scope-read",
+            ["--config", 'default_permissions="odyssey-scope-read"'],
+        ),
+    )
     monkeypatch.setattr(cycle, "touched_paths", lambda *_: ())
     job = "wrong-model-fixture"
     run_root = cycle.job_path(job)
@@ -922,6 +959,39 @@ def test_codex_cli_refuses_unverified_model_substitution(monkeypatch, tmp_path):
     monkeypatch.setattr(cycle.subprocess, "Popen", WrongModel)
     with pytest.raises(cycle.CycleError, match="not verified"):
         cycle.codex("generality", "Review", tmp_path, work, read_only=True)
+
+
+def test_missing_native_scoped_permissions_refuses_model_before_launch(monkeypatch, tmp_path):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1600)
+    monkeypatch.setattr(cycle, "touched_paths", lambda *_: ())
+    job = "scoped-permission-denied"
+    work = cycle.job_path(job) / "round-1"
+    work.mkdir(parents=True)
+    cycle.atomic_json(
+        cycle.job_path(job) / "status.json",
+        {
+            "phase": "reviewing",
+            "risk": "normal",
+            "round": 1,
+            "baseline_commit": "a" * 40,
+            "reported_token_budget": 110000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+        },
+    )
+
+    def deny_proof(*_args, **_kwargs):
+        raise cycle.ScopeError("private HOME unexpectedly visible")
+
+    monkeypatch.setattr(cycle, "probe_native_profile", deny_proof)
+    monkeypatch.setattr(
+        cycle.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: pytest.fail("Model must never launch without OS scope proof"),
+    )
+    with pytest.raises(cycle.CycleError, match="Unsafe Codex filesystem/network scope"):
+        cycle.codex("generality", "Review", tmp_path, work, read_only=True)
+    assert cycle.load(job)["token_usage"]["sessions"] == []
 
 
 def test_failing_offline_gate_skips_all_model_reviewers_and_preserves_logs(monkeypatch, tmp_path):

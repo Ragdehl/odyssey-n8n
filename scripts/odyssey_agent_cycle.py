@@ -32,6 +32,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# The CLI entrypoint is launched as scripts/odyssey_agent_cycle.py, so make
+# the same import available to direct invocations and pytest module imports.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from scripts.odyssey_codex_permissions import (  # noqa: E402
+    ScopeError,
+    permission_overrides,
+    probe_native_profile,
+)
+
 ROLES = ROOT / "ops/agent-team"
 STATE = ROOT.parent / ".odyssey-agent-runs"
 SCHEMA = ROLES / "review.schema.json"
@@ -731,6 +741,15 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     if cap - used < model_policy()["minimum_session_headroom"]:
         raise CycleError("Insufficient reported-token headroom for another Codex session")
     choice = select_agent_model(role, state, dest)
+    # Codex :read-only only prevents writes, NOT reading ~/private, /data, or
+    # authenticated Codex files. Enforce a scoped named native permission
+    # profile and verify it against real OS sandbox behavior BEFORE a model
+    # session. No fallback to the unsafe stock profile.
+    try:
+        scope_receipt = probe_native_profile(dest, read_only=read_only)
+        _permission_profile, scope_cli_args = permission_overrides(dest, read_only=read_only)
+    except (ScopeError, OSError, subprocess.TimeoutExpired) as exc:
+        raise CycleError("Unsafe Codex filesystem/network scope: model not started") from exc
     artifact = evidence / (role + ".json" if read_only else "builder.md")
     stdout_log = evidence / (role + ".log")
     cmd = [
@@ -742,8 +761,7 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
         choice["model"],
         "--config",
         'model_reasoning_effort="' + choice["effort"] + '"',
-        "--sandbox",
-        "read-only" if read_only else "workspace-write",
+        *scope_cli_args,
         "--cd",
         str(dest),
         "--output-last-message",
@@ -752,14 +770,25 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     if read_only:
         cmd.extend(("--output-schema", str(SCHEMA)))
     cmd.append("-")
-    # The host CLI has ChatGPT login; never pass existing local MCP
-    # configurations, API secrets or n8n tokens to these delegated agents.
-    excluded = ("SECRET", "TOKEN", "API_KEY", "PASSWORD", "CREDENTIAL", "PRIVATE_KEY")
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if not any(name in key.upper() for name in excluded)
+    # The host CLI keeps ChatGPT sign-in in its trusted launcher context;
+    # the model's commands cannot read it. Also prevent unrelated connector,
+    # n8n, cloudflared and API env vars leaking to delegated commands.
+    permitted_env = {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "SHELL",
+        "TERM",
+        "TMPDIR",
+        "TZ",
     }
+    env = {key: value for key, value in os.environ.items() if key in permitted_env}
+    if not env.get("HOME") or not env.get("PATH"):
+        raise CycleError("Missing required isolated Codex launcher environment")
     started = time.monotonic()
     minimum_available = mem_available()
     with stdout_log.open("w", encoding="utf-8") as log:
@@ -811,6 +840,7 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
         "effort": choice["effort"],
         "tier": choice["tier"],
         "routing_reason": choice["reason"],
+        "permissions": scope_receipt,
         "reported_tokens": reported_token_count(stdout_log),
     }
     # The CLI must not silently downgrade/replace our security-reviewed
