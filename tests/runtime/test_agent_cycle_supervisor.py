@@ -14,6 +14,12 @@ assert spec and spec.loader
 cycle = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cycle)
 
+SUMMARY_SCRIPT = Path(__file__).resolve().parents[2] / "ops/agent-team/job_summary.py"
+summary_spec = importlib.util.spec_from_file_location("odyssey_job_summary", SUMMARY_SCRIPT)
+assert summary_spec and summary_spec.loader
+summary_cli = importlib.util.module_from_spec(summary_spec)
+summary_spec.loader.exec_module(summary_cli)
+
 
 def test_pilot_has_one_builder_four_independent_read_only_reviewers_and_schema():
     assert cycle.REVIEW_ROLES == ("generality", "quality", "testing", "performance")
@@ -25,6 +31,182 @@ def test_pilot_has_one_builder_four_independent_read_only_reviewers_and_schema()
     assert schema["additionalProperties"] is False
     for role in cycle.REVIEW_ROLES:
         assert "READ-ONLY" in (cycle.ROLES / (role + ".md")).read_text()
+
+
+def test_job_summary_text_and_json_are_safe_read_only_projections(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(summary_cli.cycle, "STATE", tmp_path / "runs")
+    job = "summary-recovered-job"
+    job_dir = cycle.job_path(job)
+    job_dir.mkdir(parents=True)
+    old_dir = job_dir / "round-1"
+    retry_dir = job_dir / "blocked-quality-retry-1"
+    old_dir.mkdir()
+    retry_dir.mkdir()
+    original_path = old_dir / "quality-completed.json"
+    retry_path = retry_dir / "quality-completed.json"
+    cycle.atomic_json(
+        original_path,
+        {
+            "role": "quality",
+            "verdict": {"verdict": "blocked", "summary": "private history"},
+        },
+    )
+    cycle.atomic_json(
+        retry_path,
+        {
+            "role": "quality",
+            "verdict": {"verdict": "pass", "summary": "safe recovered verdict"},
+        },
+    )
+    cycle.atomic_json(
+        job_dir / "status.json",
+        {
+            "job": job,
+            "phase": "reviewed_tooling_ready",
+            "round": 1,
+            "ready_for_user": True,
+            "review_plan": {"roles": ["generality", "quality"]},
+            "reviews": {
+                "generality": {"verdict": "pass", "summary": "safe reviewer detail"},
+                "quality": {"verdict": "pass", "summary": "safe recovered verdict"},
+            },
+            "reported_token_budget": 220000,
+            "token_usage": {"reported_total": 137380, "sessions": []},
+            "audit_source_sha256": "a" * 64,
+            "review_artifacts": {"quality": str(retry_path)},
+            "review_recovery_history": [
+                {
+                    "role": "quality",
+                    "original_verdict": {"verdict": "blocked", "summary": "private history"},
+                    "retry_artifact": str(retry_path),
+                    "original_artifact": str(original_path),
+                    "source_sha256": "a" * 64,
+                    "prompt": "never expose prompt text",
+                }
+            ],
+            "private_path": "/private/path",
+            "credential": "never expose credential",
+        },
+    )
+    before = (job_dir / "status.json").read_bytes()
+
+    assert summary_cli.main(["--job", job]) == 0
+    text_output = capsys.readouterr().out
+    assert "Job: summary-recovered-job" in text_output
+    assert "Phase: reviewed_tooling_ready" in text_output
+    assert "Round: 1" in text_output
+    assert "Ready for maintainer: true" in text_output
+    assert "Generality: PASS" in text_output
+    assert "Quality: PASS" in text_output
+    assert "Testing" not in text_output
+    assert "137380 / 220000 job cap" in text_output
+    assert "original BLOCKED; accepted retry PASS" in text_output
+    for private in ("private", "credential", "prompt", "retry_artifact", "safe reviewer detail"):
+        assert private not in text_output
+
+    assert summary_cli.main(["--job", job, "--json"]) == 0
+    json_output = json.loads(capsys.readouterr().out)
+    assert json_output == {
+        "job": job,
+        "phase": "reviewed_tooling_ready",
+        "round": 1,
+        "ready_for_maintainer": True,
+        "mandatory_auditors": [
+            {"role": "Generality", "verdict": "PASS"},
+            {"role": "Quality", "verdict": "PASS"},
+        ],
+        "reported_tokens_used": 137380,
+        "reported_token_cap": 220000,
+        "recovered_reviews": [
+            {
+                "role": "Quality",
+                "original_verdict": "BLOCKED",
+                "accepted_retry_verdict": "PASS",
+            }
+        ],
+    }
+    assert "/private" not in json.dumps(json_output)
+    assert "credential" not in json.dumps(json_output)
+    assert (job_dir / "status.json").read_bytes() == before
+    assert sorted(path.name for path in job_dir.iterdir()) == [
+        "blocked-quality-retry-1",
+        "round-1",
+        "status.json",
+    ]
+
+
+def test_job_summary_refuses_stale_recovery_or_fabricated_approval(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(summary_cli.cycle, "STATE", tmp_path / "runs")
+    job = "summary-unverified-recovery"
+    folder = cycle.job_path(job)
+    folder.mkdir(parents=True)
+    fake_receipt = folder / "blocked-quality-retry-1" / "quality-completed.json"
+    fake_receipt.parent.mkdir()
+    cycle.atomic_json(fake_receipt, {"verdict": {"verdict": "blocked"}})
+    state = {
+        "job": job,
+        "phase": "reviewed_tooling_ready",
+        "round": 1,
+        "ready_for_user": True,
+        "review_plan": {"roles": ["quality"]},
+        "reviews": {"quality": {"verdict": "pass"}},
+        "reported_token_budget": 180000,
+        "token_usage": {"reported_total": 90000},
+        "audit_source_sha256": "b" * 64,
+        "review_artifacts": {"quality": str(fake_receipt)},
+        "review_recovery_history": [
+            {
+                "role": "quality",
+                "original_verdict": {"verdict": "blocked"},
+                "original_artifact": str(folder / "round-1" / "quality-completed.json"),
+                "retry_artifact": str(fake_receipt),
+                "source_sha256": "b" * 64,
+            }
+        ],
+    }
+    cycle.atomic_json(folder / "status.json", state)
+    assert summary_cli.main(["--job", job, "--json"]) == 2
+    assert "unverified recovery" in capsys.readouterr().err
+    # The status alone must never be able to create an accepted retry.
+    assert fake_receipt.is_file()
+
+
+def test_job_summary_unknown_malformed_and_corrupt_status_fail_closed(
+    monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(summary_cli.cycle, "STATE", tmp_path / "runs")
+    assert summary_cli.main(["--job", "missing-summary-job"]) == 2
+    assert "unavailable or corrupt" in capsys.readouterr().err
+    assert summary_cli.main(["--job", "../escape-summary-job"]) == 2
+    assert "unavailable or corrupt" in capsys.readouterr().err
+
+    malformed_dir = cycle.job_path("malformed-summary-job")
+    malformed_dir.mkdir(parents=True)
+    (malformed_dir / "status.json").write_text("{broken", encoding="utf-8")
+    assert summary_cli.main(["--job", "malformed-summary-job", "--json"]) == 2
+    error = capsys.readouterr().err
+    assert "unavailable or corrupt" in error
+    assert "broken" not in error
+
+    invalid_dir = cycle.job_path("invalid-summary-job")
+    invalid_dir.mkdir(parents=True)
+    cycle.atomic_json(
+        invalid_dir / "status.json",
+        {
+            "phase": "reviewed_tooling_ready",
+            "round": 1,
+            "ready_for_user": True,
+            "review_plan": {"roles": ["generality", "testing"]},
+            "reviews": {"generality": {"verdict": "pass"}},
+            "reported_token_budget": 100000,
+            "token_usage": {"reported_total": 0},
+        },
+    )
+    assert summary_cli.main(["--job", "invalid-summary-job"]) == 2
+    assert "missing a selected reviewer verdict" in capsys.readouterr().err
 
 
 def test_plan_dry_run_is_persistent_does_not_create_worktree_and_cannot_reuse_id(
