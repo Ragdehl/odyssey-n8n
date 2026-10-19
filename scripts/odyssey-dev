@@ -512,6 +512,12 @@ public_route_provenance() {
   esac
 }
 
+require_dev_public_routes() {
+  local state
+  state=$(public_route_provenance)
+  [ "$state" = MATCH ] || fail "DEV Cloudflare public routes are $state; browser JavaScript may be blocked. Reconcile only with explicit DEV authorization before deployment"
+}
+
 wait_workflow_readiness() {
   local attempt
   for attempt in $(seq 1 45); do
@@ -614,6 +620,9 @@ status() {
 deploy() {
   guard
   [ -z "$(git -C "$DEV_SOURCE" status --porcelain)" ] || fail "DEV source checkout is dirty"
+  # Do not restart DEV or claim deploy success when any static ES module is
+  # missing from the authenticated public Cloudflare ingress.
+  require_dev_public_routes
   prepare_dev_identity
   install_unit
   systemctl --user restart "$UNIT"

@@ -7,7 +7,6 @@ import {
   requestConversation,
 } from "./client.js";
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
-import {startEmbeddingPresence} from "./presence.js";
 import {mountCalendar} from "./calendar.js";
 import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";
 
@@ -67,9 +66,13 @@ function showDeploymentMarker() {
 
 showDeploymentMarker();
 
-// DEV pilot: start loading local ONNX on page entry without delaying chat UI.
+// DEV-only ONNX prewarm is optional, not a dependency of the chat/navigation.
+// A Cloudflare module route may be missing or temporarily blocked. Never let
+// that noncritical optimization prevent the application from initializing.
 if (globalThis.ODYSSEY_DEPLOYMENT?.environment === "DEV") {
-  startEmbeddingPresence({endpoint: conversationEndpoint});
+  void import("./presence.js")
+    .then(({startEmbeddingPresence}) => startEmbeddingPresence({endpoint: conversationEndpoint}))
+    .catch(() => {});
 }
 
 // Application controllers remain mounted for the page lifetime so each surface keeps its local state.

@@ -437,3 +437,25 @@ def test_publish_uses_n8n_current_imported_version_not_a_stale_history_pointer()
     assert "n8n import:workflow" in publish
     assert "n8n publish:workflow --id=$workflow_id >/dev/null" in publish
     assert "n8n publish:workflow --id=$workflow_id --versionId=" not in publish
+
+
+def test_deploy_checks_live_cloudflare_route_match_before_mutating_any_dev_service() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    deployed = source.split("deploy() {", 1)[1].split("\n}\n", 1)[0]
+    assert "require_dev_public_routes" in deployed
+    assert deployed.index("require_dev_public_routes") < deployed.index("prepare_dev_identity")
+    assert deployed.index("require_dev_public_routes") < deployed.index("systemctl --user restart")
+
+
+def test_public_cloudflare_drift_and_unknown_refuse_new_deploy() -> None:
+    for label, expected in (("MATCH", True), ("DRIFT", False), ("UNKNOWN", False)):
+        command = (
+            f"source {shlex.quote(str(SCRIPT))}; "
+            f"public_route_provenance() {{ echo {label}; }}; "
+            "require_dev_public_routes"
+        )
+        result = subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+        assert (result.returncode == 0) is expected
+        if not expected:
+            assert label in result.stderr
+            assert "explicit DEV authorization" in result.stderr

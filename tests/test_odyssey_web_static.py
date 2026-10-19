@@ -347,12 +347,16 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
         "calendar.js",
         "calendar-client.js",
         "progress.js",
-        "presence.js",
     }
+    # Presence is an optional DEV optimization: failure to fetch it must no
+    # longer prevent the entire app's static module graph from evaluating.
+    app = (WEB_ROOT / "app.js").read_text(encoding="utf-8")
+    assert 'void import("./presence.js")' in app
+    assert ".catch(() => {})" in app
 
     workflow = (Path("workflows") / "odyssey-online-static.ts").read_text(encoding="utf-8")
     inventory = (Path("deploy") / "odyssey-dev-product-routes.tsv").read_text(encoding="utf-8")
-    for route in routes:
+    for route in routes | {"presence.js"}:
         assert f"path: '{route}'" in workflow
         assert f"/odyssey-web/{route}" in workflow
         assert f"GET\t/api/{route}\tstatic" in inventory

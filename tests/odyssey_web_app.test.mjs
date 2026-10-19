@@ -263,7 +263,6 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     .replace(/import \{[\s\S]*?\} from "\.\/client\.js";/, "const {ProductRequestError, createSubmission, findRecoverableSubmission, requestProductResult, requestConversation, renderProductResultWithContinuity} = globalThis.__odysseyTestClient;")
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
-    .replace('import {startEmbeddingPresence} from "./presence.js";', "const startEmbeddingPresence = () => ({stop() {}});")
     .replace('import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling, renderExecutionFlow} = globalThis.__odysseyTestProgress;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
