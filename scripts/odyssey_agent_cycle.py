@@ -874,6 +874,11 @@ def instructions(role: str, spec: str, baseline: str, reviews: dict | None = Non
         "focused tests; review the gate receipt rather than rerunning it. "
         "When reviewing, begin with git diff against source baseline and read "
         "only files needed to support concrete findings. "
+        "Never mark a review FAIL solely because a clearly OPTIONAL brief "
+        "criterion was not implemented; note optional improvements as warning "
+        "or omit them. A failed attempt to run pytest inside the restricted "
+        "Codex sandbox does not invalidate the supervisor's authoritative "
+        "host gate receipt, which includes pytest results. "
         "Work ONLY in this temporary worktree/agent branch; no deploy, "
         "no production/private vault, no secrets, no changing Git remotes, "
         "no approval bypasses, no push or merge.\n"
@@ -992,6 +997,29 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     update(job, state, "running")
     try:
         for attempt in range(1, max_rounds + 1):
+            if attempt > 1 and "reported_token_budget" in state and "token_usage" in state:
+                # A repair is not useful if we already know its outcome cannot
+                # be independently reviewed. Require room for ONE Builder
+                # session plus the full remaining mandatory review set before
+                # paying for the Builder. This reserves a *minimum*, not a
+                # hard per-session cap.
+                repair_quote = review_budget_quote(state, include_builder=True, dest=dest)
+                state["review_plan"] = repair_quote
+                if not repair_quote["can_start"]:
+                    update(
+                        job,
+                        state,
+                        "blocked_insufficient_review_budget",
+                        active_role=None,
+                        ready_for_user=False,
+                        last_error=(
+                            "Cannot start unreviewable repair: "
+                            f"{repair_quote['reported_tokens_available']} tokens available, "
+                            f"{repair_quote['minimum_remaining_reported_tokens']} "
+                            "required for Builder and mandatory independent reviewers"
+                        ),
+                    )
+                    return state
             evidence = run_dir / f"round-{attempt}"
             evidence.mkdir(parents=True)
             # Publish the new evidence scope before any repair or handoff work.

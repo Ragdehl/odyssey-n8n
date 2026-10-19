@@ -1048,6 +1048,94 @@ def test_failing_offline_gate_skips_all_model_reviewers_and_preserves_logs(monke
     assert "shortfall" in status["last_error"].lower()
 
 
+def test_review_failure_cannot_launch_repair_without_full_independent_review_reserve(
+    monkeypatch, tmp_path, mocked_review_snapshot
+):
+    """Reproduce actual 19 Oct outcome: 119153 tokens used, 220k budget.
+
+    Previously the supervisor spent another 34,678 tokens on Builder and only
+    THEN learned it could not afford the two mandatory reviewer reservations.
+    """
+    monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    monkeypatch.setattr(cycle, "mem_available", lambda: 1900)
+    workspace = tmp_path / "isolated"
+    workspace.mkdir()
+    monkeypatch.setattr(cycle, "workspace", lambda *_: workspace)
+    monkeypatch.setattr(cycle, "safe_worktree", lambda *_: None)
+    monkeypatch.setattr(cycle, "tooling_scope_is_safe", lambda *_: True)
+    monkeypatch.setattr(
+        cycle,
+        "touched_paths",
+        lambda *_: ("tests/runtime/test_agent_cycle_supervisor.py",),
+    )
+    monkeypatch.setattr(cycle, "deterministic_gates", lambda *_: {"cross_surface": {"pass": True}})
+    job = "review-reserve-before-repair"
+    folder = cycle.job_path(job)
+    folder.mkdir(parents=True)
+    (folder / "brief.md").write_text("A small tooling regression, requiring two reviews.")
+    cycle.atomic_json(
+        folder / "status.json",
+        {
+            "phase": "planned",
+            "implemented_by": "codex",
+            "acceptance_profile": "tooling",
+            "risk": "normal",
+            "baseline_commit": "b" * 40,
+            "reported_token_budget": 220000,
+            "token_usage": {"reported_total": 0, "sessions": []},
+            "ready_for_user": False,
+            "reviews": {},
+            "gate": {},
+        },
+    )
+    invoked = []
+
+    def fake_agent(role, *_args, **_kwargs):
+        invoked.append(role)
+        if role == "builder":
+            return {"role": role, "reported_tokens": 47400}
+        if role == "generality":
+            return {
+                "role": role,
+                "reported_tokens": 34377,
+                "verdict": {"verdict": "pass", "findings": []},
+            }
+        assert role == "quality"
+        return {
+            "role": role,
+            "reported_tokens": 37376,
+            "verdict": {
+                "verdict": "fail",
+                "findings": [
+                    {
+                        "severity": "blocking",
+                        "actionability": "repairable",
+                        "reason": "Optional test incorrectly deemed mandatory",
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr(cycle, "codex", fake_agent)
+    result = cycle.run(job, 2, live=True)
+    assert invoked == ["builder", "generality", "quality"]
+    assert result["phase"] == "blocked_insufficient_review_budget"
+    assert result["round"] == 1
+    assert result["token_usage"]["reported_total"] == 119153
+    assert result["review_plan"]["minimum_remaining_reported_tokens"] == 140000
+    assert result["review_plan"]["reported_tokens_available"] == 100847
+    assert "Cannot start unreviewable repair" in result["last_error"]
+    assert not (folder / "round-2").exists()
+    assert result["ready_for_user"] is False
+
+
+def test_every_independent_reviewer_prompt_rejects_optional_criteria_as_blocker():
+    for role in cycle.REVIEW_ROLES:
+        result = cycle.instructions(role, "Optional: extra timeout test", "b" * 40)
+        assert "clearly OPTIONAL" in result
+        assert "host gate receipt" in result
+
+
 def test_failing_gates_go_straight_to_bounded_builder_repair_without_review(
     monkeypatch, tmp_path, mocked_review_snapshot
 ):
