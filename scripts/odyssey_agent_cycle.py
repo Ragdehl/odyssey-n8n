@@ -70,6 +70,10 @@ class CycleError(RuntimeError):
     pass
 
 
+class DailyBudgetPause(CycleError):
+    """Pacing refused a model BEFORE it launched; safe to checkpoint reviews."""
+
+
 def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -752,7 +756,7 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
                 STATE, minimum=model_policy()["minimum_session_headroom"]
             )
     except pacing.PacingError as exc:
-        raise CycleError(str(exc)) from exc
+        raise DailyBudgetPause(str(exc)) from exc
     choice = select_agent_model(role, state, dest)
     # Codex :read-only only prevents writes, NOT reading ~/private, /data, or
     # authenticated Codex files. Enforce a scoped named native permission
@@ -948,13 +952,99 @@ def deterministic_gates(dest: Path, evidence: Path) -> dict:
     return report
 
 
-def run(job: str, max_rounds: int, live: bool) -> dict:
+def validate_review_resume(job: str, state: dict, dest: Path) -> tuple[int, tuple[str, ...]]:
+    """Refuse stale/tampered review evidence; never repeat a finished agent."""
+    if state.get("phase") != "paused_daily_budget":
+        raise CycleError("Only a paused daily-budget review may be resumed")
+    checkpoint = state.get("resume_checkpoint")
+    if not isinstance(checkpoint, dict) or checkpoint.get("stage") != "reviewing":
+        raise CycleError("No safe review resume checkpoint")
+    number = checkpoint.get("round")
+    if type(number) is not int or not 1 <= number <= 3 or number != state.get("round"):
+        raise CycleError("Invalid saved review round")
+    if state.get("worktree") != str(dest):
+        raise CycleError("Resume worktree does not match the saved checkout")
+    safe_worktree(dest, job)
+    expected_roles = select_review_roles(state, dest)
+    if checkpoint.get("required_roles") != list(expected_roles):
+        raise CycleError("Required review policy changed; cannot resume")
+    role = checkpoint.get("next_role")
+    if role not in expected_roles:
+        raise CycleError("Unrecognized pending review role")
+    reviews = state.get("reviews")
+    artifacts = state.get("review_artifacts")
+    if not isinstance(reviews, dict) or not isinstance(artifacts, dict):
+        raise CycleError("Missing completed-review evidence")
+    if list(reviews) != list(expected_roles[: expected_roles.index(role)]):
+        raise CycleError("Completed-review order is incomplete or inconsistent")
+    if set(artifacts) != set(reviews):
+        raise CycleError("Completed-review artifacts mismatch")
+    if (
+        not isinstance(state.get("gate"), dict)
+        or not state["gate"]
+        or not all(isinstance(g, dict) and g.get("pass") is True for g in state["gate"].values())
+    ):
+        raise CycleError("Cannot reuse unverified deterministic gates")
+    evidence = job_path(job) / f"round-{number}"
+    for done, verdict in reviews.items():
+        path = evidence / f"{done}-completed.json"
+        if artifacts[done] != str(path) or path.is_symlink() or not path.is_file():
+            raise CycleError("Missing or redirected saved reviewer artifact")
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise CycleError("Saved reviewer artifact cannot be verified") from exc
+        if saved.get("verdict") != verdict:
+            raise CycleError("Saved reviewer verdict was modified")
+    fingerprint = checkpoint.get("snapshot_sha256")
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+        raise CycleError("Invalid saved source fingerprint")
+    if review_snapshot(dest).hex() != fingerprint:
+        raise CycleError("Worktree changed since daily pause; review evidence is stale")
+    return number, expected_roles
+
+
+def checkpoint_daily_review(job: str, state: dict, dest: Path, exc: DailyBudgetPause) -> None:
+    """Pause only at a proven model-free reviewer boundary."""
+    role = state.get("active_role")
+    roles = select_review_roles(state, dest)
+    reviews = state.get("reviews", {})
+    if (
+        state.get("phase") != "reviewing"
+        or role not in roles
+        or list(reviews) != list(roles[: roles.index(role)])
+        or not state.get("gate")
+        or not all(isinstance(g, dict) and g.get("pass") is True for g in state["gate"].values())
+    ):
+        update(job, state, "blocked", ready_for_user=False, last_error=str(exc))
+        return
+    update(
+        job,
+        state,
+        "paused_daily_budget",
+        ready_for_user=False,
+        active_role=None,
+        last_error=str(exc),
+        resume_checkpoint={
+            "stage": "reviewing",
+            "round": state["round"],
+            "next_role": role,
+            "required_roles": list(roles),
+            "snapshot_sha256": review_snapshot(dest).hex(),
+        },
+    )
+
+
+def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
     if not live:
         raise CycleError("No live agents without --live; use plan/doctor safely")
     if not 1 <= max_rounds <= 3:
         raise CycleError("Rounds capped at 1-3")
     state = load(job)
-    if state["phase"] != "planned":
+    if resume:
+        if state.get("phase") != "paused_daily_budget":
+            raise CycleError("Job has no paused daily-budget review to resume")
+    elif state["phase"] != "planned":
         raise CycleError("Job is not planned; refusing duplicate or concurrent launch")
     acceptance = state.get("acceptance_profile", "product")
     if acceptance not in ACCEPTANCE_PROFILES:
@@ -966,7 +1056,7 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     selected_roles = select_review_roles(state, initial_scope)
     # Jobs created by plan() always have a full per-session ledger. Stop before
     # Builder if a full mandatory review set could not fit even at the minimum.
-    if "reported_token_budget" in state and "token_usage" in state:
+    if not resume and "reported_token_budget" in state and "token_usage" in state:
         initial_quote = review_budget_quote(
             state,
             include_builder=state.get("implemented_by", "codex") == "codex",
@@ -987,9 +1077,17 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 ),
             )
             return state
-    dest = workspace(job, state["baseline_commit"])
-    safe_worktree(dest, job)
-    state["worktree"] = str(dest)
+    if resume:
+        dest = Path(state.get("worktree", ""))
+        pending_round = state.get("resume_checkpoint", {}).get("round")
+        if type(pending_round) is int and max_rounds < pending_round:
+            raise CycleError("Resume round exceeds requested maximum")
+        first_round, _saved_roles = validate_review_resume(job, state, dest)
+    else:
+        dest = workspace(job, state["baseline_commit"])
+        safe_worktree(dest, job)
+        state["worktree"] = str(dest)
+        first_round = 1
     brief = (run_dir / "brief.md").read_text(encoding="utf-8")
     findings = {}
     review_base = state.get("review_base")
@@ -1009,8 +1107,14 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
     )
     update(job, state, "running")
     try:
-        for attempt in range(1, max_rounds + 1):
-            if attempt > 1 and "reported_token_budget" in state and "token_usage" in state:
+        for attempt in range(first_round, max_rounds + 1):
+            continuing_review = resume and attempt == first_round
+            if (
+                attempt > 1
+                and not continuing_review
+                and "reported_token_budget" in state
+                and "token_usage" in state
+            ):
                 # A repair is not useful if we already know its outcome cannot
                 # be independently reviewed. Require room for ONE Builder
                 # session plus the full remaining mandatory review set before
@@ -1033,124 +1137,133 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                         ),
                     )
                     return state
-            evidence = run_dir / f"round-{attempt}"
-            evidence.mkdir(parents=True)
-            # Publish the new evidence scope before any repair or handoff work.
-            # Prior verdicts remain in their round files and in `findings` for repair.
-            update(
-                job,
-                state,
-                "starting_round",
-                round=attempt,
-                active_role=None,
-                reviews={},
-                review_artifacts={},
-                gate={},
-                ready_for_user=False,
-            )
-            if state.get("implemented_by", "codex") == "chatgpt" and attempt == 1:
-                # A real human-facing ChatGPT session ALREADY authored and
-                # committed this exact source snapshot. Never bill Codex to
-                # implement the same feature a second time.
-                update(job, state, "reviewing_chatgpt_change", round=attempt, active_role=None)
-                (evidence / "handoff.json").write_text(
-                    json.dumps(
-                        {
-                            "developer": "chatgpt",
-                            "feature_commit": state["feature_commit"],
-                            "review_base": review_base,
-                        },
-                        indent=2,
-                    ),
-                    encoding="utf-8",
+            if not continuing_review:
+                evidence = run_dir / f"round-{attempt}"
+                evidence.mkdir(parents=True)
+                # Publish the new evidence scope before any repair or handoff work.
+                # Prior verdicts remain in their round files and in `findings` for repair.
+                update(
+                    job,
+                    state,
+                    "starting_round",
+                    round=attempt,
+                    active_role=None,
+                    reviews={},
+                    review_artifacts={},
+                    gate={},
+                    ready_for_user=False,
                 )
+                if state.get("implemented_by", "codex") == "chatgpt" and attempt == 1:
+                    # A real human-facing ChatGPT session ALREADY authored and
+                    # committed this exact source snapshot. Never bill Codex to
+                    # implement the same feature a second time.
+                    update(job, state, "reviewing_chatgpt_change", round=attempt, active_role=None)
+                    (evidence / "handoff.json").write_text(
+                        json.dumps(
+                            {
+                                "developer": "chatgpt",
+                                "feature_commit": state["feature_commit"],
+                                "review_base": review_base,
+                            },
+                            indent=2,
+                        ),
+                        encoding="utf-8",
+                    )
+                else:
+                    update(job, state, "implementing", round=attempt, active_role="builder")
+                    builder_receipt = codex(
+                        "builder",
+                        instructions(
+                            "builder", brief, review_base or state["baseline_commit"], findings
+                        )
+                        + compare,
+                        dest,
+                        evidence,
+                        read_only=False,
+                    )
+                    record_agent_usage(job, state, "builder", builder_receipt)
+                safe_worktree(dest, job)
+                if acceptance == "tooling":
+                    scope_baseline = review_base or state["baseline_commit"]
+                    if not tooling_scope_is_safe(dest, scope_baseline):
+                        update(
+                            job,
+                            state,
+                            "blocked_acceptance_scope",
+                            active_role=None,
+                            ready_for_user=False,
+                            last_error="Tooling acceptance includes a path outside the supervisor allowlist",
+                        )
+                        return state
+                update(job, state, "testing", active_role="deterministic_gates")
+                gates = deterministic_gates(dest, evidence)
+                state["gate"] = gates
+                if not all(check.get("pass") is True for check in gates.values()):
+                    # Fail FAST on deterministic defects. Independent GPT reviews
+                    # at 30-50k tokens/session cannot usefully approve broken tests.
+                    # Feed the gate logs directly to the next Builder, without
+                    # spending more on architecture/QA/performance first.
+                    findings = {"gates": gates, "reviews": {}}
+                    remaining = state.get(
+                        "reported_token_budget", model_policy()["default_reported_token_budget"]
+                    ) - state.get("token_usage", {}).get("reported_total", 0)
+                    if attempt >= max_rounds:
+                        update(
+                            job,
+                            state,
+                            "blocked_repair_budget",
+                            active_role=None,
+                            ready_for_user=False,
+                            last_error="Deterministic gates failed; no repair rounds remain",
+                        )
+                        return state
+                    if remaining < model_policy()["minimum_session_headroom"]:
+                        update(
+                            job,
+                            state,
+                            "blocked_insufficient_token_headroom",
+                            active_role=None,
+                            ready_for_user=False,
+                            last_error=(
+                                "Deterministic gates failed; insufficient token headroom "
+                                "for a safe repair attempt"
+                            ),
+                        )
+                        return state
+                    update(job, state, "repair_needed", active_role=None, ready_for_user=False)
+                    continue
+                # Gate passed. Recalculate the minimum for all outstanding audits
+                # after the Builder's actual measured consumption. No partial
+                # reviewing if the remaining job budget is already insufficient.
+                selected_roles = select_review_roles(state, dest)
+                if "reported_token_budget" in state and "token_usage" in state:
+                    quote = review_budget_quote(state, dest=dest)
+                    state["review_plan"] = quote
+                    if not quote["can_start"]:
+                        update(
+                            job,
+                            state,
+                            "blocked_insufficient_review_budget",
+                            active_role=None,
+                            ready_for_user=False,
+                            last_error=(
+                                f"Review capacity shortfall after gate: "
+                                f"{quote['reported_tokens_available']} available vs "
+                                f"{quote['minimum_remaining_reported_tokens']} reserved"
+                            ),
+                        )
+                        return state
             else:
-                update(job, state, "implementing", round=attempt, active_role="builder")
-                builder_receipt = codex(
-                    "builder",
-                    instructions(
-                        "builder", brief, review_base or state["baseline_commit"], findings
-                    )
-                    + compare,
-                    dest,
-                    evidence,
-                    read_only=False,
-                )
-                record_agent_usage(job, state, "builder", builder_receipt)
-            safe_worktree(dest, job)
-            if acceptance == "tooling":
-                scope_baseline = review_base or state["baseline_commit"]
-                if not tooling_scope_is_safe(dest, scope_baseline):
-                    update(
-                        job,
-                        state,
-                        "blocked_acceptance_scope",
-                        active_role=None,
-                        ready_for_user=False,
-                        last_error="Tooling acceptance includes a path outside the supervisor allowlist",
-                    )
-                    return state
-            update(job, state, "testing", active_role="deterministic_gates")
-            gates = deterministic_gates(dest, evidence)
-            state["gate"] = gates
-            if not all(check.get("pass") is True for check in gates.values()):
-                # Fail FAST on deterministic defects. Independent GPT reviews
-                # at 30-50k tokens/session cannot usefully approve broken tests.
-                # Feed the gate logs directly to the next Builder, without
-                # spending more on architecture/QA/performance first.
-                findings = {"gates": gates, "reviews": {}}
-                remaining = state.get(
-                    "reported_token_budget", model_policy()["default_reported_token_budget"]
-                ) - state.get("token_usage", {}).get("reported_total", 0)
-                if attempt >= max_rounds:
-                    update(
-                        job,
-                        state,
-                        "blocked_repair_budget",
-                        active_role=None,
-                        ready_for_user=False,
-                        last_error="Deterministic gates failed; no repair rounds remain",
-                    )
-                    return state
-                if remaining < model_policy()["minimum_session_headroom"]:
-                    update(
-                        job,
-                        state,
-                        "blocked_insufficient_token_headroom",
-                        active_role=None,
-                        ready_for_user=False,
-                        last_error=(
-                            "Deterministic gates failed; insufficient token headroom "
-                            "for a safe repair attempt"
-                        ),
-                    )
-                    return state
-                update(job, state, "repair_needed", active_role=None, ready_for_user=False)
-                continue
-            # Gate passed. Recalculate the minimum for all outstanding audits
-            # after the Builder's actual measured consumption. No partial
-            # reviewing if the remaining job budget is already insufficient.
-            selected_roles = select_review_roles(state, dest)
-            if "reported_token_budget" in state and "token_usage" in state:
-                quote = review_budget_quote(state, dest=dest)
-                state["review_plan"] = quote
-                if not quote["can_start"]:
-                    update(
-                        job,
-                        state,
-                        "blocked_insufficient_review_budget",
-                        active_role=None,
-                        ready_for_user=False,
-                        last_error=(
-                            f"Review capacity shortfall after gate: "
-                            f"{quote['reported_tokens_available']} available vs "
-                            f"{quote['minimum_remaining_reported_tokens']} reserved"
-                        ),
-                    )
-                    return state
+                evidence = run_dir / f"round-{attempt}"
+                gates = state["gate"]
+                selected_roles = select_review_roles(state, dest)
+                # The exact prior worktree and each finished verdict were verified above.
+                check_review_reserve(job, state, selected_roles[len(state["reviews"]) :])
             update(job, state, "reviewing", active_role=None)
-            reviews = {}
+            reviews = dict(state["reviews"]) if continuing_review else {}
             for i, role in enumerate(selected_roles):
+                if role in reviews:
+                    continue
                 check_review_reserve(job, state, selected_roles[i:])
                 update(job, state, "reviewing", active_role=role)
                 before = review_snapshot(dest)
@@ -1260,6 +1373,8 @@ def run(job: str, max_rounds: int, live: bool) -> dict:
                 last_error="Reviewers did not grant a clear proof of completion",
             )
             return state
+    except DailyBudgetPause as err:
+        checkpoint_daily_review(job, state, dest, err)
     except (CycleError, OSError, ValueError) as err:
         update(job, state, "blocked", ready_for_user=False, last_error=str(err))
     return state
@@ -1286,6 +1401,10 @@ def main() -> int:
     r.add_argument("--job", required=True)
     r.add_argument("--max-rounds", type=int, default=2)
     r.add_argument("--live", action="store_true")
+    resume_cli = actions.add_parser("resume")
+    resume_cli.add_argument("--job", required=True)
+    resume_cli.add_argument("--max-rounds", type=int, default=2)
+    resume_cli.add_argument("--live", action="store_true")
     st = actions.add_parser("status")
     st.add_argument("--job", required=True)
     route = actions.add_parser("route")
@@ -1313,7 +1432,7 @@ def main() -> int:
                 token_budget=args.token_budget,
                 acceptance=args.acceptance,
             )
-        elif args.action == "run":
+        elif args.action in {"run", "resume"}:
             STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
             if args.live:
                 # Fail closed on unattended starts: no implicit guess about
@@ -1330,7 +1449,10 @@ def main() -> int:
                     fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError as error:
                     raise CycleError("Another Codex agent cycle is already active") from error
-                value = run(args.job, args.max_rounds, args.live)
+                if args.action == "resume":
+                    value = run(args.job, args.max_rounds, args.live, resume=True)
+                else:
+                    value = run(args.job, args.max_rounds, args.live)
         elif args.action == "pace":
             try:
                 if args.weekly_reported_proxy is not None:
@@ -1383,7 +1505,15 @@ def main() -> int:
         print(json.dumps(value, ensure_ascii=False, indent=2))
         # A successful shell invocation is not a completed feature. CI/n8n
         # must also check the JSON phase; return nonzero for blocked pilots.
-        return 3 if args.action == "run" and value.get("phase", "").startswith("blocked") else 0
+        return (
+            3
+            if args.action in {"run", "resume"}
+            and (
+                value.get("phase", "").startswith("blocked")
+                or value.get("phase") == "paused_daily_budget"
+            )
+            else 0
+        )
     except CycleError as err:
         print(f"Odyssey agent-team: {err}", file=sys.stderr)
         return 2
