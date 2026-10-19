@@ -595,6 +595,7 @@ def test_cli_blocked_cycle_exits_nonzero_for_shell_orchestration(monkeypatch, tm
     import sys
 
     monkeypatch.setattr(cycle, "STATE", tmp_path / "runs")
+    cycle.pacing.configure(cycle.STATE, 700_000, 20)
     monkeypatch.setattr(
         cycle,
         "run",
@@ -1449,7 +1450,13 @@ def test_untracked_file_mutation_by_readonly_reviewer_blocks_before_next_review(
     assert result["phase"] == "blocked"
     assert result["ready_for_user"] is False
     assert result["reviews"] == {}
-    assert result["token_usage"]["sessions"] == [
+    assert len(result["token_usage"]["sessions"]) == 1
+    assert result["token_usage"]["sessions"][0]["ended_at"].endswith("+00:00")
+    without_time = [
+        {key: value for key, value in entry.items() if key != "ended_at"}
+        for entry in result["token_usage"]["sessions"]
+    ]
+    assert without_time == [
         {
             "role": "generality",
             "round": 1,

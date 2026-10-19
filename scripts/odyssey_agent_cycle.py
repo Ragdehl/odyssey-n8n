@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # the same import available to direct invocations and pytest module imports.
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from scripts import odyssey_agent_pacing as pacing  # noqa: E402
 from scripts.odyssey_codex_permissions import (  # noqa: E402
     ScopeError,
     permission_overrides,
@@ -521,6 +522,7 @@ def record_agent_usage(job: str, state: dict, role: str, receipt: dict) -> None:
     ledger["reported_total"] += tokens
     ledger["sessions"].append(
         {
+            "ended_at": now(),
             "role": role,
             "round": state.get("round"),
             "model": receipt.get("model"),
@@ -547,6 +549,7 @@ def doctor() -> dict:
     login = running(["codex", "login", "status"])
     return {
         "repository": str(ROOT),
+        "daily_pacing": pacing.status(STATE),
         "model_cli": result.stdout.strip() if result.returncode == 0 else "unavailable",
         "auth_ready": login.returncode == 0,
         "available_ram_mib": mem_available(),
@@ -740,6 +743,16 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     cap = state.get("reported_token_budget", model_policy()["default_reported_token_budget"])
     if cap - used < model_policy()["minimum_session_headroom"]:
         raise CycleError("Insufficient reported-token headroom for another Codex session")
+    # Direct Python unit tests may call this with a fixture ledger. Real CLI
+    # run --live refuses to start unless pacing is configured. For configured
+    # installations, protect each agent session, including reviewer retries.
+    try:
+        if pacing.load_policy(STATE) is not None:
+            pacing.require_session_headroom(
+                STATE, minimum=model_policy()["minimum_session_headroom"]
+            )
+    except pacing.PacingError as exc:
+        raise CycleError(str(exc)) from exc
     choice = select_agent_model(role, state, dest)
     # Codex :read-only only prevents writes, NOT reading ~/private, /data, or
     # authenticated Codex files. Enforce a scoped named native permission
@@ -1277,6 +1290,13 @@ def main() -> int:
     st.add_argument("--job", required=True)
     route = actions.add_parser("route")
     route.add_argument("--job", required=True)
+    pace = actions.add_parser("pace")
+    pace.add_argument(
+        "--weekly-reported-proxy",
+        type=int,
+        help="Operator's LOCAL CLI-reported-token proxy, NOT a ChatGPT usage allowance",
+    )
+    pace.add_argument("--reserve-percent", type=int, default=20)
     stop = actions.add_parser("stop")
     stop.add_argument("--job", required=True)
     args = parser.parse_args()
@@ -1295,6 +1315,15 @@ def main() -> int:
             )
         elif args.action == "run":
             STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if args.live:
+                # Fail closed on unattended starts: no implicit guess about
+                # this user's actual weekly quota or reset date.
+                try:
+                    pacing.require_session_headroom(
+                        STATE, minimum=model_policy()["minimum_session_headroom"]
+                    )
+                except pacing.PacingError as exc:
+                    raise CycleError(str(exc)) from exc
             # Process-level exclusivity ACROSS job IDs on this Raspberry.
             with (STATE / "SUPERVISOR.lock").open("w") as lock:
                 try:
@@ -1302,6 +1331,13 @@ def main() -> int:
                 except BlockingIOError as error:
                     raise CycleError("Another Codex agent cycle is already active") from error
                 value = run(args.job, args.max_rounds, args.live)
+        elif args.action == "pace":
+            try:
+                if args.weekly_reported_proxy is not None:
+                    pacing.configure(STATE, args.weekly_reported_proxy, args.reserve_percent)
+                value = pacing.status(STATE)
+            except pacing.PacingError as exc:
+                raise CycleError(str(exc)) from exc
         elif args.action == "status":
             value = load(args.job)
         elif args.action == "route":
@@ -1319,6 +1355,7 @@ def main() -> int:
                 "used_reported_tokens": (
                     state["token_usage"]["reported_total"] if "token_usage" in state else None
                 ),
+                "daily_pacing": pacing.status(STATE),
                 "choices": {
                     role: select_agent_model(role, state, checkout)
                     for role in ("builder", *REVIEW_ROLES)
