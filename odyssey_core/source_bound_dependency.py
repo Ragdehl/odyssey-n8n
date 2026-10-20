@@ -18,9 +18,9 @@ from .application import (
     ApplicationStatus,
     CanonicalReferenceEvidence,
     DependentReferenceGuard,
-    UnitStatus,
     _dependent_evidence_is_current,
 )
+from .canonical_receipt_provenance import materialized_core_receipt
 from .storage import VaultRepository
 
 
@@ -94,8 +94,7 @@ def prove_source_bound_dependency(
             *action.canonical_reference_evidence,
             *action.canonical_direct_target_evidence,
         )
-        if proof.action_index == action.action_index
-        and proof.source_mention == proof.canonical_name
+        if proof.source_mention == proof.canonical_name
         and len(
             re.findall(
                 r"(?<!\w)" + re.escape(proof.source_mention) + r"(?!\w)",
@@ -104,6 +103,21 @@ def prove_source_bound_dependency(
         )
         == 1
     )
+    # The request-level carrier must agree with its action receipts. A single
+    # link must not disappear from the top-level carrier, and a forged or
+    # repeated top-level entry must never gain independent authority.
+    action_links = tuple(
+        proof
+        for action in predecessor.action_results
+        for proof in action.canonical_reference_evidence
+    )
+    aggregate_links = predecessor.canonical_reference_evidence
+    if (
+        len(aggregate_links) != len(set(aggregate_links))
+        or any(proof not in action_links for proof in aggregate_links)
+        or (len(action_links) == 1 and not aggregate_links)
+    ):
+        raise SourceBoundDependencyError("Predecessor has no unique materialized Core fact")
     # An explicit reviewed dependent name can select one of several Core-created
     # people. An anaphoric mention cannot: with multiple receipts its identity
     # is not proven by the source alone, so fail closed.
@@ -119,38 +133,23 @@ def prove_source_bound_dependency(
         not action_proofs
         or any(not isinstance(p, CanonicalReferenceEvidence) for p in action_proofs)
         or len({p.stable_note_id for p in action_proofs}) != 1
+        or len(action_proofs) != len(set(action_proofs))
         or any(not _dependent_evidence_is_current(p, repository, schema) for p in action_proofs)
+        or any(
+            not materialized_core_receipt(p, action, predecessor, repository, schema)
+            for action in predecessor.action_results
+            if action.status is ActionStatus.COMPLETED
+            for p in (
+                *action.canonical_reference_evidence,
+                *action.canonical_direct_target_evidence,
+            )
+            if p in action_proofs
+        )
     ):
+        if any(not _dependent_evidence_is_current(p, repository, schema) for p in action_proofs):
+            raise SourceBoundDependencyError("Canonical source or target has changed")
         raise SourceBoundDependencyError("Predecessor has no unique materialized Core fact")
     evidence = next((p for p in action_proofs if p.source_reference_index == -1), action_proofs[0])
-    if (
-        evidence.source_note_id not in predecessor.affected_stable_note_ids
-        or evidence.source_reference_index < -1
-        or (
-            evidence.source_reference_index >= 0
-            and predecessor.canonical_reference_evidence.count(evidence) != 1
-        )
-        or (
-            evidence.source_reference_index == -1
-            and not (
-                evidence.source_note_id == evidence.stable_note_id
-                and evidence.source_content_guard == evidence.canonical_content_guard
-                and any(
-                    proof == evidence
-                    and any(
-                        unit.unit_index == evidence.source_unit_index
-                        and unit.status is UnitStatus.SUCCEEDED
-                        and unit.operation == "CREATED"
-                        and unit.stable_note_id == evidence.stable_note_id
-                        for unit in action.unit_results
-                    )
-                    for action in predecessor.action_results
-                    for proof in action.canonical_direct_target_evidence
-                )
-            )
-        )
-    ):
-        raise SourceBoundDependencyError("Predecessor has no unique materialized Core fact")
     if (
         not evidence.source_mention
         or not evidence.canonical_name

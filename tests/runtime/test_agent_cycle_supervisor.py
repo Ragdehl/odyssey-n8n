@@ -924,7 +924,7 @@ def test_model_selector_refuses_unapproved_role_and_invalid_risk(monkeypatch, tm
         )
 
 
-@pytest.mark.parametrize("value", [0, 5000, 19999, 300001, "110000", True])
+@pytest.mark.parametrize("value", [-1, 5000, 19999, 300001, "110000", True])
 def test_model_budget_configuration_rejects_invalid_values(monkeypatch, value):
     monkeypatch.setattr(cycle, "check_repository", lambda: None)
     with pytest.raises(cycle.CycleError, match="Token budget"):
@@ -1954,3 +1954,33 @@ def test_sensitive_policy_catalog_cannot_omit_core_supervisor_code(monkeypatch, 
     monkeypatch.setattr(cycle, "MODEL_POLICY", filename)
     with pytest.raises(cycle.CycleError, match="cannot be weakened"):
         cycle.model_policy()
+
+
+def test_daily_only_mode_keeps_all_reviewers_and_daily_session_preflight(monkeypatch):
+    """Disabling E4's aggregate cap must not disable safety or four reviewer roles."""
+    policy = cycle.model_policy()
+    state = {
+        "acceptance_profile": "product",
+        "risk": "high",
+        "reported_token_budget": 0,
+        "token_usage": {"reported_total": 900000, "sessions": []},
+    }
+    monkeypatch.setattr(cycle, "effective_review_risk", lambda _state, _dest=None: ("high", []))
+    quote = cycle.review_budget_quote(state)
+    assert quote["daily_only_budget"] is True
+    assert quote["reported_tokens_available"] is None
+    assert quote["can_start"] is True
+    assert set(quote["roles"]) == set(cycle.REVIEW_ROLES)
+    cycle.check_review_reserve("daily-only-test", state, cycle.REVIEW_ROLES)
+    assert cycle.remaining_resume_review_quote(
+        {
+            **state,
+            "phase": "paused_daily_budget",
+            "resume_checkpoint": {"stage": "reviewing"},
+            "reviews": {},
+        },
+        quote,
+    )["can_start"]
+    # The per-job cap is absent, but daily pacing remains a separate mandatory
+    # launch guard in codex() and run(), checked on every agent session.
+    assert policy["minimum_session_headroom"] > 0

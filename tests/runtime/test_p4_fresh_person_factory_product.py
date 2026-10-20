@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
+
+import pytest
 
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
     TASK_SCHEMA_EXTENSION,
     TaskInterpretation,
     TaskOperation,
+    TaskPersonReference,
     TaskTemporalMention,
     TaskTemporalRole,
 )
@@ -36,7 +40,8 @@ from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
 
 
-def test_factory_fresh_person_create_task_create_and_replay(tmp_path, monkeypatch):
+@pytest.mark.parametrize("fault", [None, "stale", "wrong_actor", "forged_link"])
+def test_factory_fresh_person_create_task_create_and_replay(tmp_path, monkeypatch, fault):
     vault, state, derived = (tmp_path / part for part in ("vault", "state", "derived"))
     for path in (vault, state / "pending", derived):
         path.mkdir(parents=True)
@@ -179,9 +184,46 @@ def test_factory_fresh_person_create_task_create_and_replay(tmp_path, monkeypatc
     executor = product.hybrid_candidate_execute
     assert executor.dependent_person_create_enabled is True
     executor.client = RecordedClient(rows)
-    result = product.execute_product(source, "p4-factory-fresh-person", "main", actor)
+    if fault is not None:
+        actual_delegate = executor.dependent_task_delegate
+
+        def with_invalid_handoff(
+            text, locator, identity, interpretation, temporal, handoff, instant
+        ):
+            assert isinstance(handoff, TaskPersonReference)
+            if fault == "stale":
+                person = next(
+                    path
+                    for path in repo.list_markdown_paths()
+                    if parse_note(repo.read_text(path)).metadata.get("name") == "Marta"
+                )
+                (vault / person).write_text(
+                    repo.read_text(person) + "\nLocally changed after Core receipt.\n"
+                )
+            elif fault == "wrong_actor":
+                handoff = replace(handoff, actor_id="different-actor")
+            elif fault == "forged_link":
+                evidence = replace(
+                    handoff.source_dependency.evidence, stable_note_id="self-p4-factory"
+                )
+                handoff = replace(
+                    handoff, source_dependency=replace(handoff.source_dependency, evidence=evidence)
+                )
+            return actual_delegate(
+                text, locator, identity, interpretation, temporal, handoff, instant
+            )
+
+        executor.dependent_task_delegate = with_invalid_handoff
+    result = product.execute_product(source, f"p4-factory-{fault or 'success'}", "main", actor)
+    assert seen == ([source, before] if fault is not None else [source, before, after.strip()])
+    if fault is not None:
+        assert result["status"] != "completed", result
+        assert not any(
+            parse_note(repo.read_text(path)).metadata.get("type") == "task"
+            for path in repo.list_markdown_paths()
+        ), "Invalid Core reference must never create a Task"
+        return
     assert result["status"] == "completed", result
-    assert seen == [source, before, after.strip()]
     notes = [parse_note(repo.read_text(path)) for path in repo.list_markdown_paths()]
     people = [
         n for n in notes if n.metadata.get("type") == "person" and n.metadata.get("name") == "Marta"
@@ -191,7 +233,7 @@ def test_factory_fresh_person_create_task_create_and_replay(tmp_path, monkeypatc
     assert tasks[0].metadata["target_date"] == "2026-10-17"
     assert "[[Marta" in tasks[0].content or "|Marta]]" in tasks[0].content
     snapshot = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
-    replay = product.execute_product(source, "p4-factory-fresh-person", "main", actor)
+    replay = product.execute_product(source, "p4-factory-success", "main", actor)
     assert replay["delivery_replayed"] is True
     assert snapshot == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
     assert executor.client.rows == []

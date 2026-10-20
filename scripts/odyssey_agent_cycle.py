@@ -414,7 +414,10 @@ def review_budget_quote(
     cap = state.get("reported_token_budget", policy["default_reported_token_budget"])
     if isinstance(used, bool) or not isinstance(used, int) or used < 0:
         raise CycleError("Invalid reported usage")
+    daily_only = cap == 0
+    available = None if daily_only else cap - used
     return {
+        "daily_only_budget": daily_only,
         "profile": state.get("acceptance_profile", "product"),
         "risk": state.get("risk", "normal"),
         "effective_risk": effective,
@@ -432,8 +435,8 @@ def review_budget_quote(
         "minimum_remaining_reported_tokens": total,
         "reported_token_budget": cap,
         "reported_tokens_used": used,
-        "reported_tokens_available": cap - used,
-        "can_start": cap - used >= total,
+        "reported_tokens_available": available,
+        "can_start": daily_only or available >= total,
     }
 
 
@@ -459,7 +462,9 @@ def remaining_resume_review_quote(state: dict, quote: dict) -> dict:
         "roles": pending,
         "minimum_by_role": remaining,
         "minimum_remaining_reported_tokens": minimum,
-        "can_start": quote["reported_tokens_available"] >= minimum,
+        "can_start": (
+            quote.get("daily_only_budget", False) or quote["reported_tokens_available"] >= minimum
+        ),
     }
 
 
@@ -470,6 +475,9 @@ def check_review_reserve(job: str, state: dict, roles: tuple[str, ...]) -> None:
         return
     minimums = model_policy()["minimum_review_tokens_by_role"]
     required = sum(minimums[role] for role in roles)
+    if state["reported_token_budget"] == 0:
+        # Unlimited across days, NEVER bypass shared local daily pacing.
+        return
     available = state["reported_token_budget"] - state["token_usage"]["reported_total"]
     if available < required:
         raise CycleError(
@@ -563,9 +571,8 @@ def record_agent_usage(job: str, state: dict, role: str, receipt: dict) -> None:
         }
     )
     update(job, state, state["phase"])
-    if ledger["reported_total"] > state.get(
-        "reported_token_budget", model_policy()["default_reported_token_budget"]
-    ):
+    cap = state.get("reported_token_budget", model_policy()["default_reported_token_budget"])
+    if cap != 0 and ledger["reported_total"] > cap:
         raise CycleError("Codex reported-token budget exhausted")
 
 
@@ -652,9 +659,9 @@ def plan(
     if (
         isinstance(token_budget, bool)
         or not isinstance(token_budget, int)
-        or not 20000 <= token_budget <= 300000
+        or (token_budget != 0 and not 20000 <= token_budget <= 300000)
     ):
-        raise CycleError("Token budget must be 20000 to 300000 reported tokens")
+        raise CycleError("Token budget must be 0 (daily-only) or 20000 to 300000 reported tokens")
     if implemented_by not in {"codex", "chatgpt"}:
         raise CycleError("Only Codex or ChatGPT can be the development source")
     if acceptance not in ACCEPTANCE_PROFILES:
@@ -772,7 +779,7 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     state = load(job)
     used = state.get("token_usage", {}).get("reported_total", 0)
     cap = state.get("reported_token_budget", model_policy()["default_reported_token_budget"])
-    if cap - used < model_policy()["minimum_session_headroom"]:
+    if cap != 0 and cap - used < model_policy()["minimum_session_headroom"]:
         raise CycleError("Insufficient reported-token headroom for another Codex session")
     # Direct Python unit tests may call this with a fixture ledger. Real CLI
     # run --live refuses to start unless pacing is configured. For configured
@@ -1528,9 +1535,10 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                     # Feed the gate logs directly to the next Builder, without
                     # spending more on architecture/QA/performance first.
                     findings = {"gates": gates, "reviews": {}}
-                    remaining = state.get(
+                    cap = state.get(
                         "reported_token_budget", model_policy()["default_reported_token_budget"]
-                    ) - state.get("token_usage", {}).get("reported_total", 0)
+                    )
+                    remaining = cap - state.get("token_usage", {}).get("reported_total", 0)
                     if attempt >= max_rounds:
                         update(
                             job,
@@ -1541,7 +1549,7 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
                             last_error="Deterministic gates failed; no repair rounds remain",
                         )
                         return state
-                    if remaining < model_policy()["minimum_session_headroom"]:
+                    if cap != 0 and remaining < model_policy()["minimum_session_headroom"]:
                         update(
                             job,
                             state,
@@ -1888,7 +1896,7 @@ def main() -> int:
         "--token-budget",
         type=int,
         default=None,
-        help="Maximum cumulative CLI-reported tokens (default from policy)",
+        help="Maximum cumulative CLI-reported tokens; 0 = daily pacing only",
     )
     r = actions.add_parser("run")
     r.add_argument("--job", required=True)
