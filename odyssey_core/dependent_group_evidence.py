@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any
 
 from .application import (
@@ -122,6 +123,9 @@ def prove_canonical_group_handoff(
         ):
             raise CanonicalGroupEvidenceError("Malformed Core receipt carrier")
         antecedent = graph.groups[parent].source
+        reviewed_core_source = antecedent.strip()
+        if result.core_source_digest != sha256(reviewed_core_source.encode("utf-8")).hexdigest():
+            raise CanonicalGroupEvidenceError("Core result belongs to a different source group")
         if not _unique_source_occurrence(
             antecedent, dependency.antecedent_mention
         ) or not _unique_source_occurrence(consumer.source, dependency.mention):

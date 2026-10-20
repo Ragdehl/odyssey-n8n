@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from hashlib import sha256 as _core_source_sha256
 from threading import Lock
 from time import perf_counter
 from typing import Any, Protocol, cast
@@ -370,6 +371,8 @@ class ApplicationResult:
     execution_flow: Mapping[str, Any] | None = None
     # Core-private dependent-route input. Never add this to public delivery/presentation payloads.
     canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
+    # Core-private exact planner input binding for cross-route handoffs.
+    core_source_digest: str | None = None
 
 
 def allocate_request_id() -> str:
@@ -910,6 +913,7 @@ def execute_request(
             else None
         ),
         canonical_reference_evidence=_unique_canonical_reference_evidence(actions),
+        core_source_digest=_core_source_sha256(user_request.encode("utf-8")).hexdigest(),
     )
     if history_recorder is not None and history_error is None and history_snapshot is not None:
         history_started = monotonic()

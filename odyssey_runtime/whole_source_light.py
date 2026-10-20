@@ -2262,4 +2262,14 @@ class WholeSourceLightExecutor:
             canonical_reference_evidence=proofs
             if aggregate.status is ApplicationStatus.COMPLETED and len(proofs) == 1
             else (),
+            # Each verified Core sub-request may have been executed separately;
+            # preserve an exact source digest only when every result agrees.
+            core_source_digest=(
+                results[0].core_source_digest
+                if results[0].core_source_digest is not None
+                and all(
+                    result.core_source_digest == results[0].core_source_digest for result in results
+                )
+                else None
+            ),
         )

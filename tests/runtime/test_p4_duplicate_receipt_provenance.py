@@ -42,6 +42,53 @@ def test_repeated_identical_receipt_is_not_independent_provenance(tmp_path):
         )
 
 
+def test_single_handoff_rejects_current_receipt_from_another_source(tmp_path):
+    """A live canonical Note does not authorize a different Core message."""
+    from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
+
+    repo, predecessor = _completed_predecessor(tmp_path)
+    before = "Ayer saludé a Nora."
+    after = " Mañana debo llamar a esa persona."
+    with pytest.raises(SourceBoundDependencyError, match="different source span"):
+        prove_source_bound_dependency(
+            complete_original_source=before + after,
+            antecedent_quote=before,
+            dependent_quote=after,
+            exact_dependent_mention="esa persona",
+            predecessor=predecessor,
+            repository=repo,
+            schema=SCHEMA,
+        )
+
+
+def test_nm_handoff_rejects_current_receipt_from_another_source(tmp_path):
+    from odyssey_core.dependent_group_evidence import (
+        CanonicalGroupEvidenceError,
+        prove_canonical_group_handoff,
+    )
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+    from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
+
+    repo, predecessor = _completed_predecessor(tmp_path)
+    before = "Ayer saludé a Nora."
+    after = " Mañana debo llamar a Nora."
+    graph = ReviewedSourceGraph(
+        before + after,
+        (
+            SourceGroup(0, "core", before, ()),
+            SourceGroup(1, "tasks", after, (GroupDependency(0, "Nora", "Nora"),)),
+        ),
+    )
+    with pytest.raises(CanonicalGroupEvidenceError, match="different source group"):
+        prove_canonical_group_handoff(
+            graph=graph,
+            consumer_index=1,
+            predecessors={0: predecessor},
+            repository=repo,
+            schema=SCHEMA,
+        )
+
+
 def test_stale_duplicate_receipt_fails_closed(tmp_path):
     repo, predecessor = _completed_predecessor(tmp_path)
     action = predecessor.action_results[0]

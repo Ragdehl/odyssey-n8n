@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any
 
 from .application import (
@@ -83,6 +84,9 @@ def prove_source_bound_dependency(
         raise SourceBoundDependencyError("Dependent source has changed or is incomplete")
     if predecessor.status is not ApplicationStatus.COMPLETED:
         raise SourceBoundDependencyError("A pending predecessor has no handoff authority")
+    reviewed_core_source = antecedent_quote.strip()
+    if predecessor.core_source_digest != sha256(reviewed_core_source.encode("utf-8")).hexdigest():
+        raise SourceBoundDependencyError("Core result belongs to a different source span")
     if any(
         not isinstance(proof, CanonicalReferenceEvidence)
         for action in predecessor.action_results

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from odyssey_apps.tasks import (
     TaskTemporalMention,
     TaskTemporalRole,
 )
+from odyssey_apps.tasks.interpretation import OpenAITaskInterpreter
 from odyssey_core import create_entity
 from odyssey_core.context import ContextIndex
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
@@ -25,6 +27,7 @@ from odyssey_core.notes import parse_note
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
+    OpenAIRequestPlanner,
     PropertyChange,
     RequestPlan,
     SelectionCriteria,
@@ -35,17 +38,32 @@ from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal_interpretation import parse_temporal_interpretation
 from odyssey_runtime import composition
 from tests.core.test_reference_preflight import UnresolvedReasoner
+from tests.core.test_request_planning import (
+    planner_output,
+    provider_output,
+    reference_selection,
+    schema_unit,
+    write,
+)
 from tests.runtime.test_p4_fresh_person_task import CLOCK, _scenario
 from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
 
 
+@pytest.mark.parametrize("recorded_provider_adapters", (False, True))
 @pytest.mark.parametrize(
     ("fault", "lowercase_source"),
-    [(None, False), (None, True), ("stale", False), ("wrong_actor", False), ("forged_link", False)],
+    [
+        (None, False),
+        (None, True),
+        ("stale", False),
+        ("wrong_actor", False),
+        ("forged_link", False),
+        ("source_swap", False),
+    ],
 )
 def test_factory_fresh_person_create_task_create_and_replay(
-    tmp_path, monkeypatch, fault, lowercase_source
+    tmp_path, monkeypatch, fault, lowercase_source, recorded_provider_adapters
 ):
     vault, state, derived = (tmp_path / part for part in ("vault", "state", "derived"))
     for path in (vault, state / "pending", derived):
@@ -140,10 +158,6 @@ def test_factory_fresh_person_create_task_create_and_replay(
 
         return Planner()
 
-    monkeypatch.setattr(
-        composition.OpenAIRequestPlanner, "from_environment", classmethod(planner_from_environment)
-    )
-
     class Interpreter:
         def interpret(self, text, context=()):
             assert text == after.strip()
@@ -153,11 +167,92 @@ def test_factory_fresh_person_create_task_create_and_replay(
                 temporal_mentions=(TaskTemporalMention("Mañana", TaskTemporalRole.TARGET_DATE),),
             )
 
-    monkeypatch.setattr(
-        composition.OpenAITaskInterpreter,
-        "from_environment",
-        classmethod(lambda cls: Interpreter()),
-    )
+    if recorded_provider_adapters:
+
+        def response(payload):
+            return SimpleNamespace(
+                id="recorded-e4",
+                status="completed",
+                incomplete_details=None,
+                output_text=json.dumps(payload, ensure_ascii=False),
+                usage=None,
+            )
+
+        person = schema_unit("Marta", entity="Marta", note_type="person", facts=["Conocí a Marta."])
+        task = schema_unit(
+            "Llamar a Marta",
+            entity="Llamar a Marta",
+            note_type="task",
+            facts=["Debo llamar a {{ref:0}}."],
+            properties=[
+                {"field": "status", "op": "set", "value": "pending"},
+                {"field": "target_date", "op": "set", "value": "2026-10-17"},
+            ],
+            references=[
+                {
+                    "selection": reference_selection("Marta", entity="Marta", note_type="person"),
+                    "role": "person",
+                    "mention": mention,
+                }
+            ],
+        )
+        planner_responses = {
+            source: provider_output(planner_output(write(person))),
+            before: provider_output(planner_output(write(person))),
+            after.strip(): provider_output(planner_output(write(task))),
+        }
+
+        def recorded_planner(_cls, active_schema, clock, **kwargs):
+            def create(**request):
+                text = request["input"][1]["content"]
+                seen.append(text)
+                assert request["text"]["format"]["strict"] is True
+                return response(planner_responses[text])
+
+            client = SimpleNamespace(responses=SimpleNamespace(create=create))
+            return OpenAIRequestPlanner(client, active_schema, clock, **kwargs)
+
+        def recorded_tasks(_cls):
+            def create(**request):
+                assert request["input"][1]["content"] == after.strip()
+                assert request["text"]["format"]["strict"] is True
+                return response(
+                    {
+                        "operation": "CREATE",
+                        "temporal_mentions": [{"text": "Mañana", "role": "TARGET_DATE"}],
+                        "relationship_mentions": [],
+                        "clear_fields": [],
+                        "query_scope": None,
+                        "task_reference": "",
+                        "activity_text": "",
+                        "activity_target": "NONE",
+                    }
+                )
+
+            client = SimpleNamespace(responses=SimpleNamespace(create=create))
+            return OpenAITaskInterpreter(client)
+
+        monkeypatch.setattr(
+            composition.OpenAIRequestPlanner,
+            "from_environment",
+            classmethod(recorded_planner),
+        )
+        monkeypatch.setattr(
+            composition.OpenAITaskInterpreter,
+            "from_environment",
+            classmethod(recorded_tasks),
+        )
+    else:
+        monkeypatch.setattr(
+            composition.OpenAIRequestPlanner,
+            "from_environment",
+            classmethod(planner_from_environment),
+        )
+        monkeypatch.setattr(
+            composition.OpenAITaskInterpreter,
+            "from_environment",
+            classmethod(lambda cls: Interpreter()),
+        )
 
     class Temporal:
         def interpret(self, text, context=()):
@@ -214,6 +309,14 @@ def test_factory_fresh_person_create_task_create_and_replay(
                 handoff = replace(
                     handoff, source_dependency=replace(handoff.source_dependency, evidence=evidence)
                 )
+            elif fault == "source_swap":
+                handoff = replace(
+                    handoff,
+                    source_dependency=replace(
+                        handoff.source_dependency,
+                        dependent_quote=" Mañana debo escribir a esa persona.",
+                    ),
+                )
             return actual_delegate(
                 text, locator, identity, interpretation, temporal, handoff, instant
             )
@@ -235,8 +338,19 @@ def test_factory_fresh_person_create_task_create_and_replay(
     ]
     tasks = [n for n in notes if n.metadata.get("type") == "task"]
     assert len(people) == len(tasks) == 1
+    assert people[0].metadata["id"] in result["affected_stable_note_ids"]
+    assert tasks[0].metadata["id"] in result["affected_stable_note_ids"]
+    assert "Conocí a Marta." in people[0].content
     assert tasks[0].metadata["target_date"] == "2026-10-17"
-    assert "[[Marta" in tasks[0].content or "|Marta]]" in tasks[0].content
+    assert tasks[0].metadata["status"] == "pending"
+    person_path = next(
+        path
+        for path in repo.list_markdown_paths()
+        if parse_note(repo.read_text(path)).metadata.get("id") == people[0].metadata["id"]
+    )
+    assert f"[[{person_path.removesuffix('.md')}|Marta]]" in tasks[0].content
+    assert "Debo llamar a" in tasks[0].content
+    assert "15:00" not in tasks[0].content
     snapshot = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
     replay = product.execute_product(source, "p4-factory-success", "main", actor)
     assert replay["delivery_replayed"] is True

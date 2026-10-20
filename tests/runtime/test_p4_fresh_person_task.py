@@ -44,11 +44,15 @@ from tests.runtime.test_whole_source_light_product_p4 import SCHEMA, RecordedCli
 CLOCK = "2026-10-16T15:30:00+02:00"
 
 
-def _scenario(name: str, others: tuple[str, ...] = ()):
+def _scenario(name: str, others: tuple[str, ...] = (), *, anaphoric: bool = False):
     before = f"Hoy conocí a {', '.join((name, *others))}."
-    after = f" Mañana debo llamar a {name}." if others else " Mañana debo llamar a esa persona."
+    after = (
+        f" Mañana debo llamar a {name}."
+        if others and not anaphoric
+        else " Mañana debo llamar a esa persona."
+    )
     source = before + after
-    mention = name if others else "esa persona"
+    mention = name if others and not anaphoric else "esa persona"
     route = {
         "capabilities": ["core", "tasks"],
         "self_relation_span": None,
@@ -99,9 +103,10 @@ def _physical(
     core_partial=False,
     others: tuple[str, ...] = (),
     wrong_link=False,
+    anaphoric=False,
 ):
     repo, actor, executor, runtime = _fixture(tmp_path, incremental_indexes=True)
-    source, before, after, mention, rows = _scenario(name, others)
+    source, before, after, mention, rows = _scenario(name, others, anaphoric=anaphoric)
     executor.dependent_person_create_enabled = True
     calls = []
     handoffs = []
@@ -177,7 +182,7 @@ def _physical(
         assert isinstance(handoff, TaskPersonReference)
         assert identity == actor and instant.isoformat() == CLOCK
         assert temporal is not None and temporal.source_text == text
-        proof = handoff.require_current(identity.stable_user_id, repo, SCHEMA)
+        proof = handoff.require_current(identity.stable_user_id, text, repo, SCHEMA)
         handoffs.append(handoff)
         calls.append("task")
         title = f"Llamar a {name}"
@@ -248,6 +253,18 @@ def _physical(
 
 def _notes(repo):
     return [parse_note(repo.read_text(path)) for path in repo.list_markdown_paths()]
+
+
+def test_two_new_people_leave_ambiguous_task_pending_in_vertical_runtime(tmp_path):
+    repo, actor, _executor, runtime, source, calls = _physical(
+        tmp_path, "Nora", others=("Eva",), anaphoric=True
+    )
+    result = runtime.execute_product(source, "ambiguous-person-task", "main", actor)
+    assert result["status"] != "completed"
+    notes = _notes(repo)
+    assert {n.metadata["name"] for n in notes if n.metadata["type"] == "person"} >= {"Nora", "Eva"}
+    assert not any(n.metadata["type"] == "task" for n in notes)
+    assert "task" not in calls
 
 
 @pytest.mark.parametrize("name", ["Marta", "Élodie", "Rina"])
@@ -352,7 +369,12 @@ def test_person_handoff_rejects_wrong_actor_and_stale_markdown(tmp_path):
     assert runtime.execute_product(source, "fresh-proof", "main", actor)["status"] == "completed"
     proof = executor.person_handoffs[0]
     with pytest.raises(TaskDependentTargetError):
-        proof.require_current("different-authenticated-actor", repo, SCHEMA)
+        proof.require_current(
+            "different-authenticated-actor",
+            proof.source_dependency.dependent_quote.strip(),
+            repo,
+            SCHEMA,
+        )
     person_path = next(
         path
         for path in repo.list_markdown_paths()
@@ -360,7 +382,19 @@ def test_person_handoff_rejects_wrong_actor_and_stale_markdown(tmp_path):
     )
     repo.replace_text(person_path, repo.read_text(person_path) + "\nChanged after receipt.\n")
     with pytest.raises(TaskDependentTargetError):
-        proof.require_current(actor.stable_user_id, repo, SCHEMA)
+        proof.require_current(
+            actor.stable_user_id, proof.source_dependency.dependent_quote.strip(), repo, SCHEMA
+        )
+
+
+def test_person_handoff_rejects_a_different_dependent_source(tmp_path):
+    repo, actor, executor, runtime, source, _calls = _physical(tmp_path, "Nora")
+    assert runtime.execute_product(source, "source-proof", "main", actor)["status"] == "completed"
+    handoff = executor.person_handoffs[0]
+    with pytest.raises(TaskDependentTargetError):
+        handoff.require_current(
+            actor.stable_user_id, "Mañana debo escribir a esa persona.", repo, SCHEMA
+        )
 
 
 def test_person_changed_after_core_write_vetoes_task_before_mutation(tmp_path):
@@ -374,7 +408,9 @@ def test_person_changed_after_core_write_vetoes_task_before_mutation(tmp_path):
         )
         repo.replace_text(person_path, repo.read_text(person_path) + "\nExternal change.\n")
         with pytest.raises(TaskDependentTargetError):
-            handoff.require_current(who.stable_user_id, repo, SCHEMA)
+            handoff.require_current(
+                who.stable_user_id, handoff.source_dependency.dependent_quote.strip(), repo, SCHEMA
+            )
         return ApplicationResult(locator, ApplicationStatus.NEEDS_ATTENTION, (), ())
 
     executor.dependent_task_delegate = stale_task
@@ -389,7 +425,12 @@ def test_wrong_actor_person_proof_vetoes_task_before_mutation(tmp_path):
 
     def wrong_actor_task(text, locator, who, interpretation, temporal, handoff, instant):
         with pytest.raises(TaskDependentTargetError):
-            handoff.require_current("another-authenticated-actor", repo, SCHEMA)
+            handoff.require_current(
+                "another-authenticated-actor",
+                handoff.source_dependency.dependent_quote.strip(),
+                repo,
+                SCHEMA,
+            )
         return ApplicationResult(locator, ApplicationStatus.NEEDS_ATTENTION, (), ())
 
     executor.dependent_task_delegate = wrong_actor_task

@@ -1,50 +1,22 @@
-# E4 Core Person → Task CREATE: reparación de procedencia, 20-10-2026
+# E4 — Core crea Person y Tasks crea Task en el mismo mensaje (20-10-2026)
 
-Rama aislada `agent/e4-closure-review-fixed-20261020`; base fuente
-`2055148f6ca97dd7575a1d6bfd966eba20a6628e`. Los cambios de reparación
-están **sin commit**: `git add` no pudo crear el index lock bajo el Git común
-de solo lectura (`Read-only file system`). No se intentó eludir esa restricción.
-Sin push, merge ni deploy.
+## Estado verificable
+El código está implementado en la rama aislada `agent/e4-final-audit-20261020`, derivada de `869e362`, sin merge, push, despliegue DEV/PROD ni acceso a las notas privadas del usuario.
 
-## Hecho
+**Gate transversal fresco tras la reparación:** 1.268 tests Python PASS (7 subtests adicionales) y 178 tests JavaScript PASS. En la comprobación focal posterior, 72/72 PASS para handoffs y contratos anteriores. Ruff check PASS; el formateo se verifica antes del commit. El repositorio mantiene **9 fallos históricos** de benchmarks congelados en la suite Python global, distintos del gate transversal y de los cambios E4.
 
-- `ActionResult` conserva una vinculación Core independiente de cada recibo linked:
-  unidad fuente, índice de referencia, mención, ID canónico y operación del Writer.
-  Ambos handoffs exigen esa vinculación y guards actuales del Markdown. Un recibo
-  directo CREATE y un backlink materializado distintos pueden corroborar el mismo ID.
-- La búsqueda de la mención antecedente admite variación de mayúsculas y sigue
-  exigiendo un único span original completo. No transforma la fuente ni concede
-  autoridad de identidad a Router o Tasks.
-- Nuevos centinelas alteran índice, unidad, acción y operación del recibo linked
-  en los carriers de ambos handoffs; el replay de la fábrica de producción usa
-  fuente `marta` y Note canónica `Marta` en un vault sintético. El selector
-  de Person tiene variantes con 1, 3, 5 y 7 identidades Core.
-- Un centinela del supervisor obliga a `codex()` con presupuesto de job cero
-  a respetar el rechazo del pacing diario antes de lanzar el proceso modelo.
+## Comportamiento implementado
+- Core Writer crea Person realmente, conserva ID canónico y recibos físicos. Tasks reutiliza el Task CREATE ordinario y el E3 replay; no crea un segundo Writer ni da autoridad al Router para inventar personas.
+- Los recibos directos CREATE y backlinks distintos pueden acreditar la misma identidad. Clones duplicados, índices de referencia manipulados, operaciones inventadas, guards físicos caducados, actor incorrecto y pronombres ambiguos quedan vetados.
+- Los recibos Core vinculados a dependencias incluyen un digest privado del texto exacto que Core planificó. Ambos handoffs comparan el fragmento de origen revisado (con el mismo recorte de espacios de borde que usa el delegado). El agregador WholeSourceLight conserva el digest únicamente cuando todas las suboperaciones coinciden, evitando descartarlo en una agregación legítima.
+- El nombre canónico puede estar capitalizado aunque aparezca en minúsculas en la fuente. La aparición en el texto original sigue siendo única y completa.
+- TaskPersonReference revisa identidad, estado Markdown, actor y fragmento de Task antes de pasar al servicio estándar.
+- Tests con fábrica de composición real y proveedores de respuestas **grabadas**, incluyendo parsers Planner/Tasks, readback de Markdown, enlace canónico, dos personas con referencia ambigua, nombres variables y replay sin duplicados.
 
-## Evidencia y límites
+## Evidencia complementaria y límites
+- Pruebas separadas en Chromium arm64 real sobre localhost: PASS en móvil y escritorio, notas, SVG/flujo, conservación después de recarga y replay; **ese escenario visual previo es Core/Maya, no un E2E visual nuevo Persona→Task**. Usa sustituto HTTP de n8n y respuestas grabadas, no Cloudflare ni GPT vivo.
+- Benchmark Pi de la batería sintética de 20 tests: 5 ejecuciones PASS, mediana 3,001 s por lote, máximo 3,151 s, pico RSS observado 96.096 KiB. **No representa la latencia de mensajes en uso real ni p95, concurrencia o carga de embeddings.**
+- Auditoría independiente: en la ronda inicial Generality encontró el enlace cruzado entre mensajes; Quality aprobó esa revisión del código anterior; Testing y Performance quedaron bloqueados por evidencia externa de navegador/GPT y medición de rendimiento. El Builder posterior incorporó correcciones, pero la tercera sesión falló con el límite real de uso de Codex antes de cerrar las cuatro revisiones sobre el último código. No hay cuatro PASS finales; el supervisor quedó bloqueado por cuota del proveedor. El límite diario local no refleja la cuota real de ChatGPT.
 
-- `python -m compileall -q` sobre los módulos y tests modificados: PASS.
-- Importación del módulo de procedencia y smoke del vínculo de índice/target:
-  PASS, sin pytest.
-- `git diff --check`: PASS. Escaneo de patrones de credenciales en diff: PASS.
-- El sandbox Codex carece de pytest y Ruff (`No module named pytest/ruff`), por
-  lo que **los tests nuevos todavía no tienen ejecución verificada**.
-- El recibo host anterior informa acceptance, cross-surface y Ruff PASS en
-  `5bf798c`; ese árbol precede esta reparación y no se reutiliza como gate final.
-- El host de revisión es ARM64 con 4049 MiB RAM; una lectura puntual mostró
-  2438 MiB disponibles y 1277 MiB de swap usados. El gate host anterior tardó
-  58,34 s y dejó ~2020 MiB disponibles. Estas cifras no miden latencia E4
-  fría/caliente, p50/p95, CPU, concurrencia ni temperatura.
-- Falta el gate host fresco completo Python/Node/ledger/Ruff y las cuatro
-  revisiones independientes sobre un snapshot inmutable. La aceptación de
-  producto exige aparte navegador autenticado → n8n → modelo vivo → Writer →
-  Markdown persistido → consulta → navegador en datos desechables. RecordedClient
-  y pruebas aisladas no sustituyen esa evidencia.
-
-## Próximo paso
-
-Permitir al supervisor registrar el cambio en un snapshot Git del worktree,
-ejecutar una sola vez el gate host sobre ese snapshot y revisar sus recibos;
-después Generality, Quality, Testing y Performance. Conservar DEV/PROD y el
-vault privado sin cambios. Sin autorización del E2E real no declarar user-ready.
+## Pendiente para cierre de producto
+Repetir las cuatro auditorías independientes sobre el commit definitivo cuando el proveedor permita nuevas sesiones, preservando controles de memoria y gasto diario. Después comprobar con datos y vault **sintéticos y aislados** el recorrido autenticado navegador → n8n auténtico → GPT vivo → Core/Tasks → Markdown → búsqueda → gráfico/donut → navegador y replay E3. El éxito offline no autoriza un despliegue a DEV/PROD ni significa que la funcionalidad esté lista para el usuario.

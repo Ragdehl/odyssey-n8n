@@ -3631,7 +3631,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         if dependent_person_handoff is not None:
             try:
                 person_proof = dependent_person_handoff.require_current(
-                    authenticated_actor.stable_user_id, repository, schema
+                    authenticated_actor.stable_user_id, source_text, repository, schema
                 )
             except TaskDependentTargetError:
                 return ApplicationResult(

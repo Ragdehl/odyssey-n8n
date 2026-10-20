@@ -42,13 +42,18 @@ class TaskPersonReference:
     actor_id: str
 
     def require_current(
-        self, actor_id: str, repository: VaultRepository, schema: dict[str, Any]
+        self,
+        actor_id: str,
+        dependent_source: str,
+        repository: VaultRepository,
+        schema: dict[str, Any],
     ) -> SourceBoundDependency:
-        """Reject actor changes and stale Core Markdown before Tasks planning."""
+        """Reject actor/source changes and stale Core Markdown before Tasks planning."""
         proof = self.source_dependency.evidence
         if (
             not self.actor_id
             or self.actor_id != actor_id
+            or self.source_dependency.dependent_quote.strip() != dependent_source
             or proof.note_type != "person"
             or not _dependent_evidence_is_current(proof, repository, schema)
         ):
