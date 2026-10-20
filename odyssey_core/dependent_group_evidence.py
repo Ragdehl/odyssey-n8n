@@ -23,6 +23,7 @@ from .application import (
 )
 from .canonical_receipt_provenance import materialized_core_receipt
 from .dependent_group_graph import ReviewedSourceGraph
+from .dependent_reference_form import supported_anaphoric_form
 from .storage import VaultRepository
 
 
@@ -205,13 +206,13 @@ def prove_canonical_group_handoff(
             for receipt in candidates
             if receipt.canonical_name.casefold() == dependency.mention.casefold()
         }
-        if (
-            proof.note_type == "person"
-            and len(consumer.dependencies) == 1
+        if (explicitly_named_ids and proof.stable_note_id not in explicitly_named_ids) or (
+            not explicitly_named_ids
             and (
-                (explicitly_named_ids and proof.stable_note_id not in explicitly_named_ids)
+                not supported_anaphoric_form(dependency.mention)
                 or (
-                    not explicitly_named_ids
+                    proof.note_type == "person"
+                    and len(consumer.dependencies) == 1
                     and len({receipt.stable_note_id for receipt in candidates}) != 1
                 )
             )

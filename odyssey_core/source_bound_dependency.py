@@ -22,6 +22,7 @@ from .application import (
     _dependent_evidence_is_current,
 )
 from .canonical_receipt_provenance import materialized_core_receipt
+from .dependent_reference_form import supported_anaphoric_form
 from .storage import VaultRepository
 
 
@@ -145,12 +146,13 @@ def prove_source_bound_dependency(
     )
     if explicitly_named:
         action_proofs = explicitly_named
-    elif any(word[0].isupper() for word in re.findall(r"[^\W\d_][\w-]*", exact_dependent_mention)):
-        # A different explicitly capitalized name is NOT an anaphor. The
-        # two model attestations cannot turn an unmatched name into the sole
-        # Core Person/Task by elimination. Fail closed for unproven aliases;
-        # a later typed alias resolution may explicitly authorize one.
-        raise SourceBoundDependencyError("Named dependent reference does not match Core target")
+    elif not supported_anaphoric_form(exact_dependent_mention):
+        # Name capitalization is not reliable ("ana" may be written lower-case).
+        # Only a proven grammatical referring expression can use the unique
+        # predecessor receipt. Unknown aliases and descriptive mentions abstain.
+        raise SourceBoundDependencyError(
+            "Dependent reference is neither a canonical name nor a supported anaphor"
+        )
     # Several independently persisted Core receipts can prove the same
     # canonical identity (e.g. direct Person CREATE plus a Day backlink).
     # Identity uniqueness, not receipt-count uniqueness, is the boundary.

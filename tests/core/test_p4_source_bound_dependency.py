@@ -75,11 +75,10 @@ def test_changed_source_or_dependent_mention_fails_closed(grounded_proof, modifi
     repo, result, source = grounded_proof
     # Multiword referring expressions are permitted if actually in source;
     # only altered, absent, ambiguous or non-boundary mentions must be vetoed.
-    if modifications.get("exact_dependent_mention") == "la llamé":
-        assert _bound(repo, result, source, **modifications).mention == "la llamé"
-    else:
-        with pytest.raises(SourceBoundDependencyError):
-            _bound(repo, result, source, **modifications)
+    # An arbitrary verb phrase is not an identity mention, even when it is
+    # exactly quoted from the source. Never use it as a lexical anaphor proof.
+    with pytest.raises(SourceBoundDependencyError):
+        _bound(repo, result, source, **modifications)
 
 
 def test_repeated_antecedent_name_or_anaphor_is_ambiguous(grounded_proof):
@@ -212,11 +211,11 @@ def test_whole_source_single_antecedent_does_preserve_actual_proof(grounded_proo
     )
 
 
-@pytest.mark.parametrize("different_name", ["Ana", "Lucía", "René Dupont", "Zoe"])
+@pytest.mark.parametrize("different_name", ["Ana", "ana", "Lucía", "lucía", "René Dupont", "Zoe"])
 def test_explicit_other_name_cannot_inherit_sole_core_person(grounded_proof, different_name):
     repo, result, source = grounded_proof
     after = f" Después debo llamar a {different_name}."
-    with pytest.raises(SourceBoundDependencyError, match="Named dependent"):
+    with pytest.raises(SourceBoundDependencyError, match="supported anaphor"):
         _bound(
             repo,
             result,
@@ -225,3 +224,20 @@ def test_explicit_other_name_cannot_inherit_sole_core_person(grounded_proof, dif
             dependent_quote=after,
             exact_dependent_mention=different_name,
         )
+
+
+@pytest.mark.parametrize(
+    "mention", ["la", "ella", "esa persona", "Esa persona", "cette personne", "her"]
+)
+def test_genuine_bounded_anaphoric_forms_preserve_core_reference(grounded_proof, mention):
+    repo, result, source = grounded_proof
+    after = f" Después debo llamar a {mention}."
+    proof = _bound(
+        repo,
+        result,
+        source,
+        complete_original_source=source + after,
+        dependent_quote=after,
+        exact_dependent_mention=mention,
+    )
+    assert proof.evidence.stable_note_id == result.canonical_reference_evidence[0].stable_note_id

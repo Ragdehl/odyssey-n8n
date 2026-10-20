@@ -61,6 +61,7 @@ from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
         ("forged_link", False),
         ("source_swap", False),
         ("wrong_named_mention", False),
+        ("wrong_named_mention_lower", False),
     ],
 )
 def test_factory_fresh_person_create_task_create_and_replay(
@@ -116,12 +117,16 @@ def test_factory_fresh_person_create_task_create_and_replay(
         },
     )
     source, before, after, mention, rows = _scenario("marta" if lowercase_source else "Marta")
-    if fault == "wrong_named_mention":
+    if fault in {"wrong_named_mention", "wrong_named_mention_lower"}:
         # Model attestations may be overconfident; a named second Person that
         # Core never created must NOT inherit the sole Marta receipt.
-        after = " Mañana debo llamar a Ana."
+        after = (
+            " Mañana debo llamar a ana."
+            if fault == "wrong_named_mention_lower"
+            else " Mañana debo llamar a Ana."
+        )
         source = before + after
-        mention = "Ana"
+        mention = "ana" if fault == "wrong_named_mention_lower" else "Ana"
         rows[1].update(full_source_quote=source, dependent_quote=after, dependent_mention=mention)
         rows[2]["source_quote"] = after.strip()
         for review in rows[3:]:
@@ -336,7 +341,10 @@ def test_factory_fresh_person_create_task_create_and_replay(
 
         executor.dependent_task_delegate = with_invalid_handoff
     result = product.execute_product(source, f"p4-factory-{fault or 'success'}", "main", actor)
-    assert seen == ([source, before] if fault is not None else [source, before, after.strip()])
+    if fault == "wrong_named_mention_lower":
+        assert seen and seen[0] == source
+    else:
+        assert seen == ([source, before] if fault is not None else [source, before, after.strip()])
     if fault is not None:
         assert result["status"] != "completed", result
         assert not any(

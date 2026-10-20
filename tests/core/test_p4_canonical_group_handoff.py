@@ -21,6 +21,7 @@ from odyssey_core.request_planning import (
     SelectionCriteria,
     WriteAction,
 )
+from tests.core import test_p4_source_bound_dependency as source_dependency_tests
 from tests.runtime.test_p4_dependent_router_integrated import (
     BEFORE,
     CLOCK,
@@ -400,3 +401,89 @@ def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(
             repository=repo,
             schema=SCHEMA,
         )
+
+
+@pytest.fixture
+def grounded_person_reference(tmp_path):
+    return source_dependency_tests.grounded_proof.__wrapped__(tmp_path)
+
+
+@pytest.mark.parametrize("dependent", ["Ana", "ana", "lucía", "LUcía", "otra persona"])
+def test_nm_single_core_person_never_links_unmatched_explicit_name(
+    grounded_person_reference, dependent
+):
+    """Overconfident source-graph reviews cannot create wrong-person handoff."""
+    repo, result, source = grounded_person_reference
+    after = f" Después debo llamar a {dependent}."
+    groups = [
+        {"capability": "core", "source_quote": source, "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": after,
+            "dependencies": [
+                {"predecessor_index": 0, "mention": dependent, "antecedent_mention": "Maya"}
+            ],
+        },
+    ]
+    full = source + after
+    graph = verify_dependent_group_graph(
+        full,
+        {"full_source_quote": full, "groups": groups},
+        {
+            "full_source_quote": full,
+            "complete": True,
+            "dependency_edges_verified": True,
+            "review_reason": "APPROVED",
+            "failing_group_index": None,
+            "groups": groups,
+        },
+    )
+    with pytest.raises(CanonicalGroupEvidenceError, match="does not uniquely identify"):
+        prove_canonical_group_handoff(
+            graph=graph, consumer_index=1, predecessors={0: result}, repository=repo, schema=SCHEMA
+        )
+    assert not any(
+        parse_note(repo.read_text(p)).metadata.get("type") == "task"
+        for p in repo.list_markdown_paths()
+    )
+
+
+@pytest.mark.parametrize("dependent", ["ella", "Esa persona", "Maya"])
+def test_nm_single_core_person_genuine_anaphor_or_name_still_passes(
+    grounded_person_reference, dependent
+):
+    repo, result, source = grounded_person_reference
+    after = f" Después debo llamar a {dependent}."
+    groups = [
+        {"capability": "core", "source_quote": source, "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": after,
+            "dependencies": [
+                {"predecessor_index": 0, "mention": dependent, "antecedent_mention": "Maya"}
+            ],
+        },
+    ]
+    full = source + after
+    graph = verify_dependent_group_graph(
+        full,
+        {"full_source_quote": full, "groups": groups},
+        {
+            "full_source_quote": full,
+            "complete": True,
+            "dependency_edges_verified": True,
+            "review_reason": "APPROVED",
+            "failing_group_index": None,
+            "groups": groups,
+        },
+    )
+    handoff = prove_canonical_group_handoff(
+        graph=graph,
+        consumer_index=1,
+        predecessors={0: result},
+        repository=repo,
+        schema=SCHEMA,
+    )
+    assert handoff.require_all_current(repo, SCHEMA) == (
+        result.canonical_reference_evidence[0].stable_note_id,
+    )
