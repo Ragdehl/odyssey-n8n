@@ -89,7 +89,7 @@ def test_review_packet_fails_closed_on_invalid_evidence(tmp_path, tamper):
     elif tamper == "fake_sha":
         state["baseline_commit"] = "z" * 40
     elif tamper == "oversized":
-        (repo / "tests/runtime/test_agent_cycle_supervisor.py").write_text("a = 1\n" * 18000)
+        (repo / "tests/runtime/test_agent_cycle_supervisor.py").write_text("a = 1\n" * 50000)
     elif tamper == "binary":
         (repo / "tests/runtime/suspicious.py").write_bytes(b"abc\0")
     elif tamper == "symlink":

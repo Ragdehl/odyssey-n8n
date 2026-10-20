@@ -982,7 +982,7 @@ def deterministic_gates(dest: Path, evidence: Path) -> dict:
     return report
 
 
-REVIEW_EVIDENCE_LIMIT = 65536
+REVIEW_EVIDENCE_LIMIT = 128 * 1024
 REVIEW_HELPER_LIMIT = 18000
 
 
