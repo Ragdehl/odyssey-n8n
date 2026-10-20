@@ -58,7 +58,7 @@ http.createServer((req,res)=>{
     if(!data || typeof data!=='object')return fail(400);
     const connection=net.createConnection(SOCK);
     let reply='';
-    connection.setTimeout(20000);
+    connection.setTimeout(150000);
     connection.on('connect',()=>connection.write(JSON.stringify(data)+'\n'));
     connection.on('data',part=>{
       reply+=part.toString('utf8');

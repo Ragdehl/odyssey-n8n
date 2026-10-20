@@ -33,7 +33,7 @@ def test_valid_exact_unmodified_whole_source_is_only_provenance_not_authority():
     [
         {"full_source_quote": SOURCE + " Extra"},
         {"antecedent_quote": BEFORE[:-1]},
-        {"dependent_quote": AFTER.lstrip()},
+        {"dependent_quote": AFTER.lstrip().replace("inicia", "termina")},
         {"dependent_quote": AFTER + " y otra cosa"},
         {"dependent_mention": "otra tarea"},
         {"dependent_mention": ""},
@@ -46,6 +46,12 @@ def test_valid_exact_unmodified_whole_source_is_only_provenance_not_authority():
 def test_missing_overlapping_invented_or_reordered_source_is_rejected(changes):
     with pytest.raises(DependentSourceScopesError):
         verify_dependent_source_scopes(SOURCE, PROPOSAL | changes)
+
+
+def test_only_missing_boundary_whitespace_is_restored_from_source():
+    proof = verify_dependent_source_scopes(SOURCE, PROPOSAL | {"dependent_quote": AFTER.lstrip()})
+    assert proof.dependent == AFTER
+    assert proof.antecedent + proof.dependent == SOURCE
 
 
 def test_repeated_dependent_reference_does_not_select_first_occurrence():

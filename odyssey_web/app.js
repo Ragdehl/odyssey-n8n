@@ -157,6 +157,7 @@ async function loadMainConversation() {
       userMessages.set(turn.request_id, message);
     }
     if (turn.role === "assistant") {
+      restorePersistedAcknowledgement(message, turn);
       appendDetailButton(message, turn.request_detail);
       appendNoteSetAffordance(message, turn.note_result_snapshot);
     }
@@ -325,6 +326,7 @@ async function loadOlderConversation() {
         {createdAt, insert: false, scroll: false, groupDate: false},
       );
       if (turn.role === "assistant") {
+        restorePersistedAcknowledgement(message, turn);
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
       }
@@ -551,6 +553,16 @@ function appendContinuityWarning() {
   warning.textContent = "La respuesta se ha obtenido, pero no se ha podido guardar la continuidad de esta conversación.";
   conversation.append(warning);
   conversation.scrollTop = conversation.scrollHeight;
+}
+
+function restorePersistedAcknowledgement(message, turn) {
+  // ConversationStore keeps the visible text/status/snapshot, not the transient
+  // response kind. Restore the saved acknowledgement after reload and paging.
+  if (turn.status === "completed"
+      && turn.note_result_snapshot?.kind === "affected_notes") {
+    message.querySelector(".message-text").textContent = "Guardado";
+    message.classList.add("message-acknowledgement");
+  }
 }
 
 function renderProductResult(result) {

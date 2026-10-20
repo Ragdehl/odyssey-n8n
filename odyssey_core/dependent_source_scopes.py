@@ -53,6 +53,15 @@ def verify_dependent_source_scopes(
         or after.strip().count(mention) != 1
     ):
         raise DependentSourceScopesError("Changed or ambiguous dependent source")
+    # A model may trim the whitespace at a clause boundary. Reconstruct ONLY
+    # whitespace physically present between the two exact proposed slices;
+    # never fill in punctuation, words, references or omitted obligations.
+    # The resulting spans still concatenate byte-for-byte to the original.
+    if before + after != original and original.startswith(before) and original.endswith(after):
+        end = len(original) - len(after)
+        middle = original[len(before) : end] if end >= len(before) else ""
+        if middle and middle.isspace():
+            after = middle + after
     try:
         anchor_original_partition(original, (before, after))
     except SourceEvidenceError as error:
