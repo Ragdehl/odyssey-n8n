@@ -101,13 +101,15 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     surfaceVisible:document.querySelector("#notes-surface")?.hidden===false,
     resultNodes:document.querySelector("#notes-list")?.children.length||0
   }));
+  const expectedWrites=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
+  if(![2,3].includes(expectedWrites))throw Error("Invalid E4 expected receipt count");
   const output={
     pass:before.userMessages===1 && before.acknowledgements===1 &&
       before.details===1 && before.noteButtons===1 &&
       before.userMessages===after.userMessages &&
       before.details===after.details && before.noteButtons===after.noteButtons &&
       before.confirmationVisible===true && after.confirmationVisible===true &&
-      detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===2 &&
+      detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===expectedWrites &&
       !detail.diagnosticRejected && reloadedDetail.svgCount>0 &&
       reloadedDetail.writeReceipts===detail.writeReceipts &&
       !reloadedDetail.diagnosticRejected &&

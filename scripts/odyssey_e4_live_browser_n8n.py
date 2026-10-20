@@ -501,6 +501,9 @@ def run() -> dict:
                                 or "/tmp/odyssey-p4-browser-deps/root/usr/lib/aarch64-linux-gnu",
                                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public.server_port}/",
                                 "ODYSSEY_SYNTHETIC_SOURCE": E4_SOURCE,
+                                "ODYSSEY_E4_EXPECTED_WRITES": "2"
+                                if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
+                                else "3",
                                 "ODYSSEY_SYNTHETIC_AUTH": token,
                                 "ODYSSEY_SYNTHETIC_VIEWPORT": os.environ.get(
                                     "ODYSSEY_E4_VIEWPORT", "mobile"
