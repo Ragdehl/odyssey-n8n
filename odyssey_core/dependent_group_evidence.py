@@ -132,7 +132,8 @@ def prove_canonical_group_handoff(
                 proof.source_reference_index >= 0
                 or (
                     proof.source_note_id == proof.stable_note_id
-                    and proof.source_content_guard == proof.canonical_content_guard
+                    # Do not filter stale guards out here: a forged or stale
+                    # duplicate must fail the entire provenance set below.
                     and any(
                         unit.unit_index == proof.source_unit_index
                         and unit.status is UnitStatus.SUCCEEDED
@@ -147,8 +148,8 @@ def prove_canonical_group_handoff(
         # actions linked different targets), but if present it must agree with
         # the per-action proof. Never trust an uncorroborated top-level carrier.
         if (
-            len(proofs) != 1
-            or len(set(proofs)) != 1
+            not proofs
+            or len({proof.stable_note_id for proof in proofs}) != 1
             or (
                 result.canonical_reference_evidence
                 and any(
@@ -163,9 +164,11 @@ def prove_canonical_group_handoff(
             )
         ):
             raise CanonicalGroupEvidenceError("No unique Core-materialized reference occurrence")
-        proof = proofs[0]
-        if not _dependent_evidence_is_current(proof, repository, schema):
+        # Multiple receipts may refer to one canonical identity; every receipt
+        # must still be current, not just the selected representative.
+        if any(not _dependent_evidence_is_current(p, repository, schema) for p in proofs):
             raise CanonicalGroupEvidenceError("Predecessor or canonical identity changed")
+        proof = next((p for p in proofs if p.source_reference_index == -1), proofs[0])
         edges.append(
             CanonicalGroupEdge(
                 parent, consumer_index, dependency.antecedent_mention, dependency.mention, proof

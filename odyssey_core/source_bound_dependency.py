@@ -112,9 +112,17 @@ def prove_source_bound_dependency(
     )
     if explicitly_named:
         action_proofs = explicitly_named
-    if len(action_proofs) != 1 or not isinstance(action_proofs[0], CanonicalReferenceEvidence):
+    # Several independently persisted Core receipts can prove the same
+    # canonical identity (e.g. direct Person CREATE plus a Day backlink).
+    # Identity uniqueness, not receipt-count uniqueness, is the boundary.
+    if (
+        not action_proofs
+        or any(not isinstance(p, CanonicalReferenceEvidence) for p in action_proofs)
+        or len({p.stable_note_id for p in action_proofs}) != 1
+        or any(not _dependent_evidence_is_current(p, repository, schema) for p in action_proofs)
+    ):
         raise SourceBoundDependencyError("Predecessor has no unique materialized Core fact")
-    evidence = action_proofs[0]
+    evidence = next((p for p in action_proofs if p.source_reference_index == -1), action_proofs[0])
     if (
         evidence.source_note_id not in predecessor.affected_stable_note_ids
         or evidence.source_reference_index < -1
