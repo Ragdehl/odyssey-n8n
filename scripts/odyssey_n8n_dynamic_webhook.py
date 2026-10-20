@@ -35,6 +35,7 @@ from scripts.odyssey_n8n_isolated_projection import (  # noqa: E402
 ID = "odysseyp4dynamicwebhook20261019"
 PATH = "odyssey-p4-dynamic-synthetic-20261019"
 REQUEST_ID = "n8n-dynamic-synthetic-20261019"
+E4_SOURCE = "Hoy conocí a Marta. Mañana debo llamar a esa persona."
 
 BROKER_JS = r"""
 'use strict';
@@ -105,7 +106,7 @@ async function main(){
         try {
           const j=await r.json();
           if(j?.request_id===original.request_id && j?.status==='completed'
-              && j?.request_detail?.flow?.routes?.[0]?.writes?.length===2){
+              && j?.request_detail?.flow?.routes?.reduce((n,r)=>n+(r.writes?.length||0),0)===2){
             response=r;valid=j;break;
           }
           last='unexpected_product_response';
@@ -123,14 +124,14 @@ async function main(){
   const badId=await request('POST',{...original,request_id:'unknown-request'});
   const badSource=await request('POST',{...original,request:'Otro hecho inventado'});
   const badMethod=await request('GET',null);
-  const writes=valid?.request_detail?.flow?.routes?.[0]?.writes;
+  const writes=valid?.request_detail?.flow?.routes?.flatMap(r=>r.writes||[])||[];
   const result={
     pass:response.status===200 && replay.status===200 &&
       badId.status===403 && badSource.status===403 && badMethod.status===404 &&
       valid.kind==='acknowledgement' && valid.note_result_snapshot?.total===2 &&
       writes?.length===2 && writes.every(x=>x.status==='succeeded') &&
       again?.request_id===original.request_id && again?.status==='completed' &&
-      again?.request_detail?.flow?.routes?.[0]?.writes?.length===2,
+      again?.request_detail?.flow?.routes?.reduce((n,r)=>n+(r.writes?.length||0),0)===2,
     first_http:response.status,replay_http:replay.status,
     wrong_id_http:badId.status,wrong_source_http:badSource.status,
     wrong_method_http:badMethod.status,
@@ -145,6 +146,15 @@ main().catch(err=>{console.log('ODYSSEY_DYNAMIC_N8N='+JSON.stringify({
  pass:false,reason:'driver_exception',category:err?.name||'unknown'}));process.exitCode=4;});
 JS
 """
+
+
+# Both drivers are literally pinned fixtures: no inherited network credentials,
+# remote payload or untrusted shell string may modify the n8n launch command.
+E4_SHELL = SHELL.replace(
+    "request:'Ayer hablé con Maya.'",
+    "request:" + json.dumps(E4_SOURCE, ensure_ascii=False),
+)
+assert E4_SHELL != SHELL
 
 
 def workflow(code: dict, text: str) -> dict:
@@ -261,7 +271,9 @@ def workflow(code: dict, text: str) -> dict:
     }
 
 
-def docker_command(workflow_file: Path, bridge_dir: Path) -> list[str]:
+def docker_command(workflow_file: Path, bridge_dir: Path, *, driver: str = SHELL) -> list[str]:
+    if driver not in (SHELL, E4_SHELL):
+        raise ValueError("Only pinned offline product drivers are allowed")
     wf = workflow_file.resolve(strict=True)
     share = bridge_dir.resolve(strict=True)
     broker = share / "broker.cjs"
@@ -322,11 +334,13 @@ def docker_command(workflow_file: Path, bridge_dir: Path) -> list[str]:
         "/bin/sh",
         IMAGE,
         "-c",
-        SHELL,
+        driver,
     ]
 
 
-def run() -> dict:
+def run(case: str = "maya") -> dict:
+    if case not in {"maya", "e4_person_task"}:
+        raise ValueError("Only pinned synthetic cases are permitted")
     from odyssey_core.notes import parse_note
     from tests.runtime.test_whole_source_light_product_p4 import (
         RecordedClient,
@@ -345,12 +359,19 @@ def run() -> dict:
         location = Path(root)
         share = Path(bridge)
         os.chmod(share, 0o700)
-        source, route, plan, review = _actual_snapshot("maya_simple")
         (location / "vault").mkdir()
-        repo, actor, executor, runtime = _fixture(location / "vault")
-        executor.client = RecordedClient(
-            [route, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
-        )
+        if case == "maya":
+            source, route, plan, review = _actual_snapshot("maya_simple")
+            repo, actor, executor, runtime = _fixture(location / "vault")
+            executor.client = RecordedClient(
+                [route, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
+            )
+        else:
+            from tests.runtime.test_p4_fresh_person_task import _physical
+
+            repo, actor, executor, runtime, source, _calls = _physical(location / "vault", "Marta")
+            if source != E4_SOURCE:
+                raise RuntimeError("E4 recorded fixture drifted from pinned n8n driver")
         stats = {
             "calls": 0,
             "completed": 0,
@@ -411,7 +432,9 @@ def run() -> dict:
                 entry = location / "workflow.json"
                 entry.write_text(json.dumps(workflow(code, source), ensure_ascii=False))
                 completed = subprocess.run(
-                    docker_command(entry, share),
+                    docker_command(
+                        entry, share, driver=E4_SHELL if case == "e4_person_task" else SHELL
+                    ),
                     cwd=ROOT,
                     capture_output=True,
                     text=True,
@@ -448,8 +471,30 @@ def run() -> dict:
             for n in notes
             if n.metadata.get("type") == "person" and n.metadata.get("name") == "Maya"
         ]
-        assert len(days) == 1 and len(person) == 1, "physical_counts"
-        assert "(yo:" in days[0].content, "missing_SELF"
+        if case == "maya":
+            assert len(days) == 1 and len(person) == 1, "physical_counts"
+            assert "(yo:" in days[0].content, "missing_SELF"
+            person_task_link_verified = False
+            tasks = []
+        else:
+            person = [
+                note
+                for note in notes
+                if note.metadata.get("type") == "person" and note.metadata.get("name") == "Marta"
+            ]
+            tasks = [note for note in notes if note.metadata.get("type") == "task"]
+            assert len(person) == len(tasks) == 1, "E4 physical Person/Task counts"
+            person_path = next(
+                path
+                for path in repo.list_markdown_paths()
+                if parse_note(repo.read_text(path)).metadata.get("id") == person[0].metadata["id"]
+            )
+            person_task_link_verified = (
+                f"[[{person_path.removesuffix('.md')}|Marta]]" in tasks[0].content
+                and tasks[0].metadata.get("status") == "pending"
+                and tasks[0].metadata.get("target_date") == "2026-10-17"
+            )
+            assert person_task_link_verified, "E4 canonical Person link/Task properties invalid"
         assert stats["completed"] == 2, f"completed_writer_calls_{stats['completed']}"
         assert stats["replayed"] == 1, f"replay_count_{stats['replayed']}"
         assert stats["first_writes"] == 1, "not_exactly_one_physical_first_write"
@@ -463,8 +508,12 @@ def run() -> dict:
             "real_n8n_http_request_node": True,
             "real_p4_core_writer_called_at_request_time": True,
             "physical_day_notes": len(days),
-            "physical_maya_notes": len(person),
-            "self_link_in_day": True,
+            "case": case,
+            "physical_maya_notes": len(person) if case == "maya" else 0,
+            "physical_e4_person_notes": len(person) if case == "e4_person_task" else 0,
+            "physical_e4_task_notes": len(tasks),
+            "e4_person_task_link_verified": person_task_link_verified,
+            "self_link_in_day": case == "maya",
             "no_external_network": True,
             "gpt_mode": "recorded",
             "dev_prod_untouched": True,
@@ -476,11 +525,12 @@ def run() -> dict:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--case", choices=("maya", "e4_person_task"), default="maya")
     arg = parser.parse_args()
     if not arg.run:
         parser.error("Use explicit --run")
     try:
-        result = run()
+        result = run(arg.case)
         print(json.dumps(result, indent=2))
         if result.get("pass") is not True:
             raise SystemExit(1)

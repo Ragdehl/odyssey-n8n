@@ -93,9 +93,11 @@ def real_result_browser_detail(value: dict, request_id: str) -> dict:
     return detail
 
 
-def run_synthetic_browser(viewport: str = "mobile") -> dict:
+def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
     if viewport not in {"mobile", "desktop"}:
         raise ValueError("Only fixed synthetic browser viewports are allowed")
+    if case not in {"maya", "e4_person_task"}:
+        raise ValueError("Only fixed synthetic source cases are allowed")
     from odyssey_core.note_queries import NotesQueryService
     from odyssey_core.notes import parse_note
     from odyssey_runtime.server import _handler_for
@@ -109,17 +111,24 @@ def run_synthetic_browser(viewport: str = "mobile") -> dict:
 
     with tempfile.TemporaryDirectory(prefix="odyssey-synthetic-browser-", dir="/tmp") as tmp:
         root = Path(tmp)
-        source, route, proposal, review = _actual_snapshot(SOURCE_CASE)
-        repo, actor, executor, runtime = _fixture(root)
-        executor.client = RecordedClient(
-            [
-                route,
-                proposal,
-                review,
-                _speaker(source, proposal, base=1),
-                _speaker(source, proposal),
-            ]
-        )
+        if case == "maya":
+            source, route, proposal, review = _actual_snapshot(SOURCE_CASE)
+            repo, actor, executor, runtime = _fixture(root)
+            executor.client = RecordedClient(
+                [
+                    route,
+                    proposal,
+                    review,
+                    _speaker(source, proposal, base=1),
+                    _speaker(source, proposal),
+                ]
+            )
+        else:
+            # Exact E4 vertical fixture: real Core and Tasks write paths,
+            # source reviewers and temporal interpretation with recorded models.
+            from tests.runtime.test_p4_fresh_person_task import _physical
+
+            repo, actor, executor, runtime, source, _calls = _physical(root, "Marta")
         runtime.notes_service = NotesQueryService(repo, SCHEMA, executor.context_index)
         runtime.vault_repository = repo
 
@@ -301,10 +310,31 @@ def run_synthetic_browser(viewport: str = "mobile") -> dict:
                 for note in physical
                 if note.metadata["type"] == "person" and note.metadata["name"] == "Maya"
             ]
-            assert len(days) == 1 and len(person) == 1, (
-                "Core facts/person were not physically written"
-            )
-            assert "(yo:" in days[0].content, "Implicit speaker SELF missing in physical Markdown"
+            tasks = [note for note in physical if note.metadata["type"] == "task"]
+            if case == "maya":
+                assert len(days) == 1 and len(person) == 1, (
+                    "Core facts/person were not physically written"
+                )
+                assert "(yo:" in days[0].content, (
+                    "Implicit speaker SELF missing in physical Markdown"
+                )
+            else:
+                person = [
+                    note
+                    for note in physical
+                    if note.metadata["type"] == "person" and note.metadata["name"] == "Marta"
+                ]
+                assert len(person) == len(tasks) == 1, "E4 must write one Person and one Task"
+                person_path = next(
+                    path
+                    for path in repo.list_markdown_paths()
+                    if parse_note(repo.read_text(path)).metadata.get("id")
+                    == person[0].metadata["id"]
+                )
+                assert f"[[{person_path.removesuffix('.md')}|Marta]]" in tasks[0].content
+                assert tasks[0].metadata["target_date"] == "2026-10-17"
+                assert tasks[0].metadata["status"] == "pending"
+                assert "15:00" not in tasks[0].content, "E4 must not invent a clock time"
             assert browser_report["pass"] is True
             assert proxy_stats["executions"] == 1
             assert proxy_stats["assistant_persisted"] == 1
@@ -320,6 +350,7 @@ def run_synthetic_browser(viewport: str = "mobile") -> dict:
             return {
                 "pass": True,
                 "viewport": viewport,
+                "case": case,
                 "browser": browser_report,
                 "provider_mode": "recorded_output",
                 "n8n_mode": "synthetic_http_facade",
@@ -329,7 +360,9 @@ def run_synthetic_browser(viewport: str = "mobile") -> dict:
                 "physical_note_count_after_replay": len(before_replay),
                 "physical_day_notes": len(days),
                 "physical_new_people": len(person),
-                "self_binding_verified": True,
+                "physical_new_tasks": len(tasks),
+                "person_task_link_verified": case == "e4_person_task",
+                "self_binding_verified": case == "maya",
                 "http_stats": proxy_stats,
                 "vault_root": "temporary_only",
                 "cloudflare_access_checked": False,
@@ -348,9 +381,16 @@ def run_synthetic_browser(viewport: str = "mobile") -> dict:
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--viewport", choices=("mobile", "desktop"), default="mobile")
-    viewport = args.parse_args().viewport
+    args.add_argument("--case", choices=("maya", "e4_person_task"), default="maya")
+    options = args.parse_args()
     try:
-        print(json.dumps(run_synthetic_browser(viewport), ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                run_synthetic_browser(options.viewport, options.case),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     except Exception as error:
         print(
             json.dumps(

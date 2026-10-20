@@ -170,3 +170,20 @@ def test_broker_source_must_be_pinned_and_not_mutated():
             sock.bind(str(share / "writer.sock"))
             with pytest.raises(ValueError):
                 dynamic.docker_command(wf, share)
+
+
+def test_real_n8n_e4_driver_is_pinned_and_counts_both_core_and_task_routes():
+    """The exact E4 source is the only alternate isolated broker input."""
+    assert dynamic.E4_SOURCE == "Hoy conocí a Marta. Mañana debo llamar a esa persona."
+    assert dynamic.E4_SHELL != dynamic.SHELL
+    assert "request:" + json.dumps(dynamic.E4_SOURCE, ensure_ascii=False) in dynamic.E4_SHELL
+    assert "routes?.reduce" in dynamic.E4_SHELL
+    assert "routes?.flatMap" in dynamic.E4_SHELL
+    assert "Ayer hablé con Maya." in dynamic.SHELL
+    assert dynamic.SHELL.count("Ayer hablé con Maya.") == 1
+    assert dynamic.E4_SHELL.count("Ayer hablé con Maya.") == 0
+
+
+def test_n8n_dynamic_broker_rejects_arbitrary_driver(tmp_path):
+    with pytest.raises(ValueError, match="pinned"):
+        dynamic.docker_command(tmp_path / "workflow.json", tmp_path, driver="exit 0")

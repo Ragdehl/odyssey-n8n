@@ -272,6 +272,19 @@ def test_fresh_person_task_wikilink_and_delivery_replay(tmp_path, name):
     repo, actor, executor, runtime, source, calls = _physical(tmp_path, name)
     result = runtime.execute_product(source, "fresh-person-task", "main", actor)
     assert result["status"] == "completed", result
+    # Mixed Core+Tasks flow must display *real* physically affected write
+    # receipts in both routes, not merely a successful model proposal.
+    assert [route["capability"] for route in result["execution_flow"]["routes"]] == [
+        "core",
+        "tasks",
+    ]
+    assert [len(route["writes"]) for route in result["execution_flow"]["routes"]] == [1, 1]
+    assert {
+        write["target"]
+        for route in result["execution_flow"]["routes"]
+        for write in route["writes"]
+        if write["status"] == "succeeded" and write["operation"] == "CREATED"
+    } == set(result["affected_stable_note_ids"])
     notes = _notes(repo)
     people = [
         note

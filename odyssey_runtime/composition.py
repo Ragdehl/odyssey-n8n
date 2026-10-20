@@ -2809,10 +2809,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
         elif prepared_core is not None:
             planner = prepared_core.planner
         elif domain_interpretation is None:
-            planner = OpenAIRequestPlanner.from_environment(schema, planner_context)
+            planner = OpenAIRequestPlanner.from_environment(execution_schema, planner_context)
         else:
+            # The app's typed domain evidence authorizes only its OWN managed
+            # fields. Use the same owner-scoped schema for provider planning,
+            # local plan validation and Core execution; the unprojected schema
+            # incorrectly vetoed every normal Tasks status/date property.
             planner = OpenAIRequestPlanner.from_environment(
-                schema, planner_context, domain_interpretation=domain_interpretation
+                execution_schema, planner_context, domain_interpretation=domain_interpretation
             )
         if planner_decorator is not None:
             if resume_plan is not None:

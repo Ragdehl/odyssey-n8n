@@ -131,6 +131,58 @@ def test_anaphor_cannot_select_one_of_two_distinct_people(tmp_path):
         )
 
 
+@pytest.mark.parametrize(
+    ("other_names", "dependent_mention", "antecedent_name", "accepted"),
+    [
+        (("Eva",), "esa persona", "Nora", False),
+        (("Eva",), "Eva", "Nora", False),
+        (("Eva",), "Nora", "Nora", True),
+        (("Eva",), "Eva", "Eva", True),
+        ((), "esa persona", "Nora", True),
+    ],
+)
+def test_nm_person_handoff_rejects_ambiguous_or_wrong_named_target(
+    tmp_path, other_names, dependent_mention, antecedent_name, accepted
+):
+    """N:M graph hints cannot select a Person on a pronoun with two candidates."""
+    from odyssey_core.dependent_group_evidence import (
+        CanonicalGroupEvidenceError,
+        prove_canonical_group_handoff,
+    )
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+    from tests.runtime.test_p4_fresh_person_task import _scenario
+    from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
+
+    repo, predecessor = _completed_predecessor(tmp_path, others=other_names)
+    _, before, _, _, _ = _scenario("Nora", other_names)
+    dependent = f" Mañana debo llamar a {dependent_mention}."
+    graph = ReviewedSourceGraph(
+        before + dependent,
+        (
+            SourceGroup(0, "core", before, ()),
+            SourceGroup(
+                1,
+                "tasks",
+                dependent,
+                (GroupDependency(0, dependent_mention, antecedent_name),),
+            ),
+        ),
+    )
+    arguments = dict(
+        graph=graph,
+        consumer_index=1,
+        predecessors={0: predecessor},
+        repository=repo,
+        schema=SCHEMA,
+    )
+    if not accepted:
+        with pytest.raises(CanonicalGroupEvidenceError):
+            prove_canonical_group_handoff(**arguments)
+    else:
+        handoff = prove_canonical_group_handoff(**arguments)
+        assert handoff.edges[0].evidence.canonical_name == antecedent_name
+
+
 def test_nm_graph_rejects_cloned_duplicate_receipts(tmp_path):
     from odyssey_core.dependent_group_evidence import prove_canonical_group_handoff
     from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup

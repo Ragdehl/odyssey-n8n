@@ -148,6 +148,27 @@ class WholeSourceLightError(ValueError):
     """A model suggestion or physical state is insufficient to authorize a source write."""
 
 
+def _verified_route_writes(result: ApplicationResult) -> list[dict[str, str]]:
+    """Project ONLY actual materialized Core/Tasks receipts, bounded for UI."""
+    writes = [
+        {
+            "status": unit.status.value,
+            "operation": unit.operation[:48],
+            "target": unit.stable_note_id[:160],
+        }
+        for action in result.action_results
+        for unit in action.unit_results
+        if unit.status.value == "succeeded"
+        and unit.materially_affected
+        and unit.stable_note_id in result.affected_stable_note_ids
+        and isinstance(unit.operation, str)
+        and unit.operation
+        and isinstance(unit.stable_note_id, str)
+        and unit.stable_note_id
+    ]
+    return writes if 0 < len(writes) <= 8 else []
+
+
 @dataclass
 class WholeSourceLightExecutor:
     repository: VaultRepository
@@ -607,22 +628,7 @@ class WholeSourceLightExecutor:
             # Project actual SUCCEEDED Core unit receipts, never Planner
             # intentions. Each item is physically postwrite; no identity
             # inferred from text. The browser supports up to eight entries.
-            verified_writes = [
-                {
-                    "status": unit.status.value,
-                    "operation": unit.operation[:48],
-                    "target": unit.stable_note_id[:160],
-                }
-                for action in result.action_results
-                for unit in action.unit_results
-                if unit.status.value == "succeeded"
-                and unit.materially_affected
-                and unit.stable_note_id in result.affected_stable_note_ids
-                and isinstance(unit.operation, str)
-                and unit.operation
-                and isinstance(unit.stable_note_id, str)
-                and unit.stable_note_id
-            ]
+            verified_writes = _verified_route_writes(result)
             # Prior per-operation route_index values are action ordinals,
             # not Router-proven source subroutes. One complete Core source
             # route owns all those actions, so retain the action ordering and
@@ -1496,6 +1502,11 @@ class WholeSourceLightExecutor:
                         "status": receipt.status.value,
                         "stage_count": len(receipt.operational.stages),
                         "temporal": [],
+                        **(
+                            {"writes": writes}
+                            if (writes := _verified_route_writes(receipt))
+                            else {}
+                        ),
                         "steps": [
                             {"name": stage.name[:80], "input": text[:512], "output": ""}
                             for stage in receipt.operational.stages
@@ -2004,6 +2015,7 @@ class WholeSourceLightExecutor:
                     "status": outcome.status.value,
                     "stage_count": len(outcome.operational.stages),
                     "temporal": [],
+                    **({"writes": writes} if (writes := _verified_route_writes(outcome)) else {}),
                     "steps": [
                         {"name": stage.name[:80], "input": part.source[:512], "output": ""}
                         for stage in outcome.operational.stages

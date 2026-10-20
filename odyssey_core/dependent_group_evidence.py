@@ -181,6 +181,44 @@ def prove_canonical_group_handoff(
         ):
             raise CanonicalGroupEvidenceError("Predecessor receipt lacks materialized provenance")
         proof = next((p for p in proofs if p.source_reference_index == -1), proofs[0])
+        # A reviewed graph edge names its preferred antecedent, but that
+        # model-generated choice cannot disambiguate a pronoun between two
+        # independently materialized Persons in a single-target edge. Multi-
+        # edge N:M references to several targets retain their prior semantics.
+        # A literal
+        # canonical name may select one; a name of ANOTHER materialized target
+        # must never silently authorize this one. Apply the same guard for
+        # Persons and Tasks, without a fixed pronoun/name vocabulary.
+        candidates = tuple(
+            receipt
+            for action in result.action_results
+            for receipt in (
+                *action.canonical_reference_evidence,
+                *action.canonical_direct_target_evidence,
+            )
+            if isinstance(receipt, CanonicalReferenceEvidence)
+            and receipt.note_type == proof.note_type
+            and receipt.source_mention.casefold() == receipt.canonical_name.casefold()
+        )
+        explicitly_named_ids = {
+            receipt.stable_note_id
+            for receipt in candidates
+            if receipt.canonical_name.casefold() == dependency.mention.casefold()
+        }
+        if (
+            proof.note_type == "person"
+            and len(consumer.dependencies) == 1
+            and (
+                (explicitly_named_ids and proof.stable_note_id not in explicitly_named_ids)
+                or (
+                    not explicitly_named_ids
+                    and len({receipt.stable_note_id for receipt in candidates}) != 1
+                )
+            )
+        ):
+            raise CanonicalGroupEvidenceError(
+                "Dependent mention does not uniquely identify this canonical target"
+            )
         edges.append(
             CanonicalGroupEdge(
                 parent, consumer_index, dependency.antecedent_mention, dependency.mention, proof
