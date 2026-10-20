@@ -109,6 +109,18 @@ def prove_canonical_group_handoff(
             or result.status is not ApplicationStatus.COMPLETED
         ):
             raise CanonicalGroupEvidenceError("Predecessor was not completed by Core")
+        if any(
+            not isinstance(proof, CanonicalReferenceEvidence)
+            for action in result.action_results
+            for proof in (
+                *action.canonical_reference_evidence,
+                *action.canonical_direct_target_evidence,
+            )
+        ) or any(
+            not isinstance(proof, CanonicalReferenceEvidence)
+            for proof in result.canonical_reference_evidence
+        ):
+            raise CanonicalGroupEvidenceError("Malformed Core receipt carrier")
         antecedent = graph.groups[parent].source
         if not _unique_source_occurrence(
             antecedent, dependency.antecedent_mention
@@ -123,16 +135,20 @@ def prove_canonical_group_handoff(
                 *action.canonical_direct_target_evidence,
             )
             if isinstance(proof, CanonicalReferenceEvidence)
-            and proof.source_mention == dependency.antecedent_mention
-            and proof.canonical_name == dependency.antecedent_mention
+            and proof.source_mention.casefold() == dependency.antecedent_mention.casefold()
+            and proof.canonical_name.casefold() == dependency.antecedent_mention.casefold()
         )
         # A result's top-level proof is optional (may be absent when multiple
         # actions linked different targets), but if present it must agree with
         # the per-action proof. Never trust an uncorroborated top-level carrier.
+        duplicate_carriers = len(result.canonical_reference_evidence) != len(
+            set(result.canonical_reference_evidence)
+        )
         if (
             not proofs
             or len({proof.stable_note_id for proof in proofs}) != 1
             or len(proofs) != len(set(proofs))
+            or duplicate_carriers
             or (
                 result.canonical_reference_evidence
                 and any(

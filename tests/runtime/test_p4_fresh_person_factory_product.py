@@ -40,8 +40,13 @@ from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
 
 
-@pytest.mark.parametrize("fault", [None, "stale", "wrong_actor", "forged_link"])
-def test_factory_fresh_person_create_task_create_and_replay(tmp_path, monkeypatch, fault):
+@pytest.mark.parametrize(
+    ("fault", "lowercase_source"),
+    [(None, False), (None, True), ("stale", False), ("wrong_actor", False), ("forged_link", False)],
+)
+def test_factory_fresh_person_create_task_create_and_replay(
+    tmp_path, monkeypatch, fault, lowercase_source
+):
     vault, state, derived = (tmp_path / part for part in ("vault", "state", "derived"))
     for path in (vault, state / "pending", derived):
         path.mkdir(parents=True)
@@ -91,7 +96,7 @@ def test_factory_fresh_person_create_task_create_and_replay(tmp_path, monkeypatc
             "timestamp": CLOCK,
         },
     )
-    source, before, after, mention, rows = _scenario("Marta")
+    source, before, after, mention, rows = _scenario("marta" if lowercase_source else "Marta")
     seen = []
 
     def planner_from_environment(_cls, _schema, _clock, **_kwargs):

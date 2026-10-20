@@ -10,8 +10,11 @@ from typing import Any
 
 from .application import (
     ActionResult,
+    ActionStatus,
     ApplicationResult,
+    ApplicationStatus,
     CanonicalReferenceEvidence,
+    MaterializedReferenceBinding,
     UnitStatus,
     _dependent_evidence_is_current,
 )
@@ -33,6 +36,14 @@ def materialized_core_receipt(
     """
     if (
         not isinstance(proof, CanonicalReferenceEvidence)
+        or action.status is not ActionStatus.COMPLETED
+        or predecessor.status is not ApplicationStatus.COMPLETED
+        or type(action.action_index) is not int
+        or type(proof.action_index) is not int
+        or type(proof.source_unit_index) is not int
+        or type(proof.source_reference_index) is not int
+        or not 0 <= action.action_index < len(predecessor.action_results)
+        or predecessor.action_results[action.action_index] is not action
         or proof.action_index != action.action_index
         or proof.source_unit_index < 0
         or proof.source_reference_index < -1
@@ -59,4 +70,15 @@ def materialized_core_receipt(
             and proof.source_note_id == proof.stable_note_id
             and proof.source_content_guard == proof.canonical_content_guard
         )
-    return proof in action.canonical_reference_evidence
+    return (
+        proof in action.canonical_reference_evidence
+        and unit.operation in {"CREATED", "UPDATED", "MIGRATED"}
+        and MaterializedReferenceBinding(
+            proof.source_unit_index,
+            proof.source_reference_index,
+            proof.source_mention,
+            proof.stable_note_id,
+            unit.operation,
+        )
+        in action.materialized_reference_bindings
+    )

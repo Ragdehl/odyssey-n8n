@@ -1984,3 +1984,25 @@ def test_daily_only_mode_keeps_all_reviewers_and_daily_session_preflight(monkeyp
     # The per-job cap is absent, but daily pacing remains a separate mandatory
     # launch guard in codex() and run(), checked on every agent session.
     assert policy["minimum_session_headroom"] > 0
+
+
+def test_daily_only_codex_session_still_obeys_shared_daily_pacing(monkeypatch, tmp_path):
+    """A zero job cap cannot reach the model launcher after daily refusal."""
+    state = {
+        "reported_token_budget": 0,
+        "token_usage": {"reported_total": 900000, "sessions": []},
+    }
+    monkeypatch.setattr(cycle, "require_budget", lambda _job: None)
+    monkeypatch.setattr(cycle, "load", lambda _job: state)
+
+    def refuse_daily_start():
+        raise cycle.DailyBudgetPause("daily pacing exhausted")
+
+    monkeypatch.setattr(cycle, "require_daily_model_start", refuse_daily_start)
+    monkeypatch.setattr(
+        cycle,
+        "probe_native_profile",
+        lambda *_args, **_kwargs: pytest.fail("Model scope probe ran after daily refusal"),
+    )
+    with pytest.raises(cycle.DailyBudgetPause, match="daily pacing exhausted"):
+        cycle.codex("generality", "review", tmp_path, tmp_path, read_only=True)

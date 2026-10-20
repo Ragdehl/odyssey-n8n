@@ -222,13 +222,11 @@ def test_forged_duplicate_receipts_never_authorize_a_handoff(tmp_path, tamper, g
             )
 
 
-def test_real_direct_create_and_independent_backlink_share_one_identity(tmp_path):
-    """Two *different* Core writes to the same Person must remain valid handoff proof."""
+def _direct_and_linked_receipts(tmp_path):
+    """Write distinct direct and linked proofs for one canonical Person."""
     from types import SimpleNamespace
 
     from odyssey_core.application import execute_request
-    from odyssey_core.dependent_group_evidence import prove_canonical_group_handoff
-    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
     from odyssey_core.request_planning import (
         KnowledgeReference,
         KnowledgeUnit,
@@ -308,6 +306,16 @@ def test_real_direct_create_and_independent_backlink_share_one_identity(tmp_path
         ),
         canonical_reference_evidence=(replace(linked, action_index=1),),
     )
+    return repo, direct, two_receipts
+
+
+def test_real_direct_create_and_independent_backlink_share_one_identity(tmp_path):
+    """Two *different* Core writes to the same Person must remain valid handoff proof."""
+    from odyssey_core.dependent_group_evidence import prove_canonical_group_handoff
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+    from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
+
+    repo, direct, two_receipts = _direct_and_linked_receipts(tmp_path)
     whole, before, after, mention, _ = _scenario("Nora")
     handoff = prove_source_bound_dependency(
         complete_original_source=whole,
@@ -339,3 +347,124 @@ def test_real_direct_create_and_independent_backlink_share_one_identity(tmp_path
         schema=SCHEMA,
     )
     assert grouped.require_all_current(repo, SCHEMA) == (direct.stable_note_id,)
+
+
+def test_nm_graph_rejects_duplicate_request_level_linked_receipt(tmp_path):
+    """A cloned top-level carrier cannot count as another Core write."""
+    from odyssey_core.dependent_group_evidence import (
+        CanonicalGroupEvidenceError,
+        prove_canonical_group_handoff,
+    )
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+    from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
+
+    repo, _direct, predecessor = _direct_and_linked_receipts(tmp_path)
+    linked = predecessor.canonical_reference_evidence[0]
+    duplicate = replace(predecessor, canonical_reference_evidence=(linked, linked))
+    graph = ReviewedSourceGraph(
+        "Hoy conocí a Nora. Mañana debo llamar a Nora.",
+        (
+            SourceGroup(0, "core", "Hoy conocí a Nora.", ()),
+            SourceGroup(
+                1,
+                "tasks",
+                " Mañana debo llamar a Nora.",
+                (GroupDependency(0, "Nora", "Nora"),),
+            ),
+        ),
+    )
+    with pytest.raises(CanonicalGroupEvidenceError):
+        prove_canonical_group_handoff(
+            graph=graph,
+            consumer_index=1,
+            predecessors={0: duplicate},
+            repository=repo,
+            schema=SCHEMA,
+        )
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        "reference_index",
+        "operation",
+        "unit_index",
+        "action_index",
+        "action_reindexed",
+        "source_guard",
+        "malformed",
+    ),
+)
+@pytest.mark.parametrize("graph_mode", (False, True))
+def test_forged_linked_receipt_fails_both_handoffs(tmp_path, tamper, graph_mode):
+    """Alter linked provenance in every receipt carrier while Markdown stays current."""
+    from odyssey_core.dependent_group_evidence import (
+        CanonicalGroupEvidenceError,
+        prove_canonical_group_handoff,
+    )
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+    from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
+
+    repo, _direct, predecessor = _direct_and_linked_receipts(tmp_path)
+    action = predecessor.action_results[1]
+    linked = action.canonical_reference_evidence[0]
+    units = action.unit_results
+    if tamper == "reference_index":
+        linked = replace(linked, source_reference_index=87)
+    elif tamper == "operation":
+        units = tuple(replace(unit, operation="NO_CHANGE") for unit in units)
+    elif tamper == "unit_index":
+        linked = replace(linked, source_unit_index=1)
+    elif tamper == "source_guard":
+        linked = replace(linked, source_content_guard="stale-source-guard")
+    elif tamper == "malformed":
+        linked = None
+    else:
+        linked = replace(linked, action_index=87)
+    action_index = 87 if tamper == "action_reindexed" else action.action_index
+    predecessor = replace(
+        predecessor,
+        action_results=(
+            predecessor.action_results[0],
+            replace(
+                action,
+                action_index=action_index,
+                unit_results=units,
+                canonical_reference_evidence=(linked,),
+            ),
+        ),
+        canonical_reference_evidence=(linked,),
+    )
+    if graph_mode:
+        graph = ReviewedSourceGraph(
+            "Hoy conocí a Nora. Mañana debo llamar a Nora.",
+            (
+                SourceGroup(0, "core", "Hoy conocí a Nora.", ()),
+                SourceGroup(
+                    1,
+                    "tasks",
+                    " Mañana debo llamar a Nora.",
+                    (GroupDependency(0, "Nora", "Nora"),),
+                ),
+            ),
+        )
+        with pytest.raises(CanonicalGroupEvidenceError):
+            prove_canonical_group_handoff(
+                graph=graph,
+                consumer_index=1,
+                predecessors={0: predecessor},
+                repository=repo,
+                schema=SCHEMA,
+            )
+    else:
+        source, before, after, mention, _ = _scenario("Nora")
+        with pytest.raises(SourceBoundDependencyError):
+            prove_source_bound_dependency(
+                complete_original_source=source,
+                antecedent_quote=before,
+                dependent_quote=after,
+                exact_dependent_mention=mention,
+                predecessor=predecessor,
+                repository=repo,
+                schema=SCHEMA,
+            )

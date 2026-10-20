@@ -83,6 +83,18 @@ def prove_source_bound_dependency(
         raise SourceBoundDependencyError("Dependent source has changed or is incomplete")
     if predecessor.status is not ApplicationStatus.COMPLETED:
         raise SourceBoundDependencyError("A pending predecessor has no handoff authority")
+    if any(
+        not isinstance(proof, CanonicalReferenceEvidence)
+        for action in predecessor.action_results
+        for proof in (
+            *action.canonical_reference_evidence,
+            *action.canonical_direct_target_evidence,
+        )
+    ) or any(
+        not isinstance(proof, CanonicalReferenceEvidence)
+        for proof in predecessor.canonical_reference_evidence
+    ):
+        raise SourceBoundDependencyError("Malformed Core receipt carrier")
     # Select by the reviewed antecedent occurrence, never by result order or
     # the last referenced identity. A direct newly created Note has its own
     # Writer receipt, separate from ordinary materialized backlink proofs.
@@ -99,6 +111,7 @@ def prove_source_bound_dependency(
             re.findall(
                 r"(?<!\w)" + re.escape(proof.source_mention) + r"(?!\w)",
                 antecedent_quote,
+                flags=re.IGNORECASE,
             )
         )
         == 1
@@ -122,7 +135,9 @@ def prove_source_bound_dependency(
     # people. An anaphoric mention cannot: with multiple receipts its identity
     # is not proven by the source alone, so fail closed.
     explicitly_named = tuple(
-        proof for proof in action_proofs if proof.canonical_name == exact_dependent_mention
+        proof
+        for proof in action_proofs
+        if proof.canonical_name.casefold() == exact_dependent_mention.casefold()
     )
     if explicitly_named:
         action_proofs = explicitly_named
@@ -156,7 +171,9 @@ def prove_source_bound_dependency(
         or evidence.source_mention != evidence.canonical_name
         or len(
             re.findall(
-                r"(?<!\w)" + re.escape(evidence.source_mention) + r"(?!\w)", antecedent_quote
+                r"(?<!\w)" + re.escape(evidence.source_mention) + r"(?!\w)",
+                antecedent_quote,
+                flags=re.IGNORECASE,
             )
         )
         != 1

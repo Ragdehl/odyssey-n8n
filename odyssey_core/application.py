@@ -312,6 +312,17 @@ class DependentReferenceGuard:
 
 
 @dataclass(frozen=True, slots=True)
+class MaterializedReferenceBinding:
+    """Record a persisted Core link's source coordinate and Writer operation."""
+
+    source_unit_index: int
+    source_reference_index: int
+    source_mention: str
+    stable_note_id: str
+    operation: str
+
+
+@dataclass(frozen=True, slots=True)
 class ActionResult:
     """Preserve typed evidence for one action in original planner order."""
 
@@ -331,6 +342,8 @@ class ActionResult:
     # Internal-only; runtime serializers intentionally do not project this field.
     canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
     canonical_direct_target_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
+    # Core-authored write metadata; receipt fields alone cannot attest their own index.
+    materialized_reference_bindings: tuple[MaterializedReferenceBinding, ...] = ()
     # Read-only evidence for a set mention expanded into multiple proven member links.
     observed_set_members: tuple[tuple[str, str], ...] = ()
     # Internal only: each skipped mutation needs exact canonical existing support.
@@ -1905,6 +1918,9 @@ def _execute_write(
         _action_status(results),
         unit_results=tuple(results),
         canonical_reference_evidence=reference_evidence,
+        materialized_reference_bindings=_materialized_reference_bindings(
+            evidence_action, preflight, results, reference_evidence
+        ),
         canonical_direct_target_evidence=direct_target_evidence,
         known_fact_evidence=known_proofs,
         observed_set_members=tuple(
@@ -2193,6 +2209,9 @@ def _execute_relational_write(
         _action_status(results),
         unit_results=tuple(results),
         canonical_reference_evidence=reference_evidence,
+        materialized_reference_bindings=_materialized_reference_bindings(
+            evidence_action, preflight, results, reference_evidence
+        ),
     )
 
 
@@ -2303,6 +2322,49 @@ def _collect_persisted_direct_target_evidence(
             )
         )
     return tuple(evidence)
+
+
+def _materialized_reference_bindings(
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+    results: list[UnitResult],
+    proofs: tuple[CanonicalReferenceEvidence, ...],
+) -> tuple[MaterializedReferenceBinding, ...]:
+    """Bind persisted links to their executed source units and planned references.
+
+    These Core-owned coordinates and operation are retained separately from
+    receipts so a later handoff cannot alter a receipt's index in both carriers.
+    """
+    bindings: list[MaterializedReferenceBinding] = []
+    for proof in proofs:
+        source_index = proof.source_unit_index
+        reference_index = proof.source_reference_index
+        if not 0 <= source_index < len(action.units) or source_index >= len(results):
+            continue
+        unit = action.units[source_index]
+        if not 0 <= reference_index < len(unit.references):
+            continue
+        reference = unit.references[reference_index]
+        target_index = reference.target_index
+        if target_index is None or not 0 <= target_index < len(preflight):
+            continue
+        operation = results[source_index].operation
+        if (
+            reference.mention == proof.source_mention
+            and preflight[target_index].stable_id == proof.stable_note_id
+            and operation in {"CREATED", "UPDATED", "MIGRATED"}
+            and any(f"{{{{ref:{reference_index}}}}}" in fact for fact in unit.facts)
+        ):
+            bindings.append(
+                MaterializedReferenceBinding(
+                    source_index,
+                    reference_index,
+                    reference.mention,
+                    proof.stable_note_id,
+                    operation,
+                )
+            )
+    return tuple(bindings)
 
 
 def _collect_persisted_reference_evidence(

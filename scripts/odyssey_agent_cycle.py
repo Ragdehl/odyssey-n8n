@@ -1132,7 +1132,10 @@ def bounded_reviewer_evidence(dest: Path, state: dict, gates: dict) -> str:
         "Review its meaning, not just its existence. If evidence is truly insufficient, "
         "identify the EXACT missing source or check; never infer read-only means unreadable.\n"
     )
-    if len(payload.encode("utf-8")) > 105000:
+    # The packet may contain a full bounded diff, reviewed helper excerpts,
+    # and a small provenance header; never cap it below its own source bound.
+    limit = REVIEW_EVIDENCE_LIMIT + REVIEW_HELPER_LIMIT + 16 * 1024
+    if len(payload.encode("utf-8")) > limit:
         raise CycleError("Review evidence prompt exceeds hard size limit")
     return payload
 

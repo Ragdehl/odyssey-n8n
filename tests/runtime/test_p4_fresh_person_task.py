@@ -282,7 +282,15 @@ def test_fresh_person_task_wikilink_and_delivery_replay(tmp_path, name):
     assert calls == ["prepare", "core", "task"]
 
 
-@pytest.mark.parametrize("others", [(), ("Leo", "Iris"), ("Leo", "Iris", "Noa", "Eva")])
+@pytest.mark.parametrize(
+    "others",
+    [
+        (),
+        ("Leo", "Iris"),
+        ("Leo", "Iris", "Noa", "Eva"),
+        ("Leo", "Iris", "Noa", "Eva", "Tara", "Sofía"),
+    ],
+)
 def test_named_person_selected_from_variable_core_receipts(tmp_path, others):
     repo, actor, _executor, runtime, source, _calls = _physical(tmp_path, "Marta", others=others)
     result = runtime.execute_product(source, "many-core-people", "main", actor)
