@@ -26,6 +26,9 @@ class CoreLinkFactSpec:
     mention: str
     target_type: str
     reference_role: str
+    # Non-empty only when the caller already holds a fresh canonical Core
+    # receipt; E3 write guard must check the precise target ID at time of use.
+    canonical_target_name: str | None = None
 
 
 def _sole_primary(plan: RequestPlan) -> tuple[WriteAction, list[KnowledgeUnit], int]:
@@ -90,12 +93,21 @@ def add_core_reference_facts(plan: RequestPlan, links: tuple[CoreLinkFactSpec, .
                 spec.mention.strip(),
                 spec.target_type.strip(),
                 spec.reference_role.strip(),
+                spec.canonical_target_name.strip()
+                if spec.canonical_target_name is not None
+                else "ok",
             )
         )
         or any(char in spec.label + spec.mention for char in "[]{}\n\r")
         or any(
             len(value) > 160
-            for value in (spec.label, spec.mention, spec.target_type, spec.reference_role)
+            for value in (
+                spec.label,
+                spec.mention,
+                spec.target_type,
+                spec.reference_role,
+                spec.canonical_target_name or "",
+            )
         )
         for spec in links
     ):
@@ -107,7 +119,13 @@ def add_core_reference_facts(plan: RequestPlan, links: tuple[CoreLinkFactSpec, .
     references = list(unit.references)
     helpers: list[KnowledgeUnit] = []
     for spec in links:
-        selection = SelectionCriteria(None, spec.mention, spec.target_type, (), None)
+        selection = SelectionCriteria(
+            spec.canonical_target_name,
+            spec.canonical_target_name or spec.mention,
+            spec.target_type,
+            (),
+            None,
+        )
         target_index = len(units) + len(helpers)
         helpers.append(
             KnowledgeUnit(
@@ -133,3 +151,54 @@ def add_core_reference_facts(plan: RequestPlan, links: tuple[CoreLinkFactSpec, .
         fact_temporal_anchors=tuple(anchors),
     )
     return replace(plan, actions=(replace(action, units=tuple((*units, *helpers))),))
+
+
+def ensure_complete_core_reference_set(
+    plan: RequestPlan,
+    links: tuple[CoreLinkFactSpec, ...],
+    *,
+    compatible_roles: tuple[str, ...] = (),
+) -> RequestPlan:
+    """Complete a receipt-backed reference set using only Core plan mechanics.
+
+    The caller provides preverified *canonical names*, never stable Note IDs.
+    Reject foreign/duplicate references to a protected mention instead of
+    silently augmenting an unsafe partial model plan. The ordinary E3 preflight
+    must independently recheck every target's current physical Note ID.
+    """
+    if not links:
+        return plan
+    if len(links) > 16 or any(
+        not isinstance(spec, CoreLinkFactSpec)
+        or not isinstance(spec.canonical_target_name, str)
+        or not spec.canonical_target_name.strip()
+        for spec in links
+    ):
+        raise RequestPlanningError("Reference-set members require Core receipts")
+    requested = {
+        (spec.mention, spec.target_type, spec.canonical_target_name): spec for spec in links
+    }
+    if len(requested) != len(links):
+        raise RequestPlanningError("Duplicate canonical reference-set members")
+    action, units, primary_index = _sole_primary(plan)
+    remaining = set(requested)
+    protected_mentions = {spec.mention for spec in links}
+    for ref in units[primary_index].references:
+        if ref.mention not in protected_mentions:
+            continue
+        if not 0 <= ref.target_index < len(action.units):
+            raise RequestPlanningError("Reference-set helper is missing")
+        helper = action.units[ref.target_index]
+        key = (ref.mention, helper.target.type, helper.target.entity)
+        spec = requested.get(key)
+        if (
+            not helper.reference_lookup_only
+            or spec is None
+            or ref.role not in (spec.reference_role, *compatible_roles)
+            or key not in remaining
+        ):
+            raise RequestPlanningError("Reference-set member is not one proven identity")
+        remaining.remove(key)
+    return add_core_reference_facts(
+        plan, tuple(spec for key, spec in requested.items() if key in remaining)
+    )

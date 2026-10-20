@@ -116,7 +116,8 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     resultNodes:document.querySelector("#notes-list")?.children.length||0
   }));
   const expectedWrites=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
-  if(![2,3].includes(expectedWrites))throw Error("Invalid E4 expected receipt count");
+  if(!Number.isInteger(expectedWrites) || expectedWrites<2 || expectedWrites>10)
+    throw Error("Invalid E4 expected receipt count");
   const output={
     pass:progressDonut.present && progressDonut.valid &&
       String(progressDonut.percent)===progressDonut.displayed &&

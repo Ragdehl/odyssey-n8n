@@ -157,3 +157,12 @@ def test_router_generic_intention_coverage_does_not_merge_core_fact_with_session
     assert "A progress report explicitly attached to a session" in prompt
     for example_specific in ("Preparar informe Atlas", "esa tarea", "Guillem", "Maite"):
         assert example_specific not in prompt
+
+
+def test_tasks_scope_counts_predicates_not_people_without_losing_distinct_obligations():
+    """Regression: one joint action with N people is not N Tasks."""
+    prompt = contract.TASK_ONLY_SCOPE_PROMPT
+    assert "ONE shared action predicate" in prompt
+    assert "several coordinated" in prompt
+    assert "multiple independent activities" in prompt
+    assert "If uncertain, return false." in prompt

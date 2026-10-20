@@ -34,7 +34,14 @@ from odyssey_core.semantic import SemanticEntityIndex
 from odyssey_core.storage import VaultRepository
 from odyssey_runtime import composition
 from odyssey_runtime.server import _handler_for
-from scripts.odyssey_n8n_dynamic_webhook import BROKER_JS, E4_SOURCE, docker_command, workflow
+from scripts.odyssey_n8n_dynamic_webhook import (
+    BROKER_JS,
+    docker_command,
+    workflow,
+)
+from scripts.odyssey_n8n_dynamic_webhook import (
+    E4_SOURCE as DEFAULT_E4_SOURCE,
+)
 from scripts.odyssey_n8n_isolated_projection import PINNED_RENDER, validated_deployed_projection
 from tests.core.test_reference_preflight import UnresolvedReasoner
 from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
@@ -43,6 +50,22 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "odyssey_web"
 BROWSER = ROOT / "scripts/odyssey_e4_live_browser.cjs"
 CLOCK = "2026-10-20T10:30:00+02:00"
+# Source and expected physical targets are test inputs, never production routing.
+E4_SOURCE = os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
+EXPECTED_PERSON_NAMES = tuple(
+    json.loads(os.environ.get("ODYSSEY_E4_SYNTHETIC_PERSONS", '["Marta"]'))
+)
+if (
+    not isinstance(E4_SOURCE, str)
+    or not 1 <= len(E4_SOURCE) <= 500
+    or not 1 <= len(EXPECTED_PERSON_NAMES) <= 8
+    or len(set(EXPECTED_PERSON_NAMES)) != len(EXPECTED_PERSON_NAMES)
+    or any(
+        not isinstance(name, str) or not name.strip() or name not in E4_SOURCE
+        for name in EXPECTED_PERSON_NAMES
+    )
+):
+    raise RuntimeError("Invalid synthetic browser E4 test fixture")
 EXEC_JS = """const fs=require('node:fs');const raw=fs.readFileSync(0,'utf8');
 fetch('http://127.0.0.1:5678/webhook/odyssey-p4-dynamic-synthetic-20261019',{
 method:'POST',headers:{'content-type':'application/json'},body:raw,
@@ -315,6 +338,28 @@ def run() -> dict:
                                 + str(bool(result.get("delivery_replayed"))),
                                 flush=True,
                             )
+                            detail = result.get("request_detail") or {}
+                            diagnostic_flow = (
+                                detail.get("flow") or detail.get("execution_flow") or {}
+                            )
+                            print(
+                                "E4_WRITER_DIAGNOSTIC="
+                                + json.dumps(
+                                    {
+                                        "clarification": result.get("clarification_code")
+                                        or result.get("clarification"),
+                                        "flow_routes": [
+                                            {
+                                                "stage_count": route.get("stage_count"),
+                                                "writes": len(route.get("writes") or []),
+                                            }
+                                            for route in diagnostic_flow.get("routes", [])
+                                        ],
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
+                            )
                             if result.get("delivery_replayed"):
                                 stats["replay"] += 1
                             else:
@@ -501,9 +546,10 @@ def run() -> dict:
                                 or "/tmp/odyssey-p4-browser-deps/root/usr/lib/aarch64-linux-gnu",
                                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public.server_port}/",
                                 "ODYSSEY_SYNTHETIC_SOURCE": E4_SOURCE,
-                                "ODYSSEY_E4_EXPECTED_WRITES": "2"
-                                if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
-                                else "3",
+                                "ODYSSEY_E4_EXPECTED_WRITES": str(
+                                    len(EXPECTED_PERSON_NAMES)
+                                    + (1 if os.environ.get("ODYSSEY_E4_RECORDED") == "1" else 2)
+                                ),
                                 "ODYSSEY_SYNTHETIC_AUTH": token,
                                 "ODYSSEY_SYNTHETIC_VIEWPORT": os.environ.get(
                                     "ODYSSEY_E4_VIEWPORT", "mobile"
@@ -548,7 +594,7 @@ def run() -> dict:
                                 (p, n)
                                 for p, n in notes.items()
                                 if n.metadata.get("type") == "person"
-                                and n.metadata.get("name") == "Marta"
+                                and n.metadata.get("name") in EXPECTED_PERSON_NAMES
                             ]
                             tasks = [n for n in notes.values() if n.metadata.get("type") == "task"]
                             days = [
@@ -556,10 +602,15 @@ def run() -> dict:
                                 for n in notes.values()
                                 if n.metadata.get("type") == "calendar_day"
                             ]
-                            assert len(people) == len(tasks) == 1
-                            person_path, person = people[0]
-                            assert (
-                                f"[[{person_path.removesuffix('.md')}|Marta]]" in tasks[0].content
+                            assert len(people) == len(EXPECTED_PERSON_NAMES)
+                            assert len(tasks) == 1
+                            assert {note.metadata.get("name") for _, note in people} == set(
+                                EXPECTED_PERSON_NAMES
+                            )
+                            assert all(
+                                f"[[{person_path.removesuffix('.md')}|{person.metadata['name']}]]"
+                                in tasks[0].content
+                                for person_path, person in people
                             )
                             assert tasks[0].metadata.get("target_date") == (
                                 "2026-10-17"

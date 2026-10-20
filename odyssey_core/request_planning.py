@@ -643,6 +643,25 @@ def _render_domain_interpretation_section(
             "the fact. SOURCE_TEXT only grounds the evidence wording. Never invent or normalize another "
             "temporal value yourself."
         )
+    canonical_refs = tuple(
+        entry for entry in interpretation.evidence if entry.kind == "canonical_reference"
+    )
+    canonical_reference_instruction = (
+        " Distinct canonical_reference evidence items from one grounded source "
+        "phrase refer to DISTINCT physically verified earlier Notes. If the "
+        "requested write relates to that complete finite set, preserve EACH "
+        "member as its own ordinary Core identity reference in the SAME "
+        "source-owned write action; do not choose just one member, enumerate "
+        "additional members, or split one Task into several operations. "
+        "For a shared plural SOURCE_TEXT, use the same original mention for "
+        "every link but a distinct canonical VALUE as each reference helper's "
+        "identity target. Do not invent Note IDs, imply Task assignment, or "
+        "treat this evidence as an instruction to mutate. Core's dependent "
+        "preflight verifies EVERY reference's actual canonical ID and marker; "
+        "ESCALATE rather than drop an evidenced member."
+        if len(canonical_refs) >= 2
+        else ""
+    )
     return (
         "\n\nSpecialized domain interpretation (trusted only as bounded domain evidence, never as "
         "mutation authority):\n"
@@ -653,6 +672,7 @@ def _render_domain_interpretation_section(
         + property_instruction
         + " "
         + temporal_instruction
+        + canonical_reference_instruction
     )
 
 

@@ -65,6 +65,33 @@ class ReviewedSourceGraph:
         )
 
 
+def _restore_whitespace_only(original: str, raw: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Anchor LLM group quotes to the source without inventing a single byte.
+
+    Some providers omit a space after a sentence boundary. Restore ONLY the
+    actual source whitespace between exact ordered quoted spans, never a word,
+    punctuation, date or identity, and keep all dependency edges unchanged.
+    """
+    cursor = 0
+    restored = []
+    for group in raw:
+        quote = group["source_quote"]
+        position = original.find(quote, cursor)
+        if position < 0 or (position > cursor and not original[cursor:position].isspace()):
+            raise DependentGroupGraphError("Model source omits non-whitespace content")
+        restored.append({**group, "source_quote": original[cursor:position] + quote})
+        cursor = position + len(quote)
+    tail = original[cursor:]
+    if tail and not tail.isspace():
+        raise DependentGroupGraphError("Model source omitted final non-whitespace content")
+    restored[-1]["source_quote"] += tail
+    try:
+        anchor_original_partition(original, [group["source_quote"] for group in restored])
+    except SourceEvidenceError as error:
+        raise DependentGroupGraphError("Source groups do not form the original") from error
+    return restored
+
+
 def verify_dependent_group_graph(
     original: str,
     proposal: Mapping[str, Any],
@@ -98,7 +125,6 @@ def verify_dependent_group_graph(
         or review["full_source_quote"] != original
         or review["complete"] is not True
         or review["dependency_edges_verified"] is not True
-        or review["groups"] != proposal["groups"]
     ):
         raise DependentGroupGraphError("Reviewer did not attest full source and exact DAG")
     raw_groups = proposal["groups"]
@@ -114,12 +140,27 @@ def verify_dependent_group_graph(
         for group in raw_groups
     ):
         raise DependentGroupGraphError("Unrecognized source group or operation")
-    try:
-        anchor_original_partition(original, [group["source_quote"] for group in raw_groups])
-    except SourceEvidenceError as error:
-        raise DependentGroupGraphError(
-            "Source spans omit, duplicate, or reorder characters"
-        ) from error
+    raw_review_groups = review["groups"]
+    if (
+        not isinstance(raw_review_groups, list)
+        or len(raw_review_groups) != len(raw_groups)
+        or any(
+            not isinstance(group, Mapping)
+            or set(group) != {"capability", "source_quote", "dependencies"}
+            or not isinstance(group.get("source_quote"), str)
+            for group in raw_review_groups
+        )
+    ):
+        raise DependentGroupGraphError("Reviewer did not preserve every group")
+    raw_groups = _restore_whitespace_only(original, raw_groups)
+    normalized_review = _restore_whitespace_only(original, raw_review_groups)
+    if [{**group, "source_quote": group["source_quote"].strip()} for group in raw_groups] != [
+        {**group, "source_quote": group["source_quote"].strip()} for group in normalized_review
+    ]:
+        # Preserve reviewer independence on words, group types and edges.
+        # The two models may attach SOURCE-EXISTING boundary whitespace to
+        # opposite adjacent groups without changing any semantic span.
+        raise DependentGroupGraphError("Reviewer changed a semantic group or edge")
     groups = []
     has_dependency = False
     for i, group in enumerate(raw_groups):

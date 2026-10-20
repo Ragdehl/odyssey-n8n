@@ -436,3 +436,29 @@ test("hybrid v6 real index-barrier and Core prewrite boundary render the single 
   broken.flow.routes[0].steps[3].name = "invented.action";
   assert.throws(() => validateRequestDetail(broken, "e2-hybrid-app-1"), ProductRequestError);
 });
+
+test("long but bounded E4 routes retain actual stages and physical Core writes", () => {
+  const source = "Hoy he conocido a Ana y Luis. Mañana tengo que llamar a los dos.";
+  const stages = Array.from({length: 22}, (_, i) => stage(`core.stage.${i}`, 1));
+  const receipt = {status:"succeeded", operation:"CREATED", target:"Task llamar a los dos"};
+  const flow = {version:1, input:source, parallel_preparation:false, routes:[{
+    capability:"core", text:source, status:"completed", stage_count:22, temporal:[],
+    writes:[receipt],
+    steps:stages.map(s => ({name:s.name, input:source, output:""})),
+  }]};
+  const detail=validateRequestDetail({
+    request_id:"e4-long-routes",
+    operational:{total_duration_ms:100,stages:[stage("application.router",0),...stages]},
+    flow,
+  },"e4-long-routes");
+  const graph=renderExecutionFlow(doc,detail);
+  assert.equal(graph.findAll("flow-lane").length,1);
+  assert.match(graph.textContent, /Estado de ruta: completed/);
+  assert.match(graph.textContent, /Resultado de escritura Core registrado: CREATED/);
+  const oversized={...flow,routes:[{...flow.routes[0],stage_count:65}]};
+  assert.throws(()=>validateRequestDetail({
+    request_id:"e4-long-routes",
+    operational:{total_duration_ms:100,stages:[stage("application.router",0),...stages]},
+    flow:oversized,
+  },"e4-long-routes"), ProductRequestError);
+});

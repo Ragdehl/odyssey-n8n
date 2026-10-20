@@ -78,7 +78,7 @@ def test_nm_group_graph_fails_closed_on_unverified_edge_or_source(mutation):
     elif mutation == "review_mismatched":
         review["groups"][3]["dependencies"][1]["mention"] = "documento"
     elif mutation == "missing_quote":
-        proposal["groups"][2]["source_quote"] = "Prepara un resumen para ella."
+        proposal["groups"][2]["source_quote"] = "Prepara un resumen para ella"
     elif mutation == "duplicate_quote":
         proposal["groups"][2]["source_quote"] += " "
     elif mutation == "forward_edge":
@@ -230,3 +230,21 @@ def test_rejection_cannot_upgrade_a_result_or_smuggle_identity(change):
         review["note_id"] = "untrusted"
     with pytest.raises(DependentGroupGraphError):
         classify_dependent_group_review_rejection(source, proposal, review)
+
+
+def test_proposal_and_review_can_omit_only_source_whitespace_at_group_boundary():
+    original, proposed, reviewed = _proof()
+    proposed["groups"][2]["source_quote"] = proposed["groups"][2]["source_quote"].rstrip()
+    reviewed["groups"][1]["source_quote"] = reviewed["groups"][1]["source_quote"].rstrip()
+    graph = verify_dependent_group_graph(original, proposed, reviewed)
+    assert "".join(group.source for group in graph.groups) == original
+    assert graph.groups[2].source.strip() == "Prepara un resumen para ella."
+    assert graph.groups[1].source.endswith(" ") or graph.groups[2].source.startswith(" ")
+
+
+def test_lost_punctuation_never_restored_as_trivia():
+    original, proposed, reviewed = _proof()
+    proposed["groups"][2]["source_quote"] = "Prepara un resumen para ella"
+    reviewed["groups"][2]["source_quote"] = "Prepara un resumen para ella"
+    with pytest.raises(DependentGroupGraphError):
+        verify_dependent_group_graph(original, proposed, reviewed)

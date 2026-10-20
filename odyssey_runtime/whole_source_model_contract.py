@@ -379,7 +379,11 @@ TASK_ONLY_SCOPE_PROMPT = (
     "MUST be FALSE for two or more distinct Tasks commands. "
     "Count separately actionable obligations, not just command verbs: "
     "one request or reminder can govern multiple independent activities "
-    "connected by conjunctions, each needing its own Task. Never collapse "
+    "connected by conjunctions, each needing its own Task. Conversely, "
+    "ONE obligation with ONE shared action predicate and several coordinated "
+    "objects or people is ONE Task operation, not one per object. Distinguish "
+    "the number of independently actionable predicates from the number of "
+    "their grammatical participants; do not split one joint action. Never collapse "
     "distinct actions merely because they share one imperative or date. "
     "Exactly_one_operation must be false for combinations of operations, "
     "including start a work session AND note a second event. "
@@ -617,11 +621,11 @@ DEPENDENT_TASK_PARTITION_PROMPT = (
     "indicative plans into Tasks. No output authorizes mutations or source loss."
 )
 
-# N-group dependent Task execution is narrower than the GENERAL N:M source
-# grammar. Multiple Core predecessors and multiple Task consumers are valid;
-# an individual Task operation still has precisely ONE target until the
-# Tasks domain exposes a multi-target mutation contract. Never collapse an
-# unrepresentable fan-in into one arbitrary Task.
+# N-group source graph distinguishes a single Task CREATE that references
+# a complete source-proven set of Persons from a mutation of multiple Tasks.
+# The former may use an N:M canonical reference set after two independent
+# semantic reviews and all Core physical receipts; the latter still needs an
+# explicit multi-target Tasks lifecycle mutation contract and must abstain.
 DEPENDENT_GRAPH_PARTITION_SCHEMA = {
     "type": "object",
     "properties": {
@@ -669,9 +673,16 @@ DEPENDENT_GRAPH_PARTITION_PROMPT = (
     "later group that refers to a prior Core group, emit an edge with the "
     "earlier predecessor_index, the exact dependent 'mention' in the later "
     "group, and exact 'antecedent_mention' of the SAME source-referred entity in "
-    "the earlier group. Do not infer a stable Note ID or invent a name. "
+    "the earlier group. Quote the COMPLETE name or entity phrase: if a "
+    "source names a person using several words, antecedent_mention MUST "
+    "include the entire contiguous name, never only a first-name fragment. "
+    "Do not infer a stable Note ID or invent a name. "
     "Preserve multiple edges, including different entities in the SAME "
-    "antecedent. When a later STOP explicitly refers to a Work Session "
+    "antecedent. ONE new personal Task to contact ALL the exactly stated "
+    "finite Persons may have one Person-reference edge PER person, including "
+    "edges sharing one plural referring phrase. This is NOT permission to "
+    "mutate multiple existing Tasks or select a subset of a group. "
+    "When a later STOP explicitly refers to a Work Session "
     "just CREATED by an earlier Tasks START group, preserve BOTH separate "
     "edges: one Core->STOP edge proving the target Task mention, and one "
     "START->STOP edge quoting the literal session phrase in the START and "
@@ -723,6 +734,12 @@ DEPENDENT_GRAPH_REVIEW_PROMPT = (
     "Tasks START creating that single Work Session. For a STOP consuming an "
     "in-message session, require BOTH a Core->Task target edge and a "
     "Tasks START->STOP session-reference edge with exact source mentions. "
+    "For one personal Task CREATE that explicitly refers to a finite plural "
+    "set of Persons in a preceding fact, verify a COMPLETE set of distinct "
+    "source-exact Person edges; this is one Task, not multiple Task mutations. "
+    "Reject an incomplete or ambiguous set or extra unmentioned persons. "
+    "Every edge antecedent_mention must quote the FULL name, never a single "
+    "name component while the source contains a longer complete name. "
     "A matched Task name alone cannot prove a Work Session. Echo the proposed exact "
     "groups unchanged only if EVERY source span and EVERY edge is defensible. "
     "If fully approved, return complete=true, dependency_edges_verified=true, "
@@ -784,4 +801,63 @@ DEPENDENT_SESSION_LINK_REVIEW_B = (
     "the same Task? Require full literal quotes and no missing context. "
     "Return one_session=false or same_session=false on any ambiguity, even "
     "when both groups mention the same Task. Never infer a session Note ID."
+)
+
+
+# Two independent source-semantic reviews for an E4 one-Task/many-Person
+# dependency. They never provide canonical IDs or bypass the Core writer.
+DEPENDENT_PERSON_SET_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "full_source_quote": {"type": "string"},
+        "antecedent_quote": {"type": "string"},
+        "dependent_quote": {"type": "string"},
+        "dependent_mention": {"type": "string"},
+        "antecedent_mentions": {"type": "array", "items": {"type": "string"}},
+        "all_referents": {"type": "boolean"},
+        "single_personal_task": {"type": "boolean"},
+        "operation_supported": {"type": "boolean"},
+    },
+    "required": [
+        "full_source_quote",
+        "antecedent_quote",
+        "dependent_quote",
+        "dependent_mention",
+        "antecedent_mentions",
+        "all_referents",
+        "single_personal_task",
+        "operation_supported",
+    ],
+    "additionalProperties": False,
+}
+DEPENDENT_PERSON_SET_REVIEW_A = (
+    "Independently audit exact Spanish/French/English ORIGINAL source. The "
+    "Core antecedent segment may refer to two or more DISTINCT persons. "
+    "The dependent segment must unequivocally express ONE new personal "
+    "Task to be performed with ALL specified Persons, rather than a generic "
+    "plural group, an arbitrary subset or several separate Tasks. "
+    "When no antecedent_mentions are supplied in the prompt, independently "
+    "EXTRACT ALL and ONLY exact Person name spans from the prior source, in "
+    "source order, whose complete finite set is referred to by the dependent "
+    "phrase. When names are supplied, independently confirm ALL of them. "
+    "Never choose an arbitrary subset of a larger source cohort, even if "
+    "the requested number equals the number of your selected names. "
+    "Preserve each quoted source "
+    "byte-for-byte; do not invent names or IDs. Set all_referents=true "
+    "ONLY if the full intended finite set is proven by this very source. "
+    "Set single_personal_task and operation_supported independently. "
+    "You provide semantic advice only; Core must prove physical receipts."
+)
+DEPENDENT_PERSON_SET_REVIEW_B = (
+    "You are a separate adversarial multi-referent reviewer. Reject if the "
+    "Task mentions a plural referring expression without exactly the "
+    "source-listed antecedents, if any other person can plausibly be its "
+    "referent, if the scope is not one task CREATE, or if a modifier would "
+    "change the list of people. Do not reuse another review's verdict. "
+    "If the prompt has NO proposed antecedent list, independently extract "
+    "the complete finite set of antecedent Person name spans in source order; "
+    "if it has a list, independently check every member and every omission. "
+    "Copy exact source quotes and grounded antecedent mentions in order; "
+    "return all_referents=false or single_personal_task=false if uncertain. "
+    "No Note IDs, no app authority or mutations."
 )

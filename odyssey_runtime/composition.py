@@ -43,6 +43,7 @@ from odyssey_apps.tasks import (
     TaskLifecycleGuard,
     TaskOperation,
     TaskPersonReference,
+    TaskPersonReferenceSet,
     TaskQueryError,
     TaskQueryService,
     TaskScopedEvidence,
@@ -65,6 +66,7 @@ from odyssey_core.application import (
     ApplicationResult,
     ApplicationStatus,
     DependentReferenceGuard,
+    DependentReferenceSetGuard,
     UnitResult,
     UnitStatus,
     WritePreflightGuard,
@@ -2742,9 +2744,21 @@ def build_runtime_from_environment() -> RuntimeComposition:
         prepared_core: _PrecomputedCorePlan | None = None,
         fixed_plan: RequestPlan | None = None,
         dependent_handoff: DependentRouteHandoff | None = None,
+        dependent_handoffs: tuple[DependentRouteHandoff, ...] | None = None,
         captured_request_instant: datetime | None = None,
     ) -> ApplicationResult:
         """Execute Core with optional prior context and app-specialized interpretation evidence."""
+        if dependent_handoffs is not None and (
+            dependent_handoff is not None
+            or not isinstance(dependent_handoffs, tuple)
+            or not 2 <= len(dependent_handoffs) <= 8
+            or any(not isinstance(x, DependentRouteHandoff) for x in dependent_handoffs)
+            or len({x.evidence.stable_note_id for x in dependent_handoffs})
+            != len(dependent_handoffs)
+            or len({x.mention for x in dependent_handoffs}) != 1
+            or len({x.evidence.note_type for x in dependent_handoffs}) != 1
+        ):
+            raise ValueError("Invalid plural Core handoff")
         if prepared_core is not None:
             if (
                 resume_plan is not None
@@ -2754,7 +2768,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 raise ValueError("prepared Core source or continuation mismatch")
             if prepared_core.domain != domain_interpretation:
                 raise ValueError("prepared Core domain mismatch")
-            if dependent_handoff is not None:
+            if dependent_handoff is not None or dependent_handoffs is not None:
                 raise ValueError("dependent route cannot reuse an independent Core plan")
             if prepared_core.clock["date"] != _current_time()["date"]:
                 raise ValueError("prepared Core clock is stale")
@@ -2792,6 +2806,24 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 domain_interpretation = replace(
                     domain_interpretation,
                     evidence=(*domain_interpretation.evidence, evidence),
+                )
+        if dependent_handoffs is not None:
+            multi_evidence = tuple(
+                DomainEvidence(
+                    "canonical_reference",
+                    target.mention,
+                    f"{target.evidence.note_type}:{target.evidence.canonical_name}",
+                )
+                for target in dependent_handoffs
+            )
+            if domain_interpretation is None:
+                domain_interpretation = DomainInterpretation(
+                    "core", user_request, "CANONICAL_REFERENCE", multi_evidence
+                )
+            else:
+                domain_interpretation = replace(
+                    domain_interpretation,
+                    evidence=(*domain_interpretation.evidence, *multi_evidence),
                 )
         capability_id = (
             domain_interpretation.capability_id if domain_interpretation is not None else None
@@ -2871,6 +2903,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 write_preflight_guard,
                 DependentReferenceGuard(dependent_handoff.mention, dependent_handoff.evidence)
                 if dependent_handoff is not None
+                else DependentReferenceSetGuard(
+                    tuple(
+                        DependentReferenceGuard(x.mention, x.evidence) for x in dependent_handoffs
+                    )
+                )
+                if dependent_handoffs is not None
                 else None,
             ),
             progress_callback=_emit_progress,
@@ -3599,6 +3637,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         prepared_core: _PrecomputedCorePlan | None = None,
         dependent_task_target: TaskDependentTarget | None = None,
         dependent_person_handoff: TaskPersonReference | None = None,
+        dependent_person_set: TaskPersonReferenceSet | None = None,
         completed_work_session: Callable[[WorkSessionMutationResult], None] | None = None,
         dependent_session_evidence: CanonicalSessionEvidence | None = None,
     ) -> ApplicationResult:
@@ -3644,6 +3683,35 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     (),
                     (),
                     planning_error="DEPENDENT_PERSON_PROOF_INVALID",
+                )
+        person_proofs = None
+        if dependent_person_set is not None:
+            if (
+                not isinstance(dependent_person_set, TaskPersonReferenceSet)
+                or authenticated_actor is None
+                or task.operation is not TaskOperation.CREATE
+                or task.source_text != source_text
+                or dependent_person_handoff is not None
+                or dependent_task_target is not None
+            ):
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="DEPENDENT_PERSON_SET_INVALID",
+                )
+            try:
+                person_proofs = dependent_person_set.require_current(
+                    authenticated_actor.stable_user_id, source_text, repository, schema
+                )
+            except TaskDependentTargetError:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="DEPENDENT_PERSON_SET_STALE",
                 )
         if dependent_task_target is not None and (
             authenticated_actor is None
@@ -4112,12 +4180,27 @@ def build_runtime_from_environment() -> RuntimeComposition:
             authenticated_actor,
             conversation_context_override=conversation_context,
             domain_interpretation=domain,
-            planner_decorator=lambda planner: TaskCorePlanner(planner, task),
+            planner_decorator=lambda planner: TaskCorePlanner(
+                planner,
+                task,
+                verified_person_set=(
+                    tuple((proof.mention, proof.evidence.canonical_name) for proof in person_proofs)
+                    if person_proofs is not None
+                    else ()
+                ),
+            ),
             write_preflight_guard=TaskLifecycleGuard(task.operation),
             prepared_core=prepared_core,
             dependent_handoff=(
                 DependentRouteHandoff(person_proof.mention, person_proof.evidence)
                 if dependent_person_handoff is not None
+                else None
+            ),
+            dependent_handoffs=(
+                tuple(
+                    DependentRouteHandoff(proof.mention, proof.evidence) for proof in person_proofs
+                )
+                if person_proofs is not None
                 else None
             ),
             captured_request_instant=(
@@ -4766,6 +4849,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
                     ),
                     dependent_person_handoff=(
                         target if isinstance(target, TaskPersonReference) else None
+                    ),
+                    dependent_person_set=(
+                        target if isinstance(target, TaskPersonReferenceSet) else None
                     ),
                 )
             )

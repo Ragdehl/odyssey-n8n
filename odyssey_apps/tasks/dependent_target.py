@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from odyssey_core.application import ApplicationResult, _dependent_evidence_is_current
+from odyssey_core.dependent_reference_form import referenced_finite_cardinality
 from odyssey_core.request_planning import RequestPlan, WriteAction
 from odyssey_core.source_bound_dependency import (
     SourceBoundDependency,
@@ -59,6 +60,48 @@ class TaskPersonReference:
         ):
             raise TaskDependentTargetError("Person handoff is stale or belongs to another actor")
         return self.source_dependency
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class TaskPersonReferenceSet:
+    """Actor-bound, ordered N:M Person proofs; cannot select an arbitrary member."""
+
+    dependencies: tuple[SourceBoundDependency, ...]
+    actor_id: str
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.dependencies, tuple)
+            or not 2 <= len(self.dependencies) <= 8
+            or not isinstance(self.actor_id, str)
+            or not self.actor_id
+            or any(not isinstance(d, SourceBoundDependency) for d in self.dependencies)
+            or len({d.evidence.stable_note_id for d in self.dependencies}) != len(self.dependencies)
+            or len({d.mention for d in self.dependencies}) != 1
+            or len({d.dependent_quote for d in self.dependencies}) != 1
+            or any(d.evidence.note_type != "person" for d in self.dependencies)
+            or (
+                referenced_finite_cardinality(self.dependencies[0].mention)
+                not in (None, len(self.dependencies))
+            )
+        ):
+            raise TaskDependentTargetError("Multiple Person references lack complete proof")
+
+    def require_current(
+        self,
+        actor_id: str,
+        dependent_source: str,
+        repository: VaultRepository,
+        schema: dict[str, Any],
+    ) -> tuple[SourceBoundDependency, ...]:
+        """Recheck every physically written Core Person against this actor/source."""
+        if self.actor_id != actor_id or any(
+            d.dependent_quote.strip() != dependent_source
+            or not _dependent_evidence_is_current(d.evidence, repository, schema)
+            for d in self.dependencies
+        ):
+            raise TaskDependentTargetError("Plural Person handoff is stale or actor-mismatched")
+        return self.dependencies
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -195,6 +238,54 @@ def prepare_dependent_subtask_title(
     ):
         raise TaskDependentTargetError("Dependent subtask title or parent fact is not exact")
     return PreparedDependentSubtask(source_text, TaskOperation.CREATE, title)
+
+
+def verify_plural_person_task_semantics(
+    *,
+    full_source: str,
+    antecedent_source: str,
+    dependent_source: str,
+    dependent_mention: str,
+    antecedent_mentions: tuple[str, ...],
+    interpretation: TaskInterpretation,
+    reviews: tuple[Mapping[str, object], Mapping[str, object]],
+) -> None:
+    """Two independent source-semantic checks before a multi-Person CREATE.
+
+    The review does NOT select IDs, infer Persons or permit mutation. A later
+    canonical N:M handoff must still establish every original Core receipt.
+    """
+    if (
+        not isinstance(full_source, str)
+        or full_source != antecedent_source + dependent_source
+        or not 2 <= len(antecedent_mentions) <= 8
+        or len(set(antecedent_mentions)) != len(antecedent_mentions)
+        or (
+            referenced_finite_cardinality(dependent_mention) not in (None, len(antecedent_mentions))
+        )
+        or any(antecedent_source.count(name) != 1 for name in antecedent_mentions)
+        or dependent_source.strip().count(dependent_mention) != 1
+        or not isinstance(interpretation, TaskInterpretation)
+        or interpretation.operation is not TaskOperation.CREATE
+        or interpretation.source_text != dependent_source.strip()
+        or interpretation.relationship_mentions
+        or interpretation.task_reference is not None
+        or not isinstance(reviews, tuple)
+        or len(reviews) != 2
+    ):
+        raise TaskDependentTargetError("Plural Person Task source is not uniquely grounded")
+    expected = {
+        "full_source_quote": full_source,
+        "antecedent_quote": antecedent_source,
+        "dependent_quote": dependent_source,
+        "dependent_mention": dependent_mention,
+        "antecedent_mentions": list(antecedent_mentions),
+        "all_referents": True,
+        "single_personal_task": True,
+        "operation_supported": True,
+    }
+    if any(not isinstance(review, Mapping) or dict(review) != expected for review in reviews):
+        raise TaskDependentTargetError("Independent plural semantic reviewers disagreed")
 
 
 def verify_dependent_task_semantics(

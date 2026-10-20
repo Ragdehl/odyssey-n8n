@@ -398,7 +398,7 @@ export function validateExecutionFlow(value, stages) {
         Object.keys(route).some(key => !["capability", "text", "stage_count", "status", "temporal", "plan", "entities", "writes", "steps", "depends_on", "reason", "dependency_indices"].includes(key)) ||
         typeof route.capability !== "string" || !route.capability || route.capability.length > 40 ||
         typeof route.text !== "string" || !route.text || route.text.length > 4096 ||
-        !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 16 ||
+        !Number.isInteger(route.stage_count) || route.stage_count < 0 || route.stage_count > 64 ||
         !["completed", "failed", "partial", "needs_attention"].includes(route.status) ||
         !Array.isArray(route.temporal) || route.temporal.length > 8) {
       throw new ProductRequestError("Odyssey returned invalid execution route.");

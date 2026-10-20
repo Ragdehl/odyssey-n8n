@@ -23,7 +23,7 @@ from .application import (
 )
 from .canonical_receipt_provenance import materialized_core_receipt
 from .dependent_group_graph import ReviewedSourceGraph
-from .dependent_reference_form import supported_anaphoric_form
+from .dependent_reference_form import referenced_finite_cardinality, supported_anaphoric_form
 from .storage import VaultRepository
 
 
@@ -67,6 +67,43 @@ def _unique_source_occurrence(text: str, mention: str) -> bool:
     return (
         len(re.findall(r"(?<!\w)" + re.escape(mention) + r"(?!\w)", text, flags=re.IGNORECASE)) == 1
     )
+
+
+def _require_complete_person_cohort(
+    edges: tuple[CanonicalGroupEdge, ...],
+    predecessors: Mapping[int, ApplicationResult],
+) -> None:
+    """A finite 'los dos' refers to EVERY physical Person in its Core cohort.
+
+    No subset may be selected from a larger group merely because GPT omitted
+    an edge. This check supplements, never replaces, individual E2 receipts.
+    """
+    if len(edges) < 2 or any(edge.evidence.note_type != "person" for edge in edges):
+        return
+    mentions = {edge.dependent_mention for edge in edges}
+    if len(mentions) != 1:
+        return
+    cardinality = referenced_finite_cardinality(next(iter(mentions)))
+    if cardinality is None:
+        return
+    selected = {edge.evidence.stable_note_id for edge in edges}
+    all_people = {
+        proof.stable_note_id
+        for parent in {edge.predecessor_index for edge in edges}
+        for result in (predecessors[parent],)
+        for action in result.action_results
+        if action.status is ActionStatus.COMPLETED
+        for proof in (
+            *action.canonical_reference_evidence,
+            *action.canonical_direct_target_evidence,
+        )
+        if proof.note_type == "person"
+        and proof.source_mention.casefold() == proof.canonical_name.casefold()
+    }
+    if len(selected) != cardinality or selected != all_people:
+        raise CanonicalGroupEvidenceError(
+            "Plural Person selection omits a physical Core antecedent"
+        )
 
 
 def prove_canonical_group_handoff(
@@ -225,6 +262,7 @@ def prove_canonical_group_handoff(
                 parent, consumer_index, dependency.antecedent_mention, dependency.mention, proof
             )
         )
+    _require_complete_person_cohort(tuple(edges), predecessors)
     # Recheck everything at the very end: an external editor may modify the
     # first Note while we inspect later edges. This is not a multiwriter lock;
     # each real consumer must also call require_all_current immediately before

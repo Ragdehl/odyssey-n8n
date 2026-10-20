@@ -313,6 +313,40 @@ class DependentReferenceGuard:
 
 
 @dataclass(frozen=True, slots=True)
+class DependentReferenceSetGuard:
+    """Conjunctive E2/E3 preflight for one Task referring to multiple known Notes.
+
+    Every reference must appear in the SAME Core Writer action, with an exact
+    canonical identity and fresh source receipt. This does not create an App
+    operation or guess cardinality from a plural pronoun.
+    """
+
+    guards: tuple[DependentReferenceGuard, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.guards, tuple)
+            or not 2 <= len(self.guards) <= 8
+            or any(not isinstance(guard, DependentReferenceGuard) for guard in self.guards)
+            or len({guard.evidence.stable_note_id for guard in self.guards}) != len(self.guards)
+            or len({guard.evidence.note_type for guard in self.guards}) != 1
+            or len({guard.mention for guard in self.guards}) != 1
+        ):
+            raise WritePreflightGuardError("MULTI_DEPENDENT_REFERENCE_SET_INVALID")
+
+    def __call__(
+        self,
+        action: WriteAction,
+        preflight: tuple[UnitTargetPreflight, ...],
+        repository: VaultRepository,
+        schema: dict[str, Any],
+    ) -> None:
+        """Reject if even one target is missing, stale or not linked in one action."""
+        for guard in self.guards:
+            guard(action, preflight, repository, schema)
+
+
+@dataclass(frozen=True, slots=True)
 class MaterializedReferenceBinding:
     """Record a persisted Core link's source coordinate and Writer operation."""
 

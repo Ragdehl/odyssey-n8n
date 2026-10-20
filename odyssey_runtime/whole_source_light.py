@@ -38,10 +38,12 @@ from odyssey_apps.tasks import (
     TaskLifecycleGuard,
     TaskOperation,
     TaskPersonReference,
+    TaskPersonReferenceSet,
     prove_dependent_person_reference,
     prove_dependent_task_target,
     validate_task_batch_prewrite,
     verify_dependent_task_semantics,
+    verify_plural_person_task_semantics,
     verify_session_dependency,
 )
 from odyssey_core.application import ApplicationResult, ApplicationStatus, execute_request
@@ -52,9 +54,11 @@ from odyssey_core.dependent_group_evidence import (
 )
 from odyssey_core.dependent_group_graph import (
     DependentGroupGraphError,
+    ReviewedSourceGraph,
     classify_dependent_group_review_rejection,
     verify_dependent_group_graph,
 )
+from odyssey_core.dependent_reference_form import referenced_finite_cardinality
 from odyssey_core.dependent_source_scopes import (
     DependentSourceScopesError,
     verify_dependent_source_scopes,
@@ -104,6 +108,9 @@ from odyssey_runtime.whole_source_model_contract import (
     DEPENDENT_GRAPH_PARTITION_SCHEMA,
     DEPENDENT_GRAPH_REVIEW_PROMPT,
     DEPENDENT_GRAPH_REVIEW_SCHEMA,
+    DEPENDENT_PERSON_SET_REVIEW_A,
+    DEPENDENT_PERSON_SET_REVIEW_B,
+    DEPENDENT_PERSON_SET_REVIEW_SCHEMA,
     DEPENDENT_SESSION_LINK_REVIEW_A,
     DEPENDENT_SESSION_LINK_REVIEW_B,
     DEPENDENT_SESSION_LINK_REVIEW_SCHEMA,
@@ -613,7 +620,7 @@ class WholeSourceLightExecutor:
         if (
             flow is None
             and result.status is ApplicationStatus.COMPLETED
-            and 0 < len(stages) <= 16
+            and 0 < len(stages) <= 64
             and isinstance(source, str)
             and 0 < len(source) <= 4096
         ):
@@ -842,6 +849,7 @@ class WholeSourceLightExecutor:
                 actor,
                 delivery_instant=instant,
                 router_started=router_started,
+                route_scopes=scopes,
             )
             if dependent_result is not None:
                 return dependent_result
@@ -1277,6 +1285,7 @@ class WholeSourceLightExecutor:
         *,
         delivery_instant: datetime,
         router_started: float,
+        route_scopes: list[dict[str, object]] | None = None,
     ) -> ApplicationResult | None:
         """One narrow source-exact Core→Task chain, with E2 prewrite reviews.
 
@@ -1301,7 +1310,48 @@ class WholeSourceLightExecutor:
         try:
             scope = verify_dependent_source_scopes(source, candidate)
         except DependentSourceScopesError:
+            # Only a complete two-group source proposal with an explicitly
+            # numbered closed-class plural may request a *new* independent
+            # N:M audit. Invalid references and source mutations abstain.
+            candidate_mention = (
+                candidate.get("dependent_mention") if isinstance(candidate, dict) else None
+            )
+            if (
+                isinstance(route_scopes, list)
+                and len(route_scopes) == 2
+                and [x.get("capability") for x in route_scopes] == ["core", "tasks"]
+                and isinstance(candidate, dict)
+                and candidate.get("full_source_quote") == source
+                and isinstance(candidate.get("antecedent_quote"), str)
+                and isinstance(candidate.get("dependent_quote"), str)
+                and candidate["antecedent_quote"] + candidate["dependent_quote"] == source
+                and isinstance(candidate_mention, str)
+                and referenced_finite_cardinality(candidate_mention) is not None
+                and candidate["dependent_quote"].count(candidate_mention) == 1
+            ):
+                return self._execute_dependent_graph(
+                    source,
+                    delivery,
+                    actor,
+                    delivery_instant=delivery_instant,
+                    router_started=router_started,
+                    route_scopes=route_scopes,
+                )
             return self._abstain(delivery)
+        if route_scopes and referenced_finite_cardinality(scope.mention) is not None:
+            # A one-person contract is structurally incapable of proving a
+            # quoted finite set. Route straight to the N:M planner + its OWN
+            # independent reviews, avoiding contradictory singular reviews.
+            # Both paths remain prewrite and have separate canonical guards.
+            return self._execute_verified_plural_person_scope(
+                source,
+                delivery,
+                actor,
+                scope,
+                delivery_instant=delivery_instant,
+                router_started=router_started,
+                route_scopes=route_scopes,
+            )
         # No write occurs until the target operation and TWO independent
         # source auditors are available, with identical exact-source claims.
         try:
@@ -1394,6 +1444,23 @@ class WholeSourceLightExecutor:
                 attestations=(first, second),
             )
         except TaskDependentTargetError:
+            # The one-target semantic reviews must NOT be coerced into plural
+            # permission. A second, independent N:M graph and two explicit
+            # set-membership reviews may prove the complete source instead.
+            # This branch is before ANY Core write; no partial mutation exists.
+            if (
+                interpretation.operation is TaskOperation.CREATE
+                and route_scopes
+                and referenced_finite_cardinality(scope.mention) is not None
+            ):
+                return self._execute_dependent_graph(
+                    source,
+                    delivery,
+                    actor,
+                    delivery_instant=delivery_instant,
+                    router_started=router_started,
+                    route_scopes=route_scopes,
+                )
             return self._abstain(delivery)
         # Do not allow an unproven dependent CREATE to fall back into the
         # person-only P4 light compiler. Task lifecycle paths are domain-owned.
@@ -1520,6 +1587,115 @@ class WholeSourceLightExecutor:
             },
         )
 
+    def _execute_verified_plural_person_scope(
+        self,
+        source: str,
+        delivery: str,
+        actor: AuthenticatedActorContext,
+        scope: Any,
+        *,
+        delivery_instant: datetime,
+        router_started: float,
+        route_scopes: list[dict[str, object]],
+    ) -> ApplicationResult:
+        """Independently name and attest an entire source-bound finite cohort.
+
+        Unlike a broad N-group DAG, a source-exact TWO-group Core→Task
+        partition is already physically anchored. Two independent reviewers
+        must EACH extract the complete Person set without receiving a member
+        list from a proposer. Local structural verification is not semantic
+        authority: Core receipts and the E3 joint guard still prove every ID.
+        """
+        cardinality = referenced_finite_cardinality(scope.mention)
+        if (
+            cardinality is None
+            or not 2 <= cardinality <= 8
+            or len(route_scopes) != 2
+            or [group.get("capability") for group in route_scopes] != ["core", "tasks"]
+        ):
+            return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_UNSUPPORTED")
+        payload = {
+            "full_source_quote": source,
+            "antecedent_quote": scope.antecedent,
+            "dependent_quote": scope.dependent,
+            "dependent_mention": scope.mention,
+        }
+        reviews = (
+            self._ask(
+                PLANNER_MODEL,
+                DEPENDENT_PERSON_SET_REVIEW_A,
+                payload,
+                DEPENDENT_PERSON_SET_REVIEW_SCHEMA,
+                "odyssey_dependent_person_set_review_a_v1",
+            ),
+            self._ask(
+                ROUTER_MODEL,
+                DEPENDENT_PERSON_SET_REVIEW_B,
+                payload,
+                DEPENDENT_PERSON_SET_REVIEW_SCHEMA,
+                "odyssey_dependent_person_set_review_b_v1",
+            ),
+        )
+        expected = {
+            **payload,
+            "all_referents": True,
+            "single_personal_task": True,
+            "operation_supported": True,
+        }
+        people = reviews[0].get("antecedent_mentions")
+        if (
+            not isinstance(people, list)
+            or len(people) != cardinality
+            or len(set(people)) != cardinality
+            or not all(
+                isinstance(name, str)
+                and name
+                and name.strip() == name
+                and scope.antecedent.count(name) == 1
+                for name in people
+            )
+            or any(
+                dict(review) != {**expected, "antecedent_mentions": people} for review in reviews
+            )
+        ):
+            return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_UNVERIFIED")
+        groups = [
+            {"capability": "core", "source_quote": scope.antecedent, "dependencies": []},
+            {
+                "capability": "tasks",
+                "source_quote": scope.dependent,
+                "dependencies": [
+                    {"predecessor_index": 0, "mention": scope.mention, "antecedent_mention": person}
+                    for person in people
+                ],
+            },
+        ]
+        proposal = {"full_source_quote": source, "groups": groups}
+        try:
+            graph = verify_dependent_group_graph(
+                source,
+                proposal,
+                {
+                    **proposal,
+                    "complete": True,
+                    "dependency_edges_verified": True,
+                    "review_reason": "APPROVED",
+                    "failing_group_index": None,
+                },
+            )
+        except DependentGroupGraphError:
+            return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_SOURCE_UNVERIFIED")
+        return self._execute_dependent_graph(
+            source,
+            delivery,
+            actor,
+            delivery_instant=delivery_instant,
+            router_started=router_started,
+            route_scopes=route_scopes,
+            preverified_graph=graph,
+            preapproved_person_reviews=reviews,
+        )
+
     def _execute_dependent_graph(
         self,
         source: str,
@@ -1529,6 +1705,8 @@ class WholeSourceLightExecutor:
         delivery_instant: datetime,
         router_started: float,
         route_scopes: list[dict[str, object]],
+        preverified_graph: Any | None = None,
+        preapproved_person_reviews: tuple[dict[str, object], dict[str, object]] | None = None,
     ) -> ApplicationResult:
         """Opt-in N-scope Core→Tasks DAG, single canonical target per Task.
 
@@ -1545,33 +1723,45 @@ class WholeSourceLightExecutor:
             or self.dependent_task_delegate is None
         ):
             return self._abstain(delivery, "DEPENDENT_N_GRAPH_ADAPTER_UNAVAILABLE")
-        proposed = self._ask(
-            PLANNER_MODEL,
-            DEPENDENT_GRAPH_PARTITION_PROMPT,
-            {"original_source": source},
-            DEPENDENT_GRAPH_PARTITION_SCHEMA,
-            "odyssey_dependent_graph_partition_v1",
-        )
-        reviewed = self._ask(
-            ROUTER_MODEL,
-            DEPENDENT_GRAPH_REVIEW_PROMPT,
-            {"original_source": source, "proposed_groups": proposed},
-            DEPENDENT_GRAPH_REVIEW_SCHEMA,
-            "odyssey_dependent_graph_review_v1",
-        )
-        try:
-            graph = verify_dependent_group_graph(source, proposed, reviewed)
-        except DependentGroupGraphError:
-            # A reviewer veto may convey ONE bounded failure category, never
-            # reasoning text or identities. No rejected review can be promoted
-            # to authorization through its diagnostic fields.
+        if preverified_graph is None:
+            proposed = self._ask(
+                PLANNER_MODEL,
+                DEPENDENT_GRAPH_PARTITION_PROMPT,
+                {"original_source": source},
+                DEPENDENT_GRAPH_PARTITION_SCHEMA,
+                "odyssey_dependent_graph_partition_v1",
+            )
+            reviewed = self._ask(
+                ROUTER_MODEL,
+                DEPENDENT_GRAPH_REVIEW_PROMPT,
+                {"original_source": source, "proposed_groups": proposed},
+                DEPENDENT_GRAPH_REVIEW_SCHEMA,
+                "odyssey_dependent_graph_review_v1",
+            )
             try:
-                reason, _index = classify_dependent_group_review_rejection(
-                    source, proposed, reviewed
-                )
+                graph = verify_dependent_group_graph(source, proposed, reviewed)
             except DependentGroupGraphError:
-                return self._abstain(delivery, "DEPENDENT_N_GRAPH_SOURCE_UNVERIFIED")
-            return self._abstain(delivery, f"DEPENDENT_N_GRAPH_REVIEW_{reason}")
+                # A reviewer veto may convey ONE bounded failure category, never
+                # reasoning text or identities. No rejected review can be promoted
+                # to authorization through its diagnostic fields.
+                try:
+                    reason, _index = classify_dependent_group_review_rejection(
+                        source, proposed, reviewed
+                    )
+                except DependentGroupGraphError:
+                    return self._abstain(delivery, "DEPENDENT_N_GRAPH_SOURCE_UNVERIFIED")
+                return self._abstain(delivery, f"DEPENDENT_N_GRAPH_REVIEW_{reason}")
+
+        else:
+            graph = preverified_graph
+            if (
+                preapproved_person_reviews is None
+                or not isinstance(graph, ReviewedSourceGraph)
+                or graph.original != source
+                or len(graph.groups) != 2
+                or len(graph.groups[1].dependencies) < 2
+            ):
+                return self._abstain(delivery, "DEPENDENT_N_PREVERIFIED_GRAPH_INVALID")
 
         def _split_task_edges(part):
             core = tuple(
@@ -1601,12 +1791,20 @@ class WholeSourceLightExecutor:
                 or (
                     part.capability == "tasks"
                     and (
-                        len(_split_task_edges(part)[0]) > 1
+                        (
+                            len(_split_task_edges(part)[0]) > 1
+                            and not (
+                                not _split_task_edges(part)[1]
+                                and len({d.predecessor_index for d in _split_task_edges(part)[0]})
+                                == 1
+                                and len({d.mention for d in _split_task_edges(part)[0]}) == 1
+                            )
+                        )
                         or len(_split_task_edges(part)[1]) > 1
                         or (not _split_task_edges(part)[0] and bool(part.dependencies))
                         or (
                             bool(_split_task_edges(part)[0])
-                            and len(part.dependencies) not in (1, 2)
+                            and len(part.dependencies) not in range(1, 9)
                         )
                     )
                 )
@@ -1710,6 +1908,54 @@ class WholeSourceLightExecutor:
                 # No dependent target reviews apply: there is no edge.
                 # Task-only full-scope semantics were independently reviewed
                 # above, and ordinary Tasks service will preflight its target.
+                prepared[part.ordinal] = (interpretation, temporal, None)
+                continue
+            if len(core_dependencies) > 1:
+                if (
+                    interpretation.operation is not TaskOperation.CREATE
+                    or interpretation.relationship_mentions
+                    or interpretation.task_reference is not None
+                    or session_dependencies
+                    or not self.dependent_person_create_enabled
+                ):
+                    return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_UNSUPPORTED")
+                set_payload = {
+                    "full_source_quote": source,
+                    "antecedent_quote": graph.groups[dependency.predecessor_index].source,
+                    "dependent_quote": part.source,
+                    "dependent_mention": dependency.mention,
+                    "antecedent_mentions": [d.antecedent_mention for d in core_dependencies],
+                }
+                plural_reviews = preapproved_person_reviews
+                if plural_reviews is None:
+                    plural_reviews = (
+                        self._ask(
+                            PLANNER_MODEL,
+                            DEPENDENT_PERSON_SET_REVIEW_A,
+                            set_payload,
+                            DEPENDENT_PERSON_SET_REVIEW_SCHEMA,
+                            "odyssey_dependent_person_set_review_a_v1",
+                        ),
+                        self._ask(
+                            ROUTER_MODEL,
+                            DEPENDENT_PERSON_SET_REVIEW_B,
+                            set_payload,
+                            DEPENDENT_PERSON_SET_REVIEW_SCHEMA,
+                            "odyssey_dependent_person_set_review_b_v1",
+                        ),
+                    )
+                try:
+                    verify_plural_person_task_semantics(
+                        full_source=source,
+                        antecedent_source=set_payload["antecedent_quote"],
+                        dependent_source=part.source,
+                        dependent_mention=dependency.mention,
+                        antecedent_mentions=tuple(set_payload["antecedent_mentions"]),
+                        interpretation=interpretation,
+                        reviews=plural_reviews,
+                    )
+                except TaskDependentTargetError:
+                    return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_UNVERIFIED")
                 prepared[part.ordinal] = (interpretation, temporal, None)
                 continue
             payload = {
@@ -1818,7 +2064,7 @@ class WholeSourceLightExecutor:
                     (
                         part.capability,
                         part.source,
-                        tuple(dep.predecessor_index for dep in part.dependencies),
+                        tuple(dict.fromkeys(dep.predecessor_index for dep in part.dependencies)),
                     )
                     for part in graph.groups
                 ),
@@ -1889,26 +2135,52 @@ class WholeSourceLightExecutor:
                             repository=self.repository,
                             schema=self.schema,
                         )
-                        if len(handoff.edges) != 1:
-                            raise CanonicalGroupEvidenceError("Task has no unique target")
-                        edge = handoff.edges[0]
                         task, temporal, subtask = prepared[part.ordinal]
-                        source_proof = SourceBoundDependency(
-                            graph.groups[dependency.predecessor_index].source,
-                            part.source,
-                            dependency.mention,
-                            edge.evidence,
-                        )
-                        if task.operation is TaskOperation.CREATE and subtask is None:
-                            if edge.evidence.note_type != "person":
-                                raise CanonicalGroupEvidenceError("Dependent Person is unverified")
-                            target = TaskPersonReference(source_proof, actor.stable_user_id)
+                        if len(handoff.edges) > 1:
+                            if (
+                                task.operation is not TaskOperation.CREATE
+                                or subtask is not None
+                                or any(
+                                    edge.evidence.note_type != "person" for edge in handoff.edges
+                                )
+                            ):
+                                raise CanonicalGroupEvidenceError(
+                                    "Plural Task target is unverified"
+                                )
+                            target = TaskPersonReferenceSet(
+                                tuple(
+                                    SourceBoundDependency(
+                                        graph.groups[edge.predecessor_index].source,
+                                        part.source,
+                                        edge.dependent_mention,
+                                        edge.evidence,
+                                    )
+                                    for edge in handoff.edges
+                                ),
+                                actor.stable_user_id,
+                            )
                         else:
-                            if edge.evidence.note_type != "task":
-                                raise CanonicalGroupEvidenceError("Dependent Task is unverified")
-                            target = TaskDependentTarget(source_proof, task.operation)
-                            if subtask is not None:
-                                target = target.with_prepared_subtask(subtask)
+                            edge = handoff.edges[0]
+                            source_proof = SourceBoundDependency(
+                                graph.groups[dependency.predecessor_index].source,
+                                part.source,
+                                dependency.mention,
+                                edge.evidence,
+                            )
+                            if task.operation is TaskOperation.CREATE and subtask is None:
+                                if edge.evidence.note_type != "person":
+                                    raise CanonicalGroupEvidenceError(
+                                        "Dependent Person is unverified"
+                                    )
+                                target = TaskPersonReference(source_proof, actor.stable_user_id)
+                            else:
+                                if edge.evidence.note_type != "task":
+                                    raise CanonicalGroupEvidenceError(
+                                        "Dependent Task is unverified"
+                                    )
+                                target = TaskDependentTarget(source_proof, task.operation)
+                                if subtask is not None:
+                                    target = target.with_prepared_subtask(subtask)
                         # Recheck at the consumption boundary even if the Core
                         # backlink was valid when the prior group returned.
                         handoff.require_all_current(self.repository, self.schema)
@@ -1986,7 +2258,7 @@ class WholeSourceLightExecutor:
         ]
         complete_flow = len(outcomes) <= 8
         for part, outcome in zip(graph.groups, outcomes, strict=False):
-            if len(outcome.operational.stages) > 16:
+            if len(outcome.operational.stages) > 64:
                 complete_flow = False
             stages.extend(
                 replace(stage, route_index=part.ordinal) for stage in outcome.operational.stages
@@ -2001,11 +2273,13 @@ class WholeSourceLightExecutor:
                             "reason": None,
                             **(
                                 {
-                                    "dependency_indices": [
-                                        dep.predecessor_index for dep in part.dependencies
-                                    ]
+                                    "dependency_indices": list(
+                                        dict.fromkeys(
+                                            dep.predecessor_index for dep in part.dependencies
+                                        )
+                                    )
                                 }
-                                if len(part.dependencies) > 1
+                                if len({dep.predecessor_index for dep in part.dependencies}) > 1
                                 else {}
                             ),
                         }
@@ -2210,7 +2484,7 @@ class WholeSourceLightExecutor:
         complete_flow = len(outcomes) <= 8
         for part, outcome in zip(verified, outcomes, strict=False):
             stages = outcome.operational.stages
-            if len(stages) > 16:
+            if len(stages) > 64:
                 complete_flow = False
             flattened_stages.extend(replace(stage, route_index=part.index) for stage in stages)
             route_rows.append(

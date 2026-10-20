@@ -14,6 +14,7 @@ from odyssey_core.request_planning import (
 from odyssey_core.write_plan_enrichment import (
     CoreLinkFactSpec,
     add_core_reference_facts,
+    ensure_complete_core_reference_set,
     ensure_visible_core_action_fact,
 )
 
@@ -28,8 +29,27 @@ class TaskCorePlanner:
     # this specialized decorator. No Task code scans the vault or selects IDs.
     wants_verified_source_names = True
 
-    def __init__(self, planner: Any, interpretation: TaskInterpretation) -> None:
+    def __init__(
+        self,
+        planner: Any,
+        interpretation: TaskInterpretation,
+        *,
+        verified_person_set: tuple[tuple[str, str], ...] = (),
+    ) -> None:
         self._planner = planner
+        if verified_person_set and (
+            not 2 <= len(verified_person_set) <= 8
+            or any(
+                not isinstance(p, tuple)
+                or len(p) != 2
+                or any(not isinstance(v, str) or not v.strip() for v in p)
+                for p in verified_person_set
+            )
+            or len({canonical for _, canonical in verified_person_set}) != len(verified_person_set)
+            or len({mention for mention, _ in verified_person_set}) != 1
+        ):
+            raise RequestPlanningError("Unproven plural canonical Person set")
+        self._verified_person_set = verified_person_set
         self._interpretation = interpretation
         self._verified_source_names: tuple[object, ...] = ()
 
@@ -62,8 +82,30 @@ class TaskCorePlanner:
         self._validate(result)
         result = self._ensure_visible_action(result)
         result = self._ensure_relationship_facts(result)
+        result = self._ensure_verified_person_set(result)
         self._require_source_identity_links(result)
         return result
+
+    def _ensure_verified_person_set(self, plan: RequestPlan) -> RequestPlan:
+        """Supply receipts to Core; never inspect Core units in Tasks."""
+        if not self._verified_person_set:
+            return plan
+        if self._interpretation.operation is not TaskOperation.CREATE:
+            raise RequestPlanningError("Plural person links require one Task CREATE")
+        return ensure_complete_core_reference_set(
+            plan,
+            tuple(
+                CoreLinkFactSpec(
+                    "Persona relacionada",
+                    mention,
+                    "person",
+                    "person",
+                    canonical_target_name=name,
+                )
+                for mention, name in self._verified_person_set
+            ),
+            compatible_roles=("identity",),
+        )
 
     def _require_source_identity_links(self, plan: RequestPlan) -> None:
         """Prevent a generic Task label from disguising a dropped known person.
