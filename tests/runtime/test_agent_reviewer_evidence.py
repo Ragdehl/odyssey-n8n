@@ -118,3 +118,13 @@ def test_large_complete_evidence_over_legacy_limit_preserves_final_lines(tmp_pat
     assert rows[0].rstrip("\n") in packet
     assert rows[-1].rstrip("\n") in packet
     assert "Pinned Git diff" in packet
+
+
+def test_untracked_fundamental_change_forces_complete_specialist_packet(tmp_path):
+    repo, state = fixture(tmp_path)
+    (repo / "odyssey_core").mkdir()
+    (repo / "odyssey_core" / "source_guard.py").write_text("SECURITY_POLICY = True\n")
+    packet = cycle.bounded_reviewer_evidence(repo, state, passing_gates(), role="generality")
+    assert "+    assert cycle.a_real_helper(4) == 5" in packet
+    assert "SECURITY_POLICY = True" in packet
+    assert "Pinned Git diff (complete" in packet

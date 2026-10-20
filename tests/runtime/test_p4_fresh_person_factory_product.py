@@ -60,6 +60,7 @@ from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
         ("wrong_actor", False),
         ("forged_link", False),
         ("source_swap", False),
+        ("wrong_named_mention", False),
     ],
 )
 def test_factory_fresh_person_create_task_create_and_replay(
@@ -115,6 +116,18 @@ def test_factory_fresh_person_create_task_create_and_replay(
         },
     )
     source, before, after, mention, rows = _scenario("marta" if lowercase_source else "Marta")
+    if fault == "wrong_named_mention":
+        # Model attestations may be overconfident; a named second Person that
+        # Core never created must NOT inherit the sole Marta receipt.
+        after = " Mañana debo llamar a Ana."
+        source = before + after
+        mention = "Ana"
+        rows[1].update(full_source_quote=source, dependent_quote=after, dependent_mention=mention)
+        rows[2]["source_quote"] = after.strip()
+        for review in rows[3:]:
+            review.update(
+                full_source_quote=source, dependent_quote=after, dependent_mention=mention
+            )
     seen = []
 
     def planner_from_environment(_cls, _schema, _clock, **_kwargs):

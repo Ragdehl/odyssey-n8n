@@ -145,6 +145,12 @@ def prove_source_bound_dependency(
     )
     if explicitly_named:
         action_proofs = explicitly_named
+    elif any(word[0].isupper() for word in re.findall(r"[^\W\d_][\w-]*", exact_dependent_mention)):
+        # A different explicitly capitalized name is NOT an anaphor. The
+        # two model attestations cannot turn an unmatched name into the sole
+        # Core Person/Task by elimination. Fail closed for unproven aliases;
+        # a later typed alias resolution may explicitly authorize one.
+        raise SourceBoundDependencyError("Named dependent reference does not match Core target")
     # Several independently persisted Core receipts can prove the same
     # canonical identity (e.g. direct Person CREATE plus a Day backlink).
     # Identity uniqueness, not receipt-count uniqueness, is the boundary.

@@ -37,6 +37,20 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     && document.querySelector("#interaction")?.childElementCount===0,{timeout:10000});
   await page.type("#request-input",process.env.ODYSSEY_SYNTHETIC_SOURCE,{delay:2});
   await page.click("#send-button");
+  checkpoint="progress_donut";
+  await page.waitForFunction(()=>{
+    const bar=document.querySelector('.processing-donut[role="progressbar"]');
+    return bar && bar.getAttribute("aria-valuemin")==="0" &&
+      bar.getAttribute("aria-valuemax")==="100" &&
+      bar.querySelector(".processing-donut-value") &&
+      bar.querySelector(".processing-percent");
+  }, {timeout:10000});
+  const progressDonut=await page.evaluate(()=>{
+    const bar=document.querySelector('.processing-donut[role="progressbar"]');
+    const percent=Number(bar?.getAttribute("aria-valuenow"));
+    return {present:!!bar,valid:Number.isFinite(percent)&&percent>=0&&percent<=100,
+      percent,displayed:bar?.querySelector('.processing-percent')?.textContent};
+  });
   checkpoint="await_initial_response";
   await page.waitForFunction(()=>(document.querySelector(".message-acknowledgement")
     && document.querySelectorAll(".detail-button").length===1
@@ -104,7 +118,9 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
   const expectedWrites=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
   if(![2,3].includes(expectedWrites))throw Error("Invalid E4 expected receipt count");
   const output={
-    pass:before.userMessages===1 && before.acknowledgements===1 &&
+    pass:progressDonut.present && progressDonut.valid &&
+      String(progressDonut.percent)===progressDonut.displayed &&
+      before.userMessages===1 && before.acknowledgements===1 &&
       before.details===1 && before.noteButtons===1 &&
       before.userMessages===after.userMessages &&
       before.details===after.details && before.noteButtons===after.noteButtons &&
@@ -115,7 +131,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
       !reloadedDetail.diagnosticRejected &&
       notes.surfaceVisible && notes.resultNodes>=2 &&
       jsErrors.length===0,
-    before,after,detail,reloadedDetail,notes,jsErrorsCount:jsErrors.length,
+    before,after,detail,reloadedDetail,notes,progressDonut,jsErrorsCount:jsErrors.length,
     actor:"synthetic_only",messages_sent:1
   };
   console.log(JSON.stringify(output));

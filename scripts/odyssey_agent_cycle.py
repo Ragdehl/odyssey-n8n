@@ -38,6 +38,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts import odyssey_agent_pacing as pacing  # noqa: E402
+from scripts import odyssey_review_incremental as review_incremental  # noqa: E402
+from scripts import odyssey_review_scope as review_scope  # noqa: E402
 from scripts.odyssey_codex_permissions import (  # noqa: E402
     ScopeError,
     permission_overrides,
@@ -404,9 +406,10 @@ def review_budget_quote(
     """Deterministic lower-bound quote, not a hard in-session consumption limit."""
     policy = model_policy()
     selected = select_review_roles(state, dest)
+    inherited = tuple(state.get("incremental_review", {}).get("inherited_roles", ()))
     effective, sensitive_paths = effective_review_risk(state, dest)
     minimums = policy["minimum_review_tokens_by_role"]
-    reservations = {role: minimums[role] for role in selected}
+    reservations = {role: minimums[role] for role in selected if role not in inherited}
     if include_builder:
         reservations = {"builder": policy["minimum_session_headroom"], **reservations}
     total = sum(reservations.values())
@@ -423,6 +426,7 @@ def review_budget_quote(
         "effective_risk": effective,
         "auto_escalated_by": sensitive_paths,
         "roles": list(selected),
+        "inherited_roles": list(inherited),
         "omitted_roles": [
             {
                 "role": role,
@@ -454,7 +458,9 @@ def remaining_resume_review_quote(state: dict, quote: dict) -> dict:
     if list(completed) != roles[: len(completed)]:
         raise CycleError("Cannot quote out-of-order or unknown completed reviews")
     pending = roles[len(completed) :]
-    remaining = {role: quote["minimum_by_role"][role] for role in pending}
+    remaining = {
+        role: quote["minimum_by_role"][role] for role in pending if role in quote["minimum_by_role"]
+    }
     minimum = sum(remaining.values())
     return {
         **quote,
@@ -634,6 +640,53 @@ def tooling_scope_is_safe(worktree: Path, baseline: str) -> bool:
     return bool(paths) and all(permitted(path) for path in paths)
 
 
+def verified_incremental_plan(previous_job: str, base: str, new_head: str, acceptance: str) -> dict:
+    """Authorize only exact, immutable four-PASS prior evidence for a correction."""
+    prior = load(previous_job)
+    try:
+        hashes = review_incremental.audited_prior(prior, STATE, previous_job)
+    except review_incremental.IncrementalReviewError as error:
+        raise CycleError(str(error)) from error
+    if (
+        prior.get("acceptance_profile") != acceptance
+        or prior.get("feature_commit") != base
+        or prior.get("implemented_by") != "chatgpt"
+    ):
+        raise CycleError("Correction base is not a committed ChatGPT feature with prior approval")
+    old_dest = Path(prior.get("worktree", ""))
+    safe_worktree(old_dest, previous_job)
+    old_head = running(["git", "-C", str(old_dest), "rev-parse", "HEAD"])
+    if old_head.returncode or old_head.stdout.strip() != base:
+        raise CycleError("Prior audited checkout has changed HEAD")
+    old_clean = running(
+        ["git", "-C", str(old_dest), "status", "--porcelain", "--untracked-files=all"]
+    )
+    if old_clean.returncode or old_clean.stdout.strip():
+        raise CycleError("Prior audited checkout is no longer a clean committed snapshot")
+    if review_snapshot(old_dest).hex() != prior["audit_source_sha256"]:
+        raise CycleError("Prior audited source snapshot has changed")
+    changed = _bounded_git_output(
+        ["git", "diff", "--no-renames", "--name-only", "-z", base, new_head, "--"],
+        ROOT,
+        65536,
+    )
+    paths = sorted(set(os.fsdecode(p) for p in changed.split(b"\0") if p))
+    if not paths or any(
+        not p or "\n" in p or p.startswith("/") or ".." in Path(p).parts for p in paths
+    ):
+        raise CycleError("Correction has no safely scoped source changes")
+    inherited = review_incremental.inherited_roles(prior, {"changed_paths": paths})
+    return {
+        "previous_job": previous_job,
+        "previous_commit": base,
+        "previous_snapshot_sha256": prior["audit_source_sha256"],
+        "receipt_sha256": hashes,
+        "changed_paths": paths,
+        "inherited_roles": list(inherited),
+        "rerun_roles": [role for role in REVIEW_ROLES if role not in inherited],
+    }
+
+
 def plan(
     spec: Path,
     job: str,
@@ -643,6 +696,7 @@ def plan(
     risk: str = "normal",
     token_budget: int | None = None,
     acceptance: str = "product",
+    incremental_from: str | None = None,
 ) -> dict:
     check_repository()
     slug(job)
@@ -703,6 +757,13 @@ def plan(
         )
         if verify.returncode or changed.returncode or not changed.stdout.strip():
             raise CycleError("Comparison must be an ancestor with committed feature changes")
+    increment = None
+    if incremental_from is not None:
+        if implemented_by != "chatgpt" or review_base is None or incremental_from == job:
+            raise CycleError("Incremental review requires a separate ChatGPT correction job")
+        increment = verified_incremental_plan(
+            incremental_from, review_base, baseline.stdout.strip(), acceptance
+        )
     run_dir = job_path(job)
     if (run_dir / "status.json").exists():
         raise CycleError("Job already exists: never overwrite evidence or re-run an ID")
@@ -728,6 +789,8 @@ def plan(
         "deployment": "forbidden",
         "last_error": None,
     }
+    if increment is not None:
+        state["incremental_review"] = increment
     atomic_json(run_dir / "status.json", state)
     return state
 
@@ -796,7 +859,7 @@ def codex(role: str, prompt: str, dest: Path, evidence: Path, *, read_only: bool
     except (ScopeError, OSError, subprocess.TimeoutExpired) as exc:
         raise CycleError("Unsafe Codex filesystem/network scope: model not started") from exc
     if read_only and state.get("gate"):
-        prompt += bounded_reviewer_evidence(dest, state, state["gate"])
+        prompt += bounded_reviewer_evidence(dest, state, state["gate"], role=role)
     artifact = evidence / (role + ".json" if read_only else "builder.md")
     stdout_log = evidence / (role + ".log")
     cmd = [
@@ -982,11 +1045,13 @@ def deterministic_gates(dest: Path, evidence: Path) -> dict:
     return report
 
 
-REVIEW_EVIDENCE_LIMIT = 192 * 1024
+REVIEW_EVIDENCE_LIMIT = 256 * 1024
 REVIEW_HELPER_LIMIT = 18000
 
 
-def bounded_reviewer_evidence(dest: Path, state: dict, gates: dict) -> str:
+def bounded_reviewer_evidence(
+    dest: Path, state: dict, gates: dict, *, role: str | None = None
+) -> str:
     """Trusted host assembles a small review packet, with immutable source provenance.
 
     No shell tool access is needed for small tracked diffs. Larger/unsafe changes
@@ -1001,28 +1066,57 @@ def bounded_reviewer_evidence(dest: Path, state: dict, gates: dict) -> str:
         or not all(isinstance(v, dict) and v.get("pass") is True for v in gates.values())
     ):
         raise CycleError("Cannot share unsupported host gate PASS")
-    # Do not follow symlinks through generated/untracked worktree content.
-    diff = _bounded_git_output(
+    if role is not None and role not in REVIEW_ROLES:
+        raise CycleError("Unknown independent reviewer")
+    tracked = _bounded_git_output(
         [
             "git",
             "diff",
             "--no-ext-diff",
             "--no-textconv",
             "--no-renames",
-            "--unified=1",
+            "--name-only",
+            "-z",
             baseline,
             "--",
         ],
         dest,
         REVIEW_EVIDENCE_LIMIT,
     )
-    if b"\0" in diff:
-        raise CycleError("Review evidence contains unsupported binary source")
+    paths = tuple(sorted({os.fsdecode(value) for value in tracked.split(b"\0") if value}))
     names = _bounded_git_output(
         ["git", "ls-files", "--others", "--exclude-standard", "-z"], dest, 4096
     )
     if names and not names.endswith(b"\0"):
         raise CycleError("Invalid untracked evidence paths")
+    untracked_paths = tuple(sorted(os.fsdecode(entry) for entry in names.split(b"\0") if entry))
+    all_paths = tuple(sorted(set(paths + untracked_paths)))
+    selected_all = review_scope.specialist_paths(role, all_paths) if role else all_paths
+    chosen = tuple(p for p in paths if p in selected_all)
+    complete = selected_all == all_paths
+    # Keep a complete manifest. Shortlisting never denies repository read access.
+    # Do not follow symlinks through generated/untracked worktree content.
+    diff = (
+        _bounded_git_output(
+            [
+                "git",
+                "diff",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-renames",
+                "--unified=1",
+                baseline,
+                "--",
+                *(f":(literal){path}" for path in chosen),
+            ],
+            dest,
+            REVIEW_EVIDENCE_LIMIT,
+        )
+        if chosen
+        else b""
+    )
+    if b"\0" in diff:
+        raise CycleError("Review evidence contains unsupported binary source")
     untracked = []
     remaining = REVIEW_EVIDENCE_LIMIT - len(diff)
     for entry in sorted(n for n in names.split(b"\0") if n):
@@ -1052,6 +1146,8 @@ def bounded_reviewer_evidence(dest: Path, state: dict, gates: dict) -> str:
         if b"\0" in raw:
             raise CycleError("Untracked review evidence contains binary data")
         label = entry.decode("utf-8")
+        if role is not None and label not in selected_all:
+            continue  # Validated above and fingerprinted in immutable review_snapshot.
         segment = ("\nUNTRACKED SOURCE " + label + ":\n").encode() + raw
         remaining -= len(segment)
         if remaining < 0:
@@ -1123,7 +1219,17 @@ def bounded_reviewer_evidence(dest: Path, state: dict, gates: dict) -> str:
         + "Verified deterministic host gates: "
         + json.dumps(small_gates, sort_keys=True)
         + "\n"
-        + "Pinned Git diff (complete within bounded limit):\n"
+        + (
+            "Pinned Git diff (complete within bounded limit):\n"
+            if complete
+            else "Specialist-focused Git diff; all omitted paths remain available read-only. "
+            "Report any cross-specialty blocking defect you find:\n"
+        )
+        + (
+            "Complete changed-path manifest: " + json.dumps(all_paths, ensure_ascii=False) + "\n"
+            if role
+            else ""
+        )
         + text
         + "".join(untracked)
         + "\nReferenced production helpers (host-extracted, read-only):\n"
@@ -1351,6 +1457,15 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
     run_dir = job_path(job)
     initial_scope = ROOT if state.get("implemented_by") == "chatgpt" else None
     selected_roles = select_review_roles(state, initial_scope)
+    incremental = state.get("incremental_review")
+    if incremental is not None:
+        if not isinstance(incremental, dict) or incremental != verified_incremental_plan(
+            incremental.get("previous_job", ""),
+            state.get("review_base"),
+            state["baseline_commit"],
+            acceptance,
+        ):
+            raise CycleError("Incremental evidence changed since the job was planned")
     # Jobs created by plan() always have a full per-session ledger. Stop before
     # Builder if a full mandatory review set could not fit even at the minimum.
     if not resume and "reported_token_budget" in state and "token_usage" in state:
@@ -1600,7 +1715,30 @@ def run(job: str, max_rounds: int, live: bool, *, resume: bool = False) -> dict:
             for i, role in enumerate(selected_roles):
                 if role in reviews:
                     continue
-                check_review_reserve(job, state, selected_roles[i:])
+                if incremental is not None and role in incremental["inherited_roles"]:
+                    # Explicitly labelled inheritance, NOT a fictional new
+                    # Codex model session. Prior four-PASS receipts, HEAD and
+                    # source snapshot were independently reverified above.
+                    prior = load(incremental["previous_job"])
+                    inherited = {
+                        **prior["reviews"][role],
+                        "inherited_prior_pass": True,
+                        "previous_job": incremental["previous_job"],
+                        "previous_commit": incremental["previous_commit"],
+                        "delta_review_scope": incremental["changed_paths"],
+                    }
+                    artifact = evidence / (role + "-completed.json")
+                    atomic_json(artifact, {"role": role, "verdict": inherited})
+                    reviews[role] = inherited
+                    state["review_artifacts"][role] = str(artifact)
+                    update(job, state, "reviewing", reviews=dict(reviews), active_role=None)
+                    continue
+                pending = tuple(
+                    item
+                    for item in selected_roles[i:]
+                    if incremental is None or item not in incremental["inherited_roles"]
+                )
+                check_review_reserve(job, state, pending)
                 update(job, state, "reviewing", active_role=role)
                 before = review_snapshot(dest)
                 try:
@@ -1894,6 +2032,7 @@ def main() -> int:
     p.add_argument("--implemented-by", choices=("codex", "chatgpt"), default="codex")
     p.add_argument("--acceptance", choices=("product", "tooling"), default="product")
     p.add_argument("--against", help="Existing parent Git SHA of ChatGPT-authored changes")
+    p.add_argument("--incremental-from", help="Previously completed four-PASS audit job")
     p.add_argument("--risk", choices=("normal", "high", "critical"), default="normal")
     p.add_argument(
         "--token-budget",
@@ -1938,6 +2077,7 @@ def main() -> int:
                 risk=args.risk,
                 token_budget=args.token_budget,
                 acceptance=args.acceptance,
+                incremental_from=args.incremental_from,
             )
         elif args.action in {"run", "resume"}:
             STATE.mkdir(mode=0o700, parents=True, exist_ok=True)

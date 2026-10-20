@@ -102,6 +102,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_agent_daily_pacing.py",
         "tests/runtime/test_agent_daily_review_resume.py",
         "tests/runtime/test_agent_reviewer_evidence.py",
+        "tests/runtime/test_agent_review_specialization.py",
         "tests/runtime/test_agent_review_recovery.py",
         "tests/runtime/test_agent_daily_builder_resume.py",
         "tests/runtime/test_agent_offline_sandbox.py",

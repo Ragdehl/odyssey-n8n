@@ -210,3 +210,18 @@ def test_whole_source_single_antecedent_does_preserve_actual_proof(grounded_proo
     assert (
         result.action_results[0].canonical_reference_evidence == result.canonical_reference_evidence
     )
+
+
+@pytest.mark.parametrize("different_name", ["Ana", "Lucía", "René Dupont", "Zoe"])
+def test_explicit_other_name_cannot_inherit_sole_core_person(grounded_proof, different_name):
+    repo, result, source = grounded_proof
+    after = f" Después debo llamar a {different_name}."
+    with pytest.raises(SourceBoundDependencyError, match="Named dependent"):
+        _bound(
+            repo,
+            result,
+            source,
+            complete_original_source=source + after,
+            dependent_quote=after,
+            exact_dependent_mention=different_name,
+        )
