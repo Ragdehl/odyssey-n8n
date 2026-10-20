@@ -982,7 +982,7 @@ def deterministic_gates(dest: Path, evidence: Path) -> dict:
     return report
 
 
-REVIEW_EVIDENCE_LIMIT = 128 * 1024
+REVIEW_EVIDENCE_LIMIT = 192 * 1024
 REVIEW_HELPER_LIMIT = 18000
 
 
@@ -1009,7 +1009,7 @@ def bounded_reviewer_evidence(dest: Path, state: dict, gates: dict) -> str:
             "--no-ext-diff",
             "--no-textconv",
             "--no-renames",
-            "--unified=3",
+            "--unified=1",
             baseline,
             "--",
         ],

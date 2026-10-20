@@ -102,3 +102,19 @@ def test_review_packet_fails_closed_on_invalid_evidence(tmp_path, tamper):
         (repo / "tests/runtime/forbidden.dat").write_text("do not ingest")
     with pytest.raises((cycle.CycleError, OSError)):
         cycle.bounded_reviewer_evidence(repo, state, gates)
+
+
+def test_large_complete_evidence_over_legacy_limit_preserves_final_lines(tmp_path):
+    repo, state = fixture(tmp_path)
+    test = repo / "tests/runtime/test_agent_cycle_supervisor.py"
+    rows = [f"CASE_{i:05d} = {i:05d}  # source evidence\n" for i in range(4600)]
+    test.write_text("".join(rows))
+    packet = cycle.bounded_reviewer_evidence(repo, state, passing_gates())
+    assert len(packet.encode("utf-8")) > 128 * 1024
+    assert (
+        len(packet.encode("utf-8"))
+        <= cycle.REVIEW_EVIDENCE_LIMIT + cycle.REVIEW_HELPER_LIMIT + 16 * 1024
+    )
+    assert rows[0].rstrip("\n") in packet
+    assert rows[-1].rstrip("\n") in packet
+    assert "Pinned Git diff" in packet
