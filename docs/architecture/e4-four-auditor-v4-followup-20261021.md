@@ -20,3 +20,5 @@ El ciclo `v4` registró **405.364 tokens CLI**, no fue aprobado. La excepción t
 ## Estado y condiciones antes de aprobación
 
 Las pruebas focales de cobertura sintáctica (76 PASS), roles Tasks (29 PASS) y vertical 3 PASS están verificadas; el gate transversal final **1503 Python + 179 Node + 7 subtests PASS**, Ruff PASS, registrados en `/tmp/e4-v5-frozen-cross-surface-20261021.json`. **NO aprobado ni desplegado**: el commit de remediación posterior necesita congelarse y auditarse de nuevo; Performance precisa presupuesto de latencia del producto y mediciones representativas. Los nueve fallos históricos preexistentes de benchmark en el full suite siguen pendientes y no se consideran verdes. E5 sigue en rama separada.
+
+**Comprobación con GPT real tras corregir el código:** PASS en Raspberry, 85,69 s con Chromium autenticado localmente, n8n aislado, 2 Person + 1 Task, dos backlinks consultados en la UI, fecha del delivery original y replay E3 inmutable. [Recibo con hashes y resultado del navegador](e4-v5-live-verified-20261021.json). Es observación única y no cumple el p95 reclamado por Performance.
