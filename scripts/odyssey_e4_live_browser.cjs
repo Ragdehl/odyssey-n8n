@@ -111,10 +111,66 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     {timeout:10000});
   await page.waitForFunction(()=>document.querySelector("#notes-list")?.children.length>0,
     {timeout:11000});
-  const notes=await page.evaluate(()=>({
-    surfaceVisible:document.querySelector("#notes-surface")?.hidden===false,
-    resultNodes:document.querySelector("#notes-list")?.children.length||0
-  }));
+  const expectedNames=JSON.parse(process.env.ODYSSEY_E4_EXPECTED_PERSONS||"[]");
+  if(!Array.isArray(expectedNames)||!expectedNames.length||
+     expectedNames.some(name=>typeof name!=="string"||!name.trim()))
+    throw Error("Invalid expected synthetic Person names");
+  checkpoint="verify_result_note_types";
+  await page.waitForFunction((names)=>{
+    const task=document.querySelectorAll('#notes-list .notes-type-group[data-type="task"] .note-row');
+    const persons=Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="person"] .note-row'));
+    return task.length===1 && names.every(name=>persons.some(row=>row.textContent.includes(name)));
+  },{timeout:12000},expectedNames);
+  const taskName=await page.evaluate(()=>{
+    const title=document.querySelector('#notes-list .notes-type-group[data-type="task"] .note-row strong');
+    return Array.from(title?.childNodes||[]).filter(node=>node.nodeType===Node.TEXT_NODE)
+      .map(node=>node.textContent||"").join("").trim();
+  });
+  if(!taskName||taskName.length>200)throw Error("Task absent from notes snapshot");
+  // Query the actual Notes index via the same UI search the user sees.
+  checkpoint="verify_task_local_search";
+  await page.click("#notes-home-tab");
+  await page.evaluate(name=>{
+    const field=document.querySelector("#notes-search");
+    field.value=name;
+    field.dispatchEvent(new Event("input",{bubbles:true}));
+  },taskName);
+  await page.waitForFunction((name)=>
+    Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="task"] .note-row'))
+      .some(row=>row.textContent.includes(name)),{timeout:15000},taskName);
+  const taskSearchVisible=await page.evaluate((name)=>
+    Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="task"] .note-row'))
+      .some(row=>row.textContent.includes(name)),taskName);
+  checkpoint="verify_person_backlinks_ui";
+  // Search and open EACH Person with the actual Notes UI, then demand a
+  // backlink to the newly written Task, not just an existing Markdown link.
+  const linkedPersons=[];
+  for(const name of expectedNames){
+    await page.click("#notes-home-tab");
+    await page.evaluate(person=>{
+      const field=document.querySelector("#notes-search");
+      field.value=person;
+      field.dispatchEvent(new Event("input",{bubbles:true}));
+    },name);
+    await page.waitForFunction((person)=>
+      Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="person"] .note-row'))
+        .some(row=>row.textContent.includes(person)),{timeout:12000},name);
+    await page.evaluate(person=>{
+      const row=Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="person"] .note-row'))
+        .find(item=>item.textContent.includes(person));
+      if(!row)throw Error("Synthetic Person not in query");
+      row.click();
+    },name);
+    await page.waitForFunction((person,task)=>{
+      const title=document.querySelector('#note-detail header h2')?.textContent||"";
+      const inbound=Array.from(document.querySelectorAll('#note-detail .note-backlinks .backlink-source .backlink'));
+      return !document.querySelector('#note-detail')?.hidden && title.includes(person) &&
+        inbound.some(item=>item.textContent.includes(task));
+    },{timeout:15000},name,taskName);
+    linkedPersons.push(name);
+  }
+  const notes={surfaceVisible:true,resultNodes:linkedPersons.length+1,
+    taskSearchVisible,verifiedPersonBacklinks:linkedPersons.length,taskName};
   const expectedWrites=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
   if(!Number.isInteger(expectedWrites) || expectedWrites<2 || expectedWrites>10)
     throw Error("Invalid E4 expected receipt count");
@@ -139,7 +195,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
   if(!output.pass)process.exitCode=2;
  } catch(error){
   let info=null;
-  try{if(page) info=await page.evaluate(()=>({turns:document.querySelector("#interaction")?.childElementCount||0,detailButtons:document.querySelectorAll(".detail-button").length,noteButtons:document.querySelectorAll(".note-set-button").length,appErrors:document.querySelectorAll(".message-error").length}));}catch{}
+  try{if(page) info=await page.evaluate(()=>({turns:document.querySelector("#interaction")?.childElementCount||0,detailButtons:document.querySelectorAll(".detail-button").length,noteButtons:document.querySelectorAll(".note-set-button").length,appErrors:document.querySelectorAll(".message-error").length,notesSearch:document.querySelector("#notes-search")?.value?.slice(0,120),notesStatus:document.querySelector("#notes-status")?.textContent?.slice(0,120),notesResults:Array.from(document.querySelectorAll("#notes-list .note-row")).map(row=>row.textContent.slice(0,100)).slice(0,8),notesDetail:document.querySelector("#note-detail")?.textContent?.slice(0,140)}));}catch{}
   console.log(JSON.stringify({pass:false,checkpoint,info,category:String(error.message).slice(0,240)}));
   process.exitCode=1;
  } finally {if(browser) await browser.close();}

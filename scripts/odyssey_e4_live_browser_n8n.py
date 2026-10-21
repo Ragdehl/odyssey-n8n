@@ -128,15 +128,23 @@ def live_product(root: Path):
         stack.enter_context(
             patch.object(composition, "GitHistoryRecorder", side_effect=lambda *a, **k: None)
         )
+        # Optional adversarial midnight crossing: Core's wall-clock has moved
+        # on, while the user delivery and all prewrite interpretation remain
+        # anchored to the same original instant. Only the fixture changes.
+        wall_clock = (
+            "2026-10-21T00:00:02+02:00"
+            if os.environ.get("ODYSSEY_E4_ADVANCE_CORE_WALL_CLOCK") == "1"
+            else CLOCK
+        )
         stack.enter_context(
             patch.object(
                 composition,
                 "_current_time",
                 side_effect=lambda: {
-                    "date": "2026-10-20",
-                    "time": "10:30:00",
+                    "date": wall_clock[:10],
+                    "time": wall_clock[11:19],
                     "timezone": "Europe/Paris",
-                    "timestamp": CLOCK,
+                    "timestamp": wall_clock,
                 },
             )
         )
@@ -552,6 +560,7 @@ def run() -> dict:
                                 or "/tmp/odyssey-p4-browser-deps/root/usr/lib/aarch64-linux-gnu",
                                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public.server_port}/",
                                 "ODYSSEY_SYNTHETIC_SOURCE": E4_SOURCE,
+                                "ODYSSEY_E4_EXPECTED_PERSONS": json.dumps(EXPECTED_PERSON_NAMES),
                                 "ODYSSEY_E4_EXPECTED_WRITES": str(
                                     len(EXPECTED_PERSON_NAMES)
                                     + (1 if os.environ.get("ODYSSEY_E4_RECORDED") == "1" else 2)
@@ -623,7 +632,11 @@ def run() -> dict:
                                 + json.dumps(
                                     {
                                         "actual": tasks[0].metadata.get("target_date"),
-                                        "expected": "2026-10-21",
+                                        "expected": (
+                                            "2026-10-17"
+                                            if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
+                                            else "2026-10-21"
+                                        ),
                                         "clock": CLOCK,
                                     },
                                     ensure_ascii=False,

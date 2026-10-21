@@ -1,0 +1,170 @@
+{
+  "evidence_date": "2026-10-21",
+  "reviewed_old_commit": "160733d9989d76ac7e2ca8d2d8ac817b915e7599",
+  "target": "e4-remediation-frozen-source-sha256-verified",
+  "source_file_sha256": {
+    "odyssey_core/source_cohort_coverage.py": "29ca66e8912f3848438aa7d9befd896fde561a2292f6e78c7f59498046a9a16a",
+    "odyssey_runtime/composition.py": "6daf4f062fc3915e3053af39965a5b1b026745c345cde97009d99382307de5b1",
+    "scripts/odyssey_e4_live_browser.cjs": "fd4f9255badb9c76e5c33332c2566315cc2215f9d5f75cf4a60ff20e77a520ee",
+    "scripts/odyssey_e4_live_browser_n8n.py": "0719588ee53329e7220d2d0328913a0fe8c8179f28c860d7d4c350feaf283ee9",
+    "tests/core/test_p4_source_cohort_coverage.py": "d349116393982a54712532c62a518dc80ea9b0b9f02ea4a58edbeb8f8b462453",
+    "tests/core/test_p4_dependent_group_graph.py": "28345e96dfed7219f27a378720be8dc6dce26ea12f50423b9605ea7618c31b1b"
+  },
+  "tests": [
+    {
+      "profile": "recorded",
+      "product_result": {
+        "passed": true,
+        "seconds": 42.79,
+        "gpt": "recorded",
+        "n8n": "real_offline_docker",
+        "browser": "Chromium real",
+        "authentication": "synthetic_local_cookie_gate",
+        "unauth_denied": true,
+        "physical_persons": 1,
+        "physical_tasks": 1,
+        "physical_days": 1,
+        "person_task_link": true,
+        "markdown_e3_replay_unchanged": true,
+        "notes_after": 4,
+        "statistics": {
+          "writer_calls": 2,
+          "first_writes": 1,
+          "replay": 1,
+          "browser_requests": 36,
+          "denied": 1,
+          "n8n_calls": 1,
+          "assistant_persisted": 1,
+          "notes_read": 29
+        },
+        "browser_gate": true,
+        "cloudflare_access_tested": false,
+        "dev_prod_untouched": true
+      },
+      "browser_result": {
+        "pass": true,
+        "before": {
+          "userMessages": 1,
+          "acknowledgements": 1,
+          "details": 1,
+          "noteButtons": 1,
+          "confirmationVisible": true
+        },
+        "after": {
+          "userMessages": 1,
+          "acknowledgements": 1,
+          "details": 1,
+          "noteButtons": 1,
+          "confirmationVisible": true
+        },
+        "detail": {
+          "svgCount": 10,
+          "sourceFlow": true,
+          "writeReceipts": 2,
+          "diagnosticRejected": false
+        },
+        "reloadedDetail": {
+          "svgCount": 10,
+          "writeReceipts": 2,
+          "diagnosticRejected": false
+        },
+        "notes": {
+          "surfaceVisible": true,
+          "resultNodes": 2,
+          "taskSearchVisible": true,
+          "verifiedPersonBacklinks": 1,
+          "taskName": "Llamar a Marta"
+        },
+        "progressDonut": {
+          "present": true,
+          "valid": true,
+          "percent": 0,
+          "displayed": "0"
+        },
+        "jsErrorsCount": 0,
+        "actor": "synthetic_only",
+        "messages_sent": 1
+      }
+    },
+    {
+      "profile": "gpt_real_with_advanced_wall_clock",
+      "product_result": {
+        "passed": true,
+        "seconds": 77.2,
+        "gpt": "real",
+        "n8n": "real_offline_docker",
+        "browser": "Chromium real",
+        "authentication": "synthetic_local_cookie_gate",
+        "unauth_denied": true,
+        "physical_persons": 2,
+        "physical_tasks": 1,
+        "physical_days": 1,
+        "person_task_link": true,
+        "markdown_e3_replay_unchanged": true,
+        "notes_after": 5,
+        "statistics": {
+          "writer_calls": 2,
+          "first_writes": 1,
+          "replay": 1,
+          "browser_requests": 163,
+          "denied": 1,
+          "n8n_calls": 1,
+          "assistant_persisted": 1,
+          "notes_read": 37
+        },
+        "browser_gate": true,
+        "cloudflare_access_tested": false,
+        "dev_prod_untouched": true
+      },
+      "browser_result": {
+        "pass": true,
+        "before": {
+          "userMessages": 1,
+          "acknowledgements": 1,
+          "details": 1,
+          "noteButtons": 1,
+          "confirmationVisible": true
+        },
+        "after": {
+          "userMessages": 1,
+          "acknowledgements": 1,
+          "details": 1,
+          "noteButtons": 1,
+          "confirmationVisible": true
+        },
+        "detail": {
+          "svgCount": 13,
+          "sourceFlow": true,
+          "writeReceipts": 4,
+          "diagnosticRejected": false
+        },
+        "reloadedDetail": {
+          "svgCount": 13,
+          "writeReceipts": 4,
+          "diagnosticRejected": false
+        },
+        "notes": {
+          "surfaceVisible": true,
+          "resultNodes": 3,
+          "taskSearchVisible": true,
+          "verifiedPersonBacklinks": 2,
+          "taskName": "la tarea de llamar a los dos"
+        },
+        "progressDonut": {
+          "present": true,
+          "valid": true,
+          "percent": 0,
+          "displayed": "0"
+        },
+        "jsErrorsCount": 0,
+        "actor": "synthetic_only",
+        "messages_sent": 1
+      }
+    }
+  ],
+  "limitations": [
+    "synthetic local authenticated Chromium, not Cloudflare Access or user vault",
+    "single real GPT run, not stability or p95 percentile",
+    "performance auditor on previous commit paused by local daily cap"
+  ]
+}

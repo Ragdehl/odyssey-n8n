@@ -285,3 +285,40 @@ def test_finite_graph_rejects_incomplete_cohort_before_core_write(omission):
                 "groups": deepcopy(parts),
             },
         )
+
+
+@pytest.mark.parametrize(
+    "antecedent, chosen",
+    [
+        ("Hoy he conocido a ana, a luis y a marta. ", ("ana", "luis")),
+        ("Ana, Luis y Marta. ", ("Luis", "Marta")),
+    ],
+)
+def test_two_agreeing_graph_reviewers_cannot_omit_lowercase_or_sentence_first_person(
+    antecedent, chosen
+):
+    parts = [
+        {"capability": "core", "source_quote": antecedent, "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": "Mañana llamar a los dos.",
+            "dependencies": [
+                {"predecessor_index": 0, "mention": "los dos", "antecedent_mention": name}
+                for name in chosen
+            ],
+        },
+    ]
+    source = "".join(group["source_quote"] for group in parts)
+    with pytest.raises(DependentGroupGraphError, match="omitted"):
+        verify_dependent_group_graph(
+            source,
+            {"full_source_quote": source, "groups": parts},
+            {
+                "full_source_quote": source,
+                "complete": True,
+                "dependency_edges_verified": True,
+                "review_reason": "APPROVED",
+                "failing_group_index": None,
+                "groups": deepcopy(parts),
+            },
+        )

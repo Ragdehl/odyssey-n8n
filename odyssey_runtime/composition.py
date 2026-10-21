@@ -4205,7 +4205,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ),
             captured_request_instant=(
                 datetime.fromisoformat(clock["timestamp"])
-                if dependent_person_handoff is not None
+                if dependent_person_handoff is not None or person_proofs is not None
                 else None
             ),
         )
