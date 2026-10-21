@@ -54,6 +54,7 @@
       "writeReceipts": 4
     }
   },
+  "committed_full_log": "docs/architecture/e4-v8-gpt-browser-full-trace-20261021.log",
   "created_at": "2026-10-21T19:35:54+02:00",
   "fixture": "synthetic vault/actor/cookie; no real personal notes",
   "fixture_sha256": "2751f1213278b9bb4375c97a6071dad8636546b1a65b0ab6f42d39e6d3dc73cf",
@@ -63,7 +64,7 @@
     "All listed personal names and interactions are fixture-only.",
     "The resource sample covers the Python host process and subprocess rusage, not full Docker/browser total.",
     "A single successful run does not prove stable GPT p95 or Cloudflare Access.",
-    "The full temporary log stays outside the reviewer worktree; this bounded structured receipt is committed."
+    "The full synthetic-only log is committed alongside this receipt and its SHA-256 is verified."
   ],
   "physical_result": {
     "authentication": "synthetic_local_cookie_gate",
