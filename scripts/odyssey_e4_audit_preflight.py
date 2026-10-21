@@ -68,16 +68,21 @@ def _qualified_samples(rows: object, *, browser: bool) -> list[float]:
     if not isinstance(rows, list):
         return []
     seen: set[str] = set()
+    seen_cases: set[str] = set()
     durations: list[float] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
         id_ = row.get("run_id")
+        case = row.get("case")
         duration = row.get("seconds")
         if (
             not isinstance(id_, str)
             or not id_
             or id_ in seen
+            or not isinstance(case, str)
+            or not case
+            or case in seen_cases
             or row.get("pass") is not True
             or row.get("status") != "completed"
             or not isinstance(duration, (float, int))
@@ -93,6 +98,7 @@ def _qualified_samples(rows: object, *, browser: bool) -> list[float]:
         ):
             continue
         seen.add(id_)
+        seen_cases.add(case)
         durations.append(float(duration))
     return durations
 
@@ -125,13 +131,39 @@ def evaluate(*, require_clean: bool = True) -> dict:
     for key, median_limit in (("direct_positive", 60.0), ("browser_positive", 90.0)):
         rows = _qualified_samples(samples.get(key), browser=key == "browser_positive")
         median, p95 = _percentile(rows, 0.5), _percentile(rows, 0.95)
-        counts[key] = {"qualified": len(rows), "median_s": median, "p95_s": p95}
-        if len(rows) < 20:
-            issues.append(f"{key}: {len(rows)}/20 independently identified positive runs")
-        elif median > median_limit or p95 > 120:
-            issues.append(f"{key}: observed median or p95 exceeds provisional target")
-    if not samples.get("host_resources_under_full_load"):
-        issues.append("Missing Pi host CPU/RAM/swap/thermal readings for full product workload")
+        # Three heterogeneous real-model runs permit a bounded review, NOT a
+        # statistically certified product p95. Preserve that distinction.
+        counts[key] = {
+            "qualified": len(rows),
+            "observed_median_s": median,
+            "p95_s": p95 if len(rows) >= 20 else None,
+            "sample_max_s": max(rows, default=None),
+        }
+        if len(rows) < 3:
+            issues.append(
+                f"{key}: {len(rows)}/3 distinct positive runs for bounded review (20 for future SLO study)"
+            )
+        elif median > median_limit or max(rows) > 120:
+            issues.append(f"{key}: observed median or an individual run exceeds provisional budget")
+    host = samples.get("host_resources_under_full_load")
+    if not (
+        isinstance(host, dict)
+        and host.get("complete_run") is True
+        and isinstance(host.get("samples"), int)
+        and host["samples"] >= 30
+        and all(
+            isinstance(host.get(k), (float, int))
+            for k in (
+                "min_mem_available_kib",
+                "min_swap_free_kib",
+                "max_cpu_util_pct",
+                "max_temperature_millideg",
+                "peak_python_rss_kib",
+                "peak_chrome_sum_rss_kib",
+            )
+        )
+    ):
+        issues.append("Missing full-duration Pi CPU/RAM/swap/thermal and process RSS measurements")
     return {
         "ready_to_spend_four_auditors": not issues,
         "source_head": _git("rev-parse", "HEAD"),

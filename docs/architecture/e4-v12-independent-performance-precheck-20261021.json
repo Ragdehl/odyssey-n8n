@@ -1,0 +1,55 @@
+{
+  "1_performance_verdict": {
+    "pass": false,
+    "classification": "BLOCKED for a full independent Performance signoff; no demonstrated performance regression",
+    "blockers": [
+      {
+        "issue": "Too few comparable live samples to support the provisional distribution targets: 3 direct positive requests and 1 browser click-to-first-response request.",
+        "actionability": "external",
+        "detail": "More independent real-GPT runs on the reviewed code and approved isolated environment are needed. The samples show observed latency, not median or p95 product performance."
+      },
+      {
+        "issue": "No resource telemetry for the complete GPT+n8n+browser workload.",
+        "actionability": "external",
+        "detail": "Available host-wide samples were partial, not process-isolated, and do not report a complete run's CPU, memory, and swap envelope."
+      },
+      {
+        "issue": "FastEmbed evidence covers offline reloads and a 250-note synthetic index rebuild, not the complete product path or larger index workload.",
+        "actionability": "external",
+        "detail": "The isolated measurements are useful and do not show a defect. They cannot establish request percentiles or safe scaling to larger vaults."
+      }
+    ],
+    "scope": "This is a Performance verdict only. It does not claim that the full four-specialist audit passes."
+  },
+  "2_threshold_status": {
+    "twenty_plus_twenty": "Self-authored provisional experimental sample target in the v9 preflight, not a user-approved hard feature requirement or SLA/SLO.",
+    "performance_signoff": "The role instructions require measured performance and relevant resource evidence; they do not prescribe 20+20. A bounded independent review can report observed results and their limits without claiming statistical certification.",
+    "future_product_slo_certification": "Requires an explicitly approved user-facing SLO, workload, and sampling method. Do not present the provisional 60s/90s medians or 120s p95 targets as accepted product commitments.",
+    "defect_handling": "Do not waive a reproducible regression or unsafe resource behavior merely because the numerical thresholds were provisional."
+  },
+  "3_minimum_next_test_plan": {
+    "purpose": "Obtain useful evidence for an independent performance review without claiming an invented p95 or treating a self-imposed sample count as product policy.",
+    "method": [
+      "Freeze and identify the exact reviewed commit and test configuration; use only disposable synthetic data and the Pi ARM64 4 GiB + 2 GiB swap environment.",
+      "Run a small, predeclared set of at least 3 independent successful direct requests and 3 independent authenticated browser+n8n+GPT requests, with distinct valid source examples. Record safe abstentions and failures separately; do not count them as positive latency samples.",
+      "Measure direct request wall time and browser click-to-first-response with monotonic clocks. Record full harness duration separately and never mix it into user-response latency.",
+      "For every run, capture host MemAvailable, SwapFree, CPU load/utilization if available, temperature, and process/container RSS; sample throughout the complete workload at a fixed interval. Record concurrency and whether caches/model are warm or cold.",
+      "Report each observation, sample count, median only where the sample supports a descriptive median, and min/max. Label p95 unavailable at this sample size. Report FastEmbed load/query and index rebuild as separate offline measurements with cache state, note count, and peak RSS.",
+      "Compare with an earlier run only if workload, timing boundary, code-path, and environment are comparable; investigate any repeatable material slowdown or resource exhaustion before signoff."
+    ],
+    "not_claimed": "This minimum plan is a bounded evidence review, not an SLO certification or a statistically reliable p95 estimate."
+  },
+  "4_boundaries_and_regressions": {
+    "mismatched_boundaries": [
+      "The v11 browser receipt's 42.29 seconds is click-to-first-response; 86.19 seconds is the full harness including setup and replay. They are distinct metrics and must not be pooled.",
+      "The v10 browser 110.45 seconds is a historical full-harness duration without the v11 interaction timer, so it is not comparable to click-to-first-response.",
+      "Direct request durations and browser click-to-first-response have different boundaries; report separately.",
+      "The 971 MiB MemAvailable figure is from a prior partial host sample; the v10 JSON has a later partial minimum of 993984 KiB. Neither is isolated product RSS or complete-run telemetry.",
+      "FastEmbed's 1.04 GiB peak RSS and 250-note rebuild times describe an isolated synthetic indexing workload, not end-to-end GPT request latency."
+    ],
+    "real_regression_demonstrated": false,
+    "evidence": "The three current direct positives completed in 37.823, 38.767, and 50.135 seconds; the browser request completed in 42.29 seconds. The supplied evidence demonstrates insufficient coverage for distributional/resource signoff, not a measured regression. The full four-specialist feature audit remains unclaimed."
+  },
+  "review_type": "independent precheck, not the four-specialist feature acceptance",
+  "reviewed_live_evidence": "before additional v12 browser cases"
+}

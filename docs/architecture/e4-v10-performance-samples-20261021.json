@@ -40,10 +40,76 @@
       "metric": "send_to_first_response",
       "physical_browser_n8n_gpt": true,
       "trace_sha256": "26dbda42a8a6a8797f1c9b7e9a0aec6a081c7b19c70d370f56f6e430214d8529",
-      "source_commit": "1e6df71"
+      "source_commit": "1e6df71",
+      "case": "los_dos_ana_luis"
+    },
+    {
+      "run_id": "e4-v12-ambos_beatriz_carlos",
+      "case": "ambos_beatriz_carlos",
+      "pass": true,
+      "status": "completed",
+      "seconds": 46.83,
+      "harness_seconds": 85.84,
+      "metric": "send_to_first_response",
+      "physical_browser_n8n_gpt": true,
+      "source_commit": "f80e226fbe48881b376b04fb146eb132b2d69525",
+      "trace_sha256": "9a9fe793d9b8d2f60c16b3d4aeec1de7a6f11aab6b09d78d4b35ff19ca70ed0a",
+      "resource_sha256": "7e816771a0681fbd9d1c5e042bfd38f2db75ffe41d4f64aa3871b3589545ccd8"
+    },
+    {
+      "run_id": "e4-v12-tres_clara_hugo_nuria",
+      "case": "tres_clara_hugo_nuria",
+      "pass": true,
+      "status": "completed",
+      "seconds": 40.96,
+      "harness_seconds": 76.92,
+      "metric": "send_to_first_response",
+      "physical_browser_n8n_gpt": true,
+      "source_commit": "f80e226fbe48881b376b04fb146eb132b2d69525",
+      "trace_sha256": "0e63461d471b37bea0d883a99f898905e2d39cd1cb262f0f21ddddd37986314d",
+      "resource_sha256": "f73b7135b7a081563e9ba5c3db619eb07e0ad4c8f54ee3108a547e7fd25941ea"
+    },
+    {
+      "run_id": "e4-v12-dos_eva_pablo_docker",
+      "case": "dos_eva_pablo_docker",
+      "pass": true,
+      "status": "completed",
+      "seconds": 38.48,
+      "harness_seconds": 76.63,
+      "metric": "send_to_first_response",
+      "physical_browser_n8n_gpt": true,
+      "source_commit": "f80e226fbe48881b376b04fb146eb132b2d69525",
+      "trace_sha256": "0c3a06c12eb045b88214f6fc4e3e67ceffd8d2f8414b2e0210b7ac029c15d0e6",
+      "resource_sha256": "158822a77ed4cc619992830c3a042856086401cde4af81b192646e785bca0672"
+    },
+    {
+      "run_id": "e4-v12-ambos_alba_marc_cgroup",
+      "case": "ambos_alba_marc_cgroup",
+      "pass": true,
+      "status": "completed",
+      "seconds": 34.51,
+      "harness_seconds": 69.28,
+      "metric": "send_to_first_response",
+      "physical_browser_n8n_gpt": true,
+      "source_commit": "f80e226fbe48881b376b04fb146eb132b2d69525",
+      "trace_sha256": "fe97f9ecb25548c3abef986372b75b7c86d327aa4689eebaa19e3955acdbc25c",
+      "resource_sha256": "b78d34242417bb2bfef306b0e42c454cc182a4023b7de454aba618c0638bb715"
     }
   ],
-  "host_resources_under_full_load": null,
+  "host_resources_under_full_load": {
+    "complete_run": true,
+    "samples": 170,
+    "distinct_full_harness_runs": 4,
+    "min_mem_available_kib": 1134720,
+    "min_swap_free_kib": 281968,
+    "max_cpu_util_pct": 74.53,
+    "max_temperature_millideg": 57300,
+    "peak_python_rss_kib": 128096,
+    "peak_chrome_sum_rss_kib": 939232,
+    "peak_isolated_n8n_process_tree_rss_kib": 1020320,
+    "resource_audit_receipt": "docs/architecture/e4-v12-browser-resource-audit-receipt-20261021.json",
+    "unique_rss_caveat": "VmRSS sum double counts shared pages; Docker stats 0B unavailable"
+  },
   "host_resources_partial": {
     "count": 27,
     "max_load1": 2.32,

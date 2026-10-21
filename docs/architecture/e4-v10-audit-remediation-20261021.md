@@ -162,3 +162,46 @@ Enviar**. La prueba v10 de 110,45 s se preserva como *harness histórico*,
 pero queda fuera de la distribución del tiempo percibido, pues no tenía
 cronómetro de interacción. El preflight mantiene HOLD y tampoco equipara
 estos resultados a una distribución real de 20 ni a un SLA.
+
+## E4 v12 — evidencia acotada para auditoría independiente
+
+Se consultó primero a un evaluador Performance **independiente** de baja
+intensidad, que NO otorgó un PASS final: con 3 directas y 1 browser pedía
+**al menos 3 ejemplos heterogéneos por modalidad y telemetría completa**.
+Confirmó que 20+20 era una meta estadística provisional autoimpuesta, no
+un contrato de usuario ni un SLA; tampoco encontró regresión demostrada
+en las muestras disponibles. Recibo de precheck
+`e4-v12-independent-performance-precheck-20261021.json`.
+
+Se añadieron **4 ejecuciones nuevas y diferentes** con GPT real, n8n
+aislado y Chromium autenticado; todas PASS:
+Beatriz/Carlos «ambos» 46,83 s, Clara/Hugo/Nuria «los tres» 40,96 s,
+Eva/Pablo «los dos» 38,48 s, y Alba/Marc «ambos» 34,51 s,
+todos **Enviar→respuesta**. Junto con Ana/Luis 42,29 s son
+**5 positivos browser** (mediana descriptiva 40,96 s, sin p95 estadístico).
+Tres positivos GPT directos: 37,823 / 38,767 / 50,135 s
+(mediana descriptiva 38,767 s). E3 replay, links y notas
+físicas verificados cada vez. Fuente congelable desde `f80e226`
+y logs JSON/Markdown originales con hashes SHA-256 en
+`e4-v12-browser-resource-audit-receipt-20261021.json`.
+
+Telemetría de **170 observaciones de host** a intervalos de ~2 s
+desde antes de lanzar systemd+n8n hasta la terminación:
+MemAvailable mínimo ~1.108 MiB; SwapFree mínimo positivo,
+temperatura máxima y uso CPU registrados por ensayo.
+RSS Python y suma de RSS Chromium por PID, con advertencia explícita
+de páginas compartidas. `docker stats` devuelve `0B / 0B`
+para memoria de contenedor en esta Raspberry: NO se interpreta como
+consumo nulo; se ha capturado en su lugar RSS del árbol de procesos
+del contenedor n8n vivo (pico aproximado ~996 MiB). Este RSS no es PSS
+ni autoriza sumar memorias virtuales para estimar memoria física total.
+No hay evidencia de agotamiento de MemAvailable ni swap en estos ensayos,
+pero sí recursos de Pi limitados y dependencia del modelo real.
+
+Se actualizó el **preflight de lanzamiento, no el criterio de PASS de
+los auditores**, para distinguir revisión funcional+riegos acotada
+(3+3 heterogéneas + telemetría real + recibos) de certificación SLO
+(población de 20+20 con definición y límites aprobados). Sin muestras
+suficientes no publica ningún p95. Todos los agentes independientes
+conservan plena libertad para dictar PASS, FAIL o BLOCKED tras inspección.
+Sin DEV/PROD/Cloudflare ni datos privados.

@@ -16,11 +16,11 @@ spec.loader.exec_module(gate)
 
 def test_duplicate_runs_or_invalid_results_do_not_count():
     rows = [
-        {"run_id": "a", "pass": True, "status": "completed", "seconds": 45},
-        {"run_id": "a", "pass": True, "status": "completed", "seconds": 45},
-        {"run_id": "b", "pass": True, "status": "needs_attention", "seconds": 4},
-        {"run_id": "c", "pass": False, "status": "completed", "seconds": 3},
-        {"run_id": "d", "pass": True, "status": "completed", "seconds": 50},
+        {"run_id": "a", "case": "alpha", "pass": True, "status": "completed", "seconds": 45},
+        {"run_id": "a", "case": "alpha", "pass": True, "status": "completed", "seconds": 45},
+        {"run_id": "b", "case": "beta", "pass": True, "status": "needs_attention", "seconds": 4},
+        {"run_id": "c", "case": "gamma", "pass": False, "status": "completed", "seconds": 3},
+        {"run_id": "d", "case": "delta", "pass": True, "status": "completed", "seconds": 50},
     ]
     assert gate._qualified_samples(rows, browser=False) == [45, 50]
     assert gate._qualified_samples(rows, browser=True) == []
@@ -49,14 +49,15 @@ def test_preflight_holds_when_independent_run_counts_missing(monkeypatch, tmp_pa
     monkeypatch.setattr(gate, "_browser_evidence_ok", lambda receipt: True)
     report = gate.evaluate()
     assert report["ready_to_spend_four_auditors"] is False
-    assert any("0/20" in issue for issue in report["blocking_prerequisites"])
+    assert any("0/3" in issue for issue in report["blocking_prerequisites"])
 
 
 def test_complete_synthetic_reporting_has_no_hidden_special_case(monkeypatch, tmp_path):
     docs = tmp_path / "docs"
     docs.mkdir()
     base = [
-        {"run_id": str(i), "pass": True, "status": "completed", "seconds": 65} for i in range(20)
+        {"run_id": str(i), "case": f"case-{i}", "pass": True, "status": "completed", "seconds": 65}
+        for i in range(3)
     ]
     (docs / "e4-v10-performance-samples-20261021.json").write_text(
         json.dumps(
@@ -71,7 +72,16 @@ def test_complete_synthetic_reporting_has_no_hidden_special_case(monkeypatch, tm
                     }
                     for row in base
                 ],
-                "host_resources_under_full_load": {"mem_available_kib": 1700000},
+                "host_resources_under_full_load": {
+                    "complete_run": True,
+                    "samples": 40,
+                    "min_mem_available_kib": 1700000,
+                    "min_swap_free_kib": 250000,
+                    "max_cpu_util_pct": 50,
+                    "max_temperature_millideg": 55000,
+                    "peak_python_rss_kib": 130000,
+                    "peak_chrome_sum_rss_kib": 900000,
+                },
             }
         )
     )
@@ -91,8 +101,8 @@ def test_complete_synthetic_reporting_has_no_hidden_special_case(monkeypatch, tm
     monkeypatch.setattr(gate, "_browser_evidence_ok", lambda receipt: True)
     report = gate.evaluate()
     assert report["ready_to_spend_four_auditors"] is True
-    assert report["qualified_performance_samples"]["direct_positive"]["qualified"] == 20
-    assert report["qualified_performance_samples"]["browser_positive"]["qualified"] == 20
+    assert report["qualified_performance_samples"]["direct_positive"]["qualified"] == 3
+    assert report["qualified_performance_samples"]["browser_positive"]["qualified"] == 3
 
 
 def test_browser_evidence_cannot_escape_document_directory(monkeypatch, tmp_path):
