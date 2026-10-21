@@ -137,5 +137,34 @@ def test_core_cannot_invent_unrequested_task_relationship_during_plural_enrichme
         TaskInterpretation("Tengo que llamar a ambos", TaskOperation.CREATE),
         verified_person_set=PROOFS,
     )
-    with pytest.raises(RequestPlanningError, match="unrequested Task relationship"):
+    with pytest.raises(
+        RequestPlanningError, match="unrequested Task relationship|unapproved member"
+    ):
+        wrapper.plan("Tengo que llamar a ambos")
+
+
+def test_closed_verified_person_set_rejects_unapproved_foreign_mention():
+    primary = original_plan().actions[0].units[0]
+    from dataclasses import replace
+
+    foreign = replace(
+        primary,
+        references=(KnowledgeReference(1, "person", "Marta"),),
+    )
+    helper = KnowledgeUnit(
+        SelectionCriteria("Marta", "Marta", "person", (), None),
+        "record",
+        (),
+        (),
+        (),
+        (),
+        reference_lookup_only=True,
+    )
+    unsafe = RequestPlan((WriteAction((foreign, helper)),), ())
+    wrapper = TaskCorePlanner(
+        SimpleNamespace(plan=lambda *_: unsafe),
+        TaskInterpretation("Tengo que llamar a ambos", TaskOperation.CREATE),
+        verified_person_set=PROOFS,
+    )
+    with pytest.raises(RequestPlanningError, match="unapproved member"):
         wrapper.plan("Tengo que llamar a ambos")

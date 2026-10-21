@@ -1,0 +1,121 @@
+{
+  "schema": "e4-fastembed-isolated-pi-20261021-v1",
+  "synthetic_only": true,
+  "private_vault_access": false,
+  "pi_arm64_4gb": true,
+  "provider": "fastembed",
+  "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "cache": "/home/ragdehl/projects/.odyssey-agent-runs/e4-fastembed-synthetic-cache-20261021",
+  "downloaded_model_disk_mib": 241,
+  "initial_download_and_load": {
+    "status": "pass",
+    "isolated_cache": "/home/ragdehl/projects/.odyssey-agent-runs/e4-fastembed-synthetic-cache-20261021",
+    "cold_download_and_load_s": 49.93,
+    "first_query_s": 0.033,
+    "warm_query_s": 0.013,
+    "embedding_dimensions": 384,
+    "peak_rss_kib": 692864,
+    "includes_model_download": true,
+    "private_cache_access": false,
+    "private_vault_access": false
+  },
+  "offline_model_reloads": [
+    {
+      "trial": 1,
+      "load_s": 1.41,
+      "query_ms": [
+        12.91,
+        13.585,
+        11.615
+      ],
+      "peak_rss_kib": 669984,
+      "host_after": {
+        "MemAvailable": 1922912,
+        "SwapFree": 541648,
+        "cpu_thermal_millideg": 50700
+      },
+      "source": "synthetic",
+      "private_vault_access": false,
+      "download_attempted": false
+    },
+    {
+      "trial": 2,
+      "load_s": 1.445,
+      "query_ms": [
+        13.01,
+        13.339,
+        11.573
+      ],
+      "peak_rss_kib": 668192,
+      "host_after": {
+        "MemAvailable": 1918448,
+        "SwapFree": 541664,
+        "cpu_thermal_millideg": 51800
+      },
+      "source": "synthetic",
+      "private_vault_access": false,
+      "download_attempted": false
+    },
+    {
+      "trial": 3,
+      "load_s": 1.427,
+      "query_ms": [
+        13.186,
+        13.337,
+        11.703
+      ],
+      "peak_rss_kib": 669760,
+      "host_after": {
+        "MemAvailable": 1891488,
+        "SwapFree": 541664,
+        "cpu_thermal_millideg": 51800
+      },
+      "source": "synthetic",
+      "private_vault_access": false,
+      "download_attempted": false
+    }
+  ],
+  "offline_summary": {
+    "trials": 3,
+    "load_median_s": 1.427,
+    "load_min_s": 1.41,
+    "load_max_s": 1.445,
+    "model_isolated_offline": true,
+    "not_a_product_p95": true
+  },
+  "index_250_synthetic_notes": {
+    "synthetic_notes": 250,
+    "note_create_s": 5.089,
+    "model_offline_load_s": 1.413,
+    "context_rebuild_s": 7.756,
+    "semantic_rebuild_s": 5.974,
+    "cpu_user_delta_s": 37.388,
+    "cpu_system_delta_s": 0.357,
+    "peak_rss_kib": 1067904,
+    "host_before": {
+      "MemAvailable": 1917888,
+      "SwapFree": 542256,
+      "temperature_millideg": 52350
+    },
+    "host_after": {
+      "MemAvailable": 1588576,
+      "SwapFree": 538128,
+      "temperature_millideg": 57300
+    },
+    "model": "FastEmbed real offline",
+    "private_vault_access": false,
+    "network_used": false
+  },
+  "log_sha256": {
+    "download": "66234cb774f9fa7b80a40fe5ddcfd11908a1af18f9c6c8153f1373aedca630bc",
+    "offline_reloads": "b95dea799f5819089ea8357ef0d246dd57d651eede9a88989cf8a57b7986400c",
+    "index250": "d97ab8a129f6ad9128f8aba98ea07bdb9ef3718ce1b484c3cb979b8bbb3a045b"
+  },
+  "limits": [
+    "Total download time is not offline cold load",
+    "3 offline processes are not a production p95",
+    "250 synthetic Notes benchmark cannot be extrapolated to 1000/5000",
+    "onnxruntime warning: mean pooling rather than previous CLS; verify semantic version compatibility before adoption",
+    "Real GPT product full-run p95 and full workload resource envelope remain unmeasured"
+  ]
+}

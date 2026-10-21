@@ -112,3 +112,22 @@ def test_finite_cohort_allows_nonperson_trailing_modifier(source, members):
 def test_finite_cohort_never_converts_new_person_clause_to_modifier(source, members):
     with pytest.raises(SourceCohortCoverageError):
         require_explicit_cohort_coverage(source, members)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Conocí a Ana y Luis en el parque donde conocí a marta.",
+        "Conocí a Ana y Luis en el parque mientras conocí a marta.",
+        "I met alice and bob at the park where I met charlie.",
+        "J'ai rencontré claire et hugo dans le jardin où j'ai croisé marie.",
+    ],
+)
+def test_modifier_never_hides_lowercase_subordinate_person_clause(source):
+    with pytest.raises(SourceCohortCoverageError, match="Unreviewed"):
+        names = (
+            ("Ana", "Luis")
+            if "Conocí" in source
+            else (("alice", "bob") if source.startswith("I met") else ("claire", "hugo"))
+        )
+        require_explicit_cohort_coverage(source, names)

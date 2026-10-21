@@ -21,6 +21,7 @@ from .application import (
     DependentReferenceGuard,
     _dependent_evidence_is_current,
 )
+from .atomic_facts import AtomicFactError, parse_atomic_facts
 from .canonical_receipt_provenance import materialized_core_receipt
 from .dependent_group_graph import ReviewedSourceGraph
 from .dependent_reference_form import referenced_finite_cardinality, supported_anaphoric_form
@@ -165,15 +166,29 @@ def prove_canonical_group_handoff(
                 raise CanonicalGroupEvidenceError(
                     "Unselected earlier Core group has no verified physical receipt"
                 )
+            # A canonical name may NOT be present literally in the source:
+            # e.g. "Mari" can be a verified alias for "María García". Use the
+            # Core-authored source mention itself, anchored as a full original
+            # span, instead of requiring its canonical display label.
+            earlier_receipts = (
+                *result.canonical_reference_evidence,
+                *(
+                    proof
+                    for action in result.action_results
+                    if action.status is ActionStatus.COMPLETED
+                    for proof in (
+                        *action.canonical_reference_evidence,
+                        *action.canonical_direct_target_evidence,
+                    )
+                ),
+            )
             if any(
                 proof.note_type == "person"
-                and proof.canonical_name.casefold() in earlier.source.casefold()
-                for action in result.action_results
-                if action.status is ActionStatus.COMPLETED
-                for proof in (
-                    *action.canonical_reference_evidence,
-                    *action.canonical_direct_target_evidence,
+                and (
+                    _unique_source_occurrence(earlier.source, proof.source_mention)
+                    or _unique_source_occurrence(earlier.source, proof.canonical_name)
                 )
+                for proof in earlier_receipts
             ):
                 raise CanonicalGroupEvidenceError(
                     "Finite source handoff omits an earlier Core Person"
@@ -192,7 +207,34 @@ def prove_canonical_group_handoff(
                         raise CanonicalGroupEvidenceError(
                             "Finite source handoff omits an earlier Core Person"
                         )
-            except (OSError, ValueError, TypeError, RuntimeError) as error:
+                    # Alias links may have NO canonical E2 carrier, although
+                    # Writer physically persisted them. Inspect ONLY facts
+                    # marked with THIS group's request_id, never old links
+                    # already present in an updated note. Any Person target
+                    # in one of those facts forbids an omitted group.
+                    for fact in parse_atomic_facts(note.content):
+                        if fact.request_id != result.request_id:
+                            continue
+                        for quoted_target in re.findall(
+                            r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", fact.text
+                        ):
+                            if not quoted_target or any(c in quoted_target for c in "\\{}"):
+                                raise CanonicalGroupEvidenceError(
+                                    "Unselected Core group contains an invalid canonical link"
+                                )
+                            target_path = (
+                                quoted_target
+                                if quoted_target.endswith(".md")
+                                else f"{quoted_target}.md"
+                            )
+                            target_note = parse_note(repository.read_text(target_path))
+                            if target_note.metadata.get("type") == "person":
+                                raise CanonicalGroupEvidenceError(
+                                    "Finite source handoff omits an earlier Core Person"
+                                )
+            except CanonicalGroupEvidenceError:
+                raise
+            except (OSError, ValueError, TypeError, RuntimeError, AtomicFactError) as error:
                 raise CanonicalGroupEvidenceError(
                     "Unselected Core group physical inventory is unavailable"
                 ) from error

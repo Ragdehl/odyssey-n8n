@@ -106,6 +106,7 @@ class TaskCorePlanner:
                 for mention, name in self._verified_person_set
             ),
             compatible_roles=("identity",),
+            closed_target_types=("person",),
         )
 
     def _require_authorized_relationship_roles(self, plan: RequestPlan) -> None:

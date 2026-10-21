@@ -75,10 +75,22 @@ def require_explicit_cohort_coverage(source: str, quoted_members: tuple[str, ...
     stripped = trailing.strip()
     if stripped and re.fullmatch(r"[.!?;,]+", stripped) is None:
         core = stripped.rstrip(".!?").strip()
-        if not re.fullmatch(modifier, core, flags=re.IGNORECASE) or re.search(
-            r"\b(?:y|et|and|e|con|with|avec)\b\s+(?:a\s+)?[^\W\d_]+",
+        # Place/time modifiers cannot smuggle a second finite predicate by
+        # using a relative or subordinating clause ("donde conocí a marta",
+        # "where I met bob", "pendant que ..."). Veto only: no inference.
+        subordinate_clause = re.search(
+            r"\b(?:donde|adonde|mientras|cuando|where|while|when|où|lorsque|quand)\b",
             core,
             flags=re.IGNORECASE,
+        )
+        if (
+            not re.fullmatch(modifier, core, flags=re.IGNORECASE)
+            or subordinate_clause
+            or re.search(
+                r"\b(?:y|et|and|e|con|with|avec)\b\s+(?:a\s+)?[^\W\d_]+",
+                core,
+                flags=re.IGNORECASE,
+            )
         ):
             raise SourceCohortCoverageError("Unreviewed finite source trailing clause")
     leading = source[: ordered[0][0]]

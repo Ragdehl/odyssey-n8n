@@ -31,6 +31,14 @@ def test_all_required_cross_surface_groups_have_real_test_files():
     }
     assert len(set(x for group in GATE.GROUPS.values() for x in group)) >= 20
     assert GATE.PENDING_LIVE_GATES
+    # The v9 audit revealed blind spots in physical alias/progress/readback and
+    # live-campaign acceptance; these tests must run on every later change.
+    selected = {case for group in GATE.GROUPS.values() for case in group}
+    assert {
+        "tests/runtime/test_p4_aliased_prior_person.py",
+        "tests/runtime/test_p4_composition_plural_postwrite_loss.py",
+        "tests/runtime/test_p4_e4_campaign_oracle.py",
+    } <= selected
 
 
 def test_gate_cannot_falsely_claim_live_browser_or_provider_acceptance():

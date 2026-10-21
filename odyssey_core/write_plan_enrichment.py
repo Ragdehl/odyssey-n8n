@@ -158,13 +158,15 @@ def ensure_complete_core_reference_set(
     links: tuple[CoreLinkFactSpec, ...],
     *,
     compatible_roles: tuple[str, ...] = (),
+    closed_target_types: tuple[str, ...] = (),
 ) -> RequestPlan:
     """Complete a receipt-backed reference set using only Core plan mechanics.
 
     The caller provides preverified *canonical names*, never stable Note IDs.
-    Reject foreign/duplicate references to a protected mention instead of
-    silently augmenting an unsafe partial model plan. The ordinary E3 preflight
-    must independently recheck every target's current physical Note ID.
+    Reject foreign/duplicate references to a protected mention. When the
+    caller has proved a CLOSED set of one or more Note types, reject any
+    unapproved planner reference of those types, even using a different
+    textual mention. Core Writer remains the only mutation authority.
     """
     if not links:
         return plan
@@ -180,15 +182,26 @@ def ensure_complete_core_reference_set(
     }
     if len(requested) != len(links):
         raise RequestPlanningError("Duplicate canonical reference-set members")
+    if not isinstance(closed_target_types, tuple) or any(
+        not isinstance(note_type, str)
+        or not note_type
+        or note_type not in {spec.target_type for spec in links}
+        for note_type in closed_target_types
+    ):
+        raise RequestPlanningError("Closed reference types require verified members")
     action, units, primary_index = _sole_primary(plan)
     remaining = set(requested)
     protected_mentions = {spec.mention for spec in links}
     for ref in units[primary_index].references:
-        if ref.mention not in protected_mentions:
-            continue
         if not 0 <= ref.target_index < len(action.units):
-            raise RequestPlanningError("Reference-set helper is missing")
+            if ref.mention in protected_mentions or closed_target_types:
+                raise RequestPlanningError("Reference-set helper is missing")
+            continue
         helper = action.units[ref.target_index]
+        if ref.mention not in protected_mentions:
+            if helper.target.type in closed_target_types:
+                raise RequestPlanningError("Closed reference set has an unapproved member")
+            continue
         key = (ref.mention, helper.target.type, helper.target.entity)
         spec = requested.get(key)
         if (
