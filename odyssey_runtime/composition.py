@@ -125,6 +125,7 @@ from odyssey_core.observability import (
 )
 from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
 from odyssey_core.persistence import ActorInput
+from odyssey_core.plural_task_readback import guard_plural_task_readback
 from odyssey_core.reference_preflight import ReferencePreflightError, current_identity_guard
 from odyssey_core.request_planning import (
     OpenAIRequestPlanner as GPT56RequestPlanner,
@@ -4209,6 +4210,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 else None
             ),
         )
+        if person_proofs is not None:
+            # The same Core-owned postwrite guard is exercised by isolated
+            # physical-corruption regressions. Never trust a Writer receipt
+            # alone as evidence that every Person link persisted.
+            core_result = guard_plural_task_readback(repository, schema, core_result, person_proofs)
         return replace(
             core_result,
             operational=OperationalEvidence(

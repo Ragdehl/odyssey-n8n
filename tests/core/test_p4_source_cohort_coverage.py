@@ -85,3 +85,30 @@ def test_coordinated_explicit_lists_preserve_every_member(source, chosen):
 def test_later_or_previous_clause_with_possible_person_fails_closed(source, chosen):
     with pytest.raises(SourceCohortCoverageError, match="clause"):
         require_explicit_cohort_coverage(source, chosen)
+
+
+@pytest.mark.parametrize(
+    "source, members",
+    [
+        ("Conocí a Ana y a Luis en el parque.", ("Ana", "Luis")),
+        ("Conocí a Ana y a Luis hoy por la mañana.", ("Ana", "Luis")),
+        ("I met Alice and Bob at the park.", ("Alice", "Bob")),
+        ("J'ai rencontré Claire et Hugo dans le jardin.", ("Claire", "Hugo")),
+        ("Conocí a Ana, Luis y Nuria durante el viaje.", ("Ana", "Luis", "Nuria")),
+    ],
+)
+def test_finite_cohort_allows_nonperson_trailing_modifier(source, members):
+    require_explicit_cohort_coverage(source, members)
+
+
+@pytest.mark.parametrize(
+    "source, members",
+    [
+        ("Conocí a Ana y Luis con marta.", ("Ana", "Luis")),
+        ("Conocí a Ana y Luis en el parque; conocí a marta.", ("Ana", "Luis")),
+        ("Conocí a Ana y Luis hoy por la mañana y a marta.", ("Ana", "Luis")),
+    ],
+)
+def test_finite_cohort_never_converts_new_person_clause_to_modifier(source, members):
+    with pytest.raises(SourceCohortCoverageError):
+        require_explicit_cohort_coverage(source, members)

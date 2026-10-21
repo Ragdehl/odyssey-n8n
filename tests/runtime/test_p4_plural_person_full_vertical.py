@@ -293,3 +293,107 @@ def test_live_e4_gate_accepts_only_self_and_exact_person_cohort():
         for i, name in enumerate(names)
     }
     assert assert_person_inventory(notes, PEOPLE) is None
+
+
+def test_plural_task_status_is_partial_if_one_canonical_link_disappears_after_write(
+    tmp_path, monkeypatch
+):
+    """Simulate a post-Writer lost backlink on the real synthetic Markdown."""
+
+    from odyssey_core.plural_task_readback import guard_plural_task_readback
+
+    repo, actor, executor, product, records = runtime_with_plural_recording(tmp_path)
+    delegate = executor.dependent_task_delegate
+    observed = []
+
+    def corrupt_one_persisted_task(
+        text, locator, identity, interpretation, temporal, handoff, instant
+    ):
+        result = delegate(text, locator, identity, interpretation, temporal, handoff, instant)
+        assert result.status is ApplicationStatus.COMPLETED
+        task_paths = [
+            path
+            for path in repo.list_markdown_paths()
+            if parse_note(repo.read_text(path)).metadata.get("type") == "task"
+        ]
+        assert len(task_paths) == 1
+        original = repo.read_text(task_paths[0])
+        marker = "|Ana]]"
+        assert original.count(marker) == 1
+        end = original.index(marker)
+        start = original.rfind("[[", 0, end)
+        assert start >= 0
+        missing = original[:start] + original[end + len(marker) :]
+        assert missing != original
+        repo.replace_text(task_paths[0], missing)
+        observed.append("physical_link_removed")
+        proofs = handoff.require_current(identity.stable_user_id, text, repo, SCHEMA)
+        return guard_plural_task_readback(repo, SCHEMA, result, proofs)
+
+    executor.dependent_task_delegate = corrupt_one_persisted_task
+    result = product.execute_product(SOURCE, "plural-e4-lost-link", "main", actor)
+    assert result["status"] == "partial", result
+    assert observed == ["physical_link_removed"]
+    assert records == ["prepare", "core", "task"]
+    after = snapshot(repo)
+    assert sum(parse_note(x).metadata.get("type") == "task" for x in after.values()) == 1
+    assert "Ana" not in next(
+        parse_note(x).content
+        for x in after.values()
+        if parse_note(x).metadata.get("type") == "task"
+    )
+
+
+def test_physical_finite_handoff_ignores_unrelated_self_journal_note(tmp_path):
+    """A prior SELF journal fact must not become a third Person referent."""
+    from hashlib import sha256
+
+    from odyssey_core.dependent_group_evidence import prove_canonical_group_handoff
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+
+    repo, actor, executor, product, _records = runtime_with_plural_recording(tmp_path)
+    captured = []
+    real_core = executor.dependent_core_delegate
+
+    def capture_core(*args):
+        result = real_core(*args)
+        captured.append(result)
+        return result
+
+    executor.dependent_core_delegate = capture_core
+    outcome = product.execute_product(SOURCE, "e4-self-prior-fact", "main", actor)
+    assert outcome["status"] == "completed"
+    assert len(captured) == 1
+    earlier = "Hoy terminé el informe. "
+    self_id = executor.bindings.resolve(actor.stable_user_id).person_note_id
+    independent = ApplicationResult(
+        "prior-self-fact",
+        ApplicationStatus.COMPLETED,
+        (),
+        (self_id,),
+        core_source_digest=sha256(earlier.strip().encode("utf-8")).hexdigest(),
+    )
+    graph = ReviewedSourceGraph(
+        earlier + SOURCE,
+        (
+            SourceGroup(0, "core", earlier, ()),
+            SourceGroup(1, "core", BEFORE, ()),
+            SourceGroup(
+                2,
+                "tasks",
+                AFTER,
+                (
+                    GroupDependency(1, "los dos", "Ana"),
+                    GroupDependency(1, "los dos", "Luis"),
+                ),
+            ),
+        ),
+    )
+    proof = prove_canonical_group_handoff(
+        graph=graph,
+        consumer_index=2,
+        predecessors={0: independent, 1: captured[0]},
+        repository=repo,
+        schema=SCHEMA,
+    )
+    assert len(proof.require_all_current(repo, SCHEMA)) == 2

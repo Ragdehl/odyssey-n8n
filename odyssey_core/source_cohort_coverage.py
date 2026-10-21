@@ -67,13 +67,20 @@ def require_explicit_cohort_coverage(source: str, quoted_members: tuple[str, ...
     trailing = source[ordered[-1][1] :]
     if _SUFFIX_LIST_MEMBER.match(trailing):
         raise SourceCohortCoverageError("Unreviewed member after finite source quotes")
-    # Two agreeing reviewers cannot establish completeness of further clauses:
-    # "ana y luis; después conocí a marta" contains no capitalized omitted
-    # name and no adjacent list continuation. A source-bound finite cohort must
-    # end at its final quoted member; otherwise abstain rather than treating an
-    # arbitrary subset of the larger antecedent as physically complete.
-    if re.fullmatch(r"[\s.!?;,]*", trailing) is None:
-        raise SourceCohortCoverageError("Unreviewed finite source trailing clause")
+    # Permit a bounded modifier of the SAME source predicate (place/time),
+    # never an extra clause or an additional list member. A non-name lexical
+    # continuation still needs the independently reviewed Core source group.
+    # Exclude "con"/"with": those can add an unquoted Person in lowercase.
+    modifier = r"(?:hoy|ayer|mañana|today|yesterday|tomorrow)?\s*(?:en|por|durante|in|at|on|during|dans|à|pendant)\s+[^;.!?\n]+"
+    stripped = trailing.strip()
+    if stripped and re.fullmatch(r"[.!?;,]+", stripped) is None:
+        core = stripped.rstrip(".!?").strip()
+        if not re.fullmatch(modifier, core, flags=re.IGNORECASE) or re.search(
+            r"\b(?:y|et|and|e|con|with|avec)\b\s+(?:a\s+)?[^\W\d_]+",
+            core,
+            flags=re.IGNORECASE,
+        ):
+            raise SourceCohortCoverageError("Unreviewed finite source trailing clause")
     leading = source[: ordered[0][0]]
     if re.search(r"[.;!?]\s*\S", leading):
         raise SourceCohortCoverageError("Unreviewed finite source preceding clause")

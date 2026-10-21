@@ -51,12 +51,36 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     return {present:!!bar,valid:Number.isFinite(percent)&&percent>=0&&percent<=100,
       percent,displayed:bar?.querySelector('.processing-percent')?.textContent};
   });
+  // Collect REAL DOM updates over the asynchronous request, not merely the
+  // initial 0% rendered before the server has emitted a progress milestone.
+  await page.evaluate(()=>{
+    const values=[0];
+    const sample=()=>{
+      const bar=document.querySelector('.processing-donut[role="progressbar"]');
+      if(!bar)return;
+      const n=Number(bar.getAttribute("aria-valuenow"));
+      const shown=bar.querySelector(".processing-percent")?.textContent;
+      if(Number.isInteger(n)&&n>=0&&n<=100&&String(n)===shown&&values.at(-1)!==n)
+        values.push(n);
+    };
+    window.__e4ProgressValues=values;
+    window.__e4ProgressWatcher=new MutationObserver(sample);
+    window.__e4ProgressWatcher.observe(document.querySelector("#interaction"),
+      {attributes:true,subtree:true,childList:true,characterData:true});
+    sample();
+  });
   checkpoint="await_initial_response";
   await page.waitForFunction(()=>(document.querySelector(".message-acknowledgement")
     && document.querySelectorAll(".detail-button").length===1
     && document.querySelectorAll(".note-set-button").length===1)
     || document.querySelector(".message-error"), {timeout:180000});
   if(await page.$(".message-error"))throw Error("Browser received an application error");
+  const progressTrace=await page.evaluate(()=>{
+    window.__e4ProgressWatcher?.disconnect();
+    const observed=window.__e4ProgressValues||[];
+    return {observed:observed.slice(0,32),advanced:observed.some(n=>n>0),
+      monotonic:observed.every((n,i)=>i===0||n>=observed[i-1])};
+  });
   const before=await page.evaluate(()=>({
     userMessages:document.querySelectorAll(".message-user").length,
     acknowledgements:document.querySelectorAll(".message-acknowledgement").length,
@@ -177,6 +201,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
   const output={
     pass:progressDonut.present && progressDonut.valid &&
       String(progressDonut.percent)===progressDonut.displayed &&
+      progressTrace.advanced && progressTrace.monotonic &&
       before.userMessages===1 && before.acknowledgements===1 &&
       before.details===1 && before.noteButtons===1 &&
       before.userMessages===after.userMessages &&
@@ -188,7 +213,8 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
       !reloadedDetail.diagnosticRejected &&
       notes.surfaceVisible && notes.resultNodes>=2 &&
       jsErrors.length===0,
-    before,after,detail,reloadedDetail,notes,progressDonut,jsErrorsCount:jsErrors.length,
+    before,after,detail,reloadedDetail,notes,progressDonut,progressTrace,
+    jsErrorsCount:jsErrors.length,
     actor:"synthetic_only",messages_sent:1
   };
   console.log(JSON.stringify(output));

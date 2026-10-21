@@ -229,17 +229,31 @@ def verify_dependent_group_graph(
         ):
             raise DependentGroupGraphError("Finite source dependency set is incomplete")
         parents = {dep.predecessor_index for dep, _ in finite}
-        # A finite source set cannot silently ignore another earlier Core
-        # group: reviewers may select Ana and Luis while a third group
-        # creates Marta. Cross-group coverage is unsupported unless every
-        # Core predecessor of this consumer participates. This is a veto,
-        # never a source of invented names or additional edges.
-        if any(
-            earlier.ordinal not in parents
-            for earlier in groups[: group.ordinal]
-            if earlier.capability == "core"
-        ):
-            raise DependentGroupGraphError("Finite source set omits a preceding Core group")
+        # Only sibling Core facts with the SAME source-attested predicate frame
+        # are structurally part of this candidate cohort. An unrelated report
+        # must not be promoted to a Person edge. This is a negative source veto
+        # (never inference/identity resolution); the physical E2 handoff also
+        # rejects an omitted materialized Person from any other earlier group.
+        frames = []
+        for dep, _ in finite:
+            quoted = groups[dep.predecessor_index].source.strip()
+            position = quoted.casefold().find(dep.antecedent_mention.casefold())
+            if position >= 3 and position + len(dep.antecedent_mention) < len(quoted):
+                prefix = quoted[:position]
+                suffix = quoted[position + len(dep.antecedent_mention) :]
+                if suffix[0] in ".!?":
+                    frames.append((prefix.casefold(), suffix.casefold()))
+        for earlier in groups[: group.ordinal]:
+            if earlier.capability != "core" or earlier.ordinal in parents:
+                continue
+            candidate = earlier.source.strip().casefold()
+            if any(
+                candidate.startswith(prefix)
+                and candidate.endswith(suffix)
+                and len(candidate) > len(prefix) + len(suffix)
+                for prefix, suffix in frames
+            ):
+                raise DependentGroupGraphError("Finite source set omits a preceding Core group")
         if len(parents) == 1:
             parent = next(iter(parents))
             try:

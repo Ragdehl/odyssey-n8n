@@ -24,6 +24,8 @@ from .application import (
 from .canonical_receipt_provenance import materialized_core_receipt
 from .dependent_group_graph import ReviewedSourceGraph
 from .dependent_reference_form import referenced_finite_cardinality, supported_anaphoric_form
+from .notes import parse_note
+from .reference_preflight import _find_existing_identity
 from .storage import VaultRepository
 
 
@@ -141,22 +143,59 @@ def prove_canonical_group_handoff(
     consumer = graph.groups[consumer_index]
     if not consumer.dependencies:
         raise CanonicalGroupEvidenceError("Consumer has no reviewed dependency")
-    # Even a directly constructed graph cannot bypass the source-side
-    # exhaustive-cohort veto. No subset of Core predecessor groups may
-    # claim a finite plural set at the physical E2 handoff boundary.
+    # Independently asserted Core facts need not become Task dependencies.
+    # Nevertheless every earlier Core group must have a physical receipt:
+    # an unselected group with a real Person would make a finite cohort unsafe.
+    # This repeats the check even for manually constructed ReviewedSourceGraph.
     finite_dependencies = tuple(
         d for d in consumer.dependencies if referenced_finite_cardinality(d.mention) is not None
     )
     if finite_dependencies:
         selected_parents = {d.predecessor_index for d in consumer.dependencies}
-        if any(
-            earlier.ordinal not in selected_parents
-            for earlier in graph.groups[:consumer_index]
-            if earlier.capability == "core"
-        ):
-            raise CanonicalGroupEvidenceError(
-                "Finite source handoff omits an earlier Core predecessor"
-            )
+        for earlier in graph.groups[:consumer_index]:
+            if earlier.capability != "core" or earlier.ordinal in selected_parents:
+                continue
+            result = predecessors.get(earlier.ordinal)
+            if (
+                not isinstance(result, ApplicationResult)
+                or result.status is not ApplicationStatus.COMPLETED
+                or result.core_source_digest
+                != sha256(earlier.source.strip().encode("utf-8")).hexdigest()
+            ):
+                raise CanonicalGroupEvidenceError(
+                    "Unselected earlier Core group has no verified physical receipt"
+                )
+            if any(
+                proof.note_type == "person"
+                and proof.canonical_name.casefold() in earlier.source.casefold()
+                for action in result.action_results
+                if action.status is ActionStatus.COMPLETED
+                for proof in (
+                    *action.canonical_reference_evidence,
+                    *action.canonical_direct_target_evidence,
+                )
+            ):
+                raise CanonicalGroupEvidenceError(
+                    "Finite source handoff omits an earlier Core Person"
+                )
+            # Missing optional reference evidence cannot hide a physical
+            # Person write. Inspect every affected canonical Note too.
+            try:
+                for note_id in result.affected_stable_note_ids:
+                    path, _name = _find_existing_identity(repository, schema, note_id)
+                    note = parse_note(repository.read_text(path))
+                    if (
+                        note.metadata.get("type") == "person"
+                        and isinstance(note.metadata.get("name"), str)
+                        and note.metadata["name"].casefold() in earlier.source.casefold()
+                    ):
+                        raise CanonicalGroupEvidenceError(
+                            "Finite source handoff omits an earlier Core Person"
+                        )
+            except (OSError, ValueError, TypeError, RuntimeError) as error:
+                raise CanonicalGroupEvidenceError(
+                    "Unselected Core group physical inventory is unavailable"
+                ) from error
     edges: list[CanonicalGroupEdge] = []
     for dependency in consumer.dependencies:
         parent = dependency.predecessor_index

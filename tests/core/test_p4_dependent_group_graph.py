@@ -389,3 +389,37 @@ def test_finite_set_rejects_omitted_core_predecessor_before_any_write(omitted_in
                 "groups": deepcopy(groups),
             },
         )
+
+
+def test_finite_cohort_ignores_unrelated_earlier_core_fact_without_losing_edges():
+    """'Finished the report' is not another Person in 'Ana y Luis'."""
+    groups = [
+        {"capability": "core", "source_quote": "Hoy terminé el informe. ", "dependencies": []},
+        {
+            "capability": "core",
+            "source_quote": "Conocí a Ana y a Luis en el parque. ",
+            "dependencies": [],
+        },
+        {
+            "capability": "tasks",
+            "source_quote": "Mañana tengo que llamar a los dos.",
+            "dependencies": [
+                {"predecessor_index": 1, "mention": "los dos", "antecedent_mention": name}
+                for name in ("Ana", "Luis")
+            ],
+        },
+    ]
+    source = "".join(group["source_quote"] for group in groups)
+    graph = verify_dependent_group_graph(
+        source,
+        {"full_source_quote": source, "groups": groups},
+        {
+            "full_source_quote": source,
+            "groups": deepcopy(groups),
+            "complete": True,
+            "dependency_edges_verified": True,
+            "review_reason": "APPROVED",
+            "failing_group_index": None,
+        },
+    )
+    assert graph.edges == ((1, 2, "Ana", "los dos"), (1, 2, "Luis", "los dos"))
