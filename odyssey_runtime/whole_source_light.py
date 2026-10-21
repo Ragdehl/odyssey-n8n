@@ -1310,6 +1310,22 @@ class WholeSourceLightExecutor:
         try:
             scope = verify_dependent_source_scopes(source, candidate)
         except DependentSourceScopesError:
+            # Distinguish a model's invalid literal partition from semantic
+            # target disagreement. Only booleans, never source or names, enter
+            # prewrite telemetry. No retry or write authority is introduced.
+            self._observe_prewrite(
+                delivery,
+                "dependent_partition_rejected",
+                exact_source=candidate.get("full_source_quote") == source,
+                exact_span_coverage=(
+                    isinstance(candidate.get("antecedent_quote"), str)
+                    and isinstance(candidate.get("dependent_quote"), str)
+                    and candidate["antecedent_quote"] + candidate["dependent_quote"] == source
+                ),
+                finite_mention=(
+                    referenced_finite_cardinality(candidate.get("dependent_mention")) is not None
+                ),
+            )
             # Only a complete two-group source proposal with an explicitly
             # numbered closed-class plural may request a *new* independent
             # N:M audit. Invalid references and source mutations abstain.
@@ -1337,7 +1353,7 @@ class WholeSourceLightExecutor:
                     router_started=router_started,
                     route_scopes=route_scopes,
                 )
-            return self._abstain(delivery)
+            return self._abstain(delivery, "DEPENDENT_SOURCE_PARTITION_UNVERIFIED")
         if route_scopes and referenced_finite_cardinality(scope.mention) is not None:
             # A one-person contract is structurally incapable of proving a
             # quoted finite set. Route straight to the N:M planner + its OWN

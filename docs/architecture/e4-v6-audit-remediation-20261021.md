@@ -92,3 +92,41 @@ La prueba de tres predecesores incluyó tres escrituras reales de Persona por Co
 rechazo acotada que no exponga mensajes privados, estabilizar las revisiones
 semánticas sin reducir los vetos de seguridad; repetir piloto vivo, luego
 cuatro auditores del SHA vigente y campaña de Performance.
+
+## Investigación de la abstención GPT y corrección dirigida — 21-10-2026
+
+Se recuperó el acceso remoto a Raspberry sin cambiar credenciales ni conectores.
+El rechazo previo del commit `bd0dc91` solo conservaba
+`FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED`; ese código agrupa múltiples
+salidas prewrite, por lo que **su causa exacta anterior sigue sin demostrarse**.
+
+Se instrumentó únicamente una ejecución sintética efímera desde
+`/tmp/e4_safe_trace.py`, con indicadores de Router, partición, cardinal,
+revisiones y función/línea de abstención; sin claves ni datos de usuario
+en la traza. Sobre la misma rama original, GPT vivo ahora aceptó el Router
+Core+Tasks+Temporal, el split exacto, cardinal 2 y dos revisiones independientes
+con dos personas. Chromium autenticado local + n8n offline aislado + GPT
++ Writer canónico + Markdown + recarga + backlinks + replay E3 pasó
+(`/tmp/e4_safe_trace.log`). Esto demuestra **variabilidad**, no una
+causa determinista del fallo anterior.
+
+Se detectó una contradicción real en el contrato de particionado:
+`DEPENDENT_TASK_PARTITION_PROMPT` describía un referente Person singular
+aunque E4 exige también una Task propia con grupo finito de 2–8 Persons.
+Se amplió la descripción de forma genérica (cohorte completa, una Task,
+nunca selección parcial ni pronombre abierto). Además, una división inválida
+ahora emite `dependent_partition_rejected` con tres booleanos no sensibles
+y el código específico `DEPENDENT_SOURCE_PARTITION_UNVERIFIED`, antes de
+cualquier escritura. No se retocaron la semántica Core, E3, los recibos
+físicos ni el fail-closed de identidad.
+
+Tras modificar el prompt, el MISMO E2E real sintético volvió a pasar,
+incluidos **2 Person + 1 Task, 4 recibos visibles, 2 backlinks, 0 errores JS
+y E3 replay byte-idéntico**, `/tmp/e4_safe_trace_postfix.log` (exit 0,
+92,85 s). Los tests focales de prompt, negativo de particionado y
+dependencia pasan **79/79**, Ruff PASS. No debe concluirse fiabilidad
+estadística a partir de estas dos ejecuciones: la abstención anterior no
+queda causalmente explicada y el resto de auditorías/Performance siguen
+pendientes. Sin deploy, sin merge y sin notas privadas.
+
+Gate transversal tras todas las modificaciones de esta sesión: `scripts/odyssey_cross_surface_gate.py`, salida 0, **1.516 Python PASS, 179 Node PASS y 7 subtests PASS**, registro `/tmp/e4-v7-cross-20261021.log`; Ruff PASS. Se conserva el historial de 9 fallos globales de benchmarks previos, no se declara la suite global PASS.
