@@ -1,9 +1,9 @@
-const MONTH_PREVIEW_KINDS = new Set(["day_content", "journal", "capture", "task", "reference"]);
+const MONTH_PREVIEW_KINDS = new Set(["day_content", "journal", "capture", "event", "task", "reference"]);
 const MONTH_PREVIEW_LIMIT = 6;
 const MONTH_PREVIEW_LABEL_LIMIT = 80;
 const MONTH_PREVIEW_TEXT_LIMIT = 120;
 const SCHEDULE_DAY_COUNTS = new Set([1, 3, 7]);
-const SCHEDULE_ROLES = new Set(["target", "deadline", "semantic_date", "planned", "semantic_time", "work_session"]);
+const SCHEDULE_ROLES = new Set(["target", "deadline", "semantic_date", "planned", "semantic_time", "work_session", "occurrence"]);
 
 export class CalendarRequestError extends Error {
   constructor(message) {
@@ -50,14 +50,14 @@ export function validateCalendarResponse(value) {
   }
   if (value.kind === "calendar_day") {
     if (!isoDate(value.date) || typeof value.materialized !== "boolean" || !Array.isArray(value.content) ||
-        !Array.isArray(value.journals) || !Array.isArray(value.captures) || !Array.isArray(value.references) || !Array.isArray(value.tasks)) {
+        !Array.isArray(value.journals) || !Array.isArray(value.captures) || !Array.isArray(value.references) || !Array.isArray(value.tasks) || !Array.isArray(value.events ?? [])) {
       throw new CalendarRequestError("Día inválido.");
     }
     return {
       kind: "calendar_day", date: value.date, materialized: value.materialized,
       content: value.content.map(validateBlock), journals: value.journals.map(validateJournal),
       captures: value.captures.map(validateCapture), references: value.references.map(validateReference),
-      tasks: value.tasks.map(validateTask),
+      tasks: value.tasks.map(validateTask), events: (value.events ?? []).map(validateEvent),
     };
   }
   throw new CalendarRequestError("Respuesta de calendario no compatible.");
@@ -73,6 +73,7 @@ function validateMonthDay(value) {
     date: value.date, materialized: value.materialized, has_content: value.has_content,
     journal_count: count(value.journal_count), captured_fact_count: count(value.captured_fact_count),
     reference_count: count(value.reference_count), task_count: count(value.task_count),
+    event_count: count(value.event_count ?? 0),
     preview_total: previewTotal, previews,
   };
 }
@@ -95,12 +96,18 @@ function validateScheduleDay(value, expectedDate) {
   return {date: value.date, all_day: allDay, timed};
 }
 function validateScheduleItem(value, timed) {
-  if (!value || !["task", "fact", "work_session"].includes(value.kind) || !boundedText(value.source_id, 240) ||
+  if (!value || !["task", "fact", "work_session", "event"].includes(value.kind) || !boundedText(value.source_id, 240) ||
       !boundedText(value.source_type, 80) || !boundedText(value.label, MONTH_PREVIEW_LABEL_LIMIT) ||
       !SCHEDULE_ROLES.has(value.role) ||
       (value.text !== undefined && !boundedText(value.text, MONTH_PREVIEW_TEXT_LIMIT)) ||
       (value.segments !== undefined && !Array.isArray(value.segments))) {
     throw new CalendarRequestError("Elemento de agenda inválido.");
+  }
+  if (
+    (value.kind === "event" && (value.source_type !== "event" || value.role !== "occurrence")) ||
+    (value.kind !== "event" && value.role === "occurrence")
+  ) {
+    throw new CalendarRequestError("Elemento de evento inválido.");
   }
   if (timed) {
     if (!clock(value.start_time) || (value.end_time !== undefined && !clock(value.end_time))) {
@@ -136,6 +143,17 @@ function validateTask(value) {
     throw new CalendarRequestError("Tarea de calendario inválida.");
   }
   return {source: validateSummary(value.source), roles: [...new Set(value.roles)], mutation: {revision: value.mutation.revision, source_hash: value.mutation.source_hash}};
+}
+function validateEvent(value) {
+  if (!value || !Array.isArray(value.roles) || value.roles.length !== 1 ||
+      value.roles[0] !== "occurrence" || !value.mutation ||
+      !Number.isInteger(value.mutation.revision) || value.mutation.revision < 1 ||
+      !/^[a-f0-9]{64}$/.test(value.mutation.source_hash || "")) {
+    throw new CalendarRequestError("Evento de calendario inválido.");
+  }
+  const source = validateSummary(value.source);
+  if (source.type !== "event") throw new CalendarRequestError("Tipo de evento inválido.");
+  return {source, roles: ["occurrence"], mutation: {revision: value.mutation.revision, source_hash: value.mutation.source_hash}};
 }
 function validateSummary(value) {
   if (!value || !text(value.id) || !text(value.name) || !text(value.type) || !Array.isArray(value.tags) ||

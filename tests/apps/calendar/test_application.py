@@ -56,6 +56,7 @@ def test_calendar_application_dispatches_closed_month_and_day_queries() -> None:
                 "captured_fact_count": 0,
                 "reference_count": 0,
                 "task_count": 0,
+                "event_count": 0,
                 "preview_total": 1,
                 "previews": [
                     {
@@ -77,6 +78,7 @@ def test_calendar_application_dispatches_closed_month_and_day_queries() -> None:
         "captures": [],
         "references": [],
         "tasks": [],
+        "events": [],
     }
     assert calls == [("month", "2026-10"), ("day", "2026-10-01")]
 

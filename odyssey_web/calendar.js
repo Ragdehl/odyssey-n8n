@@ -383,6 +383,9 @@ export function mountCalendar(root, {
     for (const capture of day.captures) {
       items.push({kind: "capture", source_type: capture.source.type, label: capture.source.name, text: firstBlockText(capture.facts)});
     }
+    for (const event of day.events ?? []) {
+      items.push({kind: "event", source_type: event.source.type, label: event.source.name});
+    }
     for (const task of day.tasks) {
       items.push({kind: "task", source_type: task.source.type, label: task.source.name});
     }
@@ -494,6 +497,7 @@ export function mountCalendar(root, {
     if (day.content.length) sections.append(blockSection("Contenido del día", day.content));
     if (day.journals.length) sections.append(journalSection(day.journals));
     if (day.captures.length) sections.append(captureSection(day.captures));
+    if (day.events?.length) sections.append(eventSection(day.events));
     if (day.tasks.length) sections.append(taskSection(day.tasks));
     if (day.references.length) sections.append(referenceSection(day.references));
     if (!sections.children.length) {
@@ -539,6 +543,17 @@ export function mountCalendar(root, {
       facts.className = "calendar-related-blocks";
       renderBlocks(facts, capture.facts);
       group.append(facts);
+      section.append(group);
+    }
+    return section;
+  }
+
+  function eventSection(events) {
+    const section = sectionWithHeading("Eventos");
+    for (const item of events) {
+      const group = document.createElement("article");
+      group.className = "calendar-related-group calendar-event-group";
+      group.append(noteButton(item.source));
       section.append(group);
     }
     return section;
@@ -733,6 +748,7 @@ function dayAriaLabel(day) {
   if (day.journal_count) details.push(`${day.journal_count} diario` + (day.journal_count === 1 ? "" : "s"));
   if (day.captured_fact_count) details.push(`${day.captured_fact_count} hechos capturados`);
   if (day.reference_count) details.push(`${day.reference_count} referencias`);
+  if (day.event_count) details.push(day.event_count + " evento" + (day.event_count === 1 ? "" : "s"));
   if (day.task_count) details.push(`${day.task_count} tarea` + (day.task_count === 1 ? "" : "s"));
   return `${dayLabel(day.date)}${details.length ? `. ${details.join(", ")}` : ""}`;
 }

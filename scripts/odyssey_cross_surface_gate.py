@@ -25,6 +25,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "e5_events_isolated_contract": (
         "tests/apps/events/test_events_interpretation.py",
         "tests/apps/events/test_events_proposal_contract.py",
+        "tests/apps/events/test_event_calendar_vertical.py",
+        "tests/apps/events/test_event_core_e3_mutations.py",
         "tests/apps/events/test_e5_live_probe_contract.py",
         "tests/apps/tasks/test_interpretation.py",
         "tests/core/test_domain_interpretation.py",

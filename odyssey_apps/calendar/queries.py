@@ -64,6 +64,7 @@ class CalendarMonthDay:
     captured_fact_count: int
     reference_count: int
     task_count: int = 0
+    event_count: int = 0
     preview_total: int = 0
     previews: tuple[CalendarMonthPreview, ...] = ()
 
@@ -154,6 +155,7 @@ class CalendarDayView:
     captures: tuple[CalendarCapture, ...]
     references: tuple[CalendarReference, ...]
     tasks: tuple[CalendarTask, ...] = ()
+    events: tuple[CalendarTask, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +213,95 @@ def _calendar_roles_for_note(
             raise CalendarQueryError("Calendar encountered invalid scheduling metadata") from error
         by_date.setdefault(projected, []).append(role)
     return {key: tuple(dict.fromkeys(value)) for key, value in by_date.items()}
+
+
+def _event_occurrence(
+    note: _ScannedNote, schema: dict[str, Any]
+) -> tuple[date, date, str | None, str | None] | None:
+    """Read a schema-declared occurrence; never invent dates or resolve Temporal.
+
+    Any application can contribute an occurrence type, and Calendar can project
+    it without importing the owning app. Dates are inclusive and canceled notes
+    are deliberately omitted from Calendar while remaining canonical Markdown.
+    """
+    definition = next((row for row in schema.get("types", ()) if row.get("id") == note.type), None)
+    if not isinstance(definition, dict) or definition.get("calendar_projection") != "occurrence":
+        return None
+    if note.metadata.get("event_status") == "cancelled":
+        return None
+    properties = {
+        item.get("calendar_role"): item.get("id")
+        for item in definition.get("properties", ())
+        if isinstance(item, dict) and item.get("calendar_role")
+    }
+    raw_start = note.metadata.get(properties.get("occurrence_start_date"))
+    raw_end = note.metadata.get(properties.get("occurrence_end_date")) or raw_start
+    if not isinstance(raw_start, str) or not isinstance(raw_end, str):
+        raise CalendarQueryError("Occurrence lacks a canonical Temporal date")
+    try:
+        start_date = date.fromisoformat(raw_start)
+        end_date = date.fromisoformat(raw_end)
+    except ValueError as error:
+        raise CalendarQueryError("Occurrence contains invalid calendar dates") from error
+    if end_date < start_date:
+        raise CalendarQueryError("Occurrence end date precedes its start")
+    start_at = note.metadata.get(properties.get("occurrence_start_time"))
+    end_at = note.metadata.get(properties.get("occurrence_end_time"))
+    recurrence = note.metadata.get("recurrence_weekday")
+    if recurrence is not None and (
+        type(recurrence) is not int
+        or not 0 <= recurrence <= 6
+        or not note.metadata.get(properties.get("occurrence_end_date"))
+        or start_at is not None
+        or end_at is not None
+    ):
+        # A repeated offset timestamp would be wrong across DST boundaries.
+        # Recurring times require a future Temporal recurrence contract.
+        raise CalendarQueryError("Weekly event recurrence requires a finite untimed date interval")
+    if start_at is not None:
+        if not isinstance(start_at, str):
+            raise CalendarQueryError("Invalid occurrence start instant")
+        try:
+            start_instant = datetime.fromisoformat(start_at)
+        except ValueError as error:
+            raise CalendarQueryError("Invalid occurrence start instant") from error
+        if (
+            start_instant.tzinfo is None
+            or start_instant.utcoffset() is None
+            or start_instant.date() != start_date
+        ):
+            raise CalendarQueryError("Occurrence start conflicts with Temporal date/offset")
+    else:
+        start_instant = None
+    if end_at is not None:
+        if not isinstance(end_at, str) or start_instant is None:
+            raise CalendarQueryError("Occurrence end instant without start")
+        try:
+            end_instant = datetime.fromisoformat(end_at)
+        except ValueError as error:
+            raise CalendarQueryError("Invalid occurrence end instant") from error
+        if (
+            end_instant.tzinfo is None
+            or end_instant.utcoffset() is None
+            or end_instant <= start_instant
+            or end_instant.date() != end_date
+        ):
+            raise CalendarQueryError("Occurrence ends before start or off its canonical date")
+    return (
+        start_date,
+        end_date,
+        start_instant.strftime("%H:%M") if start_instant else None,
+        datetime.fromisoformat(end_at).strftime("%H:%M") if end_at else None,
+    )
+
+
+def _occurs_on(
+    note: _ScannedNote, span: tuple[date, date, str | None, str | None], day: date
+) -> bool:
+    if not span[0] <= day <= span[1]:
+        return False
+    weekday = note.metadata.get("recurrence_weekday")
+    return weekday is None or day.weekday() == weekday
 
 
 def normalize_month(value: str) -> str:
@@ -402,11 +493,13 @@ class CalendarQueryService:
                 "captured_fact_count": 0,
                 "reference_count": 0,
                 "task_count": 0,
+                "event_count": 0,
                 "candidates": {
                     "day_content": [],
                     "journal": [],
                     "capture": [],
                     "task": [],
+                    "event": [],
                     "reference": [],
                 },
             }
@@ -439,6 +532,12 @@ class CalendarQueryService:
                     if scheduled_date in state:
                         state[scheduled_date]["task_count"] += 1
                         state[scheduled_date]["candidates"]["task"].append(note.id)
+            occurrence = _event_occurrence(note, self.schema)
+            if occurrence is not None:
+                for day in dates:
+                    if _occurs_on(note, occurrence, date.fromisoformat(day)):
+                        state[day]["event_count"] += 1
+                        state[day]["candidates"]["event"].append(note.id)
 
         details: dict[str, NoteDetail] = {}
 
@@ -472,7 +571,7 @@ class CalendarQueryService:
         for item in dates:
             day_state = state[item]
             ordered_ids: list[tuple[str, str]] = []
-            for kind in ("day_content", "journal", "capture", "task", "reference"):
+            for kind in ("day_content", "journal", "capture", "event", "task", "reference"):
                 source_ids = day_state["candidates"][kind]
                 source_ids.sort(
                     key=lambda source_id: (
@@ -610,6 +709,32 @@ class CalendarQueryService:
                         )
                     )
 
+        def add_occurrence(
+            note: _ScannedNote, span: tuple[date, date, str | None, str | None]
+        ) -> None:
+            start, end, first_time, final_time = span
+            for day in dates:
+                today = date.fromisoformat(day)
+                if not _occurs_on(note, span, today):
+                    continue
+                timed = first_time is not None
+                start_time = first_time if today == start else ("00:00" if timed else None)
+                end_time = final_time if today == end else None
+                # Overnight spans remain visible on every covered Day; do not
+                # fabricate an end time when no Temporal evidence exists.
+                state[day]["timed" if timed else "all_day"].append(
+                    CalendarScheduleItem(
+                        "event",
+                        note.id,
+                        note.type,
+                        _bounded_preview_text(note.name, _MONTH_PREVIEW_LABEL_LIMIT),
+                        None,
+                        "occurrence",
+                        start_time,
+                        end_time,
+                    )
+                )
+
         scanned = self._scan()
         scanned_by_id = {note.id: note for note in scanned}
         details: dict[str, NoteDetail] = {}
@@ -664,6 +789,9 @@ class CalendarQueryService:
                 add_task(note)
             elif note.type == "work_session":
                 add_work_session(note)
+            occurrence = _event_occurrence(note, self.schema)
+            if occurrence is not None:
+                add_occurrence(note, occurrence)
             for fact in note.atomic_facts:
                 relevant_anchors = tuple(
                     anchor for anchor in fact.temporal_anchors if anchor.date in state
@@ -722,12 +850,23 @@ class CalendarQueryService:
         captures: list[CalendarCapture] = []
         references: list[CalendarReference] = []
         tasks: list[CalendarTask] = []
+        events: list[CalendarTask] = []
         for note in self._scan():
             relevant_capture = note.capture_counts.get(normalized, 0) > 0
             relevant_reference = normalized in note.explicit_dates
             relevant_journal = note.type == "journal_entry" and note.entry_date == normalized
             relevant_task = note.type == "task" and normalized in note.calendar_roles
-            if not (relevant_capture or relevant_reference or relevant_journal or relevant_task):
+            occurrence = _event_occurrence(note, self.schema)
+            relevant_event = occurrence is not None and _occurs_on(
+                note, occurrence, date.fromisoformat(normalized)
+            )
+            if not (
+                relevant_capture
+                or relevant_reference
+                or relevant_journal
+                or relevant_task
+                or relevant_event
+            ):
                 continue
             try:
                 detail = self.notes_service.detail(note.id)
@@ -755,6 +894,15 @@ class CalendarQueryService:
                         detail.source_hash,
                     )
                 )
+            if relevant_event:
+                events.append(
+                    CalendarTask(
+                        detail.note,
+                        ("occurrence",),
+                        detail.revision,
+                        detail.source_hash,
+                    )
+                )
 
         def summary_key(summary: NoteSummary) -> tuple[str, str]:
             return (summary.name.casefold(), summary.id)
@@ -763,6 +911,7 @@ class CalendarQueryService:
         captures.sort(key=lambda item: summary_key(item.source))
         references.sort(key=lambda item: summary_key(item.source))
         tasks.sort(key=lambda item: summary_key(item.source))
+        events.sort(key=lambda item: summary_key(item.source))
         return CalendarDayView(
             normalized,
             resolved.materialized,
@@ -771,4 +920,5 @@ class CalendarQueryService:
             tuple(captures),
             tuple(references),
             tuple(tasks),
+            tuple(events),
         )

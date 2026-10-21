@@ -26,6 +26,7 @@ def calendar_to_response(
                     "captured_fact_count": item.captured_fact_count,
                     "reference_count": item.reference_count,
                     "task_count": item.task_count,
+                    "event_count": item.event_count,
                     "preview_total": item.preview_total,
                     "previews": [
                         {
@@ -91,6 +92,17 @@ def calendar_to_response(
                     },
                 }
                 for item in value.tasks
+            ],
+            "events": [
+                {
+                    "source": _summary_to_response(item.source),
+                    "roles": list(item.roles),
+                    "mutation": {
+                        "revision": item.revision,
+                        "source_hash": item.source_hash,
+                    },
+                }
+                for item in value.events
             ],
         }
     raise TypeError("Calendar response is invalid")

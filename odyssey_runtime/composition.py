@@ -25,6 +25,7 @@ from odyssey_apps import (
     OpenAIApplicationRouter,
 )
 from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
+from odyssey_apps.events import EVENT_SCHEMA_EXTENSION
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
@@ -2609,7 +2610,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         raise ValueError("Experimental full-source route cannot access PROD embedding cache")
     with schema_path.open("r", encoding="utf-8") as schema_file:
         base_schema = json.load(schema_file)
-    application_schema_extensions = (TASK_SCHEMA_EXTENSION,)
+    application_schema_extensions = (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
     schema = compose_application_schema(base_schema, application_schema_extensions)
 
     repository = VaultRepository(vault_root)

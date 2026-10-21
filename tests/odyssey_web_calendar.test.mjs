@@ -779,3 +779,71 @@ test("Calendar Task checkbox uses the bounded Notes lifecycle mutation and updat
   assert.equal(mounted.controller.state.monthValue, null);
   assert.equal(mounted.elements.status.textContent, "Tarea completada.");
 });
+
+test("E5 Event appears in month, Day and schedule without Task lifecycle controls", async () => {
+  const event = {
+    source: {...summary("event-1", "Foto del colegio", "event"), properties: {event_status: "scheduled", start_date: "2026-11-22"}},
+    roles: ["occurrence"],
+    mutation: {revision: 1, source_hash: "a".repeat(64)},
+  };
+  const month = validateCalendarResponse({
+    kind: "calendar_month", month: "2026-11", days: [{
+      date: "2026-11-22", materialized: false, has_content: false,
+      journal_count: 0, captured_fact_count: 0, reference_count: 0, task_count: 0,
+      event_count: 1, preview_total: 1,
+      previews: [{kind: "event", source_type: "event", label: "Foto del colegio"}],
+    }],
+  });
+  const day = validateCalendarResponse({
+    kind: "calendar_day", date: "2026-11-22", materialized: false,
+    content: [], journals: [], captures: [], references: [], tasks: [], events: [event],
+  });
+  const schedule = validateCalendarResponse({
+    kind: "calendar_schedule", start_date: "2026-11-22", day_count: 1,
+    days: [{date: "2026-11-22", all_day: [{
+      kind: "event", source_id: "event-1", source_type: "event",
+      label: "Foto del colegio", role: "occurrence",
+    }], timed: []}],
+  });
+  assert.equal(month.days[0].event_count, 1);
+  assert.equal(day.events.length, 1);
+  assert.equal(schedule.days[0].all_day[0].kind, "event");
+
+  const mounted = await mountCalendar(async ({operation}) => operation === "month"
+    ? month : operation === "day" ? day : schedule);
+  const cell = mounted.elements.grid.querySelector(".calendar-day-cell");
+  assert.ok(cell.textContent.includes("Foto del colegio"));
+  cell.click();
+  await flush();
+  const section = mounted.elements.dayView;
+  assert.ok(section.textContent.includes("Eventos"));
+  assert.ok(section.textContent.includes("Foto del colegio"));
+  assert.equal(section.querySelectorAll(".calendar-task-toggle").length, 0);
+  const link = section.querySelectorAll(".calendar-note-link")
+    .find((node) => node.textContent === "Foto del colegio");
+  assert.ok(link);
+  link.click();
+  assert.deepEqual(mounted.document.events.at(-1).detail, {note_id: "event-1"});
+});
+
+test("E5 invalid or non-event Calendar projections fail closed", () => {
+  const basic = {
+    source: summary("event-1", "Campamento", "event"),
+    roles: ["occurrence"],
+    mutation: {revision: 1, source_hash: "a".repeat(64)},
+  };
+  const day = (event) => ({
+    kind: "calendar_day", date: "2027-07-04", materialized: false,
+    content: [], journals: [], captures: [], references: [], tasks: [], events: [event],
+  });
+  assert.throws(() => validateCalendarResponse(day({...basic, roles: ["target"]})), CalendarRequestError);
+  assert.throws(() => validateCalendarResponse(day({...basic, source: summary("task-1", "Pagar", "task")})), CalendarRequestError);
+  assert.throws(() => validateCalendarResponse(day({...basic, mutation: {revision: 1, source_hash: "x"}})), CalendarRequestError);
+  assert.throws(() => validateCalendarResponse({
+    kind: "calendar_schedule", start_date: "2027-07-04", day_count: 1,
+    days: [{date: "2027-07-04", all_day: [{
+      kind: "event", source_id: "event-1", source_type: "event",
+      label: "Foto", role: "deadline",
+    }], timed: []}],
+  }), CalendarRequestError);
+});

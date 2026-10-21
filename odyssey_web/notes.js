@@ -26,6 +26,7 @@ const ACTION_ICONS = Object.freeze({
 const TYPE_PRESENTATION = Object.freeze({
   concept: {label: "Concepto", paths: ["M12 3a6 6 0 0 0-3.8 10.6c.8.6 1.3 1.5 1.5 2.4h4.6c.2-.9.7-1.8 1.5-2.4A6 6 0 0 0 12 3Z", "M10 19h4M10.5 22h3"]},
   project: {label: "Proyecto", paths: ["m12 3 8 4.5-8 4.5L4 7.5 12 3Z", "m4 12.5 8 4.5 8-4.5", "m4 17 8 4.5 8-4.5"]},
+  event: {label: "Evento", paths: ["M5 4h14v16H5z", "M8 2v4m8-4v4M5 9h14", "m9 5 2 2 4-4"]},
   task: {label: "Tarea", paths: ["M5 4h14v16H5z", "m8 12 2.5 2.5L16 9"]},
   store: {label: "Tienda", paths: ["M4 10h16v10H4z", "M3 6h18l-1 4H4L3 6Z", "M8 20v-6h5v6"]},
   product: {label: "Producto", paths: ["m4 7 8-4 8 4v10l-8 4-8-4V7Z", "m4 7 8 4 8-4", "M12 11v10"]},
@@ -40,6 +41,7 @@ const TYPE_DESCRIPTIONS_ES = Object.freeze({
   concept: "Tema, idea o concepto identificable que puede acumular información y relacionarse con otras notas.",
   project: "Proyecto o ámbito de trabajo orientado a un objetivo que puede acumular información y tareas.",
   task: "Compromiso o acción gestionada por Tareas, con estado, planificación temporal y contexto relacionado.",
+  event: "Actividad que sucede en una fecha o intervalo, independiente de las tareas. El calendario la muestra sin inventar horas.",
   document: "Documento o archivo que merece representarse como un elemento de conocimiento independiente.",
   person: "Persona con una identidad reutilizable que puede relacionarse con tus notas y conocimientos.",
   journal_entry: "Entrada de diario antigua conservada por compatibilidad. Las nuevas entradas cotidianas se guardan en el día correspondiente del Calendario.",
