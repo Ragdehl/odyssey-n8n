@@ -94,6 +94,18 @@
       "source_commit": "f80e226fbe48881b376b04fb146eb132b2d69525",
       "trace_sha256": "fe97f9ecb25548c3abef986372b75b7c86d327aa4689eebaa19e3955acdbc25c",
       "resource_sha256": "b78d34242417bb2bfef306b0e42c454cc182a4023b7de454aba618c0638bb715"
+    },
+    {
+      "run_id": "e4-v14-postcommit-ana-maria-luis-20261021",
+      "case": "ana_maria_y_luis",
+      "pass": true,
+      "status": "completed",
+      "seconds": 38.3,
+      "harness_seconds": 74.28,
+      "metric": "send_to_first_response",
+      "physical_browser_n8n_gpt": true,
+      "trace_sha256": "f577fc2406b8a608668456068bcde98df1f5cecdbf072b32d49baf6598441143",
+      "source_commit": "6065499682d9b51270ed4d66ddf85de9d6500e54"
     }
   ],
   "host_resources_under_full_load": {

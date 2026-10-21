@@ -1,0 +1,137 @@
+{
+  "schema": "odyssey-e4-v14-postcommit-browser-v1",
+  "source_commit": "6065499682d9b51270ed4d66ddf85de9d6500e54",
+  "committed_full_log": "docs/architecture/e4-v14-postcommit-browser-full-trace-20261021.log",
+  "full_log_sha256": "f577fc2406b8a608668456068bcde98df1f5cecdbf072b32d49baf6598441143",
+  "source": "Hoy he conocido a Ana María y a Luis. Mañana tengo que llamar a los dos.",
+  "expected_people": [
+    "Ana María",
+    "Luis"
+  ],
+  "browser": {
+    "pass": true,
+    "before": {
+      "userMessages": 1,
+      "acknowledgements": 1,
+      "details": 1,
+      "noteButtons": 1,
+      "confirmationVisible": true
+    },
+    "after": {
+      "userMessages": 1,
+      "acknowledgements": 1,
+      "details": 1,
+      "noteButtons": 1,
+      "confirmationVisible": true
+    },
+    "detail": {
+      "svgCount": 13,
+      "sourceFlow": true,
+      "writeReceipts": 4,
+      "diagnosticRejected": false
+    },
+    "reloadedDetail": {
+      "svgCount": 13,
+      "writeReceipts": 4,
+      "diagnosticRejected": false
+    },
+    "notes": {
+      "surfaceVisible": true,
+      "resultNodes": 2,
+      "searchObservations": [
+        {
+          "query": "llamar a los dos",
+          "kind": "task",
+          "apiResponse": true,
+          "allRows": 1,
+          "kindRows": 1,
+          "matchRows": 1,
+          "status": "1 notas",
+          "renderCount": 1
+        },
+        {
+          "query": "Ana María",
+          "kind": "person",
+          "apiResponse": true,
+          "allRows": 2,
+          "kindRows": 1,
+          "matchRows": 1,
+          "status": "2 notas",
+          "renderCount": 3
+        },
+        {
+          "query": "Luis",
+          "kind": "person",
+          "apiResponse": true,
+          "allRows": 2,
+          "kindRows": 1,
+          "matchRows": 1,
+          "status": "2 notas",
+          "renderCount": 5
+        }
+      ],
+      "taskSearchVisible": true,
+      "verifiedPersonBacklinks": 2,
+      "taskName": "llamar a los dos"
+    },
+    "progressDonut": {
+      "present": true,
+      "valid": true,
+      "percent": 0,
+      "displayed": "0"
+    },
+    "progressTrace": {
+      "observed": [
+        0,
+        8,
+        18,
+        84,
+        94
+      ],
+      "advanced": true,
+      "monotonic": true
+    },
+    "recordedFixture": false,
+    "userRequestSeconds": 38.3,
+    "jsErrorsCount": 0,
+    "actor": "synthetic_only",
+    "messages_sent": 1
+  },
+  "physical_result": {
+    "passed": true,
+    "seconds": 74.28,
+    "gpt": "real",
+    "n8n": "real_offline_docker",
+    "browser": "Chromium real",
+    "authentication": "synthetic_local_cookie_gate",
+    "unauth_denied": true,
+    "physical_persons": 2,
+    "physical_tasks": 1,
+    "physical_days": 1,
+    "person_task_link": true,
+    "markdown_e3_replay_unchanged": true,
+    "notes_after": 5,
+    "statistics": {
+      "writer_calls": 2,
+      "first_writes": 1,
+      "replay": 1,
+      "browser_requests": 150,
+      "denied": 1,
+      "n8n_calls": 1,
+      "assistant_persisted": 1,
+      "notes_read": 37
+    },
+    "browser_gate": true,
+    "cloudflare_access_tested": false,
+    "dev_prod_untouched": true
+  },
+  "task_date": {
+    "actual": "2026-10-21",
+    "expected": "2026-10-21",
+    "clock": "2026-10-20T10:30:00+02:00"
+  },
+  "notes": [
+    "Synthetic-only local cookie; no Cloudflare/DEV/PROD validation",
+    "One positive example; not a p95 or universal correctness guarantee"
+  ]
+}
