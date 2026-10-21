@@ -514,3 +514,71 @@ def test_nm_single_core_person_genuine_anaphor_or_name_still_passes(
     assert handoff.require_all_current(repo, SCHEMA) == (
         result.canonical_reference_evidence[0].stable_note_id,
     )
+
+
+def test_direct_finite_graph_cannot_omit_third_real_core_person_receipt(tmp_path):
+    """A forged graph cannot bypass the prewrite veto after three physical Core writes."""
+    from odyssey_core.dependent_group_graph import GroupDependency, ReviewedSourceGraph, SourceGroup
+    from tests.runtime.test_whole_source_light_product_p4 import _fixture
+
+    repo, actor, executor, _runtime = _fixture(tmp_path, incremental_indexes=True)
+    names = ("Ana", "Luis", "Marta")
+    predecessors = {}
+    fragments = tuple(f"Hoy conocí a {name}. " for name in names)
+    for i, (name, part) in enumerate(zip(names, fragments, strict=True)):
+        unit = KnowledgeUnit(
+            SelectionCriteria(name, name, "person", (), None),
+            "record",
+            (),
+            (),
+            (f"Conocí a {name}.",),
+            (),
+        )
+        result = execute_request(
+            part.strip(),
+            planner=SimpleNamespace(plan=lambda *_, u=unit: RequestPlan((WriteAction((u,)),), ())),
+            repository=repo,
+            schema=SCHEMA,
+            context_index=executor.context_index,
+            semantic_index=executor.semantic_index,
+            embedder=executor.embedder,
+            contextual_reasoner=executor.reasoner,
+            authenticated_actor=actor,
+            self_binding_repository=executor.bindings,
+            actor=actor.stable_user_id,
+            now=CLOCK,
+            context_limit=10,
+            request_id_factory=lambda i=i: f"e4-three-person-predecessor-{i}",
+        )
+        assert result.status is ApplicationStatus.COMPLETED, result
+        assert any(action.canonical_direct_target_evidence for action in result.action_results)
+        predecessors[i] = result
+        executor.refresh_affected_indexes(result.affected_stable_note_ids)
+    after = "Mañana llamaré a los dos."
+    graph = ReviewedSourceGraph(
+        "".join(fragments) + after,
+        (
+            *(SourceGroup(i, "core", fragment, ()) for i, fragment in enumerate(fragments)),
+            SourceGroup(
+                3,
+                "tasks",
+                after,
+                (
+                    GroupDependency(0, "los dos", "Ana"),
+                    GroupDependency(1, "los dos", "Luis"),
+                ),
+            ),
+        ),
+    )
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    with pytest.raises(CanonicalGroupEvidenceError, match="omits an earlier Core"):
+        prove_canonical_group_handoff(
+            graph=graph,
+            consumer_index=3,
+            predecessors=predecessors,
+            repository=repo,
+            schema=SCHEMA,
+        )
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+    assert sum(parse_note(text).metadata.get("type") == "person" for text in before.values()) >= 3
+    assert not any(parse_note(text).metadata.get("type") == "task" for text in before.values())

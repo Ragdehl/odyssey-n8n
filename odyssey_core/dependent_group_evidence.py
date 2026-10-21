@@ -141,6 +141,22 @@ def prove_canonical_group_handoff(
     consumer = graph.groups[consumer_index]
     if not consumer.dependencies:
         raise CanonicalGroupEvidenceError("Consumer has no reviewed dependency")
+    # Even a directly constructed graph cannot bypass the source-side
+    # exhaustive-cohort veto. No subset of Core predecessor groups may
+    # claim a finite plural set at the physical E2 handoff boundary.
+    finite_dependencies = tuple(
+        d for d in consumer.dependencies if referenced_finite_cardinality(d.mention) is not None
+    )
+    if finite_dependencies:
+        selected_parents = {d.predecessor_index for d in consumer.dependencies}
+        if any(
+            earlier.ordinal not in selected_parents
+            for earlier in graph.groups[:consumer_index]
+            if earlier.capability == "core"
+        ):
+            raise CanonicalGroupEvidenceError(
+                "Finite source handoff omits an earlier Core predecessor"
+            )
     edges: list[CanonicalGroupEdge] = []
     for dependency in consumer.dependencies:
         parent = dependency.predecessor_index

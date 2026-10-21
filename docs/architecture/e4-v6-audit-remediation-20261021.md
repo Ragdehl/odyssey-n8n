@@ -61,3 +61,7 @@ antes de cualquier aceptación operativa/despliegue.
 El cap local de Codex observado el 21-10 en `pace` es 1.428.571
 tokens/día frente a 2.245.354 ya reportados. Este proxy no prueba
 cuota real de la cuenta ni habilita auditoría nueva por sí solo.
+
+## Refuerzo posterior al commit 001b778
+
+La prueba de tres predecesores incluyó tres escrituras reales de Persona por Core en bóveda sintética y un grafo finito manual que omite uno. Para que incluso ese uso directo del carrier quede fail-closed, el handoff físico de E2 repite el veto estructural y rechaza antes del consumidor; **23 pruebas físicas de handoff PASS**, sin crear Task. Se debe emitir un commit nuevo y reejecutar la batería transversal sobre él.
