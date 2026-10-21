@@ -155,3 +155,40 @@ def test_both_models_omit_third_explicit_person_before_any_core_write(monkeypatc
     )
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert calls == ["review", "review"]
+
+
+def test_both_models_agree_on_truncated_lowercase_multiword_name_but_core_is_never_called(
+    monkeypatch,
+):
+    """E4 source coverage must veto partial Person spans before any Writer path."""
+    original_before = "Hoy conocí a ana maría y a luis."
+    original_source = original_before + AFTER
+    bad = {
+        **REVIEW,
+        "full_source_quote": original_source,
+        "antecedent_quote": original_before,
+        "antecedent_mentions": ["maría", "luis"],
+    }
+    calls = []
+
+    def ask(_self, *_args):
+        calls.append("review")
+        return deepcopy(bad)
+
+    def must_not_write(*_args, **_kwargs):
+        raise AssertionError("Partial Person name escaped E2 to Core Writer")
+
+    monkeypatch.setattr(WholeSourceLightExecutor, "_ask", ask)
+    monkeypatch.setattr(WholeSourceLightExecutor, "_execute_dependent_graph", must_not_write)
+    executor = object.__new__(WholeSourceLightExecutor)
+    result = executor._execute_verified_plural_person_scope(
+        original_source,
+        "delivery",
+        None,
+        SimpleNamespace(antecedent=original_before, dependent=AFTER, mention="los dos"),
+        delivery_instant=None,
+        router_started=0.0,
+        route_scopes=SCOPES,
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert calls == ["review", "review"]

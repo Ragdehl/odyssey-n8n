@@ -154,57 +154,99 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
       .map(node=>node.textContent||"").join("").trim();
   });
   if(!taskName||taskName.length>200)throw Error("Task absent from notes snapshot");
-  // Query the actual Notes index via the same UI search the user sees.
+  // A matching row from the PREVIOUS snapshot does not prove a real search.
+  // Correlate the actual /api/notes local-query HTTP response to the typed
+  // query, then demand a newer DOM render (not merely matching stale text).
+  const queryObservations=[];
+  async function verifyFreshNotesSearch(query, type) {
+    const beforeRender=await page.evaluate(()=>{
+      const root=document.querySelector("#notes-list");
+      if(!root)throw Error("Missing Notes list");
+      if(!window.__e4ListMutationObserver){
+        window.__e4ListMutationCount=0;
+        window.__e4ListMutationObserver=new MutationObserver(
+          ()=>{window.__e4ListMutationCount++;}
+        );
+        window.__e4ListMutationObserver.observe(root,
+          {childList:true,subtree:true,characterData:true});
+      }
+      return window.__e4ListMutationCount;
+    });
+    const exactResponse=page.waitForResponse(response=>{
+      if(!response.ok() || !response.url().includes("/api/notes"))return false;
+      let body;
+      try{body=JSON.parse(response.request().postData()||"{}");}catch{return false;}
+      return body.operation==="query" && body.mode==="local" && body.query===query;
+    },{timeout:20000});
+    await page.evaluate(name=>{
+      const field=document.querySelector("#notes-search");
+      field.value=name;
+      field.dispatchEvent(new Event("input",{bubbles:true}));
+    },query);
+    const response=await exactResponse;
+    if(!response.ok())throw Error("E4 Notes search API error");
+    await page.waitForFunction(({name,kind,counter})=>{
+      const notes=document.querySelectorAll(
+        '#notes-list .notes-type-group[data-type="'+kind+'"] .note-row');
+      const status=document.querySelector("#notes-status")?.textContent||"";
+      return (window.__e4ListMutationCount||0)>counter &&
+        !/Cargando|Buscando|error|no se ha podido/i.test(status) &&
+        Array.from(notes).some(row=>row.textContent.includes(name));
+    },{timeout:20000},{name:query,kind:type,counter:beforeRender});
+    const observed=await page.evaluate(({name,kind})=>({
+      allRows:document.querySelectorAll("#notes-list .note-row").length,
+      kindRows:document.querySelectorAll(
+        '#notes-list .notes-type-group[data-type="'+kind+'"] .note-row').length,
+      matchRows:Array.from(document.querySelectorAll(
+        '#notes-list .notes-type-group[data-type="'+kind+'"] .note-row'
+      )).filter(row=>row.textContent.includes(name)).length,
+      status:document.querySelector("#notes-status")?.textContent||"",
+      renderCount:window.__e4ListMutationCount||0,
+    }),{name:query,kind:type});
+    if(observed.matchRows!==1 || observed.allRows<1)
+      throw Error("E4 physical Notes search did not return one canonical match");
+    queryObservations.push({query,kind:type,apiResponse:true,...observed});
+    return observed;
+  }
   checkpoint="verify_task_local_search";
   await page.click("#notes-home-tab");
-  await page.evaluate(name=>{
-    const field=document.querySelector("#notes-search");
-    field.value=name;
-    field.dispatchEvent(new Event("input",{bubbles:true}));
-  },taskName);
-  await page.waitForFunction((name)=>
-    Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="task"] .note-row'))
-      .some(row=>row.textContent.includes(name)),{timeout:15000},taskName);
-  const taskSearchVisible=await page.evaluate((name)=>
-    Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="task"] .note-row'))
-      .some(row=>row.textContent.includes(name)),taskName);
+  const taskQuery=await verifyFreshNotesSearch(taskName,"task");
+  const taskSearchVisible=taskQuery.matchRows===1;
   checkpoint="verify_person_backlinks_ui";
-  // Search and open EACH Person with the actual Notes UI, then demand a
-  // backlink to the newly written Task, not just an existing Markdown link.
   const linkedPersons=[];
   for(const name of expectedNames){
     await page.click("#notes-home-tab");
+    await verifyFreshNotesSearch(name,"person");
     await page.evaluate(person=>{
-      const field=document.querySelector("#notes-search");
-      field.value=person;
-      field.dispatchEvent(new Event("input",{bubbles:true}));
-    },name);
-    await page.waitForFunction((person)=>
-      Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="person"] .note-row'))
-        .some(row=>row.textContent.includes(person)),{timeout:12000},name);
-    await page.evaluate(person=>{
-      const row=Array.from(document.querySelectorAll('#notes-list .notes-type-group[data-type="person"] .note-row'))
-        .find(item=>item.textContent.includes(person));
-      if(!row)throw Error("Synthetic Person not in query");
+      const row=Array.from(document.querySelectorAll(
+        '#notes-list .notes-type-group[data-type="person"] .note-row'
+      )).find(item=>item.textContent.includes(person));
+      if(!row)throw Error("Synthetic Person not in fresh query");
       row.click();
     },name);
     await page.waitForFunction((person,task)=>{
-      const title=document.querySelector('#note-detail header h2')?.textContent||"";
-      const inbound=Array.from(document.querySelectorAll('#note-detail .note-backlinks .backlink-source .backlink'));
-      return !document.querySelector('#note-detail')?.hidden && title.includes(person) &&
+      const title=document.querySelector("#note-detail header h2")?.textContent||"";
+      const inbound=Array.from(document.querySelectorAll(
+        "#note-detail .note-backlinks .backlink-source .backlink"));
+      return !document.querySelector("#note-detail")?.hidden && title.includes(person) &&
         inbound.some(item=>item.textContent.includes(task));
     },{timeout:15000},name,taskName);
     linkedPersons.push(name);
   }
-  const notes={surfaceVisible:true,resultNodes:linkedPersons.length+1,
+  const notes={surfaceVisible:true,
+    resultNodes:await page.evaluate(()=>document.querySelectorAll("#notes-list .note-row").length),
+    searchObservations:queryObservations,
     taskSearchVisible,verifiedPersonBacklinks:linkedPersons.length,taskName};
   const expectedWrites=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
   if(!Number.isInteger(expectedWrites) || expectedWrites<2 || expectedWrites>10)
     throw Error("Invalid E4 expected receipt count");
+  // Recorded responses can finish before a progress milestone is painted;
+  // live GPT requests MUST still show an advanced progress trace.
+  const recordedFixture=process.env.ODYSSEY_E4_RECORDED==="1";
   const output={
     pass:progressDonut.present && progressDonut.valid &&
       String(progressDonut.percent)===progressDonut.displayed &&
-      progressTrace.advanced && progressTrace.monotonic &&
+      (recordedFixture || progressTrace.advanced) && progressTrace.monotonic &&
       before.userMessages===1 && before.acknowledgements===1 &&
       before.details===1 && before.noteButtons===1 &&
       before.userMessages===after.userMessages &&
@@ -214,9 +256,11 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
       !detail.diagnosticRejected && reloadedDetail.svgCount>0 &&
       reloadedDetail.writeReceipts===detail.writeReceipts &&
       !reloadedDetail.diagnosticRejected &&
-      notes.surfaceVisible && notes.resultNodes>=2 &&
+      notes.surfaceVisible && notes.resultNodes>=1 &&
+      notes.searchObservations.length===expectedNames.length+1 &&
+      notes.searchObservations.every(item=>item.apiResponse && item.matchRows===1) &&
       jsErrors.length===0,
-    before,after,detail,reloadedDetail,notes,progressDonut,progressTrace,
+    before,after,detail,reloadedDetail,notes,progressDonut,progressTrace,recordedFixture,
     userRequestSeconds,
     jsErrorsCount:jsErrors.length,
     actor:"synthetic_only",messages_sent:1

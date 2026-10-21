@@ -4,7 +4,10 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from odyssey_apps.tasks import TaskInterpretation, TaskOperation, TaskPersonReferenceSet
+from odyssey_core import create_entity
 from odyssey_core.application import ApplicationStatus, execute_request
 from odyssey_core.notes import parse_note
 from odyssey_core.request_planning import (
@@ -19,8 +22,9 @@ from odyssey_runtime import composition
 from scripts.odyssey_e4_live_browser_n8n import CLOCK, live_product
 
 
+@pytest.mark.parametrize("corruption", ["missing", "duplicate", "extra_person"])
 def test_factory_physical_postwrite_loss_returns_partial_via_real_composition(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, corruption
 ):
     """Do not call the guard in this test: production execute_tasks must do so."""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fixture-never-used")
@@ -93,6 +97,18 @@ def test_factory_physical_postwrite_loss_returns_partial_via_real_composition(
         original_verify = plural_task_readback.verify_plural_task_markdown
         modifications = []
 
+        if corruption == "extra_person":
+            create_entity(
+                repo,
+                schema,
+                path="marta-foreign.md",
+                entity_id="e4-foreign-person",
+                metadata={"name": "Marta", "type": "person"},
+                content="",
+                actor="fixture",
+                now=CLOCK,
+            )
+
         def corrupt_then_verify(repository, schema_, result, dependencies):
             # Called from the production guard, AFTER the Writer persisted.
             matches = [
@@ -106,7 +122,14 @@ def test_factory_physical_postwrite_loss_returns_partial_via_real_composition(
             assert marker in original
             cut = original.index(marker)
             start = original.rfind("[[", 0, cut)
-            repository.replace_text(matches[0], original[:start] + original[cut + len(marker) :])
+            link = original[start : cut + len(marker)]
+            if corruption == "missing":
+                updated = original[:start] + original[cut + len(marker) :]
+            elif corruption == "duplicate":
+                updated = original.replace(link, link + " " + link, 1)
+            else:
+                updated = original.replace(link, link + " [[marta-foreign|Marta]]", 1)
+            repository.replace_text(matches[0], updated)
             modifications.append(matches[0])
             return original_verify(repository, schema_, result, dependencies)
 

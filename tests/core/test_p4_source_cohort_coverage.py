@@ -131,3 +131,51 @@ def test_modifier_never_hides_lowercase_subordinate_person_clause(source):
             else (("alice", "bob") if source.startswith("I met") else ("claire", "hugo"))
         )
         require_explicit_cohort_coverage(source, names)
+
+
+@pytest.mark.parametrize(
+    "source, full_names, truncated_names",
+    [
+        (
+            "Hoy conocí a ana maría y a luis.",
+            ("ana maría", "luis"),
+            ("maría", "luis"),
+        ),
+        (
+            "Hoy conocí a Ana María, Luis y Marta.",
+            ("Ana María", "Luis", "Marta"),
+            ("María", "Luis", "Marta"),
+        ),
+        (
+            "I met alice smith and bob jones.",
+            ("alice smith", "bob jones"),
+            ("smith", "bob jones"),
+        ),
+        (
+            "J'ai rencontré claire martin et hugo petit.",
+            ("claire martin", "hugo petit"),
+            ("martin", "hugo petit"),
+        ),
+    ],
+)
+def test_first_quoted_source_person_must_include_full_multiword_name(
+    source, full_names, truncated_names
+):
+    require_explicit_cohort_coverage(source, full_names)
+    with pytest.raises(SourceCohortCoverageError, match="partial source name"):
+        require_explicit_cohort_coverage(source, truncated_names)
+
+
+@pytest.mark.parametrize(
+    "source, claimed_members",
+    [
+        ("Hoy conocí a ana maría.", ("ana", "maría")),
+        ("I met alice smith.", ("alice", "smith")),
+        ("J'ai rencontré claire martin.", ("claire", "martin")),
+    ],
+)
+def test_multiword_person_cannot_be_invented_as_two_people_without_coordination(
+    source, claimed_members
+):
+    with pytest.raises(SourceCohortCoverageError, match="between finite"):
+        require_explicit_cohort_coverage(source, claimed_members)

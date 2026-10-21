@@ -19,7 +19,7 @@ _CAPITALIZED = re.compile(r"(?<!\w)[A-ZÀ-ÖØ-Þ][^\W\d_]*(?:[-’][A-ZÀ-ÖØ-
 # to infer who that member is or authorize a write.
 _COORDINATION = r"(?:y|e|et|and|und|&)"
 _GRAMMATICAL_GAP = re.compile(
-    rf"\s*,?\s*(?:{_COORDINATION}\s+)?(?:(?:a|à|to)\s*)?",
+    rf"\s*(?:,\s*(?:{_COORDINATION}\s+)?|{_COORDINATION}\s+)(?:(?:a|à|to)\s+)?",
     flags=re.IGNORECASE,
 )
 _PREFIX_LIST_MEMBER = re.compile(
@@ -27,6 +27,14 @@ _PREFIX_LIST_MEMBER = re.compile(
 )
 _SUFFIX_LIST_MEMBER = re.compile(
     rf"(?i)^\s*(?:,\s*|\b{_COORDINATION}\b\s+)(?:(?:a|à|to)\s+)?[^\W\d_]+"
+)
+# Only known syntactic introductions may precede the FIRST cited member.
+# Otherwise a quote could begin halfway through a multiword lowercase name:
+# "a ana maría y a luis" with only "maría" selected. This is a veto,
+# never an attempt to recognize a Person or invent a canonical identity.
+_FIRST_MEMBER_START = re.compile(
+    rf"(?ix)(?:^\s*|[,;:]\s*|\b(?:a|à|to|{_COORDINATION}|met|meet|saw|knew|"
+    r"rencontré|rencontrée|croisé|croisée|conocí|conocido|conocimos|visited)\s+)$"
 )
 
 
@@ -59,6 +67,8 @@ def require_explicit_cohort_coverage(source: str, quoted_members: tuple[str, ...
     # A gap that contains an additional word cannot be silently interpreted
     # as punctuation joining only the selected two/three participants.
     ordered = sorted(spans)
+    if not _FIRST_MEMBER_START.search(source[: ordered[0][0]]):
+        raise SourceCohortCoverageError("Unreviewed partial source name before first member")
     for (_, left_end), (right_start, _) in zip(ordered, ordered[1:], strict=False):
         if not _GRAMMATICAL_GAP.fullmatch(source[left_end:right_start]):
             raise SourceCohortCoverageError("Unreviewed member between finite source quotes")

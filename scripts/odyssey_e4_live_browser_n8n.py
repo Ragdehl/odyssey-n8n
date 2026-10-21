@@ -161,7 +161,9 @@ def live_product(root: Path):
         yield repo, actor, product
 
 
-def assert_person_inventory(notes: dict, expected: tuple[str, ...]) -> None:
+def assert_person_inventory(
+    notes: dict, expected: tuple[str, ...], *, self_name: str = "Persona local"
+) -> None:
     """Live acceptance must count EVERY physical Person, including fabricated ones.
 
     The fixture seeds exactly one SELF; a wrong extra Person is never filtered
@@ -173,7 +175,7 @@ def assert_person_inventory(notes: dict, expected: tuple[str, ...]) -> None:
         if note.metadata.get("type") == "person"
     ]
     assert len(actual) == len(expected) + 1, "Unexpected physical Person inventory"
-    assert sorted(actual) == sorted(("Persona local", *expected)), (
+    assert sorted(actual) == sorted((self_name, *expected)), (
         "Missing, duplicated or fabricated Person in live E4 vault"
     )
 
@@ -578,6 +580,9 @@ def run() -> dict:
                                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public.server_port}/",
                                 "ODYSSEY_SYNTHETIC_SOURCE": E4_SOURCE,
                                 "ODYSSEY_E4_EXPECTED_PERSONS": json.dumps(EXPECTED_PERSON_NAMES),
+                                "ODYSSEY_E4_RECORDED": "1"
+                                if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
+                                else "0",
                                 "ODYSSEY_E4_EXPECTED_WRITES": str(
                                     len(EXPECTED_PERSON_NAMES)
                                     + (1 if os.environ.get("ODYSSEY_E4_RECORDED") == "1" else 2)
@@ -622,7 +627,15 @@ def run() -> dict:
                             notes = {
                                 p: parse_note(repo.read_text(p)) for p in repo.list_markdown_paths()
                             }
-                            assert_person_inventory(notes, EXPECTED_PERSON_NAMES)
+                            assert_person_inventory(
+                                notes,
+                                EXPECTED_PERSON_NAMES,
+                                self_name=(
+                                    "Persona autenticada"
+                                    if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
+                                    else "Persona local"
+                                ),
+                            )
                             people = [
                                 (p, n)
                                 for p, n in notes.items()

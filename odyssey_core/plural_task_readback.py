@@ -6,6 +6,7 @@ This check is an additional POSTWRITE status guard; it cannot authorize writes.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from typing import Any
 
@@ -51,8 +52,25 @@ def verify_plural_task_markdown(
             note = parse_note(repository.read_text(path))
             if note.metadata.get("id") == note_id and note.metadata.get("type") == "task":
                 tasks.append(note)
-        return len(tasks) == 1 and all(
-            task.content.count(link) >= 1 for task in tasks for link in expected_links
+        if len(tasks) != 1 or len(expected_links) != len(dependencies):
+            return False
+        task_text = tasks[0].content
+        if any(task_text.count(link) != 1 for link in expected_links):
+            return False
+        # A successful readback proves an EXACT closed Person set, not merely
+        # that the expected links are somewhere in a potentially corrupted Task.
+        # Resolve target types from canonical Markdown, not from link spelling.
+        physical_person_links = []
+        for match in re.finditer(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", task_text):
+            target_path = match.group(1)
+            if not target_path.endswith(".md"):
+                target_path += ".md"
+            referenced = parse_note(repository.read_text(target_path))
+            if referenced.metadata.get("type") == "person":
+                physical_person_links.append(match.group(0))
+        return (
+            len(physical_person_links) == len(expected_links)
+            and set(physical_person_links) == expected_links
         )
     except (OSError, RuntimeError, ValueError, TypeError, AttributeError):
         return False

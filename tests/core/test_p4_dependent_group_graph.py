@@ -423,3 +423,41 @@ def test_finite_cohort_ignores_unrelated_earlier_core_fact_without_losing_edges(
         },
     )
     assert graph.edges == ((1, 2, "Ana", "los dos"), (1, 2, "Luis", "los dos"))
+
+
+@pytest.mark.parametrize("chosen", [("maría", "luis"), ("maría", "luis", "marta")])
+def test_finite_graph_vetoes_two_reviewers_truncating_a_lowercase_multiword_person(chosen):
+    antecedent = "Hoy conocí a ana maría y a luis. "
+    if len(chosen) == 3:
+        antecedent = "Hoy conocí a ana maría, a luis y a marta. "
+    group = [
+        {"capability": "core", "source_quote": antecedent, "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": "Mañana tengo que llamar a los dos."
+            if len(chosen) == 2
+            else "Mañana llamar a los tres.",
+            "dependencies": [
+                {
+                    "predecessor_index": 0,
+                    "mention": "los dos" if len(chosen) == 2 else "los tres",
+                    "antecedent_mention": name,
+                }
+                for name in chosen
+            ],
+        },
+    ]
+    source = "".join(x["source_quote"] for x in group)
+    with pytest.raises(DependentGroupGraphError, match="Finite source"):
+        verify_dependent_group_graph(
+            source,
+            {"full_source_quote": source, "groups": group},
+            {
+                "full_source_quote": source,
+                "complete": True,
+                "dependency_edges_verified": True,
+                "review_reason": "APPROVED",
+                "failing_group_index": None,
+                "groups": deepcopy(group),
+            },
+        )
