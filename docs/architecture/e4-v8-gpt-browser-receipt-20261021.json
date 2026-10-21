@@ -1,0 +1,116 @@
+{
+  "browser": {
+    "actor": "synthetic_only",
+    "after": {
+      "acknowledgements": 1,
+      "confirmationVisible": true,
+      "details": 1,
+      "noteButtons": 1,
+      "userMessages": 1
+    },
+    "before": {
+      "acknowledgements": 1,
+      "confirmationVisible": true,
+      "details": 1,
+      "noteButtons": 1,
+      "userMessages": 1
+    },
+    "detail": {
+      "diagnosticRejected": false,
+      "sourceFlow": true,
+      "svgCount": 13,
+      "writeReceipts": 4
+    },
+    "jsErrorsCount": 0,
+    "messages_sent": 1,
+    "notes": {
+      "resultNodes": 3,
+      "surfaceVisible": true,
+      "taskName": "llamar a los dos",
+      "taskSearchVisible": true,
+      "verifiedPersonBacklinks": 2
+    },
+    "pass": true,
+    "progressDonut": {
+      "displayed": "0",
+      "percent": 0,
+      "present": true,
+      "valid": true
+    },
+    "progressTrace": {
+      "advanced": true,
+      "monotonic": true,
+      "observed": [
+        0,
+        8,
+        18,
+        84,
+        94
+      ]
+    },
+    "reloadedDetail": {
+      "diagnosticRejected": false,
+      "svgCount": 13,
+      "writeReceipts": 4
+    }
+  },
+  "created_at": "2026-10-21T19:35:54+02:00",
+  "fixture": "synthetic vault/actor/cookie; no real personal notes",
+  "fixture_sha256": "2751f1213278b9bb4375c97a6071dad8636546b1a65b0ab6f42d39e6d3dc73cf",
+  "full_log_bytes": 12329,
+  "full_log_sha256": "b97d458d065e20cdc74c37edbc8c4e51f580a807e03aeedcefcf9ca460102ca3",
+  "notes": [
+    "All listed personal names and interactions are fixture-only.",
+    "The resource sample covers the Python host process and subprocess rusage, not full Docker/browser total.",
+    "A single successful run does not prove stable GPT p95 or Cloudflare Access.",
+    "The full temporary log stays outside the reviewer worktree; this bounded structured receipt is committed."
+  ],
+  "physical_result": {
+    "authentication": "synthetic_local_cookie_gate",
+    "browser": "Chromium real",
+    "browser_gate": true,
+    "cloudflare_access_tested": false,
+    "dev_prod_untouched": true,
+    "gpt": "real",
+    "markdown_e3_replay_unchanged": true,
+    "n8n": "real_offline_docker",
+    "notes_after": 5,
+    "passed": true,
+    "person_task_link": true,
+    "physical_days": 1,
+    "physical_persons": 2,
+    "physical_tasks": 1,
+    "seconds": 74.15,
+    "statistics": {
+      "assistant_persisted": 1,
+      "browser_requests": 153,
+      "denied": 1,
+      "first_writes": 1,
+      "n8n_calls": 1,
+      "notes_read": 37,
+      "replay": 1,
+      "writer_calls": 2
+    },
+    "unauth_denied": true
+  },
+  "resource_observation": {
+    "cpu_system_s": 0.348,
+    "cpu_user_s": 2.591,
+    "elapsed_s": 78.4,
+    "process_max_rss_kib": 117344,
+    "subprocess_max_rss_kib": 198768
+  },
+  "runner": "scripts/odyssey_e4_live_browser_n8n.py (GPT real, isolated n8n)",
+  "schema": "odyssey-e4-browser-receipt-v1",
+  "source_commit": "1c79b3c64a980821242839bd79df3386c3947838",
+  "source_tree": "85d2f6f1b86501a724827185cb22bd234e4bf88b",
+  "task_date": {
+    "actual": "2026-10-21",
+    "clock": "2026-10-20T10:30:00+02:00",
+    "expected": "2026-10-21"
+  },
+  "writer": {
+    "clarification": null,
+    "flow_routes": []
+  }
+}
