@@ -83,6 +83,7 @@ class TaskCorePlanner:
         result = self._ensure_visible_action(result)
         result = self._ensure_relationship_facts(result)
         result = self._ensure_verified_person_set(result)
+        self._require_authorized_relationship_roles(result)
         self._require_source_identity_links(result)
         return result
 
@@ -106,6 +107,40 @@ class TaskCorePlanner:
             ),
             compatible_roles=("identity",),
         )
+
+    def _require_authorized_relationship_roles(self, plan: RequestPlan) -> None:
+        """Only typed Tasks evidence may authorize assignment or parentage.
+
+        A Core model's reference to a Person is not an assignee by itself;
+        canonical identity and physical link verification are separate from
+        authorization to mutate a Task's domain relationship.
+        """
+        action = plan.actions[0]
+        assert isinstance(action, WriteAction)
+        primary = next(unit for unit in action.units if not unit.reference_lookup_only)
+        expected = {
+            (
+                "assignee" if mention.role is TaskRelationshipRole.ASSIGNEE else "parent_task",
+                mention.text,
+            )
+            for mention in self._interpretation.relationship_mentions
+        }
+        for reference in primary.references:
+            if reference.role not in {"assignee", "parent_task"}:
+                continue
+            key = (reference.role, reference.mention)
+            if key not in expected:
+                raise RequestPlanningError("Core invented an unrequested Task relationship")
+            if not 0 <= reference.target_index < len(action.units):
+                raise RequestPlanningError("Task relationship helper is missing")
+            helper = action.units[reference.target_index]
+            if not helper.reference_lookup_only or helper.target.type != (
+                "person" if reference.role == "assignee" else TASK_TYPE
+            ):
+                raise RequestPlanningError("Task relationship helper has wrong identity type")
+            expected.remove(key)
+        if expected:
+            raise RequestPlanningError("Typed Task relationship was omitted")
 
     def _require_source_identity_links(self, plan: RequestPlan) -> None:
         """Prevent a generic Task label from disguising a dropped known person.

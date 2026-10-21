@@ -71,3 +71,17 @@ def test_coordinated_source_vetoes_lowercase_and_sentence_initial_omissions(sour
 )
 def test_coordinated_explicit_lists_preserve_every_member(source, chosen):
     require_explicit_cohort_coverage(source, chosen)
+
+
+@pytest.mark.parametrize(
+    "source, chosen",
+    [
+        ("Hoy conocí a ana y luis; después conocí a marta.", ("ana", "luis")),
+        ("Hoy conocí a ana y luis. Más tarde conocí a marta.", ("ana", "luis")),
+        ("Hoy conocí a marta. Después conocí a ana y luis.", ("ana", "luis")),
+        ("I met alice and bob; then I met charlie.", ("alice", "bob")),
+    ],
+)
+def test_later_or_previous_clause_with_possible_person_fails_closed(source, chosen):
+    with pytest.raises(SourceCohortCoverageError, match="clause"):
+        require_explicit_cohort_coverage(source, chosen)

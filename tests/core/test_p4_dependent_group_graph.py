@@ -322,3 +322,32 @@ def test_two_agreeing_graph_reviewers_cannot_omit_lowercase_or_sentence_first_pe
                 "groups": deepcopy(parts),
             },
         )
+
+
+def test_two_reviewer_graph_refuses_lowercase_person_in_later_clause():
+    before = "Hoy conocí a ana y luis; después conocí a marta. "
+    groups = [
+        {"capability": "core", "source_quote": before, "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": "Mañana llamar a los dos.",
+            "dependencies": [
+                {"predecessor_index": 0, "mention": "los dos", "antecedent_mention": name}
+                for name in ("ana", "luis")
+            ],
+        },
+    ]
+    source = "".join(group["source_quote"] for group in groups)
+    with pytest.raises(DependentGroupGraphError, match="omitted"):
+        verify_dependent_group_graph(
+            source,
+            {"full_source_quote": source, "groups": groups},
+            {
+                "full_source_quote": source,
+                "complete": True,
+                "dependency_edges_verified": True,
+                "review_reason": "APPROVED",
+                "failing_group_index": None,
+                "groups": deepcopy(groups),
+            },
+        )

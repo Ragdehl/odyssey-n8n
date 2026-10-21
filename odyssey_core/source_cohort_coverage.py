@@ -64,8 +64,19 @@ def require_explicit_cohort_coverage(source: str, quoted_members: tuple[str, ...
             raise SourceCohortCoverageError("Unreviewed member between finite source quotes")
     if _PREFIX_LIST_MEMBER.search(source[: ordered[0][0]]):
         raise SourceCohortCoverageError("Unreviewed member before finite source quotes")
-    if _SUFFIX_LIST_MEMBER.match(source[ordered[-1][1] :]):
+    trailing = source[ordered[-1][1] :]
+    if _SUFFIX_LIST_MEMBER.match(trailing):
         raise SourceCohortCoverageError("Unreviewed member after finite source quotes")
+    # Two agreeing reviewers cannot establish completeness of further clauses:
+    # "ana y luis; después conocí a marta" contains no capitalized omitted
+    # name and no adjacent list continuation. A source-bound finite cohort must
+    # end at its final quoted member; otherwise abstain rather than treating an
+    # arbitrary subset of the larger antecedent as physically complete.
+    if re.fullmatch(r"[\s.!?;,]*", trailing) is None:
+        raise SourceCohortCoverageError("Unreviewed finite source trailing clause")
+    leading = source[: ordered[0][0]]
+    if re.search(r"[.;!?]\s*\S", leading):
+        raise SourceCohortCoverageError("Unreviewed finite source preceding clause")
     for token in _CAPITALIZED.finditer(source):
         start, end = token.span()
         # Sentence-initial capitals are grammar, not independent referents.

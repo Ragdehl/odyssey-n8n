@@ -71,6 +71,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/apps/tasks/test_interpretation.py",
         "tests/apps/tasks/test_plural_person_prewrite.py",
         "tests/apps/tasks/test_verified_plural_person_planning.py",
+        "tests/runtime/test_p4_plural_person_full_vertical.py",
     ),
     "e3_retry_and_crashes": (
         "tests/core/test_mutation_gate.py",

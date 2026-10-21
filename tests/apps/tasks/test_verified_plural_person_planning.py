@@ -103,3 +103,39 @@ def test_single_target_task_uses_original_core_planner_unchanged():
     )
     result = wrapper.plan("Tengo que llamar a alguien")
     assert not result.actions[0].units[0].references
+
+
+@pytest.mark.parametrize("role", ["assignee", "parent_task"])
+def test_core_cannot_invent_unrequested_task_relationship_during_plural_enrichment(role):
+    existing = original_plan()
+    primary = existing.actions[0].units[0]
+    from dataclasses import replace
+
+    person_name = "Ana Prototipo" if role == "assignee" else "Reunir documentos"
+    helper_type = "person" if role == "assignee" else "task"
+    forged = replace(
+        existing,
+        actions=(
+            WriteAction(
+                (
+                    replace(primary, references=(KnowledgeReference(1, role, person_name),)),
+                    KnowledgeUnit(
+                        SelectionCriteria(person_name, person_name, helper_type, (), None),
+                        "record",
+                        (),
+                        (),
+                        (),
+                        (),
+                        reference_lookup_only=True,
+                    ),
+                )
+            ),
+        ),
+    )
+    wrapper = TaskCorePlanner(
+        SimpleNamespace(plan=lambda *_args: forged),
+        TaskInterpretation("Tengo que llamar a ambos", TaskOperation.CREATE),
+        verified_person_set=PROOFS,
+    )
+    with pytest.raises(RequestPlanningError, match="unrequested Task relationship"):
+        wrapper.plan("Tengo que llamar a ambos")
