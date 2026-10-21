@@ -143,3 +143,22 @@ Europe/Paris exacto; lo ignora después del 21/10. **Nunca afirma que el
 saldo remoto sea de 10 M**. Las pruebas cubren expiración y documentos
 ilegítimos; gate transversal **1.555 Python, 179 JS, 7 subtests PASS**.
 No se modifican políticas permanentes, recursos DEV/PROD ni notas privadas.
+
+## Prueba instrumentada v11 — medición de latencia percibida
+
+**PASS real tras commit `1e6df71`**: Chromium autenticado localmente,
+n8n aislado, GPT de verdad, dos Personas, una Task, un Day, links físicos,
+búsqueda y backlinks desde la UI, donut 0→8→18→84→94 y E3 replay intacto.
+**Desde Enviar hasta primera respuesta: 42,29 s** (cronómetro del navegador).
+**Duración total del harness: 86,19 s**; esta cifra incluye preparar
+contenedor/navegador, inspeccionar UI y segunda entrega. No se deben
+mezclar ambas métricas al calcular p50/p95. Trázas verificables:
+`e4-v11-gpt-browser-receipt-20261021.json` y
+`e4-v11-gpt-browser-full-trace-20261021.log`, SHA-256.
+
+Las muestras comparables actuales sobre v10/v11 (sin cambios en lógica
+Core/Tasks) son **3 positivos directos y 1 positivo navegador medido desde
+Enviar**. La prueba v10 de 110,45 s se preserva como *harness histórico*,
+pero queda fuera de la distribución del tiempo percibido, pues no tenía
+cronómetro de interacción. El preflight mantiene HOLD y tampoco equipara
+estos resultados a una distribución real de 20 ni a un SLA.

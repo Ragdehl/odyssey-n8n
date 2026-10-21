@@ -32,13 +32,15 @@
   ],
   "browser_positive": [
     {
-      "run_id": "e4-v10-browser-real-gpt-20261021-1",
+      "run_id": "e4-v11-browser-20261021-1",
       "pass": true,
       "status": "completed",
-      "seconds": 110.45,
+      "seconds": 42.29,
+      "harness_seconds": 86.19,
+      "metric": "send_to_first_response",
       "physical_browser_n8n_gpt": true,
-      "source_commit": "43e18fb",
-      "trace_sha256": "cc9086982c5d602fac1b71b5289b35026939f6e3931440d90856994fa706fc5c"
+      "trace_sha256": "26dbda42a8a6a8797f1c9b7e9a0aec6a081c7b19c70d370f56f6e430214d8529",
+      "source_commit": "1e6df71"
     }
   ],
   "host_resources_under_full_load": null,
@@ -53,6 +55,18 @@
   "limitations": [
     "Only one v10 live E2E; cannot establish median/p95",
     "Host samples are host-wide and do not isolate container/browser resource envelopes",
-    "Three prior v9 direct positives are historical, not v10 samples"
+    "Three prior v9 direct positives are historical, not v10 samples",
+    "Browser positive metric is click-to-first-response, not setup+UI traversal+replay wall time"
+  ],
+  "browser_harness_historical": [
+    {
+      "run_id": "e4-v10-browser-real-gpt-20261021-1",
+      "pass": true,
+      "status": "completed",
+      "seconds": 110.45,
+      "physical_browser_n8n_gpt": true,
+      "source_commit": "43e18fb",
+      "trace_sha256": "cc9086982c5d602fac1b71b5289b35026939f6e3931440d90856994fa706fc5c"
+    }
   ]
 }

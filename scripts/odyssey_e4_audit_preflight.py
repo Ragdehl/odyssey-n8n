@@ -83,7 +83,13 @@ def _qualified_samples(rows: object, *, browser: bool) -> list[float]:
             or not isinstance(duration, (float, int))
             or isinstance(duration, bool)
             or duration <= 0
-            or (browser and not row.get("physical_browser_n8n_gpt"))
+            or (
+                browser
+                and (
+                    not row.get("physical_browser_n8n_gpt")
+                    or row.get("metric") != "send_to_first_response"
+                )
+            )
         ):
             continue
         seen.add(id_)
@@ -104,9 +110,9 @@ def evaluate(*, require_clean: bool = True) -> dict:
     issues: list[str] = []
     if require_clean and _git("status", "--porcelain"):
         issues.append("Uncommitted E4 source: freeze source and receipts first")
-    receipt = _read_json(DOCS / "e4-v10-gpt-browser-receipt-20261021.json")
+    receipt = _read_json(DOCS / "e4-v11-gpt-browser-receipt-20261021.json")
     if not _browser_evidence_ok(receipt):
-        issues.append("Missing post-freeze v10 live GPT+n8n+browser trace with matching SHA-256")
+        issues.append("Missing post-freeze v11 live GPT+n8n+browser trace with matching SHA-256")
     fast = _read_json(DOCS / "e4-v10-fastembed-isolated-pi-receipt-20261021.json")
     if not (
         fast.get("synthetic_only") is True

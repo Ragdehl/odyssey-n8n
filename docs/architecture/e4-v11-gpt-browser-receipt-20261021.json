@@ -1,0 +1,105 @@
+{
+  "schema": "odyssey-e4-v11-browser-receipt-v1",
+  "source_commit": "1e6df71",
+  "committed_full_log": "docs/architecture/e4-v11-gpt-browser-full-trace-20261021.log",
+  "full_log_sha256": "26dbda42a8a6a8797f1c9b7e9a0aec6a081c7b19c70d370f56f6e430214d8529",
+  "browser": {
+    "pass": true,
+    "before": {
+      "userMessages": 1,
+      "acknowledgements": 1,
+      "details": 1,
+      "noteButtons": 1,
+      "confirmationVisible": true
+    },
+    "after": {
+      "userMessages": 1,
+      "acknowledgements": 1,
+      "details": 1,
+      "noteButtons": 1,
+      "confirmationVisible": true
+    },
+    "detail": {
+      "svgCount": 13,
+      "sourceFlow": true,
+      "writeReceipts": 4,
+      "diagnosticRejected": false
+    },
+    "reloadedDetail": {
+      "svgCount": 13,
+      "writeReceipts": 4,
+      "diagnosticRejected": false
+    },
+    "notes": {
+      "surfaceVisible": true,
+      "resultNodes": 3,
+      "taskSearchVisible": true,
+      "verifiedPersonBacklinks": 2,
+      "taskName": "llamar a los dos"
+    },
+    "progressDonut": {
+      "present": true,
+      "valid": true,
+      "percent": 0,
+      "displayed": "0"
+    },
+    "progressTrace": {
+      "observed": [
+        0,
+        8,
+        18,
+        84,
+        94
+      ],
+      "advanced": true,
+      "monotonic": true
+    },
+    "userRequestSeconds": 42.29,
+    "jsErrorsCount": 0,
+    "actor": "synthetic_only",
+    "messages_sent": 1
+  },
+  "physical_result": {
+    "passed": true,
+    "seconds": 86.19,
+    "gpt": "real",
+    "n8n": "real_offline_docker",
+    "browser": "Chromium real",
+    "authentication": "synthetic_local_cookie_gate",
+    "unauth_denied": true,
+    "physical_persons": 2,
+    "physical_tasks": 1,
+    "physical_days": 1,
+    "person_task_link": true,
+    "markdown_e3_replay_unchanged": true,
+    "notes_after": 5,
+    "statistics": {
+      "writer_calls": 2,
+      "first_writes": 1,
+      "replay": 1,
+      "browser_requests": 161,
+      "denied": 1,
+      "n8n_calls": 1,
+      "assistant_persisted": 1,
+      "notes_read": 37
+    },
+    "browser_gate": true,
+    "cloudflare_access_tested": false,
+    "dev_prod_untouched": true
+  },
+  "task_date": {
+    "actual": "2026-10-21",
+    "expected": "2026-10-21",
+    "clock": "2026-10-20T10:30:00+02:00"
+  },
+  "timing": {
+    "send_to_first_response_s": 42.29,
+    "full_harness_s": 86.19,
+    "harness_not_equivalent_to_user_latency": true
+  },
+  "limitations": [
+    "One live GPT+n8n+Chromium isolated local synthetic case; no production percentile",
+    "DEV, PROD and Cloudflare untouched",
+    "Latency measured by Puppeteer monotonic clock from click to first response; excludes UI traversal and replay"
+  ]
+}

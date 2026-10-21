@@ -25,6 +25,8 @@ def test_duplicate_runs_or_invalid_results_do_not_count():
     assert gate._qualified_samples(rows, browser=False) == [45, 50]
     assert gate._qualified_samples(rows, browser=True) == []
     rows[0]["physical_browser_n8n_gpt"] = True
+    assert gate._qualified_samples(rows, browser=True) == []
+    rows[0]["metric"] = "send_to_first_response"
     assert gate._qualified_samples(rows, browser=True) == [45]
 
 
@@ -61,7 +63,13 @@ def test_complete_synthetic_reporting_has_no_hidden_special_case(monkeypatch, tm
             {
                 "direct_positive": [{**row, "seconds": 52} for row in base],
                 "browser_positive": [
-                    {**row, "seconds": 85, "physical_browser_n8n_gpt": True} for row in base
+                    {
+                        **row,
+                        "seconds": 85,
+                        "physical_browser_n8n_gpt": True,
+                        "metric": "send_to_first_response",
+                    }
+                    for row in base
                 ],
                 "host_resources_under_full_load": {"mem_available_kib": 1700000},
             }
