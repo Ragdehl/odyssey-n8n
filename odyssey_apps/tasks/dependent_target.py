@@ -82,7 +82,7 @@ class TaskPersonReferenceSet:
             or any(d.evidence.note_type != "person" for d in self.dependencies)
             or (
                 referenced_finite_cardinality(self.dependencies[0].mention)
-                not in (None, len(self.dependencies))
+                != len(self.dependencies)
             )
         ):
             raise TaskDependentTargetError("Multiple Person references lack complete proof")
@@ -260,9 +260,7 @@ def verify_plural_person_task_semantics(
         or full_source != antecedent_source + dependent_source
         or not 2 <= len(antecedent_mentions) <= 8
         or len(set(antecedent_mentions)) != len(antecedent_mentions)
-        or (
-            referenced_finite_cardinality(dependent_mention) not in (None, len(antecedent_mentions))
-        )
+        or (referenced_finite_cardinality(dependent_mention) != len(antecedent_mentions))
         or any(antecedent_source.count(name) != 1 for name in antecedent_mentions)
         or dependent_source.strip().count(dependent_mention) != 1
         or not isinstance(interpretation, TaskInterpretation)

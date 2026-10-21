@@ -161,6 +161,23 @@ def live_product(root: Path):
         yield repo, actor, product
 
 
+def assert_person_inventory(notes: dict, expected: tuple[str, ...]) -> None:
+    """Live acceptance must count EVERY physical Person, including fabricated ones.
+
+    The fixture seeds exactly one SELF; a wrong extra Person is never filtered
+    out before comparing the inventory. Duplicates also fail by count.
+    """
+    actual = [
+        note.metadata.get("name")
+        for note in notes.values()
+        if note.metadata.get("type") == "person"
+    ]
+    assert len(actual) == len(expected) + 1, "Unexpected physical Person inventory"
+    assert sorted(actual) == sorted(("Persona local", *expected)), (
+        "Missing, duplicated or fabricated Person in live E4 vault"
+    )
+
+
 def build_workflow():
     graph = workflow(validated_deployed_projection(PINNED_RENDER), E4_SOURCE)
     guard = next(node for node in graph["nodes"] if node["name"] == "Validate isolated request")
@@ -605,6 +622,7 @@ def run() -> dict:
                             notes = {
                                 p: parse_note(repo.read_text(p)) for p in repo.list_markdown_paths()
                             }
+                            assert_person_inventory(notes, EXPECTED_PERSON_NAMES)
                             people = [
                                 (p, n)
                                 for p, n in notes.items()

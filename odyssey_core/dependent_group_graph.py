@@ -229,6 +229,17 @@ def verify_dependent_group_graph(
         ):
             raise DependentGroupGraphError("Finite source dependency set is incomplete")
         parents = {dep.predecessor_index for dep, _ in finite}
+        # A finite source set cannot silently ignore another earlier Core
+        # group: reviewers may select Ana and Luis while a third group
+        # creates Marta. Cross-group coverage is unsupported unless every
+        # Core predecessor of this consumer participates. This is a veto,
+        # never a source of invented names or additional edges.
+        if any(
+            earlier.ordinal not in parents
+            for earlier in groups[: group.ordinal]
+            if earlier.capability == "core"
+        ):
+            raise DependentGroupGraphError("Finite source set omits a preceding Core group")
         if len(parents) == 1:
             parent = next(iter(parents))
             try:

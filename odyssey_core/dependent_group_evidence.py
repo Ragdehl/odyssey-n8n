@@ -227,7 +227,8 @@ def prove_canonical_group_handoff(
         proof = next((p for p in proofs if p.source_reference_index == -1), proofs[0])
         # A reviewed graph edge names its preferred antecedent, but that
         # model-generated choice cannot disambiguate a pronoun between two
-        # independently materialized Persons in a single-target edge. Multi-
+        # independently materialized canonical Notes of the same type in a
+        # single-target edge. Multi-
         # edge N:M references to several targets retain their prior semantics.
         # A literal
         # canonical name may select one; a name of ANOTHER materialized target
@@ -254,8 +255,7 @@ def prove_canonical_group_handoff(
             and (
                 not supported_anaphoric_form(dependency.mention)
                 or (
-                    proof.note_type == "person"
-                    and len(consumer.dependencies) == 1
+                    len(consumer.dependencies) == 1
                     and len({receipt.stable_note_id for receipt in candidates}) != 1
                 )
             )

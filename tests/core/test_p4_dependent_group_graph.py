@@ -351,3 +351,41 @@ def test_two_reviewer_graph_refuses_lowercase_person_in_later_clause():
                 "groups": deepcopy(groups),
             },
         )
+
+
+@pytest.mark.parametrize("omitted_index", [0, 1, 2])
+def test_finite_set_rejects_omitted_core_predecessor_before_any_write(omitted_index):
+    """A unanimous reviewer cannot omit a third Core group from 'los dos'."""
+    groups = [
+        {"capability": "core", "source_quote": f"Conocí a {name}. ", "dependencies": []}
+        for name in ("Ana", "Luis", "Marta")
+    ]
+    chosen = [idx for idx in range(3) if idx != omitted_index]
+    groups.append(
+        {
+            "capability": "tasks",
+            "source_quote": "Mañana llamaré a los dos.",
+            "dependencies": [
+                {
+                    "predecessor_index": idx,
+                    "mention": "los dos",
+                    "antecedent_mention": ("Ana", "Luis", "Marta")[idx],
+                }
+                for idx in chosen
+            ],
+        }
+    )
+    full = "".join(group["source_quote"] for group in groups)
+    with pytest.raises(DependentGroupGraphError, match="omits a preceding Core group"):
+        verify_dependent_group_graph(
+            full,
+            {"full_source_quote": full, "groups": groups},
+            {
+                "full_source_quote": full,
+                "complete": True,
+                "dependency_edges_verified": True,
+                "review_reason": "APPROVED",
+                "failing_group_index": None,
+                "groups": deepcopy(groups),
+            },
+        )

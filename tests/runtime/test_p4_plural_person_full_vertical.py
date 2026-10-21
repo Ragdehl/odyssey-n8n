@@ -270,3 +270,26 @@ def test_recorded_plural_e4_refuses_false_completion_after_person_writes(
         == 2
     )
     assert records == ["prepare", "core", "task"]
+
+
+@pytest.mark.parametrize("unwanted", [("Marta",), ("Ana",), ("Persona local",)])
+def test_live_e4_gate_rejects_unexpected_or_duplicate_physical_person(unwanted):
+    from scripts.odyssey_e4_live_browser_n8n import assert_person_inventory
+
+    def note(name):
+        return SimpleNamespace(metadata={"type": "person", "name": name})
+
+    notes = {str(i): note(name) for i, name in enumerate(("Persona local", *PEOPLE, *unwanted))}
+    with pytest.raises(AssertionError):
+        assert_person_inventory(notes, PEOPLE)
+
+
+def test_live_e4_gate_accepts_only_self_and_exact_person_cohort():
+    from scripts.odyssey_e4_live_browser_n8n import assert_person_inventory
+
+    names = ("Persona local", *PEOPLE)
+    notes = {
+        str(i): SimpleNamespace(metadata={"type": "person", "name": name})
+        for i, name in enumerate(names)
+    }
+    assert assert_person_inventory(notes, PEOPLE) is None

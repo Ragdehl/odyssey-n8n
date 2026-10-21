@@ -68,3 +68,47 @@ def test_semantic_model_review_cannot_drop_person_or_rewrite_source(field, value
 def test_unbacked_or_reordered_referent_set_cannot_be_approved(names):
     with pytest.raises(TaskDependentTargetError):
         verify(names=names)
+
+
+@pytest.mark.parametrize("ambiguous", ["ellos", "Ana y Luis", "esas personas"])
+def test_unbounded_plural_wording_cannot_claim_finite_semantic_proof(ambiguous):
+    dependent = f" Mañana debo llamar a {ambiguous}."
+    review = {
+        **REVIEW,
+        "full_source_quote": BEFORE + dependent,
+        "dependent_quote": dependent,
+        "dependent_mention": ambiguous,
+    }
+    with pytest.raises(TaskDependentTargetError, match="not uniquely grounded"):
+        verify_plural_person_task_semantics(
+            full_source=BEFORE + dependent,
+            antecedent_source=BEFORE,
+            dependent_source=dependent,
+            dependent_mention=ambiguous,
+            antecedent_mentions=MENTIONS,
+            interpretation=TaskInterpretation(dependent.strip(), TaskOperation.CREATE),
+            reviews=(deepcopy(review), deepcopy(review)),
+        )
+
+
+def test_plural_carrier_requires_exact_finite_cardinal_even_if_targets_are_distinct():
+    from types import SimpleNamespace
+
+    from odyssey_apps.tasks.dependent_target import TaskPersonReferenceSet
+    from odyssey_core.source_bound_dependency import SourceBoundDependency
+
+    def dependencies(mention):
+        return tuple(
+            SourceBoundDependency(
+                BEFORE,
+                AFTER,
+                mention,
+                SimpleNamespace(stable_note_id=name, note_type="person"),
+            )
+            for name in MENTIONS
+        )
+
+    assert len(TaskPersonReferenceSet(dependencies("los dos"), "actor").dependencies) == 2
+    for mention in ("ellos", "Ana y Luis", "esas personas"):
+        with pytest.raises(TaskDependentTargetError, match="complete proof"):
+            TaskPersonReferenceSet(dependencies(mention), "actor")

@@ -275,7 +275,10 @@ def test_nm_handoff_rechecks_all_sources_immediately_before_consumer(written_pre
         handoff.require_all_current(repo, SCHEMA)
 
 
-def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(tmp_path):
+@pytest.mark.parametrize("single_anaphor", [False, True])
+def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(
+    tmp_path, single_anaphor
+):
     """Multiple genuine links in one Core result must never choose the last."""
     from copy import deepcopy
 
@@ -299,7 +302,7 @@ def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(
     executor.context_index.rebuild(repo, SCHEMA, executor.embedder)
     executor.semantic_index.rebuild(repo, SCHEMA, executor.embedder)
     before = "Hoy revisé Preparar informe Atlas y Revisar contratos. "
-    after = "Después organizo ambas tareas."
+    after = "Después organizo esa tarea." if single_anaphor else "Después organizo ambas tareas."
     children = (
         KnowledgeUnit(
             SelectionCriteria(None, "2026-10-16", "calendar_day", (), None),
@@ -352,18 +355,28 @@ def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(
         {
             "capability": "tasks",
             "source_quote": after,
-            "dependencies": [
-                {
-                    "predecessor_index": 0,
-                    "mention": "ambas tareas",
-                    "antecedent_mention": "Preparar informe Atlas",
-                },
-                {
-                    "predecessor_index": 0,
-                    "mention": "ambas tareas",
-                    "antecedent_mention": "Revisar contratos",
-                },
-            ],
+            "dependencies": (
+                [
+                    {
+                        "predecessor_index": 0,
+                        "mention": "esa tarea",
+                        "antecedent_mention": "Preparar informe Atlas",
+                    }
+                ]
+                if single_anaphor
+                else [
+                    {
+                        "predecessor_index": 0,
+                        "mention": "ambas tareas",
+                        "antecedent_mention": "Preparar informe Atlas",
+                    },
+                    {
+                        "predecessor_index": 0,
+                        "mention": "ambas tareas",
+                        "antecedent_mention": "Revisar contratos",
+                    },
+                ]
+            ),
         },
     ]
     source = before + after
@@ -379,6 +392,20 @@ def test_two_real_core_links_in_one_antecedent_are_selected_by_exact_occurrence(
             "groups": deepcopy(groups),
         },
     )
+    if single_anaphor:
+        with pytest.raises(CanonicalGroupEvidenceError, match="uniquely identify"):
+            prove_canonical_group_handoff(
+                graph=graph,
+                consumer_index=1,
+                predecessors={0: result},
+                repository=repo,
+                schema=SCHEMA,
+            )
+        assert not any(
+            parse_note(repo.read_text(path)).metadata.get("name") == "Después organizo esa tarea"
+            for path in repo.list_markdown_paths()
+        )
+        return
     proof = prove_canonical_group_handoff(
         graph=graph,
         consumer_index=1,
