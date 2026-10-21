@@ -56,5 +56,32 @@ para detectar falsos PASS.
   separados, rollback al SHA anterior y comprobación posterior a deploy.
   PROD exige autorización y promoción independientes.
 
-**Estado al crear este documento:** E4 funcionalmente aceptable en entorno
-aislado; pendiente activar y comprobar en DEV. No hay desplegado en PROD.
+## DEV aceptado funcionalmente — prueba observada el 21-10-2026
+
+Desplegado exclusivamente en DEV con SHA completo
+`d03737fec07ad222b8dd5c8cd80e29060633cb4c`, desde la instalación
+anterior `b0fc9b21da613bff4aeccf5466a18da8b18426e2`. Se verificó
+coherencia de fuente+despliegue, runtime y n8n HTTP 200. Copias locales
+privadas de vault/estado y volumen n8n creadas y comprobadas antes del
+rollout, SHA de rollback preservado, sin alterar PROD.
+
+Chromium real mediante proxy DEV **solo lectura PASS** en móvil y escritorio:
+20 vistas técnicas y SVG por superficie, errores JS 0, cuatro intentos de
+mutación rechazados con 403. Luego mensaje nuevo con GPT real y datos
+sintéticos «Irene Varela y Pablo Sanz»: **HTTP 200 / completed, 58,87 s**,
+exactamente **2 Person + 1 Task + 2 wikilinks canónicos**, 3 notas añadidas,
+1 nota del día actualizada, 0 notas eliminadas. La misma entrega reintentada
+después respondió completed y conservó **idénticos los hashes de 133 archivos
+Markdown**. La consulta al endpoint DEV de Notes también devolvió resultados
+para ambas personas. Recibo redigido [DEV](e4-dev-functional-adoption-receipt-20261021.json)
+y reportes internos de rollback en el host, nunca subidos con datos privados.
+
+El mismo comando de aceptación funcional ejecutado desde el checkout
+**realmente desplegado en DEV** (`d03737f`) dio también
+**FUNCTIONAL_ACCEPTANCE_PASS, 181 pruebas dirigidas**; la aceptación no
+depende solo de la rama experimental.
+
+**Resultado: E4 funcionalmente aceptada en DEV.** No se presenta como
+certificación de p95, Cloudflare, E5 ni aprobación para PROD. La siguiente
+etapa funcional vuelve a E5; antes de promover a PROD se requiere una
+acción de despliegue independiente.

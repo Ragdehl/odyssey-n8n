@@ -1,0 +1,58 @@
+{
+  "schema": "e4-dev-functional-adoption-v1",
+  "status": "DEV_E4_ACCEPTED_FUNCTIONALLY",
+  "deployment_commit": "d03737fec07ad222b8dd5c8cd80e29060633cb4c",
+  "rollback_source_commit": "b0fc9b21da613bff4aeccf5466a18da8b18426e2",
+  "backup": {
+    "dev_vault_state_sha256": "678b95da9d6f1c7583ec0cc2812fff9a9d359ea0971cc7f23cf6e9bdb9a127d8",
+    "dev_n8n_volume_sha256": "e070fc730c8525719007bfa95076b5f8101322071e648142035cfa26975b5ea8",
+    "location": "private local DEV rollback area; not included in source repo"
+  },
+  "dev_health": {
+    "runtime_http": 200,
+    "n8n_http": 200,
+    "source_deployment_coherent": true
+  },
+  "read_only_browser": {
+    "pass": true,
+    "deploy_commit": "d03737fec07ad222b8dd5c8cd80e29060633cb4c",
+    "unauthorized_mutations_http_403": {
+      "createRequest": 403,
+      "deleteNote": 403,
+      "changeTask": 403,
+      "appendTurn": 403
+    },
+    "errors": 0,
+    "cloudflare_access_checked": false
+  },
+  "live_synthetic_request": {
+    "http": 200,
+    "status": "completed",
+    "seconds": 58.87,
+    "added_notes": 3,
+    "modified_notes": 1,
+    "removed_notes": 0,
+    "persons_verified": [
+      "Irene Varela",
+      "Pablo Sanz"
+    ],
+    "task_count": 1,
+    "exact_canonical_links": 2
+  },
+  "replay": {
+    "status": "completed",
+    "markdown_sha_identical": true,
+    "paths_verified": 133,
+    "seconds": 0.96,
+    "dev_notes_search_hit_counts": {
+      "Irene Varela": 3,
+      "Pablo Sanz": 3
+    }
+  },
+  "limits": [
+    "DEV only, synthetic actor and notes, no PROD changes",
+    "Read-only browser did not re-drive the new write; it checked deployed frontend and security denials",
+    "No new Cloudflare Access authentication test",
+    "Performance p95 and E5 are separate acceptance items"
+  ]
+}
