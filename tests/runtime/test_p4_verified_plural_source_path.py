@@ -121,3 +121,37 @@ def test_open_nonfinite_reference_does_not_invite_models(monkeypatch):
     result, calls = run(monkeypatch, scoped=scoped)
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert calls == []
+
+
+def test_both_models_omit_third_explicit_person_before_any_core_write(monkeypatch):
+    """Even two agreeing models cannot promote an arbitrary two-of-three subset."""
+    expanded_before = "Hoy he conocido a Ana Prototipo, a Luis Prototipo y a Marta Prototipo."
+    expanded_source = expanded_before + AFTER
+    untrusted = {
+        **REVIEW,
+        "full_source_quote": expanded_source,
+        "antecedent_quote": expanded_before,
+    }
+    calls = []
+
+    def ask(_self, *_args):
+        calls.append("review")
+        return deepcopy(untrusted)
+
+    def must_not_write(*_args, **_kwargs):
+        raise AssertionError("An incomplete cohort reached the Core writer")
+
+    monkeypatch.setattr(WholeSourceLightExecutor, "_ask", ask)
+    monkeypatch.setattr(WholeSourceLightExecutor, "_execute_dependent_graph", must_not_write)
+    executor = object.__new__(WholeSourceLightExecutor)
+    result = executor._execute_verified_plural_person_scope(
+        expanded_source,
+        "delivery",
+        None,
+        SimpleNamespace(antecedent=expanded_before, dependent=AFTER, mention="los dos"),
+        delivery_instant=None,
+        router_started=0.0,
+        route_scopes=SCOPES,
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert calls == ["review", "review"]

@@ -36,6 +36,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_p4_canonical_group_handoff.py",
         "tests/core/test_p4_multi_reference_set_guard.py",
         "tests/core/test_p4_plural_core_prompt_contract.py",
+        "tests/core/test_p4_plural_complete_cohort.py",
+        "tests/core/test_p4_source_cohort_coverage.py",
         "tests/core/test_p4_finite_plural_reference_forms.py",
         "tests/runtime/test_p4_duplicate_receipt_provenance.py",
         "tests/core/test_write_plan_enrichment_e2.py",

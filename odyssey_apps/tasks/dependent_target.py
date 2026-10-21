@@ -286,6 +286,18 @@ def verify_plural_person_task_semantics(
     }
     if any(not isinstance(review, Mapping) or dict(review) != expected for review in reviews):
         raise TaskDependentTargetError("Independent plural semantic reviewers disagreed")
+    # A unanimous but incomplete LLM set must not authorize mutation. Core's
+    # source-only veto cannot mint an identity; it catches uncovered explicit
+    # name spans before any earlier Core write is permitted.
+    from odyssey_core.source_cohort_coverage import (
+        SourceCohortCoverageError,
+        require_explicit_cohort_coverage,
+    )
+
+    try:
+        require_explicit_cohort_coverage(antecedent_source, antecedent_mentions)
+    except SourceCohortCoverageError as error:
+        raise TaskDependentTargetError("Finite source cohort is not complete") from error
 
 
 def verify_dependent_task_semantics(

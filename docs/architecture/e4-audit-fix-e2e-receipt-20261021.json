@@ -1,0 +1,46 @@
+{
+  "profile": "real_authenticated_synthetic_E4_product_path",
+  "recorded_local_date": "2026-10-21",
+  "baseline_feature_commit": "4a096b6b6825dbc4aee421b213a52926afd373a6",
+  "observed_source_file_sha256": {
+    "odyssey_core/source_cohort_coverage.py": "6f70bee8c8e0277ea042682d1cff11d59c447ba5c6cb1f48120f533c190d5629",
+    "odyssey_core/dependent_group_evidence.py": "669e009bc3e0821dd2cac5cc77aa353e9fe8fc25b412fe456f663d8c78f65204",
+    "odyssey_core/dependent_group_graph.py": "09c6977a2cba7991636659323fc118687e6f4a30002be46aff38e6f3bb507fea",
+    "odyssey_core/request_planning.py": "2783cd8271463e28ac36cc41053a86db430a9e624c35bb67ca3e1c537c4f4ead",
+    "odyssey_apps/tasks/dependent_target.py": "c160c9644b3de6ec5c940a7ff87e993edb2f09e95ae0b4aa190b14fdcbab659e",
+    "odyssey_runtime/whole_source_light.py": "a6677ddb7be04a1bf29f5e571e034e961a5dd68f9578cd0388cad04d8c9a62bc",
+    "scripts/odyssey_e4_live_browser_n8n.py": "7a95c126ecb1fc0ba53c033f626ff5c7850e23bf7fca61fa9464a12821eb48af"
+  },
+  "synthetic_message": "Hoy he conocido a Ana Ejemplo y a Luis Ejemplo. Mañana tengo que llamar a los dos.",
+  "synthetic_test_clock": "2026-10-20T10:30:00+02:00",
+  "synthetic_date_readback": "2026-10-21",
+  "result": {
+    "passed": true,
+    "seconds": 69.71,
+    "gpt": "real",
+    "n8n": "real_offline_docker",
+    "browser": "Chromium real",
+    "authentication": "synthetic_local_cookie_gate",
+    "unauth_denied": true,
+    "physical_persons": 2,
+    "physical_tasks": 1,
+    "physical_days": 1,
+    "person_task_link": true,
+    "markdown_e3_replay_unchanged": true,
+    "notes_after": 5,
+    "statistics": {
+      "writer_calls": 2,
+      "first_writes": 1,
+      "replay": 1,
+      "browser_requests": 124,
+      "denied": 1,
+      "n8n_calls": 1,
+      "assistant_persisted": 1,
+      "notes_read": 15
+    },
+    "browser_gate": true,
+    "cloudflare_access_tested": false,
+    "dev_prod_untouched": true
+  },
+  "note": "No access to real user vault or DEV/PROD; no Cloudflare end-to-end. Single live run, not a reliability percentile."
+}

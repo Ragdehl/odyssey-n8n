@@ -71,3 +71,21 @@ def test_non_person_edges_are_not_burdened_by_person_cohort_logic():
         for i, x in enumerate(items)
     )
     assert _require_complete_person_cohort(task_edges, {}) is None
+
+
+@pytest.mark.parametrize("reference", ["los dos", "ambos", "los tres"])
+def test_one_edge_cannot_claim_complete_finite_person_set(reference):
+    with pytest.raises(CanonicalGroupEvidenceError, match="cardinality"):
+        _require_complete_person_cohort(_edges(reference, ("Ana",)), _receipts("Ana"))
+
+
+def test_finite_person_set_never_accepts_mixed_note_types():
+    edges = _edges()
+    mixed = (
+        edges[0],
+        CanonicalGroupEdge(
+            0, 1, "Luis", "los dos", SimpleNamespace(note_type="task", stable_note_id="task-Luis")
+        ),
+    )
+    with pytest.raises(CanonicalGroupEvidenceError, match="mixed"):
+        _require_complete_person_cohort(mixed, _receipts("Ana", "Luis"))

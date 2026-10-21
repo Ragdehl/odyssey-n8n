@@ -15,6 +15,7 @@ from time import perf_counter
 from typing import Any, Protocol
 
 from odyssey_core.context import ContextFilter, validate_context_filters
+from odyssey_core.dependent_reference_form import referenced_finite_cardinality
 from odyssey_core.domain_interpretation import (
     DOMAIN_PROPERTY_REMOVE_PREFIX,
     DOMAIN_PROPERTY_SET_PREFIX,
@@ -646,20 +647,29 @@ def _render_domain_interpretation_section(
     canonical_refs = tuple(
         entry for entry in interpretation.evidence if entry.kind == "canonical_reference"
     )
+    # Multiple unrelated source mentions are NOT one operation. Only an exact
+    # shared finite mention with the same cardinality as the unique targets
+    # justifies asking Core to preserve the entire reference set in one action.
+    shared_source = {entry.source_text for entry in canonical_refs}
+    shared_finite_set = (
+        len(canonical_refs) >= 2
+        and len(shared_source) == 1
+        and referenced_finite_cardinality(next(iter(shared_source))) == len(canonical_refs)
+        and len({entry.value for entry in canonical_refs}) == len(canonical_refs)
+    )
     canonical_reference_instruction = (
-        " Distinct canonical_reference evidence items from one grounded source "
-        "phrase refer to DISTINCT physically verified earlier Notes. If the "
-        "requested write relates to that complete finite set, preserve EACH "
-        "member as its own ordinary Core identity reference in the SAME "
-        "source-owned write action; do not choose just one member, enumerate "
-        "additional members, or split one Task into several operations. "
-        "For a shared plural SOURCE_TEXT, use the same original mention for "
-        "every link but a distinct canonical VALUE as each reference helper's "
-        "identity target. Do not invent Note IDs, imply Task assignment, or "
-        "treat this evidence as an instruction to mutate. Core's dependent "
-        "preflight verifies EVERY reference's actual canonical ID and marker; "
-        "ESCALATE rather than drop an evidenced member."
-        if len(canonical_refs) >= 2
+        " These canonical_reference evidence items describe a source-grounded "
+        "finite set of DISTINCT physically verified Notes. Preserve EACH "
+        "member as an ordinary Core identity reference in the SAME "
+        "source-owned write action only when the source requests one shared "
+        "operation. Never group independent operations merely because they "
+        "appear in the same interpretation, and never split a single shared "
+        "operation merely because it references several members. For every link "
+        "retain the exact shared SOURCE_TEXT and its distinct canonical VALUE. "
+        "Do not invent Note IDs or assignments, nor grant mutation authority "
+        "to evidence. Core preflight verifies every canonical target and marker; "
+        "ESCALATE instead of dropping a member or guessing action grouping."
+        if shared_finite_set
         else ""
     )
     return (

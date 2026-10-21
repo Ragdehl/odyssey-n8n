@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 from contextlib import ExitStack, contextmanager
+from datetime import datetime
 from http.client import HTTPConnection
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -140,6 +141,11 @@ def live_product(root: Path):
             )
         )
         product = composition.build_runtime_from_environment()
+        # Freeze the source executor's injectable clock too. Mocking only the
+        # composition clock leaves relative words like "mañana" resolved from
+        # the host's real date, invalidating the E2E temporal assertion.
+        assert product.hybrid_candidate_execute is not None
+        product.hybrid_candidate_execute.now = lambda: datetime.fromisoformat(CLOCK)
         product.notes_service = NotesQueryService(
             repo, schema, product.hybrid_candidate_execute.context_index
         )
@@ -611,6 +617,18 @@ def run() -> dict:
                                 f"[[{person_path.removesuffix('.md')}|{person.metadata['name']}]]"
                                 in tasks[0].content
                                 for person_path, person in people
+                            )
+                            print(
+                                "E4_TASK_DATE_READBACK="
+                                + json.dumps(
+                                    {
+                                        "actual": tasks[0].metadata.get("target_date"),
+                                        "expected": "2026-10-21",
+                                        "clock": CLOCK,
+                                    },
+                                    ensure_ascii=False,
+                                ),
+                                flush=True,
                             )
                             assert tasks[0].metadata.get("target_date") == (
                                 "2026-10-17"

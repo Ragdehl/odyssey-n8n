@@ -11,6 +11,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .dependent_reference_form import referenced_finite_cardinality
+from .source_cohort_coverage import SourceCohortCoverageError, require_explicit_cohort_coverage
 from .source_provenance import SourceEvidenceError, anchor_original_partition
 
 REVIEW_REASONS = frozenset(
@@ -207,6 +209,36 @@ def verify_dependent_group_graph(
         )
     if not has_dependency:
         raise DependentGroupGraphError("Independent groups require the independent-source contract")
+    # The source graph must prove cardinality BEFORE any Core predecessor is
+    # written, not just when a later consumer's physical receipts are read.
+    # This rule is generic to all finite reference sets and all consumer apps.
+    for group in groups:
+        finite = [
+            (dep, referenced_finite_cardinality(dep.mention))
+            for dep in group.dependencies
+            if referenced_finite_cardinality(dep.mention) is not None
+        ]
+        if not finite:
+            continue
+        if (
+            len(finite) != len(group.dependencies)
+            or len(finite) != finite[0][1]
+            or len({dep.mention for dep, _ in finite}) != 1
+            or len({(dep.predecessor_index, dep.antecedent_mention) for dep, _ in finite})
+            != len(finite)
+        ):
+            raise DependentGroupGraphError("Finite source dependency set is incomplete")
+        parents = {dep.predecessor_index for dep, _ in finite}
+        if len(parents) == 1:
+            parent = next(iter(parents))
+            try:
+                require_explicit_cohort_coverage(
+                    groups[parent].source, tuple(dep.antecedent_mention for dep, _ in finite)
+                )
+            except SourceCohortCoverageError as error:
+                raise DependentGroupGraphError(
+                    "Finite source dependency omitted a named referent"
+                ) from error
     return ReviewedSourceGraph(original, tuple(groups))
 
 

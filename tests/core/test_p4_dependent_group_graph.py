@@ -248,3 +248,40 @@ def test_lost_punctuation_never_restored_as_trivia():
     reviewed["groups"][2]["source_quote"] = "Prepara un resumen para ella"
     with pytest.raises(DependentGroupGraphError):
         verify_dependent_group_graph(original, proposed, reviewed)
+
+
+@pytest.mark.parametrize("omission", ["one_edge", "two_of_three"])
+def test_finite_graph_rejects_incomplete_cohort_before_core_write(omission):
+    antecedent = (
+        "Hoy he conocido a Ana, a Luis y a Marta. "
+        if omission == "two_of_three"
+        else "Hoy he conocido a Ana y a Luis. "
+    )
+    dependencies = [
+        {"predecessor_index": 0, "mention": "los dos", "antecedent_mention": "Ana"},
+        {"predecessor_index": 0, "mention": "los dos", "antecedent_mention": "Luis"},
+    ]
+    if omission == "one_edge":
+        dependencies.pop()
+    parts = [
+        {"capability": "core", "source_quote": antecedent, "dependencies": []},
+        {
+            "capability": "tasks",
+            "source_quote": "Mañana llamar a los dos.",
+            "dependencies": dependencies,
+        },
+    ]
+    full = "".join(part["source_quote"] for part in parts)
+    with pytest.raises(DependentGroupGraphError, match="Finite source"):
+        verify_dependent_group_graph(
+            full,
+            {"full_source_quote": full, "groups": parts},
+            {
+                "full_source_quote": full,
+                "complete": True,
+                "dependency_edges_verified": True,
+                "review_reason": "APPROVED",
+                "failing_group_index": None,
+                "groups": deepcopy(parts),
+            },
+        )

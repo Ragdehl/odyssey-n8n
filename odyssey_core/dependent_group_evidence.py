@@ -78,14 +78,20 @@ def _require_complete_person_cohort(
     No subset may be selected from a larger group merely because GPT omitted
     an edge. This check supplements, never replaces, individual E2 receipts.
     """
-    if len(edges) < 2 or any(edge.evidence.note_type != "person" for edge in edges):
+    # Check the source's finite cardinal even with ONE reviewed edge. A one-
+    # edge graph is precisely the unsafe subset that older validation skipped.
+    if not any(
+        edge.evidence.note_type == "person"
+        and referenced_finite_cardinality(edge.dependent_mention)
+        for edge in edges
+    ):
         return
     mentions = {edge.dependent_mention for edge in edges}
-    if len(mentions) != 1:
-        return
+    if len(mentions) != 1 or any(edge.evidence.note_type != "person" for edge in edges):
+        raise CanonicalGroupEvidenceError("Finite Person cohort has mixed or incomplete edges")
     cardinality = referenced_finite_cardinality(next(iter(mentions)))
-    if cardinality is None:
-        return
+    if cardinality is None or len(edges) != cardinality:
+        raise CanonicalGroupEvidenceError("Finite Person cohort cardinality is not complete")
     selected = {edge.evidence.stable_note_id for edge in edges}
     all_people = {
         proof.stable_note_id

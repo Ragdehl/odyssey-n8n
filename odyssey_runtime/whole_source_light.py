@@ -1659,6 +1659,17 @@ class WholeSourceLightExecutor:
             )
         ):
             return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_UNVERIFIED")
+        # Two agreeing reviewers can still omit an explicitly named third
+        # Person. Veto omitted source spans BEFORE any Core predecessor write.
+        from odyssey_core.source_cohort_coverage import (
+            SourceCohortCoverageError,
+            require_explicit_cohort_coverage,
+        )
+
+        try:
+            require_explicit_cohort_coverage(scope.antecedent, tuple(people))
+        except SourceCohortCoverageError:
+            return self._abstain(delivery, "DEPENDENT_N_PERSON_SET_SOURCE_INCOMPLETE")
         groups = [
             {"capability": "core", "source_quote": scope.antecedent, "dependencies": []},
             {
