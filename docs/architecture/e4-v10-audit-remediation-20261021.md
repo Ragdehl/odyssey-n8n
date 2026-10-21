@@ -57,16 +57,24 @@ por muestra insuficiente y FastEmbed no disponible en caché aislada.
 ## Evidencia y criterios de cierre
 
 Focal: **90 PASS** (Core set, source, alias físico, composición de producción,
-oráculo). Gate transversal de este cambio: **1.537 Python PASS,
-179 Node PASS, 7 subtests PASS**, Ruff PASS. La suite global histórica tiene
+oráculo). Gate transversal actualizado con tests adversariales obligatorios y
+preflight: **1.549 Python PASS, 179 Node PASS, 7 subtests PASS**, Ruff PASS. La suite global histórica tiene
 9 fallos benchmark preexistentes en Router/Temporal reproducidos sobre base;
 no se transforma esa deuda en PASS.
 
 La campaña GPT v9 anterior incluyó 3 casos de creación correctamente guardados
 y 1 abstención segura; el E2E posterior en navegador+n8n con GPT real
 terminó PASS en 91,05 s, traza y SHA-256 congelados bajo
-`docs/architecture/e4-v9-gpt-browser-*`. La nueva remediación v10
-no tiene aún cuatro dictámenes PASS y no está autorizada para desplegar.
+`docs/architecture/e4-v9-gpt-browser-*`. Tras congelar v10 en `43e18fb`,
+se ejecutó otro E2E GPT real+n8n+Chromium sobre la nueva versión:
+**PASS, 110,45 s, 2 Personas/1 Task/1 Day, enlaces físicos, navegador y
+replay E3 byte-idéntico**. Su traza completa y muestra host de 27 lecturas
+se conservan con SHA-256 en `e4-v10-gpt-browser-receipt-20261021.json`.
+Durante parte de la ejecución MemAvailable del host bajó a ~971 MiB,
+SwapFree a ~222 MiB; estos valores NO equivalen a RSS aislado del producto.
+La muestra v10 permanece en **1/20 browser**, 0/20 directas v10 y sin
+distribuciones válidas p95. **E4 no tiene cuatro dictámenes PASS** y no está
+autorizada para desplegar.
 
 Performance: 3 directos positivos (47,092, 52,918, 58,473 s) y 1 E2E
 v9 (91,05 s) no establecen p95 de 20 casos. Medidas de memoria total,

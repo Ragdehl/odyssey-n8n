@@ -1,0 +1,30 @@
+{
+  "schema": "e4-v10-performance-samples-v1",
+  "source_code_commit": "43e18fb",
+  "direct_positive": [],
+  "browser_positive": [
+    {
+      "run_id": "e4-v10-browser-real-gpt-20261021-1",
+      "pass": true,
+      "status": "completed",
+      "seconds": 110.45,
+      "physical_browser_n8n_gpt": true,
+      "source_commit": "43e18fb",
+      "trace_sha256": "cc9086982c5d602fac1b71b5289b35026939f6e3931440d90856994fa706fc5c"
+    }
+  ],
+  "host_resources_under_full_load": null,
+  "host_resources_partial": {
+    "count": 27,
+    "max_load1": 2.32,
+    "max_temperature_millideg": 59500,
+    "min_mem_available_kib": 993984,
+    "min_swap_free_kib": 226960,
+    "period": "3s sampling during part of one E2E"
+  },
+  "limitations": [
+    "Only one v10 live E2E; cannot establish median/p95",
+    "Host samples are host-wide and do not isolate container/browser resource envelopes",
+    "Three prior v9 direct positives are historical, not v10 samples"
+  ]
+}

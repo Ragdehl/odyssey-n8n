@@ -1,0 +1,113 @@
+{
+  "browser": {
+    "actor": "synthetic_only",
+    "after": {
+      "acknowledgements": 1,
+      "confirmationVisible": true,
+      "details": 1,
+      "noteButtons": 1,
+      "userMessages": 1
+    },
+    "before": {
+      "acknowledgements": 1,
+      "confirmationVisible": true,
+      "details": 1,
+      "noteButtons": 1,
+      "userMessages": 1
+    },
+    "detail": {
+      "diagnosticRejected": false,
+      "sourceFlow": true,
+      "svgCount": 13,
+      "writeReceipts": 4
+    },
+    "jsErrorsCount": 0,
+    "messages_sent": 1,
+    "notes": {
+      "resultNodes": 3,
+      "surfaceVisible": true,
+      "taskName": "llamar a los dos",
+      "taskSearchVisible": true,
+      "verifiedPersonBacklinks": 2
+    },
+    "pass": true,
+    "progressDonut": {
+      "displayed": "0",
+      "percent": 0,
+      "present": true,
+      "valid": true
+    },
+    "progressTrace": {
+      "advanced": true,
+      "monotonic": true,
+      "observed": [
+        0,
+        8,
+        18,
+        84,
+        94
+      ]
+    },
+    "reloadedDetail": {
+      "diagnosticRejected": false,
+      "svgCount": 13,
+      "writeReceipts": 4
+    }
+  },
+  "committed_full_log": "docs/architecture/e4-v10-gpt-browser-full-trace-20261021.log",
+  "created_at": "2026-10-21T21:20:08.560152+02:00",
+  "fixture": "synthetic disposable vault/actor/cookie, no real personal notes",
+  "full_log_bytes": 15200,
+  "full_log_sha256": "cc9086982c5d602fac1b71b5289b35026939f6e3931440d90856994fa706fc5c",
+  "host_samples": {
+    "count": 27,
+    "max_load1": 2.32,
+    "max_temperature_millideg": 59500,
+    "min_mem_available_kib": 993984,
+    "min_swap_free_kib": 226960,
+    "period": "3s sampling during part of one E2E"
+  },
+  "host_samples_log": "docs/architecture/e4-v10-gpt-browser-host-resources-20261021.log",
+  "host_samples_log_sha256": "336e4a99dcd0fa70a3274bb08a1e0360f526b9a2f1187d0aaf5838f40a81d53b",
+  "limitations": [
+    "One positive browser sample; not median or p95 over 20 independent requests",
+    "Host-wide samples do not isolate Docker/Chromium total RSS and cover only part of run",
+    "Cloudflare Access not tested; DEV/PROD untouched"
+  ],
+  "physical_result": {
+    "authentication": "synthetic_local_cookie_gate",
+    "browser": "Chromium real",
+    "browser_gate": true,
+    "cloudflare_access_tested": false,
+    "dev_prod_untouched": true,
+    "gpt": "real",
+    "markdown_e3_replay_unchanged": true,
+    "n8n": "real_offline_docker",
+    "notes_after": 5,
+    "passed": true,
+    "person_task_link": true,
+    "physical_days": 1,
+    "physical_persons": 2,
+    "physical_tasks": 1,
+    "seconds": 110.45,
+    "statistics": {
+      "assistant_persisted": 1,
+      "browser_requests": 200,
+      "denied": 1,
+      "first_writes": 1,
+      "n8n_calls": 1,
+      "notes_read": 37,
+      "replay": 1,
+      "writer_calls": 2
+    },
+    "unauth_denied": true
+  },
+  "runner": "scripts/odyssey_e4_live_browser_n8n.py, isolated systemd EnvironmentFile and n8n Docker",
+  "schema": "odyssey-e4-v10-browser-receipt-v1",
+  "source_commit": "43e18fb",
+  "task_date": {
+    "actual": "2026-10-21",
+    "clock": "2026-10-20T10:30:00+02:00",
+    "expected": "2026-10-21"
+  }
+}
