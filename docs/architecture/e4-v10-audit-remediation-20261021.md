@@ -114,3 +114,32 @@ compatibilidad de embeddings. Estas medidas **no prueban el p95 de producto**.
 Véase `e4-v10-fastembed-isolated-pi-receipt-20261021.json`.
 
 **Sin despliegue, merge, Builder ni cambios a DEV/PROD, Cloudflare, E5 o notas privadas.**
+
+## E4 v11 — instrumentación de latencia y activación real del pacing diario autorizado
+
+La campaña GPT directa v10 sobre código `cf9398a` pasó **4/4** casos:
+`ambos` 38,767 s, `los tres` 37,823 s, `uno de los dos`
+abstención segura 12,657 s, y grupo independiente `informe; Ana/Luis; los dos`
+50,135 s. En todos los casos positivos, oráculo exacto del multiconjunto,
+enlaces en Markdown y replay byte-idéntico. Registro íntegro y SHA-256 en
+`e4-v10-gpt-direct-campaign-receipt-20261021.json`. Son **3** positivos
+v10, no 20 ni un p95 de producto.
+
+El browser test ahora registra `userRequestSeconds`, cronometrado desde
+el clic Enviar hasta que aparece la respuesta, separadamente de
+preparar n8n/Docker/Chromium, revisar Notes, refrescar UI y probar replay.
+El tiempo de `E4_LIVE_AUTHENTICATED_RESULT.seconds` sigue registrándose
+sin alteración como coste **total del harness**; no es automáticamente
+latencia percibida de una petición. El nuevo campo no cambia comportamiento
+de Core/Writer ni convierte una ejecución en una distribución p95.
+
+Bug del presupuesto local: existía el documento de excepción
+`agent-pacing-one-day-exception.json` autorizado previamente, pero el
+`doctor` y `require_session_headroom` no lo consultaban y bloqueaban
+auditores aunque el cap local autorizado fuera mayor. `odyssey_agent_pacing`
+lee únicamente un fichero ya existente, privado modo 0600, con esquema
+exacto, razón explícita, cap máximo de 10 M tokens reportados y día
+Europe/Paris exacto; lo ignora después del 21/10. **Nunca afirma que el
+saldo remoto sea de 10 M**. Las pruebas cubren expiración y documentos
+ilegítimos; gate transversal **1.555 Python, 179 JS, 7 subtests PASS**.
+No se modifican políticas permanentes, recursos DEV/PROD ni notas privadas.

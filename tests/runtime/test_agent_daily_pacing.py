@@ -254,3 +254,72 @@ def test_cli_pace_report_is_read_only_and_does_not_trigger_model_calls(
     assert response["configured"] is False
     assert response["account_quota_verified"] is False
     assert not (cycle.STATE / pacing.POLICY_NAME).exists()
+
+
+def test_one_day_operator_exception_only_applies_to_exact_local_date(tmp_path):
+    pacing.configure(tmp_path, 700_000, 20)
+    file = tmp_path / pacing.ONE_DAY_EXCEPTION_NAME
+    file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "local_day": "2026-10-21",
+                "daily_cap_reported_tokens": 10_000_000,
+                "reason": pacing.ONE_DAY_EXCEPTION_REASON,
+            }
+        )
+    )
+    file.chmod(0o600)
+    within = pacing.status(tmp_path, instant=datetime(2026, 10, 21, 10, tzinfo=UTC))
+    assert within["one_day_local_exception_active"] is True
+    assert within["daily_cap_reported_tokens"] == 10_000_000
+    assert within["ordinary_daily_cap_reported_tokens"] == 80_000
+    assert within["account_quota_verified"] is False
+    after = pacing.status(tmp_path, instant=datetime(2026, 10, 22, 10, tzinfo=UTC))
+    assert after["daily_cap_reported_tokens"] == 80_000
+    assert after["one_day_local_exception_active"] is False
+
+
+@pytest.mark.parametrize(
+    "reason,cap,date",
+    [
+        ("fabricated_permission", 10_000_000, "2026-10-21"),
+        (pacing.ONE_DAY_EXCEPTION_REASON, 10_000_001, "2026-10-21"),
+        (pacing.ONE_DAY_EXCEPTION_REASON, True, "2026-10-21"),
+        (pacing.ONE_DAY_EXCEPTION_REASON, 10_000_000, "2026-10-20"),
+    ],
+)
+def test_invalid_one_day_exception_fails_closed(tmp_path, reason, cap, date):
+    pacing.configure(tmp_path, 700_000, 20)
+    file = tmp_path / pacing.ONE_DAY_EXCEPTION_NAME
+    file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "local_day": date,
+                "daily_cap_reported_tokens": cap,
+                "reason": reason,
+            }
+        )
+    )
+    file.chmod(0o600)
+    snapshot = pacing.status(tmp_path, instant=datetime(2026, 10, 21, 10, tzinfo=UTC))
+    assert snapshot["daily_cap_reported_tokens"] == 80_000
+    assert snapshot["one_day_local_exception_active"] is False
+
+
+def test_world_readable_exception_is_not_accepted(tmp_path):
+    pacing.configure(tmp_path, 700_000, 20)
+    file = tmp_path / pacing.ONE_DAY_EXCEPTION_NAME
+    file.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "local_day": "2026-10-21",
+                "daily_cap_reported_tokens": 10_000_000,
+                "reason": pacing.ONE_DAY_EXCEPTION_REASON,
+            }
+        )
+    )
+    file.chmod(0o644)
+    assert pacing.one_day_exception_cap(tmp_path, day="2026-10-21") is None

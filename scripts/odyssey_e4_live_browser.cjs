@@ -36,6 +36,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     && !!document.querySelector("#odyssey-form")
     && document.querySelector("#interaction")?.childElementCount===0,{timeout:10000});
   await page.type("#request-input",process.env.ODYSSEY_SYNTHETIC_SOURCE,{delay:2});
+  const userRequestStart=performance.now();
   await page.click("#send-button");
   checkpoint="progress_donut";
   await page.waitForFunction(()=>{
@@ -75,6 +76,8 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     && document.querySelectorAll(".note-set-button").length===1)
     || document.querySelector(".message-error"), {timeout:180000});
   if(await page.$(".message-error"))throw Error("Browser received an application error");
+  // User-perceived request latency excludes harness setup, UI inspection and replay.
+  const userRequestSeconds=Math.round((performance.now()-userRequestStart)/10)/100;
   const progressTrace=await page.evaluate(()=>{
     window.__e4ProgressWatcher?.disconnect();
     const observed=window.__e4ProgressValues||[];
@@ -214,6 +217,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
       notes.surfaceVisible && notes.resultNodes>=2 &&
       jsErrors.length===0,
     before,after,detail,reloadedDetail,notes,progressDonut,progressTrace,
+    userRequestSeconds,
     jsErrorsCount:jsErrors.length,
     actor:"synthetic_only",messages_sent:1
   };

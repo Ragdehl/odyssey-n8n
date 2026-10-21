@@ -16,6 +16,8 @@ from zoneinfo import ZoneInfo
 
 DEFAULT_ZONE = "Europe/Paris"
 POLICY_NAME = "agent-pacing-policy.json"
+ONE_DAY_EXCEPTION_NAME = "agent-pacing-one-day-exception.json"
+ONE_DAY_EXCEPTION_REASON = "explicit_user_authorization_one_day_only"
 VERSION = 1
 MAX_WEEKLY_REPORTED = 10_000_000
 MIN_WEEKLY_REPORTED = 100_000
@@ -168,6 +170,42 @@ def usage_today(state_dir: Path, *, day: str | None = None) -> dict:
     }
 
 
+def one_day_exception_cap(state_dir: Path, *, day: str) -> int | None:
+    """Honor only a trusted, date-bound, user-authorized local pacing exception.
+
+    This does not affect upstream model usage allowances or any provider limit.
+    A stale, unreadable, malformed, or untrusted file never grants extra headroom.
+    """
+    path = state_dir / ONE_DAY_EXCEPTION_NAME
+    _safe_file(state_dir, path)
+    if not path.is_file():
+        return None
+    try:
+        if path.stat().st_mode & 0o077:
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or set(data) != {
+        "version",
+        "local_day",
+        "daily_cap_reported_tokens",
+        "reason",
+    }:
+        return None
+    amount = data["daily_cap_reported_tokens"]
+    if (
+        type(data["version"]) is not int
+        or data["version"] != 1
+        or data["local_day"] != day
+        or data["reason"] != ONE_DAY_EXCEPTION_REASON
+        or type(amount) is not int
+        or not 40_000 <= amount <= 10_000_000
+    ):
+        return None
+    return amount
+
+
 def status(state_dir: Path, *, instant: datetime | None = None) -> dict:
     policy = load_policy(state_dir)
     usage = usage_today(state_dir, day=local_day(instant))
@@ -183,7 +221,9 @@ def status(state_dir: Path, *, instant: datetime | None = None) -> dict:
             "account_quota_verified": False,
             "automatic_resume_available": False,
         }
-    cap = policy["daily_reported_cap"]
+    ordinary_cap = policy["daily_reported_cap"]
+    authorized_exception = one_day_exception_cap(state_dir, day=usage["local_day"])
+    cap = max(ordinary_cap, authorized_exception or 0)
     remaining = max(0, cap - usage["tokens"])
     return {
         "configured": True,
@@ -192,6 +232,8 @@ def status(state_dir: Path, *, instant: datetime | None = None) -> dict:
         "weekly_reported_proxy": policy["weekly_reported_proxy"],
         "reserve_percent": policy["reserve_percent"],
         "daily_cap_reported_tokens": cap,
+        "one_day_local_exception_active": authorized_exception is not None and cap > ordinary_cap,
+        "ordinary_daily_cap_reported_tokens": ordinary_cap,
         "reported_tokens_today": usage["tokens"],
         "legacy_conservative_tokens_today": usage["legacy_conservative_tokens"],
         "model_sessions_today": usage["sessions"],

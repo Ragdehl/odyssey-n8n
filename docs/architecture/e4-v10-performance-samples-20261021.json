@@ -1,7 +1,35 @@
 {
   "schema": "e4-v10-performance-samples-v1",
   "source_code_commit": "43e18fb",
-  "direct_positive": [],
+  "direct_positive": [
+    {
+      "run_id": "v10-direct-ambos-20261021",
+      "pass": true,
+      "status": "completed",
+      "seconds": 38.767,
+      "source_commit": "cf9398a4370c7fa560dcc0254c9ed8eea9261a5e",
+      "trace_sha256": "110fcfd44c1a099c5ab69c16d3b2e0392a2af2b2d96e258ce7f6a724cef96030",
+      "case": "ambos"
+    },
+    {
+      "run_id": "v10-direct-los_tres-20261021",
+      "pass": true,
+      "status": "completed",
+      "seconds": 37.823,
+      "source_commit": "cf9398a4370c7fa560dcc0254c9ed8eea9261a5e",
+      "trace_sha256": "110fcfd44c1a099c5ab69c16d3b2e0392a2af2b2d96e258ce7f6a724cef96030",
+      "case": "los_tres"
+    },
+    {
+      "run_id": "v10-direct-independent_modifier-20261021",
+      "pass": true,
+      "status": "completed",
+      "seconds": 50.135,
+      "source_commit": "cf9398a4370c7fa560dcc0254c9ed8eea9261a5e",
+      "trace_sha256": "110fcfd44c1a099c5ab69c16d3b2e0392a2af2b2d96e258ce7f6a724cef96030",
+      "case": "independent_modifier"
+    }
+  ],
   "browser_positive": [
     {
       "run_id": "e4-v10-browser-real-gpt-20261021-1",
