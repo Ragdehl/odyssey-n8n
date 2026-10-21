@@ -112,3 +112,43 @@ def test_plural_carrier_requires_exact_finite_cardinal_even_if_targets_are_disti
     for mention in ("ellos", "Ana y Luis", "esas personas"):
         with pytest.raises(TaskDependentTargetError, match="complete proof"):
             TaskPersonReferenceSet(dependencies(mention), "actor")
+
+
+@pytest.mark.parametrize("prefix", ["Hoy terminé el informe. ", "Ayer terminé otro encargo. "])
+def test_independent_prior_core_fact_is_allowed_without_selecting_another_person(prefix):
+    full = prefix + BEFORE + AFTER
+    review = {**REVIEW, "full_source_quote": full}
+    assert (
+        verify_plural_person_task_semantics(
+            full_source=full,
+            antecedent_source=BEFORE,
+            dependent_source=AFTER,
+            dependent_mention="los dos",
+            antecedent_mentions=MENTIONS,
+            interpretation=TaskInterpretation(AFTER.strip(), TaskOperation.CREATE),
+            reviews=(deepcopy(review), deepcopy(review)),
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "full",
+    [
+        BEFORE + AFTER + " Texto añadido.",
+        "Hecho sin el antecedente necesario. " + AFTER,
+        "Mañana debo llamar a los dos. " + BEFORE,
+    ],
+)
+def test_independent_source_prefix_never_allows_missing_or_reordered_suffix(full):
+    review = {**REVIEW, "full_source_quote": full}
+    with pytest.raises(TaskDependentTargetError, match="not uniquely grounded"):
+        verify_plural_person_task_semantics(
+            full_source=full,
+            antecedent_source=BEFORE,
+            dependent_source=AFTER,
+            dependent_mention="los dos",
+            antecedent_mentions=MENTIONS,
+            interpretation=TaskInterpretation(AFTER.strip(), TaskOperation.CREATE),
+            reviews=(deepcopy(review), deepcopy(review)),
+        )

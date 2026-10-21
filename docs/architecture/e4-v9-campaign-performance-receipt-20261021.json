@@ -1,0 +1,342 @@
+{
+  "schema": "odyssey-e4-v9-testing-performance-evidence-v1",
+  "created_at": "2026-10-21T20:09:58.325584+02:00",
+  "fixture": "disposable synthetic local vault, real GPT, ConstantEmbedder, no n8n/browser in 4-case campaign",
+  "cases": [
+    {
+      "case": "ambos",
+      "pass": true,
+      "expected_create": true,
+      "status": "completed",
+      "persons": 2,
+      "tasks": 1,
+      "links_complete": true,
+      "unexpected_people": 0,
+      "seconds": 47.092,
+      "stage_count": 11,
+      "stage_timings": [
+        {
+          "name": "index_barrier",
+          "ms": 0.010814052075147629,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "application.router",
+          "ms": 35326.85210206546,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 5136.270089074969,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 25.587124982848763,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "tasks.interpretation",
+          "ms": 0.0,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "temporal.interpretation",
+          "ms": 0.0,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 7019.460303941742,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 21.523257018998265,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "index_refresh.schedule",
+          "ms": 0.30466297175735235,
+          "model": null,
+          "tokens": null
+        }
+      ],
+      "note": "ConstantEmbedder fixture, real GPT, no browser/n8n; safe abstention is not a positive pass",
+      "replay": true
+    },
+    {
+      "case": "los_tres",
+      "pass": true,
+      "expected_create": true,
+      "status": "completed",
+      "persons": 3,
+      "tasks": 1,
+      "links_complete": true,
+      "unexpected_people": 0,
+      "seconds": 58.473,
+      "stage_count": 11,
+      "stage_timings": [
+        {
+          "name": "index_barrier",
+          "ms": 0.006870017386972904,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "application.router",
+          "ms": 42055.09888101369,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 4765.099940006621,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 30.519670923240483,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "tasks.interpretation",
+          "ms": 0.0,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "temporal.interpretation",
+          "ms": 0.0,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 5587.781782029197,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 32.034766976721585,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "index_refresh.schedule",
+          "ms": 0.26557198725640774,
+          "model": null,
+          "tokens": null
+        }
+      ],
+      "note": "ConstantEmbedder fixture, real GPT, no browser/n8n; safe abstention is not a positive pass",
+      "replay": true
+    },
+    {
+      "case": "uno_de_dos",
+      "pass": true,
+      "expected_create": false,
+      "status": "needs_attention",
+      "persons": 0,
+      "tasks": 0,
+      "links_complete": false,
+      "unexpected_people": 0,
+      "seconds": 21.016,
+      "stage_count": 2,
+      "stage_timings": [
+        {
+          "name": "index_barrier",
+          "ms": 0.0061480095610022545,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "application.source_processing",
+          "ms": 13972.524011973292,
+          "model": null,
+          "tokens": null
+        }
+      ],
+      "note": "ConstantEmbedder fixture, real GPT, no browser/n8n; safe abstention is not a positive pass"
+    },
+    {
+      "case": "independent_modifier",
+      "pass": true,
+      "expected_create": true,
+      "status": "completed",
+      "persons": 2,
+      "tasks": 1,
+      "links_complete": true,
+      "unexpected_people": 0,
+      "seconds": 52.918,
+      "stage_count": 14,
+      "stage_timings": [
+        {
+          "name": "index_barrier",
+          "ms": 0.010056071914732456,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "application.router",
+          "ms": 45669.86934305169,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 4384.302188060246,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 16.730637988075614,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 4457.271149032749,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 28.72167294844985,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "tasks.interpretation",
+          "ms": 0.0,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "temporal.interpretation",
+          "ms": 0.0,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "planner",
+          "ms": 8078.263149014674,
+          "model": "luna-first",
+          "tokens": null
+        },
+        {
+          "name": "action.write",
+          "ms": 23.344889981672168,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "pending",
+          "ms": null,
+          "model": null,
+          "tokens": null
+        },
+        {
+          "name": "index_refresh.schedule",
+          "ms": 0.3011450171470642,
+          "model": null,
+          "tokens": null
+        }
+      ],
+      "note": "ConstantEmbedder fixture, real GPT, no browser/n8n; safe abstention is not a positive pass",
+      "replay": true
+    }
+  ],
+  "original_failure": {
+    "case": "independent_modifier",
+    "result": "needs_attention; zero created Notes, no wrong writes",
+    "prewrite_code": "DEPENDENT_N_PERSON_SET_UNVERIFIED",
+    "root_cause": "Verifier required full source = antecedent+dependent, ignoring independent earlier Core group",
+    "resolution": "Require source endswith exact antecedent+dependent; entire source separately verified by graph, omitted canonical Person receipts vetoed at E2"
+  },
+  "samples": {
+    "three_positive_direct_s": [
+      47.092,
+      58.473,
+      52.918
+    ],
+    "positive_median_s": 52.918,
+    "positive_n": 3,
+    "disallowed_to_claim_product_p95": true,
+    "negative_ambiguous_s": 21.016
+  },
+  "fastembed": {
+    "status": "blocked_cache_absent_or_unusable",
+    "reason": "SemanticIndexError",
+    "cache_kind": "home isolated fastembed",
+    "cold_attempt_s": 3.996,
+    "download_attempted": false
+  },
+  "offline_model_download": false,
+  "home_cache_only": true,
+  "existing_browser_receipt": "docs/architecture/e4-v8-gpt-browser-receipt-20261021.json",
+  "readback_1000_synthetic_notes_25_samples": {
+    "p50_ms": 451.541,
+    "empirical_p95_ms": 453.747,
+    "not_full_GPT": true
+  },
+  "cross_surface": {
+    "python_pass": 1532,
+    "node_pass": 179,
+    "subtests_pass": 7,
+    "log_sha256": "7b56d52595e1f263594fc9d6634081b9ac87934ee8bb247727dc7922f0f0694c"
+  },
+  "logs_hashes": {
+    "campaign": "3b259c281db513ac566a05dfbf1ea23aa6d8657e4339260560bb106cc654d7d2",
+    "fourth_postfix": "183fa2ae87d64389f17187213edc72ee70db9239e93c944e88212672a9c5dfac",
+    "fastembed_offline": "ef58957056da41c623346681258ceab519f89e72d94dfd27b06301c7d9437b7a"
+  }
+}

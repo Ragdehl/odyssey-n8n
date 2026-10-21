@@ -257,7 +257,11 @@ def verify_plural_person_task_semantics(
     """
     if (
         not isinstance(full_source, str)
-        or full_source != antecedent_source + dependent_source
+        # A source DAG may contain earlier INDEPENDENT Core groups. Only
+        # the exact final antecedent+dependent suffix is validated here;
+        # the DAG validates all preceding bytes and E2 checks every omitted
+        # earlier Person receipt before authorizing the Task write.
+        or not full_source.endswith(antecedent_source + dependent_source)
         or not 2 <= len(antecedent_mentions) <= 8
         or len(set(antecedent_mentions)) != len(antecedent_mentions)
         or (referenced_finite_cardinality(dependent_mention) != len(antecedent_mentions))
