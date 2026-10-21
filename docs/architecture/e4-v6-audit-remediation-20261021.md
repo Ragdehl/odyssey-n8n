@@ -32,7 +32,7 @@ Performance carece de SLA y medición representativa de E4/FastEmbed.
 ## Evidencia verificada en la Raspberry
 
 - 89 pruebas focales PASS al añadir las regresiones.
-- Gate transversal: **1.515 Python PASS + 179 JS PASS**, exit 0,
+- Gate transversal: **1.516 Python PASS + 179 JS PASS**, exit 0,
   `/tmp/e4-v6-cross-20261021.json`, pytest/node exit 0.
 - Ruff lint PASS y formato aplicado; diff sin errores de whitespace.
 - 1.ª llamada real sintética al navegador/n8n/GPT:
@@ -65,3 +65,30 @@ cuota real de la cuenta ni habilita auditoría nueva por sí solo.
 ## Refuerzo posterior al commit 001b778
 
 La prueba de tres predecesores incluyó tres escrituras reales de Persona por Core en bóveda sintética y un grafo finito manual que omite uno. Para que incluso ese uso directo del carrier quede fail-closed, el handoff físico de E2 repite el veto estructural y rechaza antes del consumidor; **23 pruebas físicas de handoff PASS**, sin crear Task. Se debe emitir un commit nuevo y reejecutar la batería transversal sobre él.
+
+## Verificación de la revisión final sobre bd0dc91 (21-10, tras congelar código)
+
+- Se reejecutó la batería completa relevante del commit: **1.516 Python
+  + 179 Node PASS**, ledger, Ruff y Markdown E2E determinista; resultado
+  `/tmp/e4-v6b-cross-20261021.json`.
+- Una nueva prueba viva de exactamente el mismo texto sintético
+  (Chromium local autenticado → n8n real aislado → GPT) emitió
+  `needs_attention`, código `FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED`,
+  **sin escrituras y con gate browser FAIL**, log
+  `/tmp/e4-v6b-final-live-20261021.log`. No hay evidencia del contenido
+  exacto del dictamen modelo que explique el rechazo, y no se atribuye
+  causalidad a la guarda de E2. El intento vivo precedente había pasado;
+  esta variación **impide declarar estabilidad GPT**.
+- La suite global pre-commit sobre esta familia de cambios completó
+  **4.456 PASS, 80 SKIP, 9 FAIL históricos** (benchmarks congelados,
+  presupuestos y hashes), no un full-suite PASS. El commit fuente con
+  las guardas es `bd0dc91`.
+- La auditoría independiente de cuatro especialistas sigue **SIN LANZAR**
+  sobre v6: el pacing Codex local mostró 2.245.354 reportados hoy frente
+  a cap 1.428.571; cuota real de la cuenta no observable. No se alteran
+  supervisor, límites ni credenciales; sin DEV/PROD o deploy.
+
+**Siguiente acción:** investigar las abstenciones vivas con telemetría de
+rechazo acotada que no exponga mensajes privados, estabilizar las revisiones
+semánticas sin reducir los vetos de seguridad; repetir piloto vivo, luego
+cuatro auditores del SHA vigente y campaña de Performance.
