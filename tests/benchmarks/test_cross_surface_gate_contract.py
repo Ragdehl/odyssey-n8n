@@ -19,6 +19,7 @@ SPEC.loader.exec_module(GATE)
 def test_all_required_cross_surface_groups_have_real_test_files():
     GATE.validate_selection()
     assert set(GATE.GROUPS) == {
+        "e5_events_isolated_contract",
         "e2_identity_and_source",
         "task_chat_core",
         "task_ui_and_subtask",

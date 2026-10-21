@@ -1,0 +1,34 @@
+# E5: trabajo independiente de E4 — 20-10-2026
+
+## Decisión de ejecución
+Mientras los cuatro auditores validan E4 (`e0728a3` en la rama E4, job `e4-grammar-fullaudit-20261021` planificado para 21-10 a las 00:20 Europe/Paris), el desarrollo de Odyssey **no se paraliza por entero**. Se abre un carril de E5 sobre el commit anterior al desarrollo específico de E4 (`2055148f6ca97dd7575a1d6bfd966eba20a6628e`). El carril E5 no modifica E4, ni lo declara aceptado, ni lo despliega.
+
+**Rama:** `feat/e5-events-independent-prep-20261020`, worktree `/home/ragdehl/projects/odyssey-e5-independent-prep`. Toda integración futura se hará por comparación y rebase/cherry-pick revisado sobre una base E2/E3/E4 explícitamente validada. No fusionar automáticamente ramas; si E4 modifica contratos de contexto, identidad o mutación, E5 debe pasar los regresivos pertinentes antes de proseguir.
+
+## Primer segmento terminado: semántica Events puramente local
+- `odyssey_apps/events/interpretation.py`: operaciones `CREATE`, `UPDATE`, `CANCEL`, `QUERY` de un evento y roles de mención temporal (`DATE`, `START`, `END`, `RECURRING_WEEKDAY`, `RECURRENCE_RANGE`) con citas exactas y comprobación de unicidad. No convierte fechas, no decide zonas horarias, no asigna Note IDs, no crea Tasks ni Reminders, no implementa Writer ni edita Markdown.
+- `EventInterpretation.as_domain_interpretation()` delega la forma común `DomainInterpretation` al contrato de Core; aporta solo evidencia de las menciones y una referencia de texto no resuelta. Nunca tiene autoridad de mutación.
+- Pruebas con evento de fecha única, intervalo, recurrencia, franja natural sin hora inventada, consulta, modificación/cancelación sin identidad canonical, duplicados, origen cambiado y roles inválidos. **62 tests PASS** al ejecutar conjuntamente nuevos tests, interpretación Tasks y Core DomainInterpretation; **gate transversal offline 1.266 Python + 178 JS y 7 subtests PASS**; Ruff PASS.
+
+**No se han añadido campos al schema ni se ha conectado Events a Router, Temporal, Calendar, n8n o DEV.** Es una pieza de dominio revisable, no una feature E5 operativa ni un E2E de eventos.
+
+## Qué continúa en paralelo y qué queda bloqueado
+- **Permitido** en E5: completar contrato funcional de evento, pruebas adversariales y semántica específica que no importe internals de E4, en rama independiente; los tests tradicionales pasan sin Codex.
+- **Pendiente E4**: revisión formal de los cuatro especialistas sobre commit E4, performance real y Cloudflare/DEV cuando corresponda. Hallazgos bloqueantes E4 impiden integrar esa rama, no impiden los desarrollos independientes.
+- **Bloqueado hasta aprobación E4/E3**: cambiar contratos comunes sensibles, añadir schema `event`, conectar E5 a la puerta Core de mutación, desplegar, mezclar con la rama E4, publicar en DEV/PROD y usar vault/credenciales reales. Se exige auditoría de código final con reparaciones incrementales verificadas, sin prometer ausencia de errores.
+
+## Protocolo de avance recomendado
+1. Escribir y comprobar porciones pequeñas, con pruebas deterministas y E2E cuando sea posible, sin modelos Codex en cada edición.
+2. Congelar commits revisables; los cuatro auditores independientes auditan cambios relevantes del contrato y mantienen recibos vinculados a commit/snapshot. Un fallo crítico bloquea solo la integración afectada.
+3. Reparar defectos; cuando el cambio es de tests o docs no contractuales, usar el mecanismo incremental de E4 si hay cuatro PASS previos y huellas intactas; para Core/Writer/identidad/E3 realizar nueva auditoría completa.
+4. Rebasar los trabajos independientes y validar todos los gates compartidos antes de integrar en una rama de aceptación. Nadie declara una auditoría PASS ni un despliegue por analogía.
+
+**Fuente del objetivo E5:** `docs/architecture/application-extensibility-plan.md` y `docs/architecture/future-events-calendar.md`. El escenario de un calendario escolar y avisos tiene dependencias de producto todavía diferidas: NO autoriza recordatorios automáticos ni registro de localización.
+
+## Segunda batería E5 (20-10): pruebas de propuestas grabadas y adversariales
+**No es el E2E operativo**. `odyssey_apps/events/proposal.py` rechaza de entrada toda propiedad ajena al pequeño contrato Events (IDs, mutaciones, tareas, recordatorios, fechas fabricadas, timezones, contenidos Markdown y cambios de `source_text`): un resultado del LLM jamás obtiene autoridad de Core o Temporal por añadir campos. Se verifican propuestas grabadas para evento puntual, intervalo, recurrencia acotada, consulta, corrección, cancelación, horas expresas y año no explicitado; el código preserva el texto original y la fuente exacta. Los tests atacan tipos JSON falsos, nombres inexistentes, citas duplicadas, referencias ambiguas, pluralidad de eventos, fragmentos numéricos y roles temporales solapados; se corrigió también la selección de tokens parciales `4` dentro de `14`. **112 pruebas focales PASS** junto a Tasks y `DomainInterpretation`; **gate transversal independiente 1.353 Python, 178 Node, 7 subtests, 10 grupos PASS**. La matriz de 15 escenarios que deben pasar antes del uso está documentada en [Aceptación E5 sin sorpresas](e5-acceptance-matrix-20261020.md). Ninguna prueba de proveedor LIVE, n8n, browser Events, Markdown o Calendar E5 se ha ejecutado, porque esa integración **todavía no existe**.
+
+## Acceso verdadero a GPT recuperado / 9 peticiones frescas (20-10, tarde)
+Las credenciales **ya existían** y se recuperaron leyendo `AGENTS.md`: la sesión remota común NO lleva `OPENAI_API_KEY`, pero sí una unidad efímera de usuario con el `EnvironmentFile` protegido, sin imprimir ni copiar la clave. No es necesaria intervención humana para estos ensayos expresamente aprobados. Se ejecutó `scripts/e5_live_intent_probe.py` contra **gpt-6-luna real**, nueve textos variados nuevos y el validador Events real, sin outputs guardados: **9/9 aprobados en primera ejecución**, incluyendo ABSTAIN correcto para solicitud Task, mezcla Event/Task y referencia ambigua. El pequeño intérprete se corrigió preventivamente para admitir `ABSTAIN` sin evidencias de mutación y se fijó un test de autorización que impide acceso GPT sin flag. [Recibo GPT real de E5](e5-real-gpt-intent-evidence-20261020.md). **No es E2E de E5**: la App aún no está conectada a Router/Writer/Markdown/Calendar/browser y no se presentará como funcionalidad operativa. La futura aceptación requiere campaña completa con modelo vivo sobre producto integrado, no solo el intérprete.
+
+**Regresión posterior al GPT real:** `scripts/odyssey_cross_surface_gate.py` con tests de autorizaciones del probe ya obligatorios: **1.356 Python PASS +178 Node PASS y 7 subtests**. El permiso `ODYSSEY_E5_LIVE_APPROVED` NO activa GPT en los tests offline: el probe vivo es una campaña manual aislada.
