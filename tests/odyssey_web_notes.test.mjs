@@ -1400,3 +1400,28 @@ test("incoming references without valid capture date are visible but never given
   assert.equal(groups[0].textContent.includes("Sin fecha de registro"), true);
   assert.equal(groups[0].querySelector(".note-fact-origin").textContent.includes("Proyecto Faro"), true);
 });
+
+test("heading-only incoming links inherit their recorded capture day without showing raw Added markup", async () => {
+  const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") return detail(payload.note_id, "Ada");
+    if (operation === "backlinks") return {items: [{
+      source: {id: "calendar-note", name: "2026-10-28", type: "calendar_day"},
+      occurrences: 1,
+      snippets: [{
+        heading: null,
+        block: {kind: "heading", segments: [{text: "Added 18-10-2026", target_id: "ada", target_type: "person"}]},
+      }],
+    }]};
+    return page({items: [pageItem("ada", "Ada")]});
+  }});
+  mounted.elements.list.querySelector(".note-row").click();
+  await flush();
+  const groups = mounted.elements.detail.querySelectorAll(".note-fact-group");
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].dataset.date, "2026-10-18");
+  assert.equal(groups[0].querySelectorAll(".note-fact-incoming").length, 1);
+  assert.equal(groups[0].textContent.includes("Added"), false);
+  assert.equal(groups[0].textContent.includes("Referencia desde el encabezado"), true);
+  assert.equal(groups[0].querySelector(".note-fact-origin").textContent.includes("Día 28 oct"), true);
+});

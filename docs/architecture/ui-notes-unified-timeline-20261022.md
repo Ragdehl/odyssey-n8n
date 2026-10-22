@@ -42,3 +42,22 @@ no son desarrollo perdido, pero GitHub `dev` aún quedó en `4944881`.
 La consolidación será fast-forward a dev cuando el nuevo frontend
 pase pruebas y DEV, sin merge-squash ni tocar `main`/PROD. No borrar
 worktrees de agentes sin comprobar sus estados individuales.
+
+
+## Auditoría independiente de interfaz
+
+La primera revisión read-only de `7fbbd90..078c66b` devolvió
+**FAIL** por dos defectos concretos: (1) un backlink cuyo bloque
+era por sí mismo el encabezado `Added dd-mm-yyyy` podía caer en
+«Sin fecha» y mostrar el marcador bruto; (2) fecha y origen tenían
+contraste insuficiente en fondo claro. Evidencia:
+`/home/ragdehl/projects/.odyssey-agent-runs/ui-notes-unified-audit-20261022/findings.md`.
+
+Se corrigió el encabezado enlazado usando la fecha validada del bloque
+como prueba de captura y mostrando «Referencia desde el encabezado de esta
+fecha» en lugar del marcador técnico; sin inventar fecha cuando no existe.
+Nueva regresión específica `tests/odyssey_web_notes.test.mjs` PASS.
+Colores ajustados a `#596476` (contraste 5,98:1 sobre blanco) y
+`#325d60` (contraste 7,32:1 sobre blanco), superiores a 4,5:1.
+Primera auditoría histórica conservada; revisión focal final y gate
+completo se actualizarán según resultados.

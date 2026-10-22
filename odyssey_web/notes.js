@@ -1326,12 +1326,18 @@ export function mountNotes(root, {
       const items = excludeSubtasks ? value.items.filter((item) => !isSubtaskBacklink(item)) : value.items;
       for (const item of items) {
         for (const snippet of item.snippets) {
-          const group = timeline.ensure(snippet.heading);
+          const linkedCaptureHeading = snippet.block.kind === "heading"
+            && captureDate(snippet.block.segments) !== null;
+          const group = timeline.ensure(linkedCaptureHeading ? snippet.block.segments : snippet.heading);
           const entry = document.createElement("li");
           entry.className = "note-fact-incoming";
           const context = document.createElement("span");
           context.className = "note-fact-content";
-          appendBodySegments(context, snippet.block.segments, open);
+          if (linkedCaptureHeading) {
+            context.textContent = "Referencia desde el encabezado de esta fecha.";
+          } else {
+            appendBodySegments(context, snippet.block.segments, open);
+          }
           const source = button("", () => void open(item.source.id));
           source.className = "note-fact-origin";
           source.setAttribute("aria-label", `Abrir nota de origen: ${item.source.name}`);
