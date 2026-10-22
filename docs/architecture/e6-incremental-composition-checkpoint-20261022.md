@@ -163,3 +163,42 @@ y actor/request alterados. **Gate transversal completo: 1838 Python +181 JS
 +7 subtests PASS, 132 ficheros, 11 grupos; Ruff PASS y acceptance ledger
 PASS (19 contratos, 49 anclajes).** Revisión independiente focal y primer
 E2E sintético E6 en DEV siguen separados.
+
+
+## Primera adopción funcional E6 en DEV — PASS (22-10-2026)
+
+Código real probado: commit `b87a748f6e06028f885c38ffdb7c5b76ec13ade0`
+en checkout DEV, marcador runtime y fuente al iniciar el ensayo. DEV venía
+de E5 `6debe8afdb614747fc89f289cca6e2136c70b865`.
+Antes de cambiar se comprobó limpieza de ambos Git, runtime/n8n HTTP 200;
+se realizaron backups tar de vault/estado y volumen n8n con sus SHA256.
+
+Recibo del orquestador:
+`/home/ragdehl/projects/.odyssey-agent-runs/e6-first-dev-acceptance-20261022/orchestrator.log`.
+Prueba real reutilizada contra commit efectivo en
+`scripts/e5_dev_audited_mutations_e2e.py` (el prefijo del recibo es E5
+por compatibilidad con el script, pero el SHA desplegado probado es E6).
+Cadena: petición HTTP real → GPT/Router → n8n → Core/E3 → Markdown →
+Calendar y readback. Resultado:
+
+```json
+{
+  "pass": true,
+  "wrong_date_cancel_rejected": true,
+  "right_date_cancelled": true,
+  "old_new_reschedule_correct": true,
+  "no_fabricated_multi_day_event": true,
+  "replay_byte_identical": true,
+  "synthetic_only": true,
+  "production_touched": false,
+  "deployed_sha": "b87a748f6e06"
+}
+```
+
+Runtime DEV y n8n verificados HTTP 200 después del ensayo; rama y checkout
+DEV sin cambios locales. Dos backups retenidos; rollback Git E5 explícito.
+El ensayo no autoriza PROD, no representa p95 estadístico y no ejercitó
+nuevamente navegador Chromium ni la semántica de nuevas Apps Projects.
+E6.2 sigue abierta para revisar oportunidades concretas de reducir
+adaptadores; la E6.3 tendrá criterios medibles de nueva capacidad antes
+de cerrarse. No repetir auditorías de E5/E6.1/E6.2 ya aprobadas.

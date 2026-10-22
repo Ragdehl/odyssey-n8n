@@ -4,7 +4,13 @@ This is Odyssey's canonical source for **functional implementation status, inten
 
 Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATER / CONDITIONAL**
 
-## ➡️ E6 — Clean Architecture incremental, primer corte de extensibilidad (22-10-2026)
+## ✅ E6 — primer checkpoint de Clean Architecture aceptado funcionalmente en DEV (22-10-2026)
+
+**ESTADO ACTUAL — DEV en `b87a748f6e06028f885c38ffdb7c5b76ec13ade0`; PROD NO tocada.** La composición común de Apps y la verificación de fuente/actor/contexto (E6.1) y el caso de uso Core para updates canónicos compartidos por Tasks/Events (primer corte E6.2) están integrados. **Gate transversal: 1838 Python +181 JavaScript +7 subtests PASS; 19 contratos/49 anclajes íntegros; tres auditorías independientes focales PASS** sobre los cambios E6. La prueba real HTTP **GPT→n8n→Core/E3→Markdown→Calendar PASS**, con Event CREATE, rechazo seguro de CANCEL en fecha equivocada, CANCEL correcto, RESCHEDULE en fecha exacta, ausencia de falso evento multidía y replay byte idéntico. Ejecución exclusivamente sintética; servicio runtime y n8n HTTP 200; Git DEV y rama limpios al aceptar. Backups de vault/estado DEV y volumen n8n con SHA256 y punto de rollback `6debe8a`: `/home/ragdehl/projects/.odyssey-agent-runs/e6-first-dev-acceptance-20261022/`. No hay p95 estadístico ni prueba nueva de Chromium para este commit. **E6 no está globalmente cerrada ni autorizada para PROD**.
+
+**SIGUIENTE:** completar E6.2 únicamente donde reste acoplamiento demostrado (p. ej., la preparación de CREATE y adaptadores de capacidades) y evaluar E6.3 con App ficticia/híbrida integrada sin rutas específicas; comparar puntos de cambio para nueva capacidad, CPU/memoria y cobertura de navegador al cerrar E6. Mantener el modelo híbrido y E2/E3, sin una reescritura ni repetición de cuatro auditorías masivas.
+
+## Historial E6.0–E6.2 anterior a la adopción DEV (checkpoints registrados cronológicamente)
 
 **Rama separada en ejecución:** `feat/e6-incremental-composition-20261022`, basada en E5 aprobada en DEV (`6debe8a`). **E6 NO desplegada; DEV permanece en E5.** E6.0: inventariados los acoplamientos entre el catálogo de Apps, `candidate_route_dispatch.py`, `composition.py`, Tasks y Events. Se confirma que E3/Core Writer y el registro de tipos canónicos ya son reutilizables, pero ambas rutas de composición enumeraban ejecutores por separado y conservan adaptaciones particulares para evidencias heredadas.
 
