@@ -180,6 +180,11 @@ def _reference_has_no_temporal_qualifier(reference: str | None) -> bool:
             r"avril|mai|juin|juillet|août|aout|décembre|decembre|at|on)\b"
             r"|\b\d{4}\b|\b\d{1,2}[-/.]\d{1,2}\b"
             r"|\b\d{1,2}(?:am|pm|st|nd|rd|th|h)\b"
+            # Prevent a clock hidden inside the Event title from bypassing
+            # Temporal verification (5 pm, 5 p.m., 17 h, 17h30, 17:30).
+            r"|\b(?:[01]?\d|2[0-3])\s*(?:[ap]\s*\.?\s*m\.?|h(?:eures?)?|heures?|hrs?|hours?)\b"
+            r"|\b(?:[01]?\d|2[0-3])\s*(?:h|:)\s*[0-5]\d\b"
+            r"|\b(?:am|pm|noon|midnight|morning|afternoon|evening|tonight)\b"
             r"|\ba\s+las\b",
             reference.casefold(),
         )

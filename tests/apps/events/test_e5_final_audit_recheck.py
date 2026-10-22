@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from odyssey_apps.events.execution import execute_event_candidate
 from odyssey_apps.events.mutations import EventMutationService
 from odyssey_core.temporal_interpretation import TemporalInterpretation, TemporalMention
@@ -180,3 +182,87 @@ def test_clock_hidden_in_event_reference_still_fails_with_verified_weekday(tmp_p
     assert result.status.value == "needs_attention"
     assert result.planning_error == "EVENT_CANCEL_SOURCE_COVERAGE_UNVERIFIED"
     assert _actual(repo)["event_status"] == "scheduled"
+
+
+@pytest.mark.parametrize(
+    "clock",
+    (
+        "5 pm",
+        "5 p.m.",
+        "5p.m.",
+        "5 AM",
+        "17 h",
+        "17h30",
+        "17 h 30",
+        "17:30",
+        "5 hours",
+        "5pm",
+    ),
+)
+def test_clock_absorbed_into_event_reference_must_abstain(tmp_path, clock):
+    # Persisted canonical Event has a different time: independent Temporal
+    # quoting only Monday cannot authorize a mutation of the 18:00 event.
+    name = f"Excursion {clock}"
+    schema, repo = _seed(
+        tmp_path, name=name, start="2026-10-19", start_at="2026-10-19T18:00:00+02:00"
+    )
+    source = f"Cancel {name} on Monday."
+    candidate = _candidate(source, "CANCEL", name, (("Monday", "DATE"),))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                "Monday",
+                TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-19"),
+            ),
+        ),
+    )
+    result = run(schema, repo, candidate, temporal)
+    assert result.status.value == "needs_attention"
+    assert result.planning_error == "EVENT_CANCEL_SOURCE_COVERAGE_UNVERIFIED"
+    assert _actual(repo)["event_status"] == "scheduled"
+    assert _actual(repo)["revision"] == 1
+
+
+def test_full_quoted_clock_and_date_can_cancel_correct_target(tmp_path):
+    schema, repo = _seed(
+        tmp_path, name="Excursion", start="2026-10-19", start_at="2026-10-19T17:00:00+02:00"
+    )
+    source = "Cancel Excursion 5 pm on Monday."
+    candidate = _candidate(source, "CANCEL", "Excursion", (("5 pm on Monday", "DATE"),))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                "5 pm on Monday",
+                TemporalResolution(
+                    TemporalResolutionKind.EXACT_DATETIME,
+                    exact_datetime="2026-10-19T17:00:00+02:00",
+                    timezone="Europe/Paris",
+                ),
+            ),
+        ),
+    )
+    result = run(schema, repo, candidate, temporal)
+    assert result.status.value == "completed"
+    assert _actual(repo)["event_status"] == "cancelled"
+
+
+def test_date_only_cancellation_remains_supported_for_timed_event(tmp_path):
+    schema, repo = _seed(
+        tmp_path, name="Excursion", start="2026-10-19", start_at="2026-10-19T18:00:00+02:00"
+    )
+    source = "Cancel Excursion on Monday."
+    candidate = _candidate(source, "CANCEL", "Excursion", (("Monday", "DATE"),))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                "Monday",
+                TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-19"),
+            ),
+        ),
+    )
+    result = run(schema, repo, candidate, temporal)
+    assert result.status.value == "completed"
+    assert _actual(repo)["event_status"] == "cancelled"
