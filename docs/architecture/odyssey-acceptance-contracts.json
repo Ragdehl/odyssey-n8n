@@ -175,7 +175,9 @@
         "tests/benchmarks/test_cross_surface_gate_contract.py::test_core_does_not_depend_on_any_app_or_runtime_implementation",
         "tests/runtime/test_e6_application_bindings.py::test_tasks_events_and_future_app_bind_from_one_closed_catalog",
         "tests/runtime/test_e6_application_bindings.py::test_disabled_capability_never_becomes_executable_despite_trusted_callable",
-        "tests/runtime/test_e6_application_bindings.py::test_missing_enabled_executor_is_a_closed_preflight_error_when_required"
+        "tests/runtime/test_e6_application_bindings.py::test_missing_enabled_executor_is_a_closed_preflight_error_when_required",
+        "tests/runtime/test_e6_scoped_route_authority.py::test_source_actor_and_conversation_substitution_is_rejected",
+        "tests/runtime/test_e6_scoped_route_authority.py::test_temporal_proof_coverage_is_shared_not_app_specific"
       ],
       "blocks_p4_dev": false,
       "verified_real_browser_n8n": false

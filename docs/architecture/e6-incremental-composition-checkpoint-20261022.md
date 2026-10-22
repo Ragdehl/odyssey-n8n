@@ -69,3 +69,42 @@ totalmente integrable sin cambios del compilador y esquema.
   construidos dentro de Apps con casos de uso/repo/puertos estrechos. E6.3:
   prueba de extensibilidad sobre una tercera app con Router híbrido y real
   E2E DEV solo después del checkpoint.
+
+
+## E6.1 — Segundo corte: autoridad de ruta y cobertura temporal comunes
+
+**Base:** primer checkpoint auditado `e2a98b5`. La validación local a
+Router y el contexto original de E2 se mantienen como única procedencia.
+
+Se añade `odyssey_runtime/scoped_route_authority.py` con:
+- `ScopedRouteAuthority.verify`: confronta correlación de ruta, capability,
+  source exacto en offsets del mensaje original, contexto local, actor y
+  secuencia de conversación. Lo reutilizan la ruta Core/Temporal, Tasks y
+  Events; una app ficticia Projects pasa idéntica comprobación de fuente.
+  Anteriormente Tasks verificaba su source pero no actor/historial dentro de
+  su wrapper específico. Core y Events sí lo hacían por separado.
+- `missing_inherited_temporal_spans`: factoriza únicamente la comprobación
+  de offsets de evidencias heredadas faltantes que duplicaban Tasks y Core.
+  El proveedor `ScopedTemporalHandoff` sigue siendo quien valida la
+  procedencia y resolución exacta; este cálculo NO certifica un datetime
+  ni concede capacidad de escritura por sí solo.
+- Las políticas NO son igualadas: Events conserva el rechazo
+  `EVENT_SCOPED_TEMPORAL_EVIDENCE_UNSUPPORTED` para herencia no soportada;
+  Tasks conserva su ejecución con `TaskScopedEvidence` y el rechazo si
+  faltan pruebas; Core conserva su ruta normal y los propios guards.
+  El dispatcher Core solo admite `core` y `temporal`.
+
+**Pruebas:** `tests/runtime/test_e6_scoped_route_authority.py` incluye
+capabilities Core, Temporal, Tasks, Events y ficticia Projects, intentos de
+alteración de actor, fuente, correlación, contexto y offsets, más cobertura
+Temporal compartida. Regresión focal con rutas existentes: **79 PASS**.
+Gate permanente ampliado: **1830 Python +181 JavaScript +7 subtests PASS**,
+131 ficheros, 11 grupos. Ruff PASS e integridad del registro de contratos
+PASS (46 anclajes). Recibo local:
+`/tmp/odyssey-e6-scoped-full-20261022.log`.
+
+**Límites:** esta fase solo es verificación de ensamblaje/autoridad de
+entrada. No elimina las políticas de Tasks ni Events ni interpreta
+referencias genéricas. Revisión independiente de código y primera aceptación
+real GPT→n8n→Markdown→Calendar para E6 quedan separadas. DEV permanece en
+`6debe8a`; no se escribió en vault ni se hizo deploy.

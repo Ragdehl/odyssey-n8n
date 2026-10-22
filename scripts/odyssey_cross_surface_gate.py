@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GROUPS: dict[str, tuple[str, ...]] = {
     "e6_application_extension_contract": (
         "tests/runtime/test_e6_application_bindings.py",
+        "tests/runtime/test_e6_scoped_route_authority.py",
         "tests/apps/test_catalog.py",
         "tests/runtime/test_runtime_routing.py",
     ),

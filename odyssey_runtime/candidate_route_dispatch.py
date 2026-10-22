@@ -40,6 +40,10 @@ from odyssey_core.source_boundary_review import (
 from odyssey_runtime.application_bindings import bind_registered_executors
 from odyssey_runtime.context_planner_ports import ContextAwareCorePlannerFactory
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
+from odyssey_runtime.scoped_route_authority import (
+    ScopedRouteAuthority,
+    missing_inherited_temporal_spans,
+)
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
 from odyssey_runtime.scoped_temporal_handoff import (
     ScopedTemporalHandoff,
@@ -564,6 +568,9 @@ def execute_candidate_routed_message(
         route_execution_id(outer_id, ordinal): (ordinal, item)
         for ordinal, item in enumerate(bundle.units)
     }
+    route_authority = ScopedRouteAuthority(
+        source, route_scopes, authenticated_actor, tuple(conversation_context)
+    )
     temporal_handoff = ScopedTemporalHandoff(source)
     subject_handoff = ScopedCoreSubjectHandoff(source)
     event_handoff = ScopedCoreEventHandoff(source)
@@ -578,9 +585,13 @@ def execute_candidate_routed_message(
         from odyssey_apps.tasks import TaskScopedEvidence, TaskScopedExecution
         from odyssey_core.temporal_interpretation import TemporalInterpretation
 
-        ordinal, scoped = route_scopes[locator]
-        if scoped.route.capability_id != "tasks" or scoped.route.source_text != unit_source:
-            raise ValueError("Task route source changed before application interpretation")
+        ordinal, scoped = route_authority.verify(
+            source=unit_source,
+            locator=locator,
+            capability="tasks",
+            actor=authenticated_actor,
+            conversation=prior_turns,
+        )
         inherited = temporal_handoff.inherited(
             scoped.context,
             current_route_index=ordinal,
@@ -588,14 +599,7 @@ def execute_candidate_routed_message(
             end=scoped.original_end,
         )
         scoped_execute = getattr(task_route_executor, "execute_scoped", None)
-        required_temporal_origins = {
-            (role.original_start, role.original_end)
-            for role in scoped.context.source_provenance
-            if role.role in {"date", "date_scope", "time", "time_approx"}
-        }
-        if required_temporal_origins - {
-            (proof.original_start, proof.original_end) for proof in inherited
-        }:
+        if missing_inherited_temporal_spans(scoped.context, inherited):
             if not callable(scoped_execute):
                 from odyssey_core.application import ApplicationResult
 
@@ -665,15 +669,15 @@ def execute_candidate_routed_message(
         routed_authenticated_actor: AuthenticatedActorContext | None = None,
         routed_prior_turns: Sequence[Mapping[str, str]] = (),
     ) -> ApplicationResult:
-        ordinal, scoped = route_scopes[locator]
-        if (
-            scoped.route.capability_id != "events"
-            or scoped.route.source_text != unit_source
-            or event_route_executor is None
-            or routed_authenticated_actor != authenticated_actor
-            or tuple(routed_prior_turns) != tuple(conversation_context)
-        ):
-            raise ValueError("Events executor source, actor or context mismatch")
+        ordinal, scoped = route_authority.verify(
+            source=unit_source,
+            locator=locator,
+            capability="events",
+            actor=routed_authenticated_actor,
+            conversation=routed_prior_turns,
+        )
+        if event_route_executor is None:
+            raise ValueError("Events executor unavailable")
         inherited = temporal_handoff.inherited(
             scoped.context,
             current_route_index=ordinal,
@@ -718,34 +722,27 @@ def execute_candidate_routed_message(
             if conversation_context_override is not None
             else routed_prior_turns
         )
-        if routed_authenticated_actor != authenticated_actor:
-            raise ValueError("route authenticated actor changed before Core execution")
-        if not isinstance(route_prior, (tuple, list)) or tuple(route_prior) != tuple(
-            conversation_context
-        ):
-            raise ValueError("route conversation context changed before Core execution")
-        # From this point onward the Planner sees the normalized, authenticated
-        # snapshot; otherwise it would silently lose all prior turns on Core
-        # routes even after the boundary check succeeds.
+        # The same source/actor/conversation authority applies to Core,
+        # Temporal, Tasks and Events; only the domain processing differs.
+        core_capability = route_scopes[locator][1].route.capability_id
+        if core_capability not in {"core", "temporal"}:
+            raise ValueError("Core executor cannot handle application-owned routes")
+        ordinal, scoped = route_authority.verify(
+            source=unit_source,
+            locator=locator,
+            capability=core_capability,
+            actor=routed_authenticated_actor,
+            conversation=route_prior,
+        )
+        # Preserve the exact trusted conversation snapshot for Core planning.
         routed_prior_turns = tuple(route_prior)
-        ordinal, scoped = route_scopes[locator]
-        if scoped.route.source_text != unit_source:
-            raise ValueError("Route source changed before Core interpretation")
         inherited = temporal_handoff.inherited(
             scoped.context,
             current_route_index=ordinal,
             start=scoped.original_start,
             end=scoped.original_end,
         )
-        required_temporal_origins = {
-            (role.original_start, role.original_end)
-            for role in scoped.context.source_provenance
-            if role.role in {"date", "date_scope", "time", "time_approx"}
-        }
-        proven_temporal_origins = {
-            (proof.original_start, proof.original_end) for proof in inherited
-        }
-        if required_temporal_origins - proven_temporal_origins:
+        if missing_inherited_temporal_spans(scoped.context, inherited):
             from odyssey_core.temporal_interpretation import TemporalInterpreterError
 
             raise TemporalInterpreterError(
