@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from odyssey_core.application import (
@@ -82,6 +82,89 @@ def _source_weekday(candidate: EventCandidate) -> int | None:
     return matches[0]
 
 
+def _exact_anchor_for_quote(
+    candidate: EventCandidate,
+    temporal: TemporalInterpretation | None,
+    role: EventTemporalRole,
+) -> TemporalAnchor:
+    """Resolve exactly one model-quoted source span with shared E2 Temporal.
+
+    Source/role quotes are not dates. Never interpret missing source evidence
+    from a model's assertion or another Event's canonical metadata.
+    """
+    source = candidate.interpretation.source_text
+    if temporal is None or temporal.source_text != source:
+        raise EventRouteError("EVENT_TARGET_TEMPORAL_REQUIRED")
+    quoted = [
+        mention.quote
+        for mention in candidate.interpretation.temporal_mentions
+        if mention.role is role
+    ]
+    if len(quoted) != 1:
+        raise EventRouteError("EVENT_TARGET_TEMPORAL_ROLE_AMBIGUOUS")
+    matches = [m for m in temporal.mentions if m.temporal_text == quoted[0]]
+    if len(matches) != 1:
+        raise EventRouteError("EVENT_TARGET_TEMPORAL_SOURCE_MISMATCH")
+    resolution = matches[0].resolution
+    if resolution.kind not in (
+        TemporalResolutionKind.EXACT_DATE,
+        TemporalResolutionKind.EXACT_DATETIME,
+    ):
+        raise EventRouteError("EVENT_TARGET_TEMPORAL_NOT_EXACT")
+    value = resolution.exact_date or resolution.exact_datetime
+    if value is None:
+        raise EventRouteError("EVENT_TARGET_TEMPORAL_UNRESOLVED")
+    return TemporalAnchor.from_value(value)
+
+
+def _target_identity_anchor(
+    candidate: EventCandidate, temporal: TemporalInterpretation | None
+) -> TemporalAnchor | None:
+    """Date/time qualifiers of an existing target must be checked BEFORE E3."""
+    event = candidate.interpretation
+    if event.operation is EventOperation.UPDATE:
+        roles = {m.role for m in event.temporal_mentions}
+        return (
+            _exact_anchor_for_quote(candidate, temporal, EventTemporalRole.ORIGINAL_DATE)
+            if EventTemporalRole.ORIGINAL_DATE in roles
+            else None
+        )
+    if event.operation is not EventOperation.CANCEL:
+        return None
+    if not event.temporal_mentions:
+        if temporal is not None and temporal.mentions:
+            raise EventRouteError("EVENT_CANCEL_UNMATCHED_TEMPORAL")
+        return None
+    if len(event.temporal_mentions) != 1:
+        raise EventRouteError("EVENT_CANCEL_MULTIPLE_DATES_AMBIGUOUS")
+    if len(temporal.mentions if temporal is not None else ()) != 1:
+        raise EventRouteError("EVENT_CANCEL_TEMPORAL_INCOMPLETE")
+    role = event.temporal_mentions[0].role
+    if role not in (EventTemporalRole.DATE, EventTemporalRole.START):
+        raise EventRouteError("EVENT_CANCEL_QUALIFIER_UNSUPPORTED")
+    return _exact_anchor_for_quote(candidate, temporal, role)
+
+
+def _matches_canonical_target(metadata: dict[str, Any], anchor: TemporalAnchor | None) -> bool:
+    if anchor is None:
+        return True
+    # A single dated occurrence cannot safely authorize cancellation of a
+    # whole weekly series or multi-day Event. Undated explicit series-level
+    # cancellation still uses the existing exact-name + E3 CAS path.
+    if metadata.get("recurrence_weekday") is not None:
+        return False
+    if metadata.get("end_date", metadata.get("start_date")) != metadata.get("start_date"):
+        return False
+    if anchor.date != metadata.get("start_date"):
+        return False
+    if anchor.time is not None:
+        recorded = metadata.get("start_at")
+        if not isinstance(recorded, str):
+            return False
+        return datetime.fromisoformat(anchor.value) == datetime.fromisoformat(recorded)
+    return True
+
+
 def bound_occurrence(
     candidate: EventCandidate, temporal: TemporalInterpretation | None
 ) -> EventOccurrence:
@@ -89,6 +172,14 @@ def bound_occurrence(
     if temporal is None or temporal.source_text != event.source_text:
         raise EventRouteError("EVENT_TEMPORAL_MISSING")
     weekday = _source_weekday(candidate)
+    if event.operation is EventOperation.UPDATE and any(
+        item.role in (EventTemporalRole.START, EventTemporalRole.END)
+        for item in event.temporal_mentions
+    ):
+        # Those roles describe a CREATE interval, never "old -> new" dates.
+        # Reject even when shared Temporal condenses both quotes into a
+        # single DATE_RANGE; otherwise an UPDATE can silently span days.
+        raise EventRouteError("EVENT_UPDATE_INTERVAL_ROLES_UNSUPPORTED")
     if weekday is not None and not any(
         m.role is EventTemporalRole.RECURRENCE_RANGE for m in event.temporal_mentions
     ):
@@ -113,6 +204,29 @@ def bound_occurrence(
             raise EventRouteError("EVENT_TEMPORAL_UNRESOLVED")
     if not trusted:
         raise EventRouteError("EVENT_TEMPORAL_MISSING")
+    if event.operation is EventOperation.UPDATE and any(
+        mention.role in (EventTemporalRole.ORIGINAL_DATE, EventTemporalRole.NEW_DATE)
+        for mention in event.temporal_mentions
+    ):
+        roles = tuple(m.role for m in event.temporal_mentions)
+        if (
+            roles.count(EventTemporalRole.NEW_DATE) != 1
+            or roles.count(EventTemporalRole.ORIGINAL_DATE) > 1
+            or len(temporal.mentions) != len(roles)
+            or any(
+                role not in (EventTemporalRole.ORIGINAL_DATE, EventTemporalRole.NEW_DATE)
+                for role in roles
+            )
+        ):
+            raise EventRouteError("EVENT_UPDATE_OLD_NEW_ROLES_INCOMPLETE")
+        if EventTemporalRole.ORIGINAL_DATE in roles:
+            _exact_anchor_for_quote(candidate, temporal, EventTemporalRole.ORIGINAL_DATE)
+        destination = _exact_anchor_for_quote(candidate, temporal, EventTemporalRole.NEW_DATE)
+        return EventOccurrence(destination)
+    if event.operation is EventOperation.UPDATE and any(kind == "range" for kind, _, _ in trusted):
+        # "move from Tuesday to Thursday" and "move to a multi-day range"
+        # cannot be distinguished safely by range evidence alone.
+        raise EventRouteError("EVENT_UPDATE_RANGE_NEEDS_EXPLICIT_DESTINATION")
     if len(trusted) == 1 and trusted[0][0] == "range":
         start, exclusive = trusted[0][1:]
         end = (date.fromisoformat(exclusive) - timedelta(days=1)).isoformat()
@@ -130,6 +244,11 @@ def bound_occurrence(
     if len(exact_dates) == 1 and len([value for value in values if "T" in value]) == 1:
         value = next(value for value in values if "T" in value)
         return EventOccurrence(TemporalAnchor.from_value(value))
+    if event.operation is EventOperation.UPDATE:
+        # A START+END pair can describe one multi-day CREATE, but cannot
+        # silently become an UPDATE "from [old] to [new]" interval.
+        # Such UPDATEs require explicit OLD_DATE / NEW_DATE target semantics.
+        raise EventRouteError("EVENT_UPDATE_ORIGIN_DESTINATION_AMBIGUOUS")
     # Ranged endpoints may only be paired when the model's role assertions
     # are bound to distinct source mentions and unambiguous Temporal values.
     if len(values) == 2 and len(temporal.mentions) == 2:
@@ -152,7 +271,7 @@ def bound_occurrence(
 
 def current_exact_event(
     repository: VaultRepository, schema: dict[str, Any], reference: str
-) -> tuple[str, int, str] | None:
+) -> tuple[str, int, str, dict[str, Any]] | None:
     """Resolve only a unique exact word-bounded event-name mention, never similarity."""
     if not isinstance(reference, str) or not reference.strip():
         return None
@@ -170,6 +289,7 @@ def current_exact_event(
                     note.metadata["id"],
                     note.metadata["revision"],
                     hashlib.sha256(raw.encode()).hexdigest(),
+                    dict(note.metadata),
                 )
             )
     return matches[0] if len(matches) == 1 else None
@@ -239,6 +359,9 @@ def execute_event_candidate(
             target = current_exact_event(repository, schema, event.event_reference or "")
             if target is None:
                 return attention("EVENT_TARGET_AMBIGUOUS_OR_MISSING")
+            anchor = _target_identity_anchor(candidate, temporal)
+            if not _matches_canonical_target(target[3], anchor):
+                return attention("EVENT_TARGET_DATE_MISMATCH")
             occurrence = (
                 bound_occurrence(candidate, temporal)
                 if event.operation is EventOperation.UPDATE

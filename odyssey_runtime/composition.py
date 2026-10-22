@@ -4455,8 +4455,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
             )
             if (
                 candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}
-                or candidate.interpretation.operation is EventOperation.QUERY
-                and candidate.interpretation.temporal_mentions
+                or candidate.interpretation.operation
+                in {EventOperation.CANCEL, EventOperation.QUERY}
+                and bool(candidate.interpretation.temporal_mentions)
             ):
                 resolved = prepare_temporal_interpretation(
                     source_text, conversation_context, captured_clock=clock

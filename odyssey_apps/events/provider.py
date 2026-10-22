@@ -28,10 +28,27 @@ one exact unique noun/name qualifier of the intended events (e.g. 'colegio'),
 or null for all events; never invent search filters. For other operations
 query_quote=null. ABSTAIN: all mentions empty and all quote fields null.
 Temporal mentions quote EXACT unique, full-word nonoverlapping substrings.
-Roles DATE, START, END, RECURRING_WEEKDAY, RECURRENCE_RANGE.
+Roles DATE, START, END, ORIGINAL_DATE, NEW_DATE, RECURRING_WEEKDAY,
+RECURRENCE_RANGE. START + END mean the boundaries of one event interval,
+NEVER the old date and new date of an UPDATE.
+For UPDATE "mueve [event] del martes al jueves", quote "martes" as
+ORIGINAL_DATE (existing event target) and "jueves" as NEW_DATE (destination).
+For UPDATE with only one destination date, DATE or NEW_DATE is valid.
+For CANCEL, quote ALL date or clock qualifiers identifying the original event
+as DATE; never silently discard one. If reference or date is ambiguous,
+ABSTAIN. The Event runtime validates the target's existing calendar date.
+For CREATE only, START+END may describe a bounded multi-day interval.
 Never resolve dates, time zones, participants, or note IDs. Return strict JSON."""
 
-ROLES = ["DATE", "START", "END", "RECURRING_WEEKDAY", "RECURRENCE_RANGE"]
+ROLES = [
+    "DATE",
+    "START",
+    "END",
+    "ORIGINAL_DATE",
+    "NEW_DATE",
+    "RECURRING_WEEKDAY",
+    "RECURRENCE_RANGE",
+]
 PROPOSAL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -144,7 +161,7 @@ class OpenAIEventInterpreter:
             text={
                 "format": {
                     "type": "json_schema",
-                    "name": "e5_event_intent_v2",
+                    "name": "e5_event_intent_v3",
                     "strict": True,
                     "schema": PROPOSAL_SCHEMA,
                 }
