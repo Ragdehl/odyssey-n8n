@@ -724,16 +724,24 @@ export function mountNotes(root, {
     for (const [key, raw] of Object.entries(value.note.properties).slice(0, 6)) {
       property(properties, key, raw);
     }
-    property(properties, "Creada", readableDate(value.note.created_at));
-    property(properties, "Actualizada", readableDate(value.note.updated_at));
+    const metadata = document.createElement("details");
+    metadata.className = "note-metadata";
+    const metadataSummary = document.createElement("summary");
+    metadataSummary.textContent = "Detalles de la nota";
+    const metadataDates = document.createElement("dl");
+    metadataDates.className = "note-properties";
+    property(metadataDates, "Creada", readableDate(value.note.created_at));
+    property(metadataDates, "Actualizada", readableDate(value.note.updated_at));
+    metadata.append(metadataSummary, metadataDates);
     const tags = document.createElement("p");
     tags.className = "note-tags";
     tags.textContent = value.note.tags.map((tag) => `#${tag}`).join(" ");
     const body = document.createElement("article");
     body.className = "note-body";
+    const timeline = createFactTimeline(body, open);
     renderBody(body, value.body_blocks, open, state.editing && value.mutation
       ? (locator, control) => void deleteFact(value, locator, control)
-      : null, value.note.type === "task" ? value.note.name : null);
+      : null, value.note.type === "task" ? value.note.name : null, timeline);
     const related = [];
     if (value.note.type === "task") {
       related.push(renderWorkSessions(value));
@@ -745,14 +753,11 @@ export function mountNotes(root, {
       void appendSubtasks(subtasks, value);
       related.push(subtasks);
     }
-    const backlinks = document.createElement("section");
-    backlinks.className = "note-backlinks";
-    const backlinksHeading = document.createElement("h3");
-    backlinksHeading.textContent = "Enlazada desde";
-    backlinks.append(backlinksHeading);
-    void appendBacklinks(backlinks, value.note.id, value.note.type === "task");
-    related.push(backlinks);
-    detail.replaceChildren(header, controls, detailStatus, properties, tags, body, ...related);
+    detail.replaceChildren(header, controls, detailStatus,
+      ...(properties.children.length ? [properties] : []), tags, body, ...related, metadata);
+    // Async incoming facts share the very same capture-date timeline. Reusing
+    // canonical snippet headings preserves provenance without a second feed.
+    void appendBacklinks(timeline, value.note.id, value.note.type === "task");
   }
 
   function detailFeedback(message) {
@@ -1312,53 +1317,43 @@ export function mountNotes(root, {
     }
   }
 
-  async function appendBacklinks(target, id, excludeSubtasks = false) {
+  async function appendBacklinks(timeline, id, excludeSubtasks = false) {
     try {
       const value = await requestNotes({endpoint, operation: "backlinks", payload: {note_id: id}});
+      // A navigation can change the selected note while this network request
+      // is in flight. Never append stale backlinks to the next note.
+      if (state.current?.note?.id !== id) return;
       const items = excludeSubtasks ? value.items.filter((item) => !isSubtaskBacklink(item)) : value.items;
-      if (!items.length) {
-        target.append(document.createTextNode("Sin enlaces entrantes."));
-        return;
-      }
       for (const item of items) {
-        const group = document.createElement("section");
-        group.className = "backlink-source";
-        const header = document.createElement("div");
-        header.className = "backlink-source-header";
-        const row = button("", () => void open(item.source.id));
-        row.className = "backlink";
-        row.setAttribute("aria-label", `Abrir ${typeLabel(item.source.type)} ${item.source.name}`);
-        row.append(typeIcon(item.source.type), document.createTextNode(`${item.source.name} · ${item.occurrences}`));
-        const occurrences = document.createElement("div");
-        occurrences.className = "backlink-occurrences";
-        header.append(row);
-        group.append(header);
         for (const snippet of item.snippets) {
-          const occurrence = document.createElement("section");
-          occurrence.className = "backlink-occurrence";
-          if (snippet.heading) {
-            const heading = document.createElement("p");
-            heading.className = "backlink-heading";
-            appendBodySegments(heading, humanizeBacklinkHeading(snippet.heading), open);
-            occurrence.append(heading);
-          }
-          const context = document.createElement("p");
-          context.className = "backlink-context";
+          const group = timeline.ensure(snippet.heading);
+          const entry = document.createElement("li");
+          entry.className = "note-fact-incoming";
+          const context = document.createElement("span");
+          context.className = "note-fact-content";
           appendBodySegments(context, snippet.block.segments, open);
-          occurrence.append(context);
-          occurrences.append(occurrence);
+          const source = button("", () => void open(item.source.id));
+          source.className = "note-fact-origin";
+          source.setAttribute("aria-label", `Abrir nota de origen: ${item.source.name}`);
+          source.append(document.createTextNode("↖ Desde: " + incomingSourceLabel(item.source)));
+          entry.append(context, source);
+          group.list.append(entry);
         }
         if (item.snippets_truncated) {
           const more = document.createElement("p");
-          more.className = "backlink-more";
-          more.textContent = `Se muestran ${item.snippets.length} de ${item.occurrences} menciones.`;
-          occurrences.append(more);
+          more.className = "note-fact-more";
+          more.textContent = `Se muestran ${item.snippets.length} de ${item.occurrences} referencias de ${item.source.name}.`;
+          timeline.ensure(null).section.append(more);
         }
-        group.append(occurrences);
-        target.append(group);
       }
     } catch {
-      target.append(document.createTextNode("No se han podido cargar los enlaces entrantes."));
+      // A failed read does not change facts or authorize an edit; show a
+      // compact failure instead of pretending there are no incoming facts.
+      if (state.current?.note?.id !== id) return;
+      const warning = document.createElement("p");
+      warning.className = "note-fact-more";
+      warning.textContent = "No se han podido cargar las referencias de otras notas.";
+      timeline.ensure(null).section.append(warning);
     }
   }
 
@@ -1588,7 +1583,73 @@ function unavailableRow(id) {
   row.dataset.noteId = id;
   return row;
 }
-function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
+function captureDate(segments) {
+  if (!Array.isArray(segments)) return null;
+  const raw = segments.map((segment) => segment.text).join("");
+  const match = /^Added (\d{2})-(\d{2})-(\d{4})$/.exec(raw);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const value = `${year}-${month}-${day}`;
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.valueOf()) || date.toISOString().slice(0, 10) !== value) return null;
+  return value;
+}
+
+function incomingSourceLabel(source) {
+  const day = source.type === "calendar_day" && /^(?:date:)?(\d{4})-(\d{2})-(\d{2})$/.exec(source.name);
+  if (!day) return source.name;
+  const date = new Date(`${day[1]}-${day[2]}-${day[3]}T12:00:00Z`);
+  if (Number.isNaN(date.valueOf())) return source.name;
+  return `Día ${new Intl.DateTimeFormat("es-ES", {day: "numeric", month: "short", timeZone: "UTC"}).format(date)}`;
+}
+
+function createFactTimeline(parent, open) {
+  const groups = new Map();
+  const root = document.createElement("section");
+  root.className = "note-timeline";
+  return {
+    ensure(segments) {
+      parent.querySelector(".note-empty-body")?.remove();
+      if (!root.parentNode) parent.append(root);
+      const date = captureDate(segments);
+      const key = date || "undated";
+      if (groups.has(key)) return groups.get(key);
+      const section = document.createElement("section");
+      section.className = "note-fact-group";
+      section.dataset.date = key;
+      const heading = document.createElement("h3");
+      heading.className = "note-fact-heading";
+      if (date) {
+        const text = new Intl.DateTimeFormat("es-ES", {
+          day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
+        }).format(new Date(`${date}T12:00:00Z`));
+        const calendarTarget = segments?.find((segment) =>
+          segment.target_type === "calendar_day" && segment.target_id === `date:${date}`);
+        if (calendarTarget) {
+          appendBodySegments(heading, [{
+            text, target_type: "calendar_day", target_id: calendarTarget.target_id,
+          }], open);
+        } else {
+          heading.textContent = text;
+        }
+      } else {
+        heading.textContent = "Sin fecha de registro";
+      }
+      const list = document.createElement("ul");
+      list.className = "note-fact-list";
+      section.append(heading, list);
+      const group = {section, list};
+      groups.set(key, group);
+      // ISO dates sort lexicographically; undated notes come last.
+      const sorted = [...groups.keys()].sort((a, b) =>
+        a === "undated" ? 1 : b === "undated" ? -1 : b.localeCompare(a));
+      root.replaceChildren(...sorted.map((dateKey) => groups.get(dateKey).section));
+      return group;
+    },
+  };
+}
+
+function renderBody(parent, blocks, open, removeFact = null, taskName = null, timeline = null) {
   if (!blocks.length) {
     const empty = document.createElement("p");
     empty.className = "note-empty-body";
@@ -1599,19 +1660,10 @@ function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
   let list = null;
   let pendingCaptureHeading = null;
   let factGroup = null;
-
   const ensureFactGroup = () => {
     if (factGroup || !pendingCaptureHeading) return factGroup;
-    factGroup = document.createElement("section");
-    factGroup.className = "note-fact-group";
-    const heading = document.createElement("h3");
-    heading.className = "note-fact-heading";
-    appendBodySegments(heading, localizeCaptureHeading(pendingCaptureHeading.segments), open);
-    factGroup.append(heading);
-    parent.append(factGroup);
-    list = document.createElement("ul");
-    list.className = "note-fact-list";
-    factGroup.append(list);
+    factGroup = timeline?.ensure(pendingCaptureHeading.segments);
+    list = factGroup?.list || null;
     return factGroup;
   };
 
@@ -1668,16 +1720,7 @@ function renderBody(parent, blocks, open, removeFact = null, taskName = null) {
   }
 }
 function isCaptureHeading(segments) {
-  return /^Added \d{2}-\d{2}-\d{4}$/.test(segments.map((segment) => segment.text).join(""));
-}
-function localizeCaptureHeading(segments) {
-  let replaced = false;
-  return segments.map((segment) => {
-    if (replaced || segment.target_id || typeof segment.text !== "string") return segment;
-    const text = segment.text.replace(/^Added\b/, "Añadido");
-    if (text !== segment.text) replaced = true;
-    return {...segment, text};
-  });
+  return captureDate(segments) !== null;
 }
 function isTaskParentRelation(segments) {
   return /^Tarea superior:\s*/.test(segments.map((segment) => segment.text).join(""));

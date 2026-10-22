@@ -129,13 +129,24 @@ h1 { font-size: 1.1rem; line-height: 1.1; }
 .note-properties dt { color: #6a7287; text-transform: capitalize; } .note-properties dd { margin: 0; overflow-wrap: anywhere; }
 .note-tags, .backlink-context { color: #6a7287; font-size: .82rem; overflow-wrap: anywhere; }
 .note-body { display: grid; gap: .55rem; line-height: 1.45; overflow-wrap: anywhere; } .note-body > p { margin: .25rem 0; } .note-body > h3 { margin: .55rem 0 .15rem; font-size: .95rem; } .note-body > ul { margin: .25rem 0; padding-left: 1.25rem; } .note-body li + li { margin-top: .3rem; }
-.note-fact-group { display: grid; gap: .25rem; padding: .1rem .15rem .1rem 0; border: 0; border-radius: 0; background: transparent; }
-.note-fact-heading { display: flex; align-items: center; gap: .2rem; margin: 0 !important; color: #71798c; font-size: .72rem !important; font-weight: 700; }
-.note-fact-heading .note-inline-link { font-size: inherit; font-weight: 700; }
-.note-fact-list { display: grid; gap: .18rem; margin: 0 !important; padding: 0 !important; list-style: none; }
-.note-fact-list > li { position: relative; padding: .3rem .15rem .3rem .8rem; }
-.note-fact-list > li::before { content: ""; position: absolute; left: .12rem; top: .48rem; bottom: .48rem; width: 2px; border-radius: 2px; background: #d9deef; }
-.note-fact-list > li + li { margin-top: 0; border-top: 0; }
+.note-timeline { display: grid; gap: 1rem; }
+.note-fact-group { display: grid; gap: .35rem; min-width: 0; }
+.note-fact-heading { display: flex; align-items: center; gap: .6rem; margin: .25rem 0 .1rem !important; color: #939aac; font-size: .73rem !important; font-weight: 500; text-align: center; white-space: nowrap; }
+.note-fact-heading::before, .note-fact-heading::after { content: ""; height: 1px; min-width: 0; flex: 1; background: rgba(145,155,180,.23); }
+.note-fact-heading .note-inline-link { color: inherit; font-weight: 550; text-decoration: none; }
+.note-fact-heading .note-inline-link .note-type { display: none; }
+.note-fact-list { display: grid; gap: .24rem; margin: 0 !important; padding: 0 !important; list-style: none; }
+.note-fact-list > li { position: relative; padding: .36rem .48rem .36rem .88rem; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.note-fact-list > li::before { content: ""; position: absolute; left: .15rem; top: .55rem; bottom: .55rem; width: 2px; border-radius: 2px; background: #8a94b5; }
+.note-fact-list > li + li { margin-top: 0; }
+.note-fact-list > li.note-fact-incoming { display: grid; gap: .1rem; background: rgba(74,159,149,.075); border-radius: .52rem; }
+.note-fact-list > li.note-fact-incoming::before { background: #5baba5; }
+.note-fact-origin { justify-self: start; width: auto; min-height: 1.65rem; padding: .08rem .25rem; background: transparent; color: #628c93; font-size: .71rem; text-decoration: underline; text-underline-offset: .12em; text-align: left; }
+.note-fact-origin:focus-visible { outline: 2px solid #665ee8; outline-offset: 2px; }
+.note-fact-more { font-size: .7rem; color: #788294; padding: 0 .55rem; }
+.note-metadata { margin: .65rem .15rem .1rem; color: #8992a3; font-size: .75rem; }
+.note-metadata summary { cursor: pointer; }
+.note-metadata .note-properties { margin: .5rem 0; font-size: .75rem; }
 .note-task-parent { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .55rem; padding: .5rem .6rem; border: 1px solid rgba(23,32,51,.08); border-radius: .68rem; background: rgba(238,240,247,.66); }
 .note-task-parent-label { color: #747d91; font-size: .72rem; font-weight: 750; }
 .note-task-parent-value { min-width: 0; }

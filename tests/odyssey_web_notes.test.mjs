@@ -858,8 +858,9 @@ test("Calendar Day inline links hand navigation to Calendar instead of opening m
   mounted.elements.list.querySelector(".note-row").click();
   await flush();
   const dateLink = mounted.elements.detail.querySelector("a");
-  assert.equal(mounted.elements.detail.textContent.includes("Añadido"), true);
-  assert.equal(dateLink.textContent.includes("01-10-2026"), true);
+  assert.equal(mounted.elements.detail.textContent.includes("Añadido"), false);
+  assert.equal(mounted.elements.detail.querySelectorAll(".note-fact-heading").length, 1);
+  assert.equal(dateLink.textContent.includes("oct"), true);
   assert.equal(dateLink.className, "note-inline-link");
   assert.equal(dateLink.querySelector(".note-type").className.includes("type-calendar_day"), true);
   dateLink.click();
@@ -887,11 +888,14 @@ test("backlinks render source occurrences open without disclosure controls", asy
   mounted.elements.list.querySelector(".note-row").click();
   await flush();
 
-  const occurrences = mounted.elements.detail.querySelector(".backlink-occurrences");
-  const disclosure = mounted.elements.detail.querySelector(".backlink-disclosure");
-  assert.equal(occurrences.hidden, false);
-  assert.equal(disclosure, null);
-  assert.equal(occurrences.querySelectorAll(".backlink-occurrence").length, 2);
+  const occurrences = mounted.elements.detail.querySelectorAll(".note-fact-incoming");
+  const sources = mounted.elements.detail.querySelectorAll(".note-fact-origin");
+  assert.equal(mounted.elements.detail.querySelector(".note-backlinks"), null);
+  assert.equal(occurrences.length, 2);
+  assert.equal(sources.length, 2);
+  assert.equal(sources[0].textContent, "↖ Desde: Cloe");
+  assert.deepEqual(mounted.elements.detail.querySelectorAll(".note-fact-group").map((g) => g.dataset.date), ["2026-09-30", "2026-09-29"]);
+  assert.equal(mounted.elements.detail.textContent.includes("Enlazada desde"), false);
 });
 
 test("inline links keep standard link text color while the target icon keeps semantic color", async () => {
@@ -1326,4 +1330,73 @@ test("legacy Task checklist marker is hidden when it duplicates the Task action"
   assert.ok(body);
   assert.equal(body.textContent.includes("pintar la pared."), true);
   assert.equal(body.textContent.includes("[ ]"), false);
+});
+
+test("timeline merges own facts and incoming references under one centered capture date", async () => {
+  const opened = [];
+  const ownBlocks = [
+    {kind: "heading", segments: [{text: "Added 18-10-2026"}]},
+    {kind: "list_item", segments: [{text: "Prefiere el té al café."}], deletable: true, fact_locator: "fact:1"},
+    {kind: "list_item", segments: [{text: "Sale a pasear."}], deletable: true, fact_locator: "fact:2"},
+    {kind: "heading", segments: [{text: "Added 21-09-2026"}]},
+    {kind: "list_item", segments: [{text: "Vive en Toulouse."}], deletable: true, fact_locator: "fact:3"},
+    {kind: "heading", segments: [{text: "Added 18-10-2026"}]},
+    {kind: "list_item", segments: [{text: "Otro hecho del mismo día."}], deletable: true, fact_locator: "fact:4"},
+  ];
+  const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") {
+      opened.push(payload.note_id);
+      return detail(payload.note_id, payload.note_id === "calendar" ? "Día" : "Usuario", null, ownBlocks);
+    }
+    if (operation === "backlinks") return {
+      items: [{
+        source: {id: "date:2026-10-28", name: "2026-10-28", type: "calendar_day"},
+        occurrences: 2,
+        snippets: [
+          {heading: [{text: "Added 18-10-2026"}], block: {segments: [{text: "Conoció a Reme."}]}},
+          {heading: [{text: "Added 29-09-2026"}], block: {segments: [{text: "Otro apunte enlazado."}]}},
+        ],
+      }],
+    };
+    return page({items: [pageItem("user", "Usuario")]});
+  }});
+  mounted.elements.list.querySelector(".note-row").click();
+  await flush();
+  const dayGroups = mounted.elements.detail.querySelectorAll(".note-fact-group");
+  assert.deepEqual(dayGroups.map((group) => group.dataset.date), [
+    "2026-10-18", "2026-09-29", "2026-09-21",
+  ]);
+  const oct = dayGroups[0];
+  assert.equal(oct.querySelectorAll(".note-fact-heading").length, 1);
+  assert.equal(oct.querySelectorAll("li").length, 4);
+  assert.equal(oct.querySelectorAll(".note-fact-incoming").length, 1);
+  assert.equal(mounted.elements.detail.textContent.includes("Añadido"), false);
+  assert.equal(mounted.elements.detail.textContent.includes("Enlazada desde"), false);
+  const origin = oct.querySelector(".note-fact-origin");
+  assert.equal(origin.textContent.includes("Desde: Día 28 oct"), true);
+  origin.click();
+  await flush();
+  assert.equal(opened.includes("date:2026-10-28"), true);
+  assert.equal(mounted.elements.detail.querySelector(".note-metadata").textContent.includes("Creada"), true);
+});
+
+test("incoming references without valid capture date are visible but never given a fabricated day", async () => {
+  const mounted = await mountNotes({requestNotes: async ({operation, payload}) => {
+    if (operation === "capabilities") return capabilities();
+    if (operation === "detail") return detail(payload.note_id, "Ada");
+    if (operation === "backlinks") return {items: [{
+      source: {id: "source", name: "Proyecto Faro", type: "project"},
+      occurrences: 1,
+      snippets: [{heading: [{text: "Some other heading"}], block: {segments: [{text: "Información referenciada."}]}}],
+    }]};
+    return page({items: [pageItem("ada", "Ada")]});
+  }});
+  mounted.elements.list.querySelector(".note-row").click();
+  await flush();
+  const groups = mounted.elements.detail.querySelectorAll(".note-fact-group");
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].dataset.date, "undated");
+  assert.equal(groups[0].textContent.includes("Sin fecha de registro"), true);
+  assert.equal(groups[0].querySelector(".note-fact-origin").textContent.includes("Proyecto Faro"), true);
 });
