@@ -105,6 +105,85 @@ def _source_has_clock_qualifier(text: str) -> bool:
     )
 
 
+# A DATE-only resolution must account for its *whole* original source quote.
+# Enumerating clock spellings is not enough ("o'clock" vs "o’clock").
+# Unknown words fail closed; this grammar is intentionally limited to
+# ES/FR/EN date vocabulary and numeric date forms.
+_DATE_ONLY_WORDS = frozenset(_WEEKDAYS) | frozenset(
+    """
+    january february march april may june july august september october november december
+    enero febrero marzo abril mayo junio julio agosto septiembre setiembre octubre noviembre diciembre
+    janvier février fevrier mars avril mai juin juillet août aout septembre octobre novembre décembre decembre
+    on the of in at from this next last coming following today tomorrow yesterday
+    el la los las del de al a en para por este esta próximo proximo próxima proxima siguiente
+    hoy mañana ayer
+    le du des au aux de la d à ce cet cette prochain prochaine suivant suivante
+    demain hier aujourd hui
+    week weeks semaine semaines semana semanas
+    """.split()
+)
+
+
+def _source_is_unqualified_date(quote: str) -> bool:
+    """Do not trust DATE-only output from a quote with unknown semantic tokens."""
+    words = re.findall(r"[^\W\d_]+|\d+", quote.casefold(), flags=re.UNICODE)
+    if not words or any(word not in _DATE_ONLY_WORDS and not word.isdecimal() for word in words):
+        return False
+    # A single unqualified number beside a weekday may be a time ("Monday 5").
+    # Allow numbers only with source evidence of a month/year or a date separator.
+    if any(word.isdecimal() for word in words) and not (
+        any(
+            word
+            in _DATE_ONLY_WORDS.intersection(
+                {
+                    "january",
+                    "february",
+                    "march",
+                    "april",
+                    "may",
+                    "june",
+                    "july",
+                    "august",
+                    "september",
+                    "october",
+                    "november",
+                    "december",
+                    "enero",
+                    "febrero",
+                    "marzo",
+                    "abril",
+                    "mayo",
+                    "junio",
+                    "julio",
+                    "agosto",
+                    "septiembre",
+                    "setiembre",
+                    "octubre",
+                    "noviembre",
+                    "diciembre",
+                    "janvier",
+                    "février",
+                    "fevrier",
+                    "mars",
+                    "avril",
+                    "mai",
+                    "juin",
+                    "juillet",
+                    "août",
+                    "aout",
+                    "décembre",
+                    "decembre",
+                }
+            )
+            for word in words
+        )
+        or re.search(r"\b\d{4}\b", quote)
+        or re.search(r"\b\d{1,2}[-/.]\d{1,2}\b", quote)
+    ):
+        return False
+    return True
+
+
 def _exact_anchor_for_quote(
     candidate: EventCandidate,
     temporal: TemporalInterpretation | None,
@@ -180,7 +259,9 @@ def _exact_anchor_for_quote(
     if value is None:
         raise EventRouteError("EVENT_TARGET_TEMPORAL_UNRESOLVED")
     anchor = TemporalAnchor.from_value(value)
-    if anchor.time is None and _source_has_clock_qualifier(quoted[0]):
+    if anchor.time is None and (
+        _source_has_clock_qualifier(quoted[0]) or not _source_is_unqualified_date(quoted[0])
+    ):
         raise EventRouteError("EVENT_TARGET_CLOCK_UNVERIFIED")
     return anchor
 

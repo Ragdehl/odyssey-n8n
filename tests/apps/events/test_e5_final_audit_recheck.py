@@ -304,3 +304,54 @@ def test_quoted_time_cannot_be_resolved_to_date_only(tmp_path, clock):
     assert result.planning_error == "EVENT_TARGET_CLOCK_UNVERIFIED"
     assert _actual(repo)["event_status"] == "scheduled"
     assert _actual(repo)["revision"] == 1
+
+
+@pytest.mark.parametrize(
+    "clock",
+    ("5 o’clock", "5 o'clock", "5 oclock", "5 o clock", "at six", "a las siete", "late in the day"),
+)
+def test_non_date_words_cannot_hitchhike_on_exact_date(tmp_path, clock):
+    schema, repo = _seed(
+        tmp_path, name="Excursion", start="2026-10-19", start_at="2026-10-19T18:00:00+02:00"
+    )
+    source = f"Cancel Excursion {clock} on Monday."
+    quote = f"{clock} on Monday"
+    candidate = _candidate(source, "CANCEL", "Excursion", ((quote, "DATE"),))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                quote,
+                TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-19"),
+            ),
+        ),
+    )
+    result = run(schema, repo, candidate, temporal)
+    assert result.status.value == "needs_attention"
+    assert result.planning_error == "EVENT_TARGET_CLOCK_UNVERIFIED"
+    assert _actual(repo)["event_status"] == "scheduled"
+    assert _actual(repo)["revision"] == 1
+
+
+@pytest.mark.parametrize(
+    ("source", "quote"),
+    (
+        ("Cancel Excursion next Monday.", "next Monday"),
+        ("Annule Excursion du lundi 26 octobre 2026.", "lundi 26 octobre 2026"),
+    ),
+)
+def test_complete_source_quoted_date_remains_cancellable(tmp_path, source, quote):
+    schema, repo = _seed(tmp_path, name="Excursion", start="2026-10-26")
+    candidate = _candidate(source, "CANCEL", "Excursion", ((quote, "DATE"),))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                quote,
+                TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-26"),
+            ),
+        ),
+    )
+    result = run(schema, repo, candidate, temporal)
+    assert result.status.value == "completed"
+    assert _actual(repo)["event_status"] == "cancelled"
