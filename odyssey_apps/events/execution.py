@@ -272,10 +272,18 @@ def bound_occurrence(
 def current_exact_event(
     repository: VaultRepository, schema: dict[str, Any], reference: str
 ) -> tuple[str, int, str, dict[str, Any]] | None:
-    """Resolve only a unique exact word-bounded event-name mention, never similarity."""
+    """Resolve one canonical Event by exact name or verified original-source quote.
+
+    A provider may shorten a title ('Excursión escolar') while the source
+    preserves a distinguishing suffix ('Excursión escolar E5 ABC123').
+    Source recovery requires the entire quoted reference inside that SAME
+    Event's fact content AND the canonical name as a word-bounded prefix;
+    it never uses similarity, location or inferred references.
+    """
     if not isinstance(reference, str) or not reference.strip():
         return None
     matches = []
+    quoted = re.compile(r"(?<!\w)" + re.escape(reference) + r"(?!\w)", re.IGNORECASE)
     for path in repository.list_markdown_paths():
         raw = repository.read_text(path)
         note = parse_note(raw)
@@ -283,7 +291,12 @@ def current_exact_event(
         if note.metadata.get("type") != "event" or note.metadata.get("deleted") is True:
             continue
         name = note.metadata["name"]
-        if re.search(r"(?<!\w)" + re.escape(reference) + r"(?!\w)", name, re.IGNORECASE):
+        name_matches = quoted.search(name) is not None
+        source_matches = (
+            re.match(r"\A" + re.escape(name) + r"(?=\W|$)", reference, re.IGNORECASE) is not None
+            and quoted.search(note.content) is not None
+        )
+        if name_matches or source_matches:
             matches.append(
                 (
                     note.metadata["id"],
