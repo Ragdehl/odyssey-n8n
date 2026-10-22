@@ -22,6 +22,7 @@ def proposal(op, *, title=None, reference=None, mentions=None):
         "operation": op,
         "event_reference": reference,
         "title_quote": title,
+        "query_quote": None,
         "temporal_mentions": mentions if mentions is not None else [],
     }
 

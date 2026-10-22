@@ -20,6 +20,7 @@ from odyssey_core.application import (
     UnitResult,
     UnitStatus,
 )
+from odyssey_core.note_result_snapshots import NoteResultSnapshot
 from odyssey_core.notes import parse_note, validate_note
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import TemporalAnchor
@@ -35,25 +36,70 @@ class EventRouteError(ValueError):
     """A source/temporal/target mapping is not reliably proven."""
 
 
+_WEEKDAYS = {
+    "lunes": 0,
+    "monday": 0,
+    "lundi": 0,
+    "martes": 1,
+    "tuesday": 1,
+    "mardi": 1,
+    "miércoles": 2,
+    "miercoles": 2,
+    "wednesday": 2,
+    "mercredi": 2,
+    "jueves": 3,
+    "thursday": 3,
+    "jeudi": 3,
+    "viernes": 4,
+    "friday": 4,
+    "vendredi": 4,
+    "sábado": 5,
+    "sabado": 5,
+    "saturday": 5,
+    "samedi": 5,
+    "domingo": 6,
+    "sunday": 6,
+    "dimanche": 6,
+}
+
+
+def _source_weekday(candidate: EventCandidate) -> int | None:
+    """Map one Events model-quoted literal weekday, never guessed recurrence."""
+    quotes = [
+        m.quote
+        for m in candidate.interpretation.temporal_mentions
+        if m.role is EventTemporalRole.RECURRING_WEEKDAY
+    ]
+    if not quotes:
+        return None
+    if len(quotes) != 1:
+        raise EventRouteError("EVENT_WEEKDAY_AMBIGUOUS")
+    matches = [
+        _WEEKDAYS[t] for t in re.findall(r"\b[\wÀ-ÿ]+\b", quotes[0].casefold()) if t in _WEEKDAYS
+    ]
+    if len(matches) != 1:
+        raise EventRouteError("EVENT_WEEKDAY_NOT_LITERAL")
+    return matches[0]
+
+
 def bound_occurrence(
     candidate: EventCandidate, temporal: TemporalInterpretation | None
 ) -> EventOccurrence:
     event = candidate.interpretation
     if temporal is None or temporal.source_text != event.source_text:
         raise EventRouteError("EVENT_TEMPORAL_MISSING")
-    if any(
-        mention.role in (EventTemporalRole.RECURRING_WEEKDAY, EventTemporalRole.RECURRENCE_RANGE)
-        for mention in event.temporal_mentions
+    weekday = _source_weekday(candidate)
+    if weekday is not None and not any(
+        m.role is EventTemporalRole.RECURRENCE_RANGE for m in event.temporal_mentions
     ):
-        # Shared Temporal currently has no trusted weekday enumeration;
-        # do not parse language-specific words or manufacture recurrence.
-        raise EventRouteError("EVENT_RECURRENCE_NEEDS_TEMPORAL_CONTRACT")
+        raise EventRouteError("EVENT_RECURRENCE_RANGE_REQUIRED")
     trusted = []
     for mention in temporal.mentions:
         r = mention.resolution
         if not any(
             quote.quote in mention.temporal_text or mention.temporal_text in quote.quote
             for quote in event.temporal_mentions
+            if quote.role is not EventTemporalRole.RECURRING_WEEKDAY
         ):
             raise EventRouteError("EVENT_TEMPORAL_SOURCE_MISMATCH")
         if r.kind is TemporalResolutionKind.DATE_RANGE and r.date_range is not None:
@@ -70,9 +116,13 @@ def bound_occurrence(
     if len(trusted) == 1 and trusted[0][0] == "range":
         start, exclusive = trusted[0][1:]
         end = (date.fromisoformat(exclusive) - timedelta(days=1)).isoformat()
-        return EventOccurrence(TemporalAnchor.from_value(start), TemporalAnchor.from_value(end))
+        return EventOccurrence(
+            TemporalAnchor.from_value(start), TemporalAnchor.from_value(end), weekday
+        )
     if any(kind == "range" for kind, _, _ in trusted):
         raise EventRouteError("EVENT_TEMPORAL_MULTIPLE_RANGES")
+    if weekday is not None:
+        raise EventRouteError("EVENT_RECURRENCE_NEEDS_VERIFIED_RANGE")
     values = tuple(dict.fromkeys(value for _, value, _ in trusted))
     if len(values) == 1:
         return EventOccurrence(TemporalAnchor.from_value(values[0]))
@@ -136,7 +186,8 @@ def execute_event_candidate(
     actor: Any,
     now: str,
     authenticated: bool,
-    query_handler: Callable[[str], tuple[str, ...]] | None = None,
+    query_handler: Callable[[EventCandidate, TemporalInterpretation | None], NoteResultSnapshot]
+    | None = None,
 ) -> ApplicationResult:
     """Execute only a validated Events route with a trusted principal + locator."""
     event = candidate.interpretation
@@ -155,13 +206,20 @@ def execute_event_candidate(
         # become navigable note IDs only through current canonical readback.
         if query_handler is None:
             return attention("EVENT_QUERY_NOT_CONNECTED")
-        matches = query_handler(event.source_text)
+        try:
+            snapshot = query_handler(candidate, temporal)
+        except (EventRouteError, ValueError):
+            return attention("EVENT_QUERY_UNRESOLVED")
+        if not isinstance(snapshot, NoteResultSnapshot):
+            return attention("EVENT_QUERY_UNVERIFIED")
         return ApplicationResult(
             request_id,
             ApplicationStatus.COMPLETED,
             (),
             (),
-            execution_flow={"events": {"operation": "query", "match_count": len(matches)}},
+            presentation_intent="show_notes",
+            note_result_snapshot=snapshot.to_payload(),
+            execution_flow={"events": {"operation": "query", "match_count": snapshot.total}},
         )
     try:
         if event.operation is EventOperation.CREATE:

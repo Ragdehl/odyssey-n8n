@@ -51,7 +51,8 @@ def main() -> int:
         event_model = OpenAIEventInterpreter(client)
         temporal_model = OpenAITemporalInterpreter(client, clock, scoped_date_time_context=True)
         mutations = EventMutationService(repo, schema)
-        actor = AuthenticatedActorContext("e5-test-principal")
+        actor = AuthenticatedActorContext("ae6adef2-df0b-45d7-b76a-32cc9a1e31e9")
+        persisted_actor = {"human": actor.stable_user_id, "app": "fixture"}
         rows = []
         for ordinal, source in enumerate(
             (
@@ -77,7 +78,7 @@ def main() -> int:
                     schema=schema,
                     mutations=mutations,
                     request_id=rid,
-                    actor="fixture",
+                    actor=persisted_actor,
                     now="2026-10-22T08:00:00+02:00",
                     authenticated=True,
                 )
@@ -87,13 +88,16 @@ def main() -> int:
                 router=router,
                 temporal=temporal_model,
                 core_planner_factory=lambda *_: None,
+                candidate_coverage_factory=lambda *_: (_ for _ in ()).throw(
+                    AssertionError("Events route must not execute Core candidate planning")
+                ),
                 repository=repo,
                 schema=schema,
                 context_index=context,
                 semantic_index=None,
                 embedder=embedder,
                 contextual_reasoner=None,
-                actor="fixture",
+                actor=persisted_actor,
                 now="2026-10-22T08:00:00+02:00",
                 context_limit=5,
                 request_id_factory=lambda ordinal=ordinal: f"e5-routing-{ordinal}",
@@ -112,6 +116,8 @@ def main() -> int:
                 "status": response.status.value,
                 "events": count,
                 "affected": len(response.affected_stable_note_ids),
+                "error": response.planning_error,
+                "clarification": response.clarification_code,
             }
             rows.append(row)
             print("E5_ROUTER_TO_E3_REAL=" + json.dumps(row), flush=True)

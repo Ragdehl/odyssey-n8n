@@ -834,6 +834,12 @@ def _aggregate(outer_request_id: str, subresults: Sequence[ApplicationResult]) -
         ),
         pending_work=_aggregate_pending(subresults),
         history=_aggregate_history(subresults),
+        # Retain one verified read-only Notes result set, never conflate it
+        # with affected (written) note IDs in the product replay envelope.
+        presentation_intent=(
+            subresults[0].presentation_intent if len(subresults) == 1 else "answer"
+        ),
+        note_result_snapshot=(subresults[0].note_result_snapshot if len(subresults) == 1 else None),
         operational=OperationalEvidence(
             stages=tuple(
                 replace(stage, route_index=route_ordinal)

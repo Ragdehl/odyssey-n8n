@@ -23,8 +23,10 @@ For CREATE, title_quote must quote an exact, unique, nonempty noun phrase that
 names the EVENT within source_text (not an invented paraphrase), preferably
 excluding dates. UPDATE/CANCEL require event_reference: the exact unique source
 phrase referring to the event, without claiming any repository identity.
-For QUERY, title_quote=null and event_reference=null. ABSTAIN: all mentions
-empty and both quote fields null.
+For QUERY, title_quote=null and event_reference=null. query_quote may quote
+one exact unique noun/name qualifier of the intended events (e.g. 'colegio'),
+or null for all events; never invent search filters. For other operations
+query_quote=null. ABSTAIN: all mentions empty and all quote fields null.
 Temporal mentions quote EXACT unique, full-word nonoverlapping substrings.
 Roles DATE, START, END, RECURRING_WEEKDAY, RECURRENCE_RANGE.
 Never resolve dates, time zones, participants, or note IDs. Return strict JSON."""
@@ -48,8 +50,9 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
         },
         "event_reference": {"type": ["string", "null"]},
         "title_quote": {"type": ["string", "null"]},
+        "query_quote": {"type": ["string", "null"]},
     },
-    "required": ["operation", "temporal_mentions", "event_reference", "title_quote"],
+    "required": ["operation", "temporal_mentions", "event_reference", "title_quote", "query_quote"],
     "additionalProperties": False,
 }
 
@@ -73,6 +76,7 @@ def _exact_unique_phrase(source: str, quote: str) -> bool:
 class EventCandidate:
     interpretation: EventInterpretation
     title_quote: str | None
+    query_quote: str | None = None
 
 
 def validate_event_candidate(source: str, result: object) -> EventCandidate:
@@ -81,9 +85,11 @@ def validate_event_candidate(source: str, result: object) -> EventCandidate:
         "temporal_mentions",
         "event_reference",
         "title_quote",
+        "query_quote",
     }:
         raise EventInterpretationError("Event provider result has unexpected fields")
     title = result["title_quote"]
+    query = result["query_quote"]
     interpretation = validate_event_proposal(
         source, {key: result[key] for key in ("operation", "temporal_mentions", "event_reference")}
     )
@@ -92,6 +98,11 @@ def validate_event_candidate(source: str, result: object) -> EventCandidate:
             raise EventInterpretationError("Event title must be an exact unique source phrase")
     elif title is not None:
         raise EventInterpretationError("Only Event CREATE may name a proposed title")
+    if interpretation.operation is EventOperation.QUERY:
+        if query is not None and not _exact_unique_phrase(source, query):
+            raise EventInterpretationError("Event query must quote one exact unique filter")
+    elif query is not None:
+        raise EventInterpretationError("Only Event QUERY may supply a query filter")
     if (
         interpretation.operation in (EventOperation.CREATE, EventOperation.UPDATE)
         and not interpretation.temporal_mentions
@@ -99,7 +110,7 @@ def validate_event_candidate(source: str, result: object) -> EventCandidate:
         raise EventInterpretationError(
             "Event creation/rescheduling requires temporal source evidence"
         )
-    return EventCandidate(interpretation, title)
+    return EventCandidate(interpretation, title, query)
 
 
 class OpenAIEventInterpreter:

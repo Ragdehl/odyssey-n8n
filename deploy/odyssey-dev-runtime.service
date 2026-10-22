@@ -22,7 +22,7 @@ Environment=ODYSSEY_SCHEMA_PATH=/home/ragdehl/projects/odyssey-dev/config/note-s
 Environment=ODYSSEY_RUNTIME_HOST=127.0.0.1
 Environment=ODYSSEY_RUNTIME_PORT=28765
 Environment=ODYSSEY_ACTOR=odyssey-dev
-Environment=ODYSSEY_ENABLED_APPLICATIONS=tasks
+Environment=ODYSSEY_ENABLED_APPLICATIONS=tasks,events
 Environment=ODYSSEY_LIGHT_SOURCE_V1=1
 Environment=ODYSSEY_DEPLOYMENT_ENV=DEV
 # DEV-only: keep ONNX hot for a user session to avoid repeated 2-3s cold starts.

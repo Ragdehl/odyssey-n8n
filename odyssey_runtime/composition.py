@@ -30,6 +30,7 @@ from odyssey_apps.events.execution import execute_event_candidate
 from odyssey_apps.events.interpretation import EventInterpretationError, EventOperation
 from odyssey_apps.events.mutations import EventMutationService
 from odyssey_apps.events.provider import OpenAIEventInterpreter
+from odyssey_apps.events.queries import event_note_snapshot
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
@@ -4420,7 +4421,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         )
         temporal_result = None
         temporal_stage = ()
-        if candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}:
+        if (
+            candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}
+            or candidate.interpretation.operation is EventOperation.QUERY
+            and candidate.interpretation.temporal_mentions
+        ):
             resolved = prepare_temporal_interpretation(
                 source_text, conversation_context, captured_clock=clock
             )
@@ -4438,6 +4443,13 @@ def build_runtime_from_environment() -> RuntimeComposition:
             actor=_persistence_actor(actor, authenticated_actor),
             now=clock["timestamp"],
             authenticated=True,
+            query_handler=lambda candidate, temporal: event_note_snapshot(
+                candidate=candidate,
+                temporal=temporal,
+                repository=repository,
+                schema=schema,
+                now=clock["timestamp"],
+            ),
         )
         return replace(
             result,
