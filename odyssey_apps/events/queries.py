@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, timedelta
 from typing import Any
 
@@ -13,6 +14,34 @@ from odyssey_core.temporal_resolution import TemporalResolutionKind
 
 from .execution import EventRouteError
 from .provider import EventCandidate
+
+_QUERY_WORDS = re.compile(
+    r"\b(?:qué|que|cuáles|cuales|cuándo|cuando|what|which|when|"
+    r"quels?|quelles?|quand|montre|mostrar|muestra|muéstrame|"
+    r"listar?|lista|show|list|voir|ver)\b|[¿?]",
+    re.IGNORECASE,
+)
+_EVENT_WORDS = re.compile(
+    r"\b(?:eventos?|events?|événements?|calendarios?|calendar|"
+    r"agenda|agendas|citas?|appointments?|rendez-vous|"
+    r"concerts?|conciertos?|excursiones?|excursions?)\b",
+    re.IGNORECASE,
+)
+
+
+def explicit_event_query_hint(source: str) -> bool:
+    """Cheap opt-in hint to preserve Events queries from the legacy Core-read fast path.
+
+    Not authorization or an operation decision: active P4 Router and Events
+    interpretation must both independently validate the complete source.
+    Other read-only prompts retain the old Core query path and token cost.
+    """
+    return (
+        isinstance(source, str)
+        and 0 < len(source) <= 4096
+        and bool(_QUERY_WORDS.search(source))
+        and bool(_EVENT_WORDS.search(source))
+    )
 
 
 def _date_filter(

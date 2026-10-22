@@ -7,6 +7,7 @@ Every success is proved by canonical readback rather than HTTP alone.
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -104,8 +105,8 @@ def main():
     ), ("source/deployed mismatch", deployed[:12])
     assert "ODYSSEY_ENABLED_APPLICATIONS=tasks,events" in expected
     repo = VaultRepository(ROOT / "vault")
-    before_events = {meta["id"] for _, meta in events(repo)}
     label = "Concierto ficticio E5 " + uuid4().hex[:7].upper()
+    print("E5_DEV_FIXTURE=" + label, flush=True)
     requests = [
         f"{label} el 29 de octubre de 2026.",
         None,
@@ -131,10 +132,14 @@ def main():
         return answer
 
     def event_readback():
-        fresh = [(path, meta) for path, meta in events(repo) if meta["id"] not in before_events]
-        if len(fresh) != 1:
-            raise RuntimeError("E5_CANONICAL_CARDINALITY_INVALID")
-        return fresh[0]
+        # Concurrent or earlier synthetic DEV runs must never turn a valid
+        # scoped Event result into a false duplicate or hide a real duplicate.
+        # The fixture label is unique to this run and independent of any
+        # unrelated Notes/Events stored in the same isolated DEV vault.
+        scoped = [(path, meta) for path, meta in events(repo) if meta.get("name") == label]
+        if len(scoped) != 1:
+            raise RuntimeError(f"E5_SCOPED_EVENT_CARDINALITY_{len(scoped)}")
+        return scoped[0]
 
     delivery = "e5-dev-" + uuid4().hex[:24]
     send("create", requests[0], delivery)
@@ -156,15 +161,19 @@ def main():
     assert len([e for e in day_events(DATE1) if e["source"]["id"] == meta["id"]]) == 0
     assert len([e for e in day_events(DATE2) if e["source"]["id"] == meta["id"]]) == 1
     report["browser_update"] = browser(actual_name, DATE2, True)
-    query = "¿Qué eventos del colegio hay en octubre de 2026?"
+    query = f"¿Qué eventos de {actual_name} hay el 30 de octubre de 2026?"
     answer = post(
         "/api/request",
         {"request": query, "request_id": "e5-dev-" + uuid4().hex[:24], "conversation_id": "main"},
     )
+    query_ids = (answer.get("note_result_snapshot") or {}).get("note_ids", [])
     report["query"] = {
         "status": answer.get("status"),
-        "snapshot_count": len((answer.get("note_result_snapshot") or {}).get("note_ids", [])),
+        "snapshot_count": len(query_ids),
+        "contains_exact_event": meta["id"] in query_ids,
     }
+    if report["query"]["status"] != "completed" or not report["query"]["contains_exact_event"]:
+        raise RuntimeError("E5_QUERY_DID_NOT_READ_CANONICAL_EVENT")
     print("E5_DEV_QUERY=" + json.dumps(report["query"]), flush=True)
     cancel = f"Cancela {actual_name}."
     send("cancel", cancel, "e5-dev-" + uuid4().hex[:24])
@@ -193,6 +202,14 @@ def main():
 
 
 if __name__ == "__main__":
+    # One synthetic end-to-end writer at a time. Overlapping runs can alter
+    # unrelated fixture Markdown and create misleading replay-hash failures.
+    lock = Path("/tmp/odyssey-e5-dev-e2e.lock").open("w")
+    try:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("E5_DEV_E2E_STOP=another full-suite writer is active", flush=True)
+        sys.exit(3)
     try:
         sys.exit(main())
     except Exception as exc:

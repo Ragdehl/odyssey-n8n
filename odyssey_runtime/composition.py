@@ -30,7 +30,7 @@ from odyssey_apps.events.execution import execute_event_candidate
 from odyssey_apps.events.interpretation import EventInterpretationError, EventOperation
 from odyssey_apps.events.mutations import EventMutationService
 from odyssey_apps.events.provider import OpenAIEventInterpreter
-from odyssey_apps.events.queries import event_note_snapshot
+from odyssey_apps.events.queries import event_note_snapshot, explicit_event_query_hint
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
@@ -3351,6 +3351,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         plan never reaches generic Core execution here; the caller retains the
         guarded candidate route for write-capable work.
         """
+        if "events" in enabled_application_ids and explicit_event_query_hint(source):
+            # Legacy Core READ_ONLY preflight must not swallow an explicit
+            # Event-domain query. This is only a lexical prefilter; P4 and
+            # Events still require source-bound GPT evidence before reading.
+            return None
         clock = _current_time()
         planner = OpenAIRequestPlanner.from_environment(
             schema, {key: clock[key] for key in ("date", "time", "timezone")}

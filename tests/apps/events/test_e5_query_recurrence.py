@@ -5,7 +5,7 @@ from __future__ import annotations
 from odyssey_apps.events.execution import bound_occurrence, execute_event_candidate
 from odyssey_apps.events.mutations import EventMutationService
 from odyssey_apps.events.provider import validate_event_candidate
-from odyssey_apps.events.queries import event_note_snapshot
+from odyssey_apps.events.queries import event_note_snapshot, explicit_event_query_hint
 from odyssey_core import create_entity
 from odyssey_core.notes import parse_note
 from odyssey_core.temporal import DateRange
@@ -107,7 +107,7 @@ def test_query_notes_is_actual_grounded_filtered_snapshot(tmp_path):
     assert result.status.value == "completed"
     assert result.affected_stable_note_ids == ()
     assert result.note_result_snapshot["note_ids"] == ["photo-id"]
-    assert result.presentation_intent == "show_notes"
+    assert result.presentation_intent == "note_set"
 
 
 def test_recurrence_weekday_derived_from_exact_source_only(tmp_path):
@@ -168,3 +168,12 @@ def test_recurrence_weekday_derived_from_exact_source_only(tmp_path):
         )
         == 1
     )
+
+
+def test_explicit_event_query_hint_is_source_only_and_does_not_capture_core_or_tasks():
+    assert explicit_event_query_hint("¿Qué eventos del colegio hay en octubre de 2026?")
+    assert explicit_event_query_hint("Show my calendar events next week")
+    assert explicit_event_query_hint("Quand sont les événements du collège ?")
+    assert not explicit_event_query_hint("Mañana tengo que preparar la mochila.")
+    assert not explicit_event_query_hint("Ayer vi a Irene en un concierto.")
+    assert not explicit_event_query_hint("¿Qué tareas tengo para mañana?")

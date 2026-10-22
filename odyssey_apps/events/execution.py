@@ -217,7 +217,7 @@ def execute_event_candidate(
             ApplicationStatus.COMPLETED,
             (),
             (),
-            presentation_intent="show_notes",
+            presentation_intent="note_set",
             note_result_snapshot=snapshot.to_payload(),
             execution_flow={"events": {"operation": "query", "match_count": snapshot.total}},
         )

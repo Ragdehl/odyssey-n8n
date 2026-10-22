@@ -32,7 +32,9 @@ if(!expected||!/^2026-10-(29|30)$/.test(day)) throw Error('Bounded E5 synthetic 
    const before=await page.evaluate(({day,label})=>{
     const grid=document.querySelector('#calendar-grid');
     const cell=[...grid.querySelectorAll('.calendar-day-cell')].find(x=>x.getAttribute('data-date')===day);
-    const snapshot=grid?.textContent||'';
+    // Source notes are intentionally still shown as capture on their
+    // creation date after cancellation. Only test the occurrence DATE cell.
+    const snapshot=cell?.textContent||'';
     return {gridExists:!!grid,cells:grid?.querySelectorAll('.calendar-day-cell').length||0,
             monthTitle:document.querySelector('#calendar-month-title')?.textContent,
             visible:snapshot.includes(label),cellFound:!!cell};
@@ -48,10 +50,14 @@ if(!expected||!/^2026-10-(29|30)$/.test(day)) throw Error('Bounded E5 synthetic 
    await page.waitForFunction(()=>document.querySelector('#interaction')?.childElementCount>0,{timeout:30000});
    await page.evaluate(()=>document.querySelector('#calendar-tab')?.click());
    await page.waitForFunction(()=>document.querySelectorAll('.calendar-day-cell').length>0,{timeout:30000});
-   const after=await page.evaluate(label=>document.querySelector('#calendar-grid')?.textContent?.includes(label)||false,expected);
+   const after=await page.evaluate(({day,label})=>{
+     const cell=[...document.querySelectorAll('#calendar-grid .calendar-day-cell')]
+       .find(x=>x.getAttribute('data-date')===day);
+     return cell?.textContent?.includes(label)||false;
+   },{day,label:expected});
    const pass=response.status()===200 && backend.http===200 &&
     backend.kind==='calendar_day' && backend.matching===(shouldExist?1:0) &&
-    before.visible===shouldExist && after===shouldExist && errors.length===0;
+    before.cellFound && before.visible===shouldExist && after===shouldExist && errors.length===0;
    rows.push({profile,pass,calendarDayMatches:backend.matching,
      uiVisible:before.visible,reloadVisible:after,cells:before.cells,exceptions:errors.length});
    await page.close();
