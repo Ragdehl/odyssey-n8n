@@ -7,11 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from odyssey_core.git_history import GitHistoryResult, HistoryRecorder
-from odyssey_core.materialization import (
-    MaterializationError,
-    materialize_create,
-    materialize_update,
-)
+from odyssey_core.materialization import MaterializationError, materialize_create
 from odyssey_core.mutation_gate import (
     CanonicalMutationError,
     CanonicalMutationGate,
@@ -21,6 +17,7 @@ from odyssey_core.mutation_gate import (
 )
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.persistence import ActorInput, PersistenceOperation
+from odyssey_core.prepared_property_mutation import execute_prepared_property_mutation
 from odyssey_core.reference_binding import ReferenceBindingError, render_reference_facts
 from odyssey_core.reference_preflight import (
     ReferencePreflightError,
@@ -35,7 +32,7 @@ from odyssey_core.request_planning import (
     WriteAction,
 )
 from odyssey_core.storage import NoteUnavailableError, VaultRepository
-from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
+from odyssey_core.write_target import WriteTargetOutcome
 
 from .schema import TASK_TYPE
 
@@ -146,29 +143,18 @@ class TaskDirectMutationService:
                 PropertyChange("completed_at", "remove", None),
             )
             operation = "task_reopened"
-        unit = KnowledgeUnit(
-            SelectionCriteria(note.metadata["name"], note.metadata["name"], TASK_TYPE, (), None),
-            "amend",
-            changes,
-            (),
-            (),
-            (),
-            "one",
-        )
         try:
-            receipt = self._gate.execute_prepared(
-                command,
-                target,
-                lambda _target: materialize_update(
-                    unit,
-                    WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=note_id),
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    now=now,
-                    request_id=request_id,
-                    fact_ordinals=(),
-                ),
+            receipt = execute_prepared_property_mutation(
+                gate=self._gate,
+                command=command,
+                target=target,
+                note_type=TASK_TYPE,
+                changes=changes,
+                repository=self.repository,
+                schema=self.schema,
+                actor=actor,
+                now=now,
+                request_id=request_id,
             )
         except CanonicalPostwriteError as error:
             raise TaskDirectMutationError(

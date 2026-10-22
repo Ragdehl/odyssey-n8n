@@ -13,11 +13,7 @@ from datetime import datetime
 from typing import Any
 
 from odyssey_core.git_history import HistoryRecorder
-from odyssey_core.materialization import (
-    MaterializationError,
-    materialize_create,
-    materialize_update,
-)
+from odyssey_core.materialization import MaterializationError, materialize_create
 from odyssey_core.mutation_gate import (
     CanonicalCreateReceipt,
     CanonicalMutationError,
@@ -28,6 +24,7 @@ from odyssey_core.mutation_gate import (
     MutationCommand,
 )
 from odyssey_core.persistence import ActorInput, PersistenceOperation
+from odyssey_core.prepared_property_mutation import execute_prepared_property_mutation
 from odyssey_core.reference_preflight import ReferencePreflightError, preflight_write_action
 from odyssey_core.request_planning import (
     KnowledgeUnit,
@@ -37,7 +34,7 @@ from odyssey_core.request_planning import (
 )
 from odyssey_core.storage import VaultRepository
 from odyssey_core.temporal import TemporalAnchor
-from odyssey_core.write_target import WriteTargetDecision, WriteTargetOutcome
+from odyssey_core.write_target import WriteTargetOutcome
 
 from .schema import EVENT_TYPE
 
@@ -249,30 +246,17 @@ class EventMutationService:
                     if field in existing
                     and not any(changed.field == field for changed in occurrence.properties())
                 )
-            unit = KnowledgeUnit(
-                SelectionCriteria(
-                    target.note.metadata["name"], target.note.metadata["name"], EVENT_TYPE, (), None
-                ),
-                "amend",
-                changes,
-                (),
-                (),
-                (),
-                "one",
-            )
-            receipt = self._gate.execute_prepared(
-                command,
-                target,
-                lambda _target: materialize_update(
-                    unit,
-                    WriteTargetDecision(WriteTargetOutcome.UPDATE, existing_note_id=note_id),
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    now=now,
-                    request_id=request_id,
-                    fact_ordinals=(),
-                ),
+            receipt = execute_prepared_property_mutation(
+                gate=self._gate,
+                command=command,
+                target=target,
+                note_type=EVENT_TYPE,
+                changes=changes,
+                repository=self.repository,
+                schema=self.schema,
+                actor=actor,
+                now=now,
+                request_id=request_id,
             )
         except CanonicalPostwriteError as error:
             raise EventMutationError(

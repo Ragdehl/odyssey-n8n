@@ -183,6 +183,19 @@
       "verified_real_browser_n8n": false
     },
     {
+      "id": "E6-CORE-PROPERTY-USECASE",
+      "phase": "E6",
+      "invariant": "Un caso de uso Core reutilizable preserva CAS, actor, esquema, target y readback en mutaciones directas de Tasks y Events.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/core/test_e6_prepared_property_mutation.py::test_core_prepared_property_use_case_preserves_e3_readback_and_cas",
+        "tests/core/test_e6_prepared_property_mutation.py::test_core_property_boundary_rejects_mixed_type_tokens_before_write",
+        "tests/core/test_e6_prepared_property_mutation.py::test_core_property_use_case_never_crosses_another_repository_or_schema"
+      ],
+      "blocks_p4_dev": false,
+      "verified_real_browser_n8n": false
+    },
+    {
       "id": "P4-NM-GRAPH-PREWRITE",
       "phase": "P4",
       "invariant": "N:M conserva los fragmentos originales y prueba aristas precedentes sin convertir una mención Router en identidad canónica ni autorización de escritura.",

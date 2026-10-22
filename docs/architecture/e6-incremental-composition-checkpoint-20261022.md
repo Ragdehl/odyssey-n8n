@@ -111,3 +111,55 @@ evidencia: `/home/ragdehl/projects/.odyssey-agent-runs/e6-scoped-route-review-20
 Esta revisión no ejecutó nuevamente la suite y NO es aceptación DEV.
 La primera aceptación real GPT→n8n→Markdown→Calendar para E6 sigue pendiente.
 DEV permanece en `6debe8a`; no se escribió en vault ni se hizo deploy.
+
+
+## E6.2 — Primer corte: caso de uso Core compartido para updates de propiedades
+
+**Problema observado:** tanto `TaskDirectMutationService.set_completed` como
+`EventMutationService.change` construían objetos genéricos
+`KnowledgeUnit`, `SelectionCriteria` y `WriteTargetDecision` en cada App
+y llamaban a `materialize_update` a través de E3. Dos rutas con el
+mismo contrato de escritura y distintas reglas de lifecycle.
+
+**Cambio:** `odyssey_core/prepared_property_mutation.py` introduce el caso
+de uso acotado `execute_prepared_property_mutation`. Las Apps siguen
+preparando el target en E3 y decidiendo si su estado admite el cambio y
+qué `PropertyChange` debe aplicarse. Core prepara el objeto de escritura,
+ejecuta `CanonicalMutationGate.execute_prepared`, obliga al CAS físico
+original y devuelve el recibo físico + historial. El nuevo límite verifica
+que el repositorio y esquema correspondan al gate que preparó el target,
+que el tipo coincida con el target y comando, que request/actor/reloj
+correspondan y que los cambios sean valores tipados no vacíos.
+
+**Antes (duplicado en Apps):**
+```python
+unit = KnowledgeUnit(SelectionCriteria(...), "amend", changes, ...)
+receipt = gate.execute_prepared(
+    command, target,
+    lambda _: materialize_update(unit, WriteTargetDecision(...), ...),
+)
+```
+
+**Después (reutilizando Core):**
+```python
+receipt = execute_prepared_property_mutation(
+    gate=gate, command=command, target=target,
+    note_type="event", changes=changes,
+    repository=repository, schema=schema,
+    actor=actor, now=now, request_id=request_id,
+)
+```
+
+**Fuera de alcance:** No se modifica `create_subtask`, Event CREATE,
+resolución de identidad/Event title, Temporal, n8n ni el Writer general.
+Tampoco se convierten las reglas de Task y Event en condiciones dentro
+de Core. No hay transacción entre notas nuevas ni mecanismo paralelo de
+persistencia.
+
+**Validación local inicial:** 36 pruebas focales PASS sobre el nuevo
+caso de uso, mutaciones Events+Calendar, Tasks+subtasks y E3 gate,
+incluidos tokens stale, write readback, tipo incorrecto, repo/esquema ajenos
+y actor/request alterados. **Gate transversal completo: 1838 Python +181 JS
++7 subtests PASS, 132 ficheros, 11 grupos; Ruff PASS y acceptance ledger
+PASS (19 contratos, 49 anclajes).** Revisión independiente focal y primer
+E2E sintético E6 en DEV siguen separados.
