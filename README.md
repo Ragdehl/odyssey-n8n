@@ -46,9 +46,9 @@ See [Odyssey Knowledge Model](docs/architecture/knowledge-model-direction.md) an
 
 ## Current product stage
 
-Odyssey has completed the first real n8n/Core end-to-end path and its reliability hardening. Current work is **Phase 20 — Odyssey Online MVP**, aimed at making the smallest standalone mobile experience usable before real-user feedback drives further product work.
+Odyssey has progressed through the Odyssey Online MVP and incremental E1–E6 contracts in DEV. **Do not infer the current phase or deployment from this README.** The [Functional Roadmap](docs/architecture/functional-roadmap.md) is the one short current-state entry point; [historical checkpoints](docs/architecture/functional-roadmap-history-20261023.md) are preserved separately.
 
-The [Functional Roadmap](docs/architecture/functional-roadmap.md) is the single canonical source for the exact current subphase, completed checkpoints, and next gate.
+Before developing or using an LLM, read the short [always-on AGENTS contract](AGENTS.md), the [instruction/skill map](docs/architecture/instruction-map.md) and the relevant scoped skills in `.codex/skills/`. A read-only context preflight is available with `python3 scripts/odyssey_context_doctor.py`; validate the instruction index with `python3 scripts/odyssey_docs_guard.py`.
 
 ## Repository and data boundaries
 

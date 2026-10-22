@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Generality"
+  short_description: "Review reusable semantics and resist hardcoded examples"
+  default_prompt: "Use $odyssey-generality for this Odyssey task."

@@ -180,6 +180,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_runtime_boundary.py",
     ),
     "workflow_and_web": (
+        "tests/runtime/test_agent_instruction_layout.py",
         "tests/test_odyssey_online_workflow.py",
         "tests/test_odyssey_web_static.py",
         "tests/benchmarks/test_p4_runtime_http_live_receipts.py",

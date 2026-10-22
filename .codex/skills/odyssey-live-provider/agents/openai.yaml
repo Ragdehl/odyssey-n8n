@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Live Provider"
+  short_description: "Use protected OpenAI environment and bounded model gates"
+  default_prompt: "Use $odyssey-live-provider for this Odyssey task."

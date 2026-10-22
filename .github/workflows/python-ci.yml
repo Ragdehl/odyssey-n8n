@@ -36,6 +36,9 @@ jobs:
 
       # User-approved invariants cannot vanish from refactors or get marked
       # DEV-ready on the strength of local tests alone.
+      - name: Validate agent skills, compact roadmap and document links
+        run: python scripts/odyssey_docs_guard.py
+
       - name: Validate user invariant acceptance ledger
         run: python scripts/odyssey_acceptance_contracts.py
 

@@ -74,12 +74,15 @@ def test_archived_agent_history_remains_accessible_but_not_primary_status():
     agent = (ROOT / "AGENTS.md").read_text()
     history = (ROOT / "docs/architecture/agent-execution-history-202610.md").read_text()
     roadmap = (ROOT / "docs/architecture/functional-roadmap.md").read_text()
-    assert len(agent.splitlines()) < 620  # Prevent silent return of timeline bloat
-    assert "agent-execution-history-202610.md" in agent
-    assert "odyssey-acceptance-contracts.json" in agent
+    assert len(agent.splitlines()) <= 150  # Keep always-on guidance compact.
+    assert "odyssey-llm-stage" in agent and "odyssey-generality" in agent
+    assert "odyssey-verify-change" in agent
     assert "### 2026-10-16 — P4 five-stage stabilized" in history
     assert "### 2026-10-13 — Hybrid validator generalization" in history
-    assert "## ➡️ Seguimiento activo" in roadmap
+    assert "## Current —" in roadmap
+    assert "functional-roadmap-history-20261023.md" in roadmap
+    assert (ROOT / "docs/architecture/functional-roadmap-history-20261023.md").is_file()
+    assert (ROOT / "docs/architecture/instruction-map.md").is_file()
 
 
 def test_dev_pull_requests_receive_an_independent_offline_contract_gate():

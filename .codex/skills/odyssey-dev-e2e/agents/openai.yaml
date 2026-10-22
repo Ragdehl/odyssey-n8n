@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey DEV E2E"
+  short_description: "Verify real browser, n8n, Core writes and recovery"
+  default_prompt: "Use $odyssey-dev-e2e for this Odyssey task."

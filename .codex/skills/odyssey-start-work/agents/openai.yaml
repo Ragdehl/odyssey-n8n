@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Start Work"
+  short_description: "Check branch, worktrees and live DEV before coding"
+  default_prompt: "Use $odyssey-start-work for this Odyssey task."

@@ -1,10 +1,12 @@
 # Plan de continuidad: arquitectura híbrida y aplicaciones reutilizables
 
-**Dirección aprobada por el usuario el 13-10-2026.** Este documento define el objetivo, los contratos deseados, las etapas, sus criterios de aceptación y las reglas de continuidad entre agentes/chats. **El estado vivo, el siguiente paso y el historial de ejecución tienen un único dueño: [Functional Roadmap](functional-roadmap.md), apartado «Seguimiento activo — DEV híbrido y extensibilidad».** No duplicar aquí indicadores de ejecución.
+**Dirección aprobada por el usuario el 13-10-2026.** Este documento define el objetivo, los contratos deseados, las etapas, sus criterios de aceptación y las reglas de continuidad entre agentes/chats. **El estado vivo, el siguiente paso y el historial de ejecución tienen un único dueño: [Functional Roadmap](functional-roadmap.md), apartado «Current — estado actual».** No duplicar aquí indicadores de ejecución.
 
 ## Objetivo y motivación
 
 Permitir incorporar Events, Projects y otras capacidades sin replicar la interpretación común, la resolución de identidades, el transporte de evidencias, la autorización de cambios ni la escritura canónica. Mantener la arquitectura Router híbrido → grupos semánticos → Temporal/aplicaciones → Core Planner/validación → persistencia Markdown; una aplicación debe aportar **solo** su semántica/lifecycle diferencial. Evitar transformaciones o parches específicos de frases del corpus. Adoptar Clean Architecture **incrementalmente**, sin refactorización global ni bloqueo preventivo de DEV.
+
+> **Archivo de la secuencia aprobada en octubre:** los hitos E1–E6 se ejecutaron e integraron después. El orden obligatorio que se describe abajo fue una decisión histórica; **no es una lista de trabajo pendiente**. Para estado, próximo paso y despliegue vigentes, consultar [Functional Roadmap](functional-roadmap.md) y Git/runtime.
 
 ## Prioridad aprobada el 14-10-2026 — consolidar antes de seguir ampliando casos
 
@@ -116,7 +118,7 @@ No asumir que añadir ejemplos o subir reasoning asegura corrección. El guard e
 
 ## Protocolo de actualización y continuidad entre chats
 
-Al **comenzar** cualquier chat/agente de Odyssey: (1) localizar el worktree correcto y leer `AGENTS.md`; (2) consultar el bloque «Seguimiento activo — DEV híbrido y extensibilidad» de `functional-roadmap.md`; (3) leer este plan y los contratos enlazados de la etapa activa; (4) verificar `git status`, `git log`, PR y estado DEV **antes de afirmar hechos**; (5) comunicar en español «hecho / falta / próximo paso / bloqueadores», sin pedir al usuario que reconstruya el contexto.
+Al **comenzar** cualquier chat/agente de Odyssey: (1) localizar el worktree correcto y leer `AGENTS.md`; (2) consultar el bloque «Current — estado actual» de `functional-roadmap.md`; (3) leer este plan y los contratos enlazados de la etapa activa; (4) verificar `git status`, `git log`, PR y estado DEV **antes de afirmar hechos**; (5) comunicar en español «hecho / falta / próximo paso / bloqueadores», sin pedir al usuario que reconstruya el contexto.
 
 Al **terminar cada paso sustancial**, en la misma unidad de trabajo: actualizar **primero** el estado canónico y el próximo paso del roadmap; registrar fecha, rama/commit/PR si existen, archivos o límites modificados, tests/comandos con resultado, estado DEV/PROD, bloqueadores y decisión de continuación; enlazar en este plan solo si cambia un criterio de arquitectura. Un test pasado no implica deployment ni un commit implica revisión humana. Si queda trabajo sin verificar, registrarlo como pendiente, no como completado. Al cerrar una sesión sin cambios, no agregar notas vacías. No sobreescribir historia previa; mantener checkpoints compactos y referencias a evidencia.
 

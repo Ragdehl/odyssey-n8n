@@ -17,8 +17,8 @@ def _fixture(tmp_path, monkeypatch, *, committed=False, dev="old-dev"):
         '"max_evidence_level": "isolated_http"}]}'
     )
     (root / "docs/architecture/functional-roadmap.md").write_text(
-        "# Roadmap\n\n## ➡️ Seguimiento activo — DEV híbrido y extensibilidad\n\n"
-        "**P4 ESTADO ACTIVO:** Verificado solo offline.\n\n"
+        "# Roadmap\n\n## Current — 23 October 2026\n\n"
+        "**Latest verified before the documentation refactor**: fixture.\n\n"
         "## Siguiente\n\nNo actualizar manualmente.\n"
     )
     monkeypatch.setattr(

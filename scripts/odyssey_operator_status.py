@@ -12,14 +12,18 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 
-from scripts.odyssey_acceptance_contracts import inspect_contracts
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.odyssey_acceptance_contracts import inspect_contracts  # noqa: E402
+
 DEV = ROOT.parent / "odyssey-dev"
 ROADMAP = ROOT / "docs/architecture/functional-roadmap.md"
-HEADER = "## ➡️ Seguimiento activo — DEV híbrido y extensibilidad"
+HEADER = "## Current —"
 
 
 def _git(path: Path, *args: str) -> str | None:
@@ -43,9 +47,12 @@ def operator_status(root: Path = ROOT, dev: Path = DEV) -> dict:
         raise ValueError("Current canonical roadmap entry is missing")
     end = roadmap.find("\n## ", start + len(HEADER))
     current = roadmap[start : end if end >= 0 else len(roadmap)]
-    first = next((line.strip() for line in current.splitlines() if line.startswith("**P4 ")), None)
+    first = next(
+        (line.strip() for line in current.splitlines() if line.startswith("**Latest verified")),
+        None,
+    )
     if not first:
-        raise ValueError("Active P4 roadmap checkpoint is missing")
+        raise ValueError("Current canonical roadmap checkpoint is missing")
     contracts = inspect_contracts(root=root)
     ledger = json.loads((root / "docs/architecture/odyssey-acceptance-contracts.json").read_text())
     blocked_ids = set(contracts["blocked_product_contracts"])
@@ -75,7 +82,7 @@ def operator_status(root: Path = ROOT, dev: Path = DEV) -> dict:
         "feature_tree_clean": not bool(dirty),
         "installed_dev_commit": installed_dev,
         "branch_matches_installed_dev": head == installed_dev,
-        "roadmap_checkpoint": first.split("**", 2)[1],
+        "roadmap_checkpoint": first.replace("**", ""),
         "registered_acceptance_invariants": contracts["contract_count"],
         "acceptance_test_anchors": contracts["existing_offline_test_anchors"],
         "verified_browser_n8n": False,
@@ -103,9 +110,12 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
-        print("Odyssey P4: NO LISTA PARA DEV (sin E2E auténtico validado)")
+        print("Odyssey — estado de Git/DEV y contratos de aceptación (solo lectura)")
+        print(
+            "El ledger indica garantías pendientes, no invalida automáticamente el DEV ya desplegado."
+        )
         print(f"Rama de trabajo: {result['feature_branch']} @ {result['feature_commit']}")
-        print(f"DEV instalado: {result['installed_dev_commit']} (distinto de la rama)")
+        print(f"DEV instalado: {result['installed_dev_commit']} (checkout comprobado)")
         print(
             f"Árbol de trabajo: {'limpio' if result['feature_tree_clean'] else 'CAMBIOS SIN COMMIT'}"
         )

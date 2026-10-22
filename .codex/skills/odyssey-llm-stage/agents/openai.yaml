@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey LLM Stage"
+  short_description: "Inherit existing prompts, strict model contracts and tests"
+  default_prompt: "Use $odyssey-llm-stage for this Odyssey task."
