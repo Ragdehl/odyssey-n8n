@@ -266,3 +266,41 @@ def test_date_only_cancellation_remains_supported_for_timed_event(tmp_path):
     result = run(schema, repo, candidate, temporal)
     assert result.status.value == "completed"
     assert _actual(repo)["event_status"] == "cancelled"
+
+
+@pytest.mark.parametrize(
+    "clock",
+    (
+        "5 pm",
+        "5 p.m.",
+        "17 h",
+        "17h30",
+        "17:30",
+        "at five",
+        "a las ocho",
+        "por la tarde",
+    ),
+)
+def test_quoted_time_cannot_be_resolved_to_date_only(tmp_path, clock):
+    # Independent audit found Temporal could quote the *whole* source but
+    # resolve only Monday, silently dropping the clock and cancelling 18:00.
+    schema, repo = _seed(
+        tmp_path, name="Excursion", start="2026-10-19", start_at="2026-10-19T18:00:00+02:00"
+    )
+    source = f"Cancel Excursion {clock} on Monday."
+    quote = f"{clock} on Monday"
+    candidate = _candidate(source, "CANCEL", "Excursion", ((quote, "DATE"),))
+    temporal = TemporalInterpretation(
+        source,
+        (
+            TemporalMention(
+                quote,
+                TemporalResolution(TemporalResolutionKind.EXACT_DATE, exact_date="2026-10-19"),
+            ),
+        ),
+    )
+    result = run(schema, repo, candidate, temporal)
+    assert result.status.value == "needs_attention"
+    assert result.planning_error == "EVENT_TARGET_CLOCK_UNVERIFIED"
+    assert _actual(repo)["event_status"] == "scheduled"
+    assert _actual(repo)["revision"] == 1

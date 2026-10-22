@@ -82,6 +82,29 @@ def _source_weekday(candidate: EventCandidate) -> int | None:
     return matches[0]
 
 
+def _source_has_clock_qualifier(text: str) -> bool:
+    """Does a source span demand independent verification of clock time?
+
+    Exact date alone cannot authorize cancellation if its own source quote
+    includes a wall clock (numeric, textual or daypart). Conservative refusals
+    are safer than silently cancelling another occurrence on the same date.
+    """
+    return (
+        re.search(
+            r"\b(?:[01]?\d|2[0-3])\s*(?:[ap]\s*\.?\s*m\.?|"
+            r"h(?:eures?)?|heures?|hrs?|hours?|o'clock)\b"
+            r"|\b(?:[01]?\d|2[0-3])\s*(?:h|:)\s*[0-5]\d\b"
+            r"|\b(?:am|pm|noon|midnight|midi|minuit|"
+            r"morning|afternoon|evening|tonight|matin|soir|après-midi)\b"
+            r"|\ba\s+las\b|\b(?:por|de)\s+la\s+(?:mañana|tarde|noche)\b"
+            r"|\b(?:at|à)\s+(?:one|two|three|four|five|six|seven|"
+            r"eight|nine|ten|eleven|twelve|\d{1,2})\b",
+            text.casefold(),
+        )
+        is not None
+    )
+
+
 def _exact_anchor_for_quote(
     candidate: EventCandidate,
     temporal: TemporalInterpretation | None,
@@ -156,12 +179,17 @@ def _exact_anchor_for_quote(
     value = resolution.exact_date or resolution.exact_datetime
     if value is None:
         raise EventRouteError("EVENT_TARGET_TEMPORAL_UNRESOLVED")
-    return TemporalAnchor.from_value(value)
+    anchor = TemporalAnchor.from_value(value)
+    if anchor.time is None and _source_has_clock_qualifier(quoted[0]):
+        raise EventRouteError("EVENT_TARGET_CLOCK_UNVERIFIED")
+    return anchor
 
 
 def _reference_has_no_temporal_qualifier(reference: str | None) -> bool:
     """Fail closed when the Event name quote hides a relative day or clock."""
     if not isinstance(reference, str) or not reference.strip():
+        return False
+    if _source_has_clock_qualifier(reference):
         return False
     return (
         re.search(
