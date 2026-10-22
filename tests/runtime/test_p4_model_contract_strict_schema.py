@@ -166,3 +166,15 @@ def test_tasks_scope_counts_predicates_not_people_without_losing_distinct_obliga
     assert "several coordinated" in prompt
     assert "multiple independent activities" in prompt
     assert "If uncertain, return false." in prompt
+
+
+def test_events_tasks_router_demands_exact_two_independent_scopes():
+    """Prevent regressions where model describes an independent duo with one scope."""
+    _, prompt = contract.capability_route_contract(enable_events=True)
+    assert "EXACTLY TWO app_scopes" in prompt
+    assert "capability=events" in prompt
+    assert "capability=tasks" in prompt
+    assert "independent Event+Task request separable with only one app_scope" in prompt
+    assert "Temporal is a shared" in prompt
+    assert "byte-for-byte complete partition" in prompt
+    assert "semantic reviewer BEFORE either write" in prompt
