@@ -4453,10 +4453,12 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 reasoning_effort=event_interpreter.reasoning_effort,
                 usage=normalize_provider_usage(event_interpreter.last_usage),
             )
-            if (
-                candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}
-                or candidate.interpretation.operation
-                in {EventOperation.CANCEL, EventOperation.QUERY}
+            if candidate.interpretation.operation in {
+                EventOperation.CREATE,
+                EventOperation.UPDATE,
+                EventOperation.CANCEL,
+            } or (
+                candidate.interpretation.operation is EventOperation.QUERY
                 and bool(candidate.interpretation.temporal_mentions)
             ):
                 resolved = prepare_temporal_interpretation(

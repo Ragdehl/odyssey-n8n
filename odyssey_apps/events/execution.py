@@ -107,13 +107,42 @@ def _exact_anchor_for_quote(
         if bound == resolved:
             return True
         longer, shorter = sorted((bound, resolved), key=len, reverse=True)
-        # The shorter text must remain a complete, unambiguous source
-        # phrase. Never let an isolated weekday override an explicit date.
-        if any(ch.isdigit() for ch in longer) and not any(ch.isdigit() for ch in shorter):
+        # Only allow an omitted LEADING weekday/article before a fully
+        # explicit dated source span. Relative modifiers ('next Monday')
+        # alter identity and must never be silently dropped.
+        if source.count(shorter) != 1 or not re.search(r"\b\d{4}\b", shorter):
             return False
-        if source.count(shorter) != 1:
+        if re.search(r"\b\d{1,2}\b", shorter) is None or not longer.endswith(shorter):
             return False
-        return re.search(r"(?<!\w)" + re.escape(shorter) + r"(?!\w)", longer) is not None
+        prefix = longer[: -len(shorter)].strip().casefold()
+        return prefix in {
+            "el",
+            "le",
+            "on",
+            "lunes",
+            "martes",
+            "miércoles",
+            "miercoles",
+            "jueves",
+            "viernes",
+            "sábado",
+            "sabado",
+            "domingo",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+            "lundi",
+            "mardi",
+            "mercredi",
+            "jeudi",
+            "vendredi",
+            "samedi",
+            "dimanche",
+        }
 
     matches = [m for m in temporal.mentions if same_source_span(quoted[0], m.temporal_text)]
     if len(matches) != 1:
@@ -128,6 +157,69 @@ def _exact_anchor_for_quote(
     if value is None:
         raise EventRouteError("EVENT_TARGET_TEMPORAL_UNRESOLVED")
     return TemporalAnchor.from_value(value)
+
+
+def _bare_cancel_has_no_unreviewed_qualifiers(source: str, reference: str | None) -> bool:
+    """Only an unqualified cancellation can proceed without Temporal evidence."""
+    if not isinstance(reference, str) or not reference:
+        return False
+    hits = tuple(re.finditer(re.escape(reference), source))
+    if len(hits) != 1:
+        return False
+    hit = hits[0]
+    before = " ".join(source[: hit.start()].casefold().split())
+    after = source[hit.end() :].strip(" \t.!?¿¡:;")
+    if after:
+        return False
+    if before not in {
+        "cancela",
+        "cancela el",
+        "cancela la",
+        "cancelar",
+        "por favor cancela",
+        "por favor cancela el",
+        "por favor cancela la",
+        "cancel",
+        "cancel the",
+        "please cancel",
+        "please cancel the",
+        "annule",
+        "annule le",
+        "annule la",
+        "annuler",
+        "supprime",
+        "supprime le",
+        "supprime la",
+        "elimina",
+        "elimina el",
+        "elimina la",
+        "borra",
+        "borra el",
+        "borra la",
+    }:
+        return False
+    # A quoted reference may itself contain the omitted time qualifier.
+    # This is a veto for undated writes, not a temporal resolver.
+    return (
+        re.search(
+            r"\b(?:next|last|today|tomorrow|yesterday|this|monday|tuesday|"
+            r"wednesday|thursday|friday|saturday|sunday|"
+            r"lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo|"
+            r"mañana|hoy|ayer|siguiente|próximo|proximo|próxima|proxima|"
+            r"lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|"
+            r"demain|aujourd'hui|hier|prochain|prochaine|"
+            r"day|days|week|weeks|month|months|year|years|"
+            r"día|dia|días|dias|semana|semanas|mes|meses|año|años|"
+            r"jour|jours|semaine|semaines|mois|année|annee|années|annees|"
+            r"january|february|march|april|may|june|july|august|september|october|"
+            r"november|december|enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+            r"septiembre|octubre|noviembre|diciembre|janvier|février|fevrier|mars|"
+            r"avril|mai|juin|juillet|août|aout|décembre|decembre)\b"
+            r"|\b\d{4}\b|\b\d{1,2}[-/.]\d{1,2}\b",
+            reference.casefold(),
+        )
+        is None
+    )
 
 
 def _target_identity_anchor(
@@ -145,8 +237,14 @@ def _target_identity_anchor(
     if event.operation is not EventOperation.CANCEL:
         return None
     if not event.temporal_mentions:
-        if temporal is not None and temporal.mentions:
-            raise EventRouteError("EVENT_CANCEL_UNMATCHED_TEMPORAL")
+        # Shared E2 Temporal returns no interpretation if it detects no
+        # temporal mention. A bare CANCEL must prove its own exact-source
+        # grammar; never infer an empty TemporalInterpretation.
+        if temporal is not None:
+            if temporal.source_text != event.source_text or temporal.mentions:
+                raise EventRouteError("EVENT_CANCEL_UNMATCHED_TEMPORAL")
+        if not _bare_cancel_has_no_unreviewed_qualifiers(event.source_text, event.event_reference):
+            raise EventRouteError("EVENT_CANCEL_UNREVIEWED_DATE_QUALIFIER")
         return None
     if len(event.temporal_mentions) != 1:
         raise EventRouteError("EVENT_CANCEL_MULTIPLE_DATES_AMBIGUOUS")
