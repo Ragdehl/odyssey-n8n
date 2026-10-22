@@ -75,3 +75,38 @@ the approved `5951830` active until the new patch is accepted.
 - Not every linguistic mixed-message corner case was sent live, but the
   1856-case cross-surface gate preserves those deterministic contracts.
 - All user-facing mutations in this release trial are synthetic.
+
+
+## Closure after the independent re-audit and DEV promotion
+
+The earlier source-level FAIL is **resolved**, not discarded:
+- Patch commit: `7fbbd9015e8f3a309fb4b6cd4f884f5cb5c62d34`.
+- Independent read-only source re-audit **PASS** (no blocking findings):
+  `/home/ragdehl/projects/.odyssey-agent-runs/e6-weekend-release-audit-20261022/fix-findings.md`.
+- Complete offline gate at this commit **1856 Python +181 JS PASS**,
+  acceptance ledger **21 invariants, 58 anchors**.
+- Deployed after backing up both DEV vault/state and n8n volume;
+  old rollback version `5951830` retained. Deployment, runtime
+  HTTP 200, n8n HTTP 200, Git DEV checkout and deployed marker
+  all matched `7fbbd90`.
+- Real GPT/n8n E2E **PASS**, including synthetic Event creation,
+  wrong-date refusal, valid cancellation, reschedule without
+  multiday hallucination and byte-identical replay.
+  Evidence:
+  `/home/ragdehl/projects/.odyssey-agent-runs/e6-weekend-audited-dev-acceptance-20261022/`.
+- DEV **readonly Chromium walkthrough PASS** at final deployed code,
+  including retained conversations/notes and SVG diagnostics.
+- Four additional historical synthetic browser test combinations
+  **PASS**: Maya/SELF × (mobile, desktop) and Person+Task with
+  backlink/target_date/replay × (mobile, desktop).
+  These four use recorded provider outputs and isolated temporary
+  Markdown, not the real DEV GPT path.
+- Public access route inventory and auth policy: routes for UI,
+  chat, notes and calendar present, one access policy; this is
+  not proof of connectivity from an external phone.
+
+**Weekend demo readiness assessment:** DEV usable and source audit
+closed. Latency from real GPT remains significant, and external-device
+connectivity and exhaustive natural-language combinations remain
+unverified. Do not present the app as universally error-free or
+make production changes.
