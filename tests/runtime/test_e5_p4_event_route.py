@@ -46,6 +46,48 @@ def test_p4_events_only_executes_one_authenticated_e5_delegate_and_replays(tmp_p
     assert replay["delivery_replayed"] is True and len(calls) == 1
 
 
+def test_p4_events_with_lower_level_temporal_dependency_remains_one_app_route(tmp_path):
+    _repo, actor, service, runtime = _fixture(tmp_path)
+    received = []
+
+    def delegate(source, locator, identity):
+        received.append((source, identity))
+        return ApplicationResult(locator, ApplicationStatus.COMPLETED, (), ())
+
+    service.event_delegate = delegate
+    service.client = RecordedClient([route("events", "temporal")])
+    result = runtime.execute_product(
+        "Cambia el concierto al jueves.", "e5-event-with-temporal", "main", actor
+    )
+    assert result["status"] == "completed"
+    assert len(received) == 1 and received[0][1] == actor
+
+
+def test_p4_events_with_temporal_and_one_valid_event_scope(tmp_path):
+    _repo, actor, service, runtime = _fixture(tmp_path)
+    calls = []
+
+    def delegate(source, locator, identity):
+        calls.append((source, locator, identity))
+        return ApplicationResult(locator, ApplicationStatus.COMPLETED, (), ())
+
+    service.event_delegate = delegate
+    proposed = route("events", "temporal")
+    proposed["app_scopes"] = [
+        {
+            "capability": "events",
+            "description": "one reschedule",
+            "depends_on_another_scope": False,
+        }
+    ]
+    service.client = RecordedClient([proposed])
+    result = runtime.execute_product(
+        "Cambia el concierto al jueves.", "e5-event-with-scope", "main", actor
+    )
+    assert result["status"] == "completed"
+    assert len(calls) == 1 and calls[0][2] == actor
+
+
 def test_p4_mixed_events_and_tasks_abstains_before_any_e3_write(tmp_path):
     _repo, actor, service, runtime = _fixture(tmp_path)
     calls = []

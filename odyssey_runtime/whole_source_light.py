@@ -750,7 +750,8 @@ class WholeSourceLightExecutor:
                 and scopes[0].get("depends_on_another_scope") is False
             )
             if (
-                capabilities != ["events"]
+                set(capabilities) not in ({"events"}, {"events", "temporal"})
+                or len(capabilities) != len(set(capabilities))
                 or route.get("self_relation_span") is not None
                 or (scopes != [] and not one_event_scope)
                 or self.event_delegate is None

@@ -96,7 +96,12 @@ def day_events(date):
 def main():
     deployed = (ROOT / "runtime/deployed-commit").read_text().strip()
     expected = (SRC / "deploy/odyssey-dev-runtime.service").read_text()
-    assert deployed.startswith("924067e"), ("not deployed candidate", deployed[:12])
+    assert (
+        deployed
+        == subprocess.check_output(
+            ["git", "-C", "/home/ragdehl/projects/odyssey-dev", "rev-parse", "HEAD"], text=True
+        ).strip()
+    ), ("source/deployed mismatch", deployed[:12])
     assert "ODYSSEY_ENABLED_APPLICATIONS=tasks,events" in expected
     repo = VaultRepository(ROOT / "vault")
     before_events = {meta["id"] for _, meta in events(repo)}
