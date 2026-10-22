@@ -4,6 +4,13 @@ This is Odyssey's canonical source for **functional implementation status, inten
 
 Status: ✅ **IMPLEMENTED** · ➡️ **NEXT** · ⬜ **PLANNED** · 💡 **LATER / CONDITIONAL**
 
+## ✅ E5 — aceptación funcional básica en DEV (22-10-2026)
+
+**Aceptada para DEV (no producción):** la versión de código **\`57fab05\`**, desplegada en DEV, terminó una prueba real única de creación → replay con mismo ID → reprogramación → consulta → cancelación. GPT, n8n, Core/E3, Markdown, Calendar y Chromium participaron en la cadena real, con datos sintéticos. Las cuatro operaciones de escritura/replay devolvieron HTTP 200/completed; el replay preservó los hashes de Markdown; la consulta devolvió **exactamente el Event creado**; cancelación lo ocultó del calendario. Chromium confirmó create/update/cancel en móvil y escritorio, con actualización tras recarga y cero excepciones JS. [Recibo verificado](e5-dev-basic-e2e-acceptance-20261022.json). Producción no se ha modificado.
+
+La aceptación es **funcional básica**, no un certificado de rendimiento p95 ni prueba exhaustiva: recurrencias semanales finitas y peticiones mixtas/ambiguas tienen regresiones dirigidas pero no forman parte de este ensayo HTTP completo. E5 no está promovida a PROD. El procedimiento acordado sustituye las cuatro auditorías repetitivas por invariantes reproducibles y una aceptación E2E acotada.
+
+
 ## ➡️ E5: Router híbrido conectado a Events, GPT real + E3 probado; n8n/Chromium aún pendientes (22-10-2026; no desplegada)
 
 La nueva rama `feat/e5-events-integration-20261021` se basa en E4 aceptada funcionalmente en DEV y recupera la interpretación Events anterior (9/9 GPT real para intenciones, sin escrituras). **Nuevo E5 en esta rama:** Event es tipo canónico de aplicación registrado sin duplicar Writer; Calendar y la interfaz proyectan eventos de día, horarios con offset, intervalos, cancelaciones y recurrencia semanal finita. Servicio Events CREATE/RESCHEDULE/CANCEL de comandos confiables ya pasa por **Core preflight + materialize_create/update + CanonicalMutationGate E3** con CAS y readback, no es aún accesible desde GPT/chat. Evidencia de bóvedas sintéticas: **132 Python de Events+Calendar y 15 Node del calendario PASS**. [Informe técnico](e5-integrated-core-calendar-20261021.md). Próximo paso: **Router/E2/Temporal y actor + manifest E3 de entrega de chat** para operaciones CREATE/UPDATE/CANCEL/QUERY, después GPT real→n8n→Markdown→Calendar/Chromium y aceptación funcional acotada, sin ciclo repetitivo de cuatro auditorías. **DEV sigue con E4 `d03737f`; E5 NO desplegada ni aprobada para PROD.**

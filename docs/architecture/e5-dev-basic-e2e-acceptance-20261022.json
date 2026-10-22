@@ -1,0 +1,116 @@
+{
+  "state": "E5_BASIC_DEV_E2E_PASS",
+  "deployed_source_commit": "57fab05c6fbb3547cb66f35c2ada8100de93c9df",
+  "scope": "isolated DEV, synthetic event, real GPT + n8n + E3 Markdown + Calendar Chromium",
+  "steps": [
+    {
+      "step": "create",
+      "http": 200,
+      "status": "completed",
+      "seconds": 12.17
+    },
+    {
+      "step": "create_replay",
+      "http": 200,
+      "status": "completed",
+      "seconds": 0.27
+    },
+    {
+      "step": "reschedule",
+      "http": 200,
+      "status": "completed",
+      "seconds": 17.89
+    },
+    {
+      "step": "cancel",
+      "http": 200,
+      "status": "completed",
+      "seconds": 15.68
+    }
+  ],
+  "query": {
+    "status": "completed",
+    "snapshot_count": 1,
+    "contains_exact_event": true
+  },
+  "replay": {
+    "byte_identical": true
+  },
+  "browser": {
+    "browser_create": {
+      "pass": true,
+      "rows": [
+        {
+          "profile": "mobile",
+          "pass": true,
+          "calendarDayMatches": 1,
+          "uiVisible": true,
+          "reloadVisible": true,
+          "cells": 31,
+          "exceptions": 0
+        },
+        {
+          "profile": "desktop",
+          "pass": true,
+          "calendarDayMatches": 1,
+          "uiVisible": true,
+          "reloadVisible": true,
+          "cells": 31,
+          "exceptions": 0
+        }
+      ]
+    },
+    "browser_update": {
+      "pass": true,
+      "rows": [
+        {
+          "profile": "mobile",
+          "pass": true,
+          "calendarDayMatches": 1,
+          "uiVisible": true,
+          "reloadVisible": true,
+          "cells": 31,
+          "exceptions": 0
+        },
+        {
+          "profile": "desktop",
+          "pass": true,
+          "calendarDayMatches": 1,
+          "uiVisible": true,
+          "reloadVisible": true,
+          "cells": 31,
+          "exceptions": 0
+        }
+      ]
+    },
+    "browser_cancel": {
+      "pass": true,
+      "rows": [
+        {
+          "profile": "mobile",
+          "pass": true,
+          "calendarDayMatches": 0,
+          "uiVisible": false,
+          "reloadVisible": false,
+          "cells": 31,
+          "exceptions": 0
+        },
+        {
+          "profile": "desktop",
+          "pass": true,
+          "calendarDayMatches": 0,
+          "uiVisible": false,
+          "reloadVisible": false,
+          "cells": 31,
+          "exceptions": 0
+        }
+      ]
+    }
+  },
+  "production_touched": false,
+  "limits": [
+    "DEV only; no PROD promotion or user-vault testing",
+    "Finite recurrence and mixed app routing regression-tested separately; not included in this live E2E",
+    "No statistical p95 certification or exhaustive coverage of ambiguous event requests"
+  ]
+}
