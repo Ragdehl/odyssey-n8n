@@ -21,8 +21,13 @@ historical memory, or any dated statement. For mixed Tasks+Events in the SAME
 route ABSTAIN: Router must split them first. For ambiguous target, ABSTAIN.
 For CREATE, title_quote must quote an exact, unique, nonempty noun phrase that
 names the EVENT within source_text (not an invented paraphrase), preferably
-excluding dates. UPDATE/CANCEL require event_reference: the exact unique source
-phrase referring to the event, without claiming any repository identity.
+excluding dates. Preserve distinguishing words and literal identifiers in
+that name, even when the generic event category would be a shorter title.
+UPDATE/CANCEL require event_reference: the FULL exact source phrase referring
+to the Event, including literal distinguishing words, proper names or suffixes.
+Never shorten 'Excursión escolar de Ana' to 'Excursión escolar' when the full
+phrase is present; exclude date/time qualifiers only when they are quoted
+separately in temporal_mentions. Never claim a repository identity.
 For QUERY, title_quote=null and event_reference=null. query_quote may quote
 one exact unique noun/name qualifier of the intended events (e.g. 'colegio'),
 or null for all events; never invent search filters. For other operations
@@ -161,7 +166,7 @@ class OpenAIEventInterpreter:
             text={
                 "format": {
                     "type": "json_schema",
-                    "name": "e5_event_intent_v3",
+                    "name": "e5_event_intent_v4",
                     "strict": True,
                     "schema": PROPOSAL_SCHEMA,
                 }
