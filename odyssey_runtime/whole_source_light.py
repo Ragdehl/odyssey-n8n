@@ -635,6 +635,96 @@ class WholeSourceLightExecutor:
             substeps=recorder.spans[:64],
         )
         flow = result.execution_flow
+        # Direct Tasks/Events take a trusted, domain-owned executor path
+        # after the whole-source Router. Those executors return useful local
+        # evidence, but not necessarily a full public route-flow document.
+        # Rebuild PRESENTATION ONLY from observed stages and measured provider
+        # spans; never infer app ownership from input text or grant a write.
+        direct_flow_repaired = False
+        if (
+            result.status is ApplicationStatus.COMPLETED
+            and 0 < len(stages) <= 16
+            and 0 < len(source) <= 4096
+            and recorder.spans
+            and recorder.spans[0].name.endswith(
+                ("odyssey_light_capability_route_v1", "odyssey_light_capability_route_events_v1")
+            )
+            and not (
+                isinstance(flow, dict)
+                and flow.get("version") == 1
+                and isinstance(flow.get("routes"), list)
+                and len(flow["routes"]) == 1
+                and len(flow["routes"][0].get("steps", ())) == len(stages)
+                and "temporal" in flow["routes"][0]
+            )
+        ):
+            app_evidence = {
+                app
+                for app, stage_name in (
+                    ("events", "events.interpretation"),
+                    ("tasks", "tasks.interpretation"),
+                )
+                if any(stage.name == stage_name for stage in stages)
+            }
+            direct_capability = next(iter(app_evidence)) if len(app_evidence) == 1 else None
+            # Do not turn a mixed, dependent or unproven source into a
+            # one-route graphic merely because a Task stage was observed.
+            if direct_capability and not (
+                isinstance(flow, dict)
+                and isinstance(flow.get("routes"), list)
+                and (
+                    len(flow["routes"]) != 1
+                    or flow["routes"][0].get("capability") != direct_capability
+                )
+            ):
+                extra_spans = recorder.spans[1:9]
+                reviewed_stages = tuple(
+                    OperationalStage(
+                        "candidate.scope_prewrite",
+                        span.outcome,
+                        span.duration_ms,
+                        start_offset_ms=span.start_offset_ms,
+                        error_category=span.error_category,
+                    )
+                    for span in extra_spans
+                )
+                route_stages = (*reviewed_stages, *stages)
+                if len(route_stages) <= 16:
+                    router_span = recorder.spans[0]
+                    router_stage = OperationalStage(
+                        "application.router",
+                        router_span.outcome,
+                        router_span.duration_ms,
+                        model=ROUTER_MODEL,
+                        reasoning_effort="low",
+                        start_offset_ms=router_span.start_offset_ms,
+                    )
+                    verified_writes = _verified_route_writes(result)
+                    flow = {
+                        "version": 1,
+                        "input": source,
+                        "parallel_preparation": False,
+                        "routes": [
+                            {
+                                "capability": direct_capability,
+                                "text": source,
+                                "status": result.status.value,
+                                "stage_count": len(route_stages),
+                                "temporal": [],
+                                **(
+                                    {"writes": verified_writes}
+                                    if 0 < len(verified_writes) <= 8
+                                    else {}
+                                ),
+                                "steps": [
+                                    {"name": stage.name[:80], "input": source[:512], "output": ""}
+                                    for stage in route_stages
+                                ],
+                            }
+                        ],
+                    }
+                    stages = (router_stage, *route_stages)
+                    direct_flow_repaired = True
         if (
             flow is None
             and result.status is ApplicationStatus.COMPLETED
@@ -679,7 +769,7 @@ class WholeSourceLightExecutor:
                 ],
             }
             stages = (router_stage, *stages)
-        if flow is not None and result.execution_flow is not None:
+        if flow is not None and (result.execution_flow is not None or direct_flow_repaired):
             # Existing N-scope flows already have a real application.router
             # followed by exact per-route stages. Keep its position/owner
             # unchanged for the E2 ledger and JS flow contract; attach only

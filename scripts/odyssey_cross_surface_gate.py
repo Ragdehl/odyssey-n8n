@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # group owns reusable invariants and is extended when a new App is introduced.
 GROUPS: dict[str, tuple[str, ...]] = {
     "e6_application_extension_contract": (
+        "tests/runtime/test_e6_direct_app_flow_diagnostics.py",
         "tests/runtime/test_e6_hybrid_third_application.py",
         "tests/core/test_e6_prepared_property_mutation.py",
         "tests/runtime/test_e6_application_bindings.py",

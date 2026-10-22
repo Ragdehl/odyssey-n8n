@@ -183,6 +183,18 @@
       "verified_real_browser_n8n": false
     },
     {
+      "id": "E6-DIRECT-APP-FLOW-DIAGNOSTICS",
+      "phase": "E6",
+      "invariant": "Las rutas directas de Task y Event conservan procedencia del Router, etapas observadas y tiempos de revisión; el gráfico no recibe splits ni decisiones inventadas.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/runtime/test_e6_direct_app_flow_diagnostics.py::test_direct_event_produces_contract_complete_measured_router_flow",
+        "tests/runtime/test_e6_direct_app_flow_diagnostics.py::test_direct_task_preserves_independent_source_scope_reviews_as_timed_stages"
+      ],
+      "blocks_p4_dev": false,
+      "verified_real_browser_n8n": false
+    },
+    {
       "id": "E6-CORE-PROPERTY-USECASE",
       "phase": "E6",
       "invariant": "Un caso de uso Core reutilizable preserva CAS, actor, esquema, target y readback en mutaciones directas de Tasks y Events.",
