@@ -105,6 +105,9 @@ PASS (46 anclajes). Recibo local:
 
 **Límites:** esta fase solo es verificación de ensamblaje/autoridad de
 entrada. No elimina las políticas de Tasks ni Events ni interpreta
-referencias genéricas. Revisión independiente de código y primera aceptación
-real GPT→n8n→Markdown→Calendar para E6 quedan separadas. DEV permanece en
-`6debe8a`; no se escribió en vault ni se hizo deploy.
+referencias genéricas. Revisión independiente focal read-only **PASS** del cambio
+`e2a98b5..0eb549d`, sin defectos de seguridad o corrección encontrados;
+evidencia: `/home/ragdehl/projects/.odyssey-agent-runs/e6-scoped-route-review-20261022/findings.md`.
+Esta revisión no ejecutó nuevamente la suite y NO es aceptación DEV.
+La primera aceptación real GPT→n8n→Markdown→Calendar para E6 sigue pendiente.
+DEV permanece en `6debe8a`; no se escribió en vault ni se hizo deploy.
