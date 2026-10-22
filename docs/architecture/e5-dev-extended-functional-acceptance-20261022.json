@@ -1,0 +1,79 @@
+{
+  "state": "E5_EXTENDED_FUNCTIONAL_DEV_ACCEPTED",
+  "date": "2026-10-22",
+  "source_commit": "18de992b648c418b4374d1c4ac395f4b18bb6c81",
+  "deployed_commit": "18de992b648c418b4374d1c4ac395f4b18bb6c81",
+  "environment": "isolated synthetic DEV (not PROD)",
+  "base_e2e_receipt": "docs/architecture/e5-dev-basic-e2e-acceptance-20261022.json",
+  "automated_gate": {
+    "python_pass": 1715,
+    "javascript_pass": 181,
+    "cross_subtests_pass": 7,
+    "python_fail": 0,
+    "javascript_fail": 0
+  },
+  "real_provider_evidence": {
+    "weekly_recurrence": {
+      "result": "PASS",
+      "one_canonical_event": true,
+      "start_date": "2027-04-05",
+      "end_date": "2027-06-28",
+      "weekday": 0,
+      "calendar_checked": {
+        "2027-04-05": 1,
+        "2027-04-06": 0,
+        "2027-04-12": 1,
+        "2027-06-28": 1,
+        "2027-07-05": 0
+      },
+      "method": "real GPT via n8n to canonical Markdown and Calendar, DEV"
+    },
+    "mixed_independent_source_review": {
+      "result": "PASS",
+      "router": "two source-complete independent Events+Tasks scopes",
+      "partition": "GPT-5.6 exact byte partition and independent GPT-6-luna semantic review PASS"
+    },
+    "mixed_independent_full_http": {
+      "result": "PASS",
+      "response_status": "completed",
+      "event_notes": 1,
+      "task_notes": 1,
+      "calendar_events": 1,
+      "calendar_tasks": 1,
+      "replay_byte_identical": true,
+      "canonical_e3_manifest": "registered trusted apps only, test fixture proves two observed receipts",
+      "method": "real GPT via n8n, source proof, shared E3, physical Markdown, Calendar and same-ID replay"
+    },
+    "mixed_dependent_full_http": {
+      "result": "PASS_SAFE_ABSTENTION",
+      "response_status": "needs_attention",
+      "canonical_bytes_unchanged": true,
+      "new_notes": 0,
+      "method": "real GPT+n8n synthetic dependent Event+Task with reference to same excursion"
+    },
+    "basic_crud_query_browser": {
+      "result": "PASS",
+      "create": true,
+      "reschedule": true,
+      "query_exact_event": true,
+      "cancel": true,
+      "same_id_replay": true,
+      "chromium_mobile_desktop": true
+    }
+  },
+  "safety_assertions": [
+    "PROD untouched",
+    "no unconditional notification/reminder delivery",
+    "dependent mixed Event+Task abstains without writing",
+    "unexpected adapter postwrite exceptions produce partial result and do not authorize replay",
+    "legacy Core+Tasks E3 manifest tests still pass"
+  ],
+  "limitations": [
+    "DEV acceptance; production promotion requires separate human approval",
+    "No statistical p95, memory stress, or prolonged scale characterization",
+    "Cross-app dependent Event+Task links and reminders not implemented: safe abstention is intentional",
+    "No exhaustive long-text school schedule, arbitrary DST, or unknown-person identity campaign",
+    "Chromium E2E verified for basic Event lifecycle; mixed Event+Task verified by HTTP, Markdown and Calendar"
+  ],
+  "audit_decision": "bounded reproducible functional acceptance, not repeated four-role auditor loop"
+}
