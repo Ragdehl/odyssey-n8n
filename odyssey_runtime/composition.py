@@ -26,10 +26,10 @@ from odyssey_apps import (
 )
 from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
 from odyssey_apps.events import EVENT_SCHEMA_EXTENSION
-from odyssey_apps.events.execution import execute_event_candidate
+from odyssey_apps.events.execution import bound_occurrence, execute_event_candidate
 from odyssey_apps.events.interpretation import EventInterpretationError, EventOperation
 from odyssey_apps.events.mutations import EventMutationService
-from odyssey_apps.events.provider import OpenAIEventInterpreter
+from odyssey_apps.events.provider import EventCandidate, OpenAIEventInterpreter
 from odyssey_apps.events.queries import event_note_snapshot, explicit_event_query_hint
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.schema_extensions import compose_application_schema
@@ -4390,6 +4390,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
         request_id: str,
         authenticated_actor: AuthenticatedActorContext | None = None,
         conversation_context: Sequence[Mapping[str, str]] = (),
+        *,
+        prepared: tuple[EventCandidate, TemporalInterpretation | None] | None = None,
+        captured_clock: dict[str, str] | None = None,
     ) -> ApplicationResult:
         """Run one trusted Events destination, then existing Temporal/Core/E3."""
         if authenticated_actor is None:
@@ -4400,44 +4403,68 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 (),
                 planning_error="EVENT_AUTH_REQUIRED",
             )
-        clock = _current_time()
+        clock = captured_clock if captured_clock is not None else _current_time()
         started = perf_counter()
-        event_interpreter = OpenAIEventInterpreter.from_environment()
-        try:
-            candidate = event_interpreter.interpret(source_text)
-            if candidate.interpretation.source_text != source_text:
-                raise EventInterpretationError("Events interpreter source mismatch")
-        except EventInterpretationError:
-            return ApplicationResult(
-                request_id,
-                ApplicationStatus.NEEDS_ATTENTION,
-                (),
-                (),
-                planning_error="EVENT_INTERPRETATION_REJECTED",
-            )
-        event_duration = max(0.0, (perf_counter() - started) * 1000)
-        stage = OperationalStage(
-            "events.interpretation",
-            OperationalOutcome.COMPLETED,
-            event_duration,
-            model=event_interpreter.model,
-            reasoning_effort=event_interpreter.reasoning_effort,
-            usage=normalize_provider_usage(event_interpreter.last_usage),
-        )
-        temporal_result = None
+        temporal_result: TemporalInterpretation | None = None
         temporal_stage = ()
-        if (
-            candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}
-            or candidate.interpretation.operation is EventOperation.QUERY
-            and candidate.interpretation.temporal_mentions
-        ):
-            resolved = prepare_temporal_interpretation(
-                source_text, conversation_context, captured_clock=clock
+        if prepared is not None:
+            candidate, temporal_result = prepared
+            if (
+                not isinstance(candidate, EventCandidate)
+                or candidate.interpretation.source_text != source_text
+                or (
+                    temporal_result is not None
+                    and (
+                        not isinstance(temporal_result, TemporalInterpretation)
+                        or temporal_result.source_text != source_text
+                    )
+                )
+            ):
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="EVENT_PREPARED_SOURCE_UNVERIFIED",
+                )
+            # A previous verified E2 review already ran BEFORE any
+            # independent sibling mutation; never reinterpret after WRITE.
+            stage = OperationalStage("events.interpretation", OperationalOutcome.COMPLETED, 0.0)
+        else:
+            event_interpreter = OpenAIEventInterpreter.from_environment()
+            try:
+                candidate = event_interpreter.interpret(source_text)
+                if candidate.interpretation.source_text != source_text:
+                    raise EventInterpretationError("Events interpreter source mismatch")
+            except EventInterpretationError:
+                return ApplicationResult(
+                    request_id,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="EVENT_INTERPRETATION_REJECTED",
+                )
+            event_duration = max(0.0, (perf_counter() - started) * 1000)
+            stage = OperationalStage(
+                "events.interpretation",
+                OperationalOutcome.COMPLETED,
+                event_duration,
+                model=event_interpreter.model,
+                reasoning_effort=event_interpreter.reasoning_effort,
+                usage=normalize_provider_usage(event_interpreter.last_usage),
             )
-            temporal_result = (
-                resolved.value if isinstance(resolved.value, TemporalInterpretation) else None
-            )
-            temporal_stage = (resolved.stage,)
+            if (
+                candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}
+                or candidate.interpretation.operation is EventOperation.QUERY
+                and candidate.interpretation.temporal_mentions
+            ):
+                resolved = prepare_temporal_interpretation(
+                    source_text, conversation_context, captured_clock=clock
+                )
+                temporal_result = (
+                    resolved.value if isinstance(resolved.value, TemporalInterpretation) else None
+                )
+                temporal_stage = (resolved.stage,)
         result = execute_event_candidate(
             candidate=candidate,
             temporal=temporal_result,
@@ -4657,6 +4684,25 @@ def build_runtime_from_environment() -> RuntimeComposition:
             "timezone": getattr(instant.tzinfo, "key", os.environ.get("TZ", "Europe/Paris")),
             "timestamp": instant.isoformat(timespec="seconds"),
         }
+
+    def prepare_independent_event_before_any_write(
+        segment: str, instant: datetime
+    ) -> tuple[EventCandidate, TemporalInterpretation | None]:
+        # Same provider contracts as Events-only route; no Note identity
+        # or destination is selected. Only a single CREATE is currently
+        # independent-app composable.
+        candidate = OpenAIEventInterpreter.from_environment().interpret(segment)
+        if (
+            candidate.interpretation.source_text != segment
+            or candidate.interpretation.operation is not EventOperation.CREATE
+        ):
+            raise EventInterpretationError("Independent Events scope is not one CREATE")
+        clock = _captured_dependent_clock(instant)
+        temporal = prepare_temporal_interpretation(segment, (), captured_clock=clock).value
+        if not isinstance(temporal, TemporalInterpretation) or temporal.source_text != segment:
+            raise EventInterpretationError("Independent Event temporal evidence unavailable")
+        bound_occurrence(candidate, temporal)
+        return candidate, temporal
 
     def prepare_dependent_task_before_core_write(
         source: str, instant: datetime
@@ -4887,6 +4933,25 @@ def build_runtime_from_environment() -> RuntimeComposition:
             # Core WRITE. Execute the same prepared interpretation later via
             # the ordinary Tasks/Core/WorkSession service, without another
             # potentially divergent TaskInterpreter model call.
+            independent_event_prepare=(
+                prepare_independent_event_before_any_write
+                if "events" in enabled_application_ids
+                else None
+            ),
+            independent_event_delegate=(
+                lambda segment, locator, identity, event, temporal, instant: (
+                    execute_events(
+                        segment,
+                        locator,
+                        identity,
+                        (),
+                        prepared=(event, temporal),
+                        captured_clock=_captured_dependent_clock(instant),
+                    )
+                    if "events" in enabled_application_ids
+                    else None
+                )
+            ),
             independent_task_prepare=(
                 prepare_dependent_task_before_core_write
                 if "tasks" in enabled_application_ids

@@ -54,7 +54,10 @@ def verify_independent_source_scopes(
     parts = proposal.get("parts")
     if not isinstance(parts, list) or not 2 <= len(parts) <= 16:
         raise IndependentSourceScopesError("Bounded independent source parts required")
-    if permitted_capabilities != frozenset({"core", "tasks"}):
+    if permitted_capabilities not in (
+        frozenset({"core", "tasks"}),
+        frozenset({"events", "tasks"}),
+    ):
         raise IndependentSourceScopesError("Unsupported independent application set")
     if any(
         not isinstance(item, Mapping) or set(item) != {"capability", "source_quote"}

@@ -30,6 +30,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/apps/events/test_e5_provider_route.py",
         "tests/apps/events/test_e5_query_recurrence.py",
         "tests/runtime/test_e5_p4_event_route.py",
+        "tests/runtime/test_e5_p4_independent_event_task.py",
         "tests/apps/events/test_e5_live_probe_contract.py",
         "tests/apps/tasks/test_interpretation.py",
         "tests/core/test_domain_interpretation.py",

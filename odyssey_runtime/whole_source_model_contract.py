@@ -59,9 +59,17 @@ def capability_route_contract(*, enable_events: bool) -> tuple[dict, str]:
         "self-contained Event operation, use capabilities=['events'] (or "
         "['events','temporal'] for a date needing shared Temporal resolution) "
         "and app_scopes=[]. Temporal is only a dependency here, not a distinct "
-        "user operation. For mixed Event+Task or dependent event references use "
-        "both capabilities and declare joint; the executor must request "
-        "clarification rather than drop one operation. The router never binds "
+        "user operation. For an Event and a Task that are truly INDEPENDENT "
+        "and each fully understandable from its own exact source span (separate "
+        "date, subject, and referents), select both capabilities, interpretation "
+        "separable, reason independent, and one app_scope per operation with "
+        "depends_on_another_scope=false. The subsequent Core-owned E2 boundary "
+        "must prove a byte-for-byte complete partition with an independent "
+        "semantic reviewer BEFORE either write. If a Task refers to the Event "
+        "or needs its date, person, purpose, target or context, this is a JOINT "
+        "dependent request: mark joint, and E5 must clarify until its dependency "
+        "is safely supported. Never reclassify the Task as an Event or vice "
+        "versa, and never silently drop either operation. The router never binds "
         "the event title, time, note identity or write permission."
     )
     return schema, instructions
@@ -482,6 +490,36 @@ INDEPENDENT_SCOPE_PARTITION_SCHEMA = {
     "required": ["full_source_quote", "parts"],
     "additionalProperties": False,
 }
+
+
+def independent_partition_contract(*, enable_events: bool) -> tuple[dict, str, str]:
+    """Reuse strict E2 full-source partition, with Events only for opt-in pairs."""
+    if not enable_events:
+        return (
+            INDEPENDENT_SCOPE_PARTITION_SCHEMA,
+            INDEPENDENT_SCOPE_PARTITION_PROMPT,
+            INDEPENDENT_SCOPE_REVIEW_PROMPT,
+        )
+    schema = copy.deepcopy(INDEPENDENT_SCOPE_PARTITION_SCHEMA)
+    schema["properties"]["parts"]["items"]["properties"]["capability"]["enum"].append("events")
+    partition = INDEPENDENT_SCOPE_PARTITION_PROMPT + (
+        " For opted-in Events+Tasks ONLY: a scheduled calendar occurrence belongs "
+        "to Events, an independent user obligation belongs to Tasks. Keep exact "
+        "source bytes, never invent missing subjects or inherit a date, pronoun, "
+        "event target or Task target from the other fragment. If either fragment "
+        "does not stand alone or cannot be fully covered, return one unsplittable "
+        "part and the validator will reject. Neither model can authorize writes."
+    )
+    reviewer = INDEPENDENT_SCOPE_REVIEW_PROMPT + (
+        " For Events+Tasks, verify that the Event and the user Task are truly "
+        "independent complete operations, each with its own source-grounded "
+        "date/subject and no shared reference, conditional or implied dependency. "
+        "If a Task requires attending, packing for, or preparing that Event and "
+        "needs its identity or timing, reject independence and abstain."
+    )
+    return schema, partition, reviewer
+
+
 INDEPENDENT_SCOPE_PARTITION_PROMPT = (
     "You propose a source-PRESERVING partition for a single user message "
     "whose router suspects INDEPENDENT Core personal facts and Tasks-owned "

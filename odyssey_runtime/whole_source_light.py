@@ -27,6 +27,9 @@ from zoneinfo import ZoneInfo
 
 from openai import OpenAIError
 
+from odyssey_apps.events.execution import bound_occurrence
+from odyssey_apps.events.interpretation import EventOperation
+from odyssey_apps.events.provider import EventCandidate
 from odyssey_apps.tasks import (
     CanonicalSessionEvidence,
     PreparedDependentSubtask,
@@ -119,9 +122,6 @@ from odyssey_runtime.whole_source_model_contract import (
     DEPENDENT_TASK_TARGET_REVIEW_A,
     DEPENDENT_TASK_TARGET_REVIEW_B,
     DEPENDENT_TASK_TARGET_REVIEW_SCHEMA,
-    INDEPENDENT_SCOPE_PARTITION_PROMPT,
-    INDEPENDENT_SCOPE_PARTITION_SCHEMA,
-    INDEPENDENT_SCOPE_REVIEW_PROMPT,
     INDEPENDENT_SCOPE_REVIEW_SCHEMA,
     MIXED_TASK_CREATE_PROMPT,
     MIXED_TASK_CREATE_SCHEMA,
@@ -139,6 +139,7 @@ from odyssey_runtime.whole_source_model_contract import (
     TASK_ONLY_SCOPE_PROMPT,
     TASK_ONLY_SCOPE_SCHEMA,
     capability_route_contract,
+    independent_partition_contract,
 )
 
 ROUTER_MODEL = "gpt-6-luna"
@@ -223,6 +224,23 @@ class WholeSourceLightExecutor:
     # Optional independent N-scope preflight and product Task execution.
     # Both must be installed together: a prechecked Task interpretation is
     # executed exactly once, never reinterpreted after an earlier Core WRITE.
+    independent_event_prepare: (
+        Callable[[str, datetime], tuple[EventCandidate, TemporalInterpretation | None]] | None
+    ) = None
+    independent_event_delegate: (
+        Callable[
+            [
+                str,
+                str,
+                AuthenticatedActorContext,
+                EventCandidate,
+                TemporalInterpretation | None,
+                datetime,
+            ],
+            ApplicationResult,
+        ]
+        | None
+    ) = None
     independent_task_prepare: (
         Callable[[str, datetime], tuple[TaskInterpretation, TemporalInterpretation | None]] | None
     ) = None
@@ -737,6 +755,38 @@ class WholeSourceLightExecutor:
         ):
             return self._abstain(delivery)
         if "events" in capabilities:
+            # Two independent Event+Task spans reuse the E2 two-review
+            # source partition and the existing E3 operation manifest.
+            scopes = route.get("app_scopes")
+            independent_event_tasks = (
+                set(capabilities) in ({"events", "tasks"}, {"events", "tasks", "temporal"})
+                and len(capabilities) == len(set(capabilities))
+                and route.get("interpretation") == "separable"
+                and route.get("reason") == "independent"
+                and route.get("self_relation_span") is None
+                and isinstance(scopes, list)
+                and len(scopes) >= 2
+                and all(
+                    isinstance(item, dict)
+                    and item.get("capability") in {"events", "tasks"}
+                    and item.get("depends_on_another_scope") is False
+                    for item in scopes
+                )
+                and {item["capability"] for item in scopes} == {"events", "tasks"}
+                and independent_scope is None
+                and self.independent_event_prepare is not None
+                and self.independent_event_delegate is not None
+            )
+            if independent_event_tasks:
+                return self._execute_independent_scopes(
+                    source,
+                    delivery,
+                    actor,
+                    conversation_id,
+                    delivery_instant=instant,
+                    router_started=router_started,
+                    route_scopes=scopes,
+                )
             # The authenticated SELF/actor guard is already complete. One
             # independently declared Events scope is equivalent to no scopes
             # for this single-route execution; multiple/mixed scopes never
@@ -2403,26 +2453,36 @@ class WholeSourceLightExecutor:
     ) -> ApplicationResult:
         # Proposed scopes are non-authoritative byte ranges. No trimming,
         # deletion, or LLM-authored canonical identities in this boundary.
+        event_mix = {item.get("capability") for item in route_scopes} == {"events", "tasks"}
+        partition_schema, partition_prompt, review_prompt = independent_partition_contract(
+            enable_events=event_mix
+        )
         proposal = self._ask(
             PLANNER_MODEL,
-            INDEPENDENT_SCOPE_PARTITION_PROMPT,
+            partition_prompt,
             {"original_source": source},
-            INDEPENDENT_SCOPE_PARTITION_SCHEMA,
-            "odyssey_independent_source_scopes_v1",
+            partition_schema,
+            "odyssey_independent_event_task_scopes_v1"
+            if event_mix
+            else "odyssey_independent_source_scopes_v1",
         )
         review = self._ask(
             ROUTER_MODEL,
-            INDEPENDENT_SCOPE_REVIEW_PROMPT,
+            review_prompt,
             {"original_source": source, "proposed_scopes": proposal},
             INDEPENDENT_SCOPE_REVIEW_SCHEMA,
-            "odyssey_independent_source_scopes_audit_v1",
+            "odyssey_independent_event_task_scopes_audit_v1"
+            if event_mix
+            else "odyssey_independent_source_scopes_audit_v1",
         )
         try:
             verified = verify_independent_source_scopes(
                 source,
                 proposal,
                 review,
-                permitted_capabilities=frozenset({"core", "tasks"}),
+                permitted_capabilities=frozenset(
+                    {"events", "tasks"} if event_mix else {"core", "tasks"}
+                ),
             )
         except IndependentSourceScopesError:
             return self._abstain(delivery)
@@ -2481,6 +2541,29 @@ class WholeSourceLightExecutor:
                     prepared_tasks[part.index] = (task, temporal)
                 except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
                     return self._abstain(delivery, "INDEPENDENT_TASK_PREWRITE_UNAVAILABLE")
+        prepared_events: dict[int, tuple[EventCandidate, TemporalInterpretation | None]] = {}
+        if event_mix:
+            if self.independent_event_prepare is None or self.independent_event_delegate is None:
+                return self._abstain(delivery, "INDEPENDENT_EVENT_ADAPTER_INCOMPLETE")
+            for part in verified:
+                if part.capability != "events":
+                    continue
+                try:
+                    candidate, temporal = self.independent_event_prepare(
+                        part.source.strip(), delivery_instant
+                    )
+                    if (
+                        not isinstance(candidate, EventCandidate)
+                        or candidate.interpretation.source_text != part.source.strip()
+                        or candidate.interpretation.operation is not EventOperation.CREATE
+                        or not isinstance(temporal, TemporalInterpretation)
+                        or temporal.source_text != part.source.strip()
+                    ):
+                        return self._abstain(delivery, "INDEPENDENT_EVENT_PREWRITE_UNVERIFIED")
+                    bound_occurrence(candidate, temporal)
+                    prepared_events[part.index] = (candidate, temporal)
+                except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
+                    return self._abstain(delivery, "INDEPENDENT_EVENT_PREWRITE_UNAVAILABLE")
         if self.operation_manifest_begin is not None:
             self.operation_manifest_begin(
                 delivery,
@@ -2523,6 +2606,16 @@ class WholeSourceLightExecutor:
                         actor,
                         task,
                         temporal,
+                        delivery_instant,
+                    )
+                elif part.capability == "events" and self.independent_event_delegate is not None:
+                    event_candidate, event_temporal = prepared_events[part.index]
+                    outcome = self.independent_event_delegate(
+                        part.source.strip(),
+                        locator,
+                        actor,
+                        event_candidate,
+                        event_temporal,
                         delivery_instant,
                     )
                 else:
