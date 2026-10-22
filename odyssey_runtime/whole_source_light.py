@@ -135,11 +135,10 @@ from odyssey_runtime.whole_source_model_contract import (
     PROMPT_SPEAKER_B,
     REVIEW_CORE_ANCHORED_SCHEMA,
     REVIEW_SCHEMA,
-    ROUTE_SCHEMA,
-    ROUTER_INSTRUCTIONS,
     SPEAKER_SCHEMA,
     TASK_ONLY_SCOPE_PROMPT,
     TASK_ONLY_SCOPE_SCHEMA,
+    capability_route_contract,
 )
 
 ROUTER_MODEL = "gpt-6-luna"
@@ -189,6 +188,7 @@ class WholeSourceLightExecutor:
     task_delegate: Callable[[str, str, AuthenticatedActorContext], ApplicationResult]
     client: Any
     progress: Callable[[str, dict[str, object]], None] | None = None
+    event_delegate: Callable[[str, str, AuthenticatedActorContext], ApplicationResult] | None = None
     timezone: str = "Europe/Paris"
     now: Callable[[], datetime] | None = None
     # Prewrite-independent source-speaker reviewers can run concurrently on
@@ -714,20 +714,70 @@ class WholeSourceLightExecutor:
         if self.progress is not None:
             self.progress("routing.started", {})
         router_started = perf_counter()
+        route_schema, route_instructions = capability_route_contract(
+            enable_events=self.event_delegate is not None
+        )
         route = self._ask(
             ROUTER_MODEL,
-            ROUTER_INSTRUCTIONS,
+            route_instructions,
             {"original_source": source, "clock": clock},
-            ROUTE_SCHEMA,
-            "odyssey_light_capability_route_v1",
+            route_schema,
+            "odyssey_light_capability_route_events_v1"
+            if self.event_delegate is not None
+            else "odyssey_light_capability_route_v1",
         )
         capabilities = route.get("capabilities")
+        allowed = {"core", "tasks", "temporal"}
+        if self.event_delegate is not None:
+            allowed.add("events")
         if (
             not isinstance(capabilities, list)
             or not capabilities
-            or not set(capabilities) <= {"core", "tasks", "temporal"}
+            or not set(capabilities) <= allowed
         ):
             return self._abstain(delivery)
+        if "events" in capabilities:
+            # The authenticated SELF/actor guard is already complete. One
+            # independently declared Events scope is equivalent to no scopes
+            # for this single-route execution; multiple/mixed scopes never
+            # lose an action by delegation.
+            scopes = route.get("app_scopes")
+            one_event_scope = (
+                isinstance(scopes, list)
+                and len(scopes) == 1
+                and isinstance(scopes[0], dict)
+                and scopes[0].get("capability") == "events"
+                and scopes[0].get("depends_on_another_scope") is False
+            )
+            if (
+                capabilities != ["events"]
+                or route.get("self_relation_span") is not None
+                or (scopes != [] and not one_event_scope)
+                or self.event_delegate is None
+                or independent_scope is not None
+            ):
+                return self._abstain(delivery, "EVENT_MIXED_SOURCE_NEEDS_CLARIFICATION")
+            result = self.event_delegate(source, delivery, actor)
+            if result.request_id != delivery:
+                raise WholeSourceLightError("Events route broke delivery correlation")
+            return replace(
+                result,
+                execution_flow={
+                    "version": 1,
+                    "input": source,
+                    "parallel_preparation": False,
+                    "routes": [
+                        {
+                            "capability": "events",
+                            "text": source,
+                            "status": result.status.value,
+                            "stage_count": len(result.operational.stages),
+                            "writes": _verified_route_writes(result),
+                            "steps": [],
+                        }
+                    ],
+                },
+            )
         if independent_scope is not None and (
             independent_scope not in {"core", "tasks"}
             or independent_scope not in capabilities

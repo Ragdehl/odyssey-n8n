@@ -39,6 +39,32 @@ ROUTE_SCHEMA = {
     "additionalProperties": False,
 }
 
+
+def capability_route_contract(*, enable_events: bool) -> tuple[dict, str]:
+    """Extend only the opted-in DEV router capability vocabulary.
+
+    Legacy P4 prompts and schemas retain their exact source and digest.
+    """
+    if not enable_events:
+        return ROUTE_SCHEMA, ROUTER_INSTRUCTIONS
+    schema = copy.deepcopy(ROUTE_SCHEMA)
+    schema["properties"]["capabilities"]["items"]["enum"].append("events")
+    schema["properties"]["app_scopes"]["items"]["properties"]["capability"]["enum"].append("events")
+    instructions = ROUTER_INSTRUCTIONS + (
+        " Events is the calendar-occurrence lifecycle capability: explicit "
+        "upcoming appointments, dated concerts, school excursions and scheduled "
+        "activities, even expressed as declarative statements; moving, cancelling "
+        "or consulting a calendar Event is also Events. Distinguish a historical "
+        "memory (Core) and a user action to perform (Tasks). For exactly one "
+        "self-contained Event operation, use capabilities=['events'] and "
+        "app_scopes=[]. For mixed Event+Task or dependent event references use "
+        "both capabilities and declare joint; the executor must request "
+        "clarification rather than drop one operation. The router never binds "
+        "the event title, time, note identity or write permission."
+    )
+    return schema, instructions
+
+
 PLAN_SCHEMA = {
     "type": "object",
     "properties": {

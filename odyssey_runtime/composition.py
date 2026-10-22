@@ -4870,6 +4870,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
             task_delegate=lambda source, locator, identity: execute_tasks(
                 source, locator, identity, ()
             ),
+            event_delegate=(
+                (lambda source, locator, identity: execute_events(source, locator, identity, ()))
+                if "events" in enabled_application_ids
+                else None
+            ),
             client=OpenAI(max_retries=0, timeout=70),
             progress=_emit_progress,
             # For source-reviewed N independent Core/Tasks scopes, prepare
