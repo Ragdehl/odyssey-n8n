@@ -41,6 +41,8 @@ def _assert_complete_flow(result, capability, source, expected_reviews):
     all_stages = raw["operational"]["stages"]
     assert all_stages[0]["name"] == "application.router"
     assert len(all_stages) == route["stage_count"] + 1
+    # Router child spans must not swallow later source-scope calls.
+    assert len(all_stages[0].get("substeps", [])) == 1
     assert len(route["steps"]) == route["stage_count"]
     assert [step["name"] for step in route["steps"]] == [stage["name"] for stage in all_stages[1:]]
     assert all(

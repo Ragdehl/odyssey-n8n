@@ -775,7 +775,11 @@ class WholeSourceLightExecutor:
             # unchanged for the E2 ledger and JS flow contract; attach only
             # child provider timings without inserting a synthetic stage.
             if stages and stages[0].name == "application.router":
-                stages = (replace(stages[0], substeps=recorder.spans[:64]), *stages[1:])
+                # Direct routes already expose each source-scope review as
+                # a sibling measured stage. Do not also place those later
+                # calls inside the shorter Router stage (false nesting).
+                router_spans = recorder.spans[:1] if direct_flow_repaired else recorder.spans[:64]
+                stages = (replace(stages[0], substeps=router_spans), *stages[1:])
             operational_stages = stages
         else:
             operational_stages = (source_stage, *stages)
