@@ -196,6 +196,21 @@
       "verified_real_browser_n8n": false
     },
     {
+      "id": "E6-THIRD-SCOPED-APP",
+      "phase": "E6",
+      "invariant": "Una tercera App tipada y habilitada explícitamente usa el compilador híbrido y dispatcher con procedencia verificada; las propuestas ambiguas o sin registro fallan antes de escribir.",
+      "max_evidence_level": "deterministic",
+      "offline_test_selectors": [
+        "tests/runtime/test_e6_hybrid_third_application.py::test_third_registered_app_routes_through_real_hybrid_without_a_core_writer",
+        "tests/runtime/test_e6_hybrid_third_application.py::test_routed_third_app_must_also_be_explicitly_bound_before_execution",
+        "tests/runtime/test_e6_hybrid_third_application.py::test_extra_app_cannot_claim_reserved_or_unknown_candidate_kind",
+        "tests/runtime/test_e6_hybrid_third_application.py::test_ambiguous_registered_app_source_fails_closed_instead_of_core_fallback",
+        "tests/runtime/test_e6_hybrid_third_application.py::test_mixed_core_and_registered_app_group_fails_closed"
+      ],
+      "blocks_p4_dev": false,
+      "verified_real_browser_n8n": false
+    },
+    {
       "id": "P4-NM-GRAPH-PREWRITE",
       "phase": "P4",
       "invariant": "N:M conserva los fragmentos originales y prueba aristas precedentes sin convertir una mención Router en identidad canónica ni autorización de escritura.",

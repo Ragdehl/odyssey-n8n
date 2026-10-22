@@ -39,6 +39,10 @@ from odyssey_core.source_boundary_review import (
 )
 from odyssey_runtime.application_bindings import bind_registered_executors
 from odyssey_runtime.context_planner_ports import ContextAwareCorePlannerFactory
+from odyssey_runtime.registered_scoped_app import (
+    RegisteredScopedApp,
+    registered_app_index,
+)
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_route_authority import (
     ScopedRouteAuthority,
@@ -279,6 +283,7 @@ def execute_candidate_routed_message(
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
     task_route_executor: object | None = None,
     event_route_executor: object | None = None,
+    registered_scoped_apps: tuple[RegisteredScopedApp, ...] = (),
     progress_callback: Callable[[str, dict[str, object]], None] | None = None,
     postwrite_index_refresh: Callable[[Sequence[str]], None] | None = None,
     source_boundary_reviewer: object | None = None,
@@ -535,21 +540,38 @@ def execute_candidate_routed_message(
     report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
     uses_tasks = any(route.capability_id == "tasks" for route in bundle.plan.routes)
     uses_events = any(route.capability_id == "events" for route in bundle.plan.routes)
-    if uses_tasks or uses_events:
+    registered_extra = registered_app_index(registered_scoped_apps)
+    app_kinds = {
+        "tasks": "task",
+        "events": "event",
+        **{app_id: app.candidate_kind for app_id, app in registered_extra.items()},
+    }
+    routed_extra = {
+        route.capability_id
+        for route in bundle.plan.routes
+        if route.capability_id in registered_extra
+    }
+    if uses_tasks or uses_events or routed_extra:
         from odyssey_runtime.hybrid_group_compiler import hybrid_enabled_app_catalog
 
         if bundle_compiler is None or any(
             not scoped.context.hybrid_interpretation_mode
             or not all(
-                c.kind == ("task" if scoped.route.capability_id == "tasks" else "event")
-                and c.state == "candidate"
-                for c in scoped.context.candidates
+                candidate.kind == app_kinds[scoped.route.capability_id]
+                and candidate.state == "candidate"
+                for candidate in scoped.context.candidates
             )
             for scoped in bundle.units
-            if scoped.route.capability_id in {"tasks", "events"}
+            if scoped.route.capability_id in app_kinds
         ):
             raise RouterError("App routing requires validated source-only app groups")
-        catalog = hybrid_enabled_app_catalog(enable_tasks=uses_tasks, enable_events=uses_events)
+        catalog = hybrid_enabled_app_catalog(
+            enable_tasks=uses_tasks,
+            enable_events=uses_events,
+            registered_apps=tuple(
+                app for app_id, app in registered_extra.items() if app_id in routed_extra
+            ),
+        )
     else:
         catalog = ApplicationCatalog.empty()
     validate_bundle_original_provenance(bundle, catalog=catalog)
@@ -1309,6 +1331,47 @@ def execute_candidate_routed_message(
         "tasks": run_task_route if task_route_executor is not None else None,
         "events": run_event_route if event_route_executor is not None else None,
     }
+
+    def scoped_extra_handler(app: RegisteredScopedApp):
+        def execute(
+            unit_source: str,
+            locator: str,
+            routed_authenticated_actor: AuthenticatedActorContext | None = None,
+            routed_prior_turns: Sequence[Mapping[str, str]] = (),
+        ) -> ApplicationResult:
+            _ordinal, scoped = route_authority.verify(
+                source=unit_source,
+                locator=locator,
+                capability=app.descriptor.id,
+                actor=routed_authenticated_actor,
+                conversation=routed_prior_turns,
+            )
+            if scoped.route.depends_on is not None or scoped.context.source_provenance:
+                # Third-party routes have no typed predecessor carrier yet.
+                # Lexical shared roles are not authority to infer an identity or time.
+                return ApplicationResult(
+                    locator,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    planning_error="APP_SCOPED_INHERITED_EVIDENCE_UNSUPPORTED",
+                )
+            report_progress("application.started", {"capability": app.descriptor.id})
+            result = app.execute(
+                unit_source, locator, routed_authenticated_actor, routed_prior_turns
+            )
+            report_progress("application.ready", {"capability": app.descriptor.id})
+            if not isinstance(result, ApplicationResult):
+                raise ValueError("Registered application returned an invalid receipt")
+            return result
+
+        return execute
+
+    trusted_app_handlers.update(
+        (app_id, scoped_extra_handler(app))
+        for app_id, app in registered_extra.items()
+        if app_id in routed_extra
+    )
     bound_app_executors = bind_registered_executors(
         catalog,
         {cap.id: trusted_app_handlers.get(cap.id) for cap in catalog.capabilities()},

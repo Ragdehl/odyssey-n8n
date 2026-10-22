@@ -202,3 +202,55 @@ nuevamente navegador Chromium ni la semántica de nuevas Apps Projects.
 E6.2 sigue abierta para revisar oportunidades concretas de reducir
 adaptadores; la E6.3 tendrá criterios medibles de nueva capacidad antes
 de cerrarse. No repetir auditorías de E5/E6.1/E6.2 ya aprobadas.
+
+
+## E6.3 — Tercera App integrada en el compilador híbrido (22-10-2026)
+
+**Antes:** `execute_routed_request` aceptaba Projects como handler en un test
+aislado, pero `compile_hybrid_candidate_bundle` y
+`execute_candidate_routed_message` solo conectaban las Apps Task/Event.
+No había contrato genérico para transportar un tercer grupo desde un
+Router candidate validado hasta su executor con autoridad acotada.
+
+**Nuevo corte opt-in, no activado en DEV:** la dataclass cerrada
+`RegisteredScopedApp` (descriptor confiable + kind de candidato
+admitido por Router/Core + executor invocable) sirve de registro único
+de la tercera capacidad. `registered_app_index` prohíbe duplicar
+IDs/kinds o reasignar las clases reservadas `task` y `event`.
+El compilador acepta `registered_apps` únicamente desde la composición
+confiable y selecciona esa ruta si todos los candidatos del grupo
+coinciden exactamente con el kind declarado y están en estado
+`candidate`. Si alguno es ambiguo o queda mezclado en un grupo con
+Core, devuelve `RouterError` y no lo envía silenciosamente a Core.
+
+El dispatcher recibe `registered_scoped_apps` por contrato tipado,
+valida la ruta con `ScopedRouteAuthority` compartido de E6.1,
+revalida candidate kind contra el registro y devuelve
+`NEEDS_ATTENTION` ante dependencias/roles heredados cuyo transporte
+semántico no existe para esta tercera App. Solo entonces ejecuta su
+callback específico de aplicación y exige un recibo `ApplicationResult`.
+No toca `materialization`, `CanonicalMutationGate`, ni los
+mecanismos E2/E3; las Apps existentes mantienen su ejecución anterior.
+
+**Prueba funcional sintética no escritora:** usa temporalmente el kind
+Router *ya existente* `plan` como clasificación de un grupo
+`projects`, sin inventar un nuevo tipo de nota ni crear permisos de
+persistencia. Comprueba la secuencia **proposal → compiler →
+validated bundle → dispatcher → registered scoped callback**, sin
+fallback a Core, conservando fuente exacta y actor/contexto; sin
+ninguna mutación de Markdown. Casos negativos: falta de registro,
+clase Task/Event reservada, ID/kind duplicados, kind incorrecto,
+estado ambiguo y grupo semántico mixto.
+
+**Limitación importante:** todavía NO se ha añadido el tipo de
+candidato `project` a Router y Core, ni la semántica del dominio
+Projects, su schema de notas, GPT parser/prompts, interfaz ni
+mutaciones propias. Esto demuestra la capacidad del mecanismo de
+composición, **no una tercera aplicación de producción terminada**.
+Una nueva clase de candidato requiere todavía revisión explícita
+del esquema del Router/Core; no se permite descubrirla por texto de
+modelo ni registrar plugins arbitrarios.
+
+Pruebas locales nuevas: nueve casos E6.3 y regresión focal de
+Tasks/Events. Evidencias de aceptación transversal y DEV se
+anotarán cuando finalicen, sin anticipar su resultado.

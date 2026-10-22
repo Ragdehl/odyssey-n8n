@@ -21,6 +21,7 @@ from odyssey_apps.fact_candidates import (
 from odyssey_apps.router import Route, RouteOutcome, RoutePlan, RouterError, validate_route_plan
 from odyssey_core.candidate_context import CoreCandidate, CoreCandidateContext
 from odyssey_core.candidate_dependencies import trace_core_candidate_dependencies
+from odyssey_runtime.registered_scoped_app import RegisteredScopedApp, registered_app_index
 from odyssey_runtime.source_scope_compiler import (
     _TEMPORAL_ROLES,
     CandidateRouteBundle,
@@ -328,7 +329,13 @@ def hybrid_tasks_catalog() -> ApplicationCatalog:
     return ApplicationRegistry((descriptor,)).catalog(enabled_ids=("tasks",))
 
 
-def hybrid_enabled_app_catalog(*, enable_tasks: bool, enable_events: bool) -> ApplicationCatalog:
+def hybrid_enabled_app_catalog(
+    *,
+    enable_tasks: bool,
+    enable_events: bool,
+    registered_apps: tuple[RegisteredScopedApp, ...] = (),
+) -> ApplicationCatalog:
+    extras = registered_app_index(registered_apps)
     descriptors = []
     ids = []
     if enable_tasks:
@@ -345,11 +352,17 @@ def hybrid_enabled_app_catalog(*, enable_tasks: bool, enable_events: bool) -> Ap
             )
         )
         ids.append("events")
+    descriptors.extend(app.descriptor for app in extras.values())
+    ids.extend(extras)
     return ApplicationRegistry(tuple(descriptors)).catalog(enabled_ids=tuple(ids))
 
 
 def compile_hybrid_candidate_bundle(
-    proposal: FactCandidateProposal, *, enable_tasks: bool = False, enable_events: bool = False
+    proposal: FactCandidateProposal,
+    *,
+    enable_tasks: bool = False,
+    enable_events: bool = False,
+    registered_apps: tuple[RegisteredScopedApp, ...] = (),
 ) -> CandidateRouteBundle:
     """Build exact-source groups while retaining every candidate independently.
 
@@ -357,6 +370,8 @@ def compile_hybrid_candidate_bundle(
     role sources or non-representable partitions. Never reconstructs a
     standalone sentence or transfers canonical meaning from Router.
     """
+    extra_apps = registered_app_index(registered_apps)
+    app_by_kind = {app.candidate_kind: cap_id for cap_id, app in extra_apps.items()}
     original = to_core_candidate_context(proposal)
     source = original.source
     traced = trace_core_candidate_dependencies(source, original)
@@ -426,11 +441,30 @@ def compile_hybrid_candidate_bundle(
         )
         all_tasks = all(candidate.kind == "task" for candidate in context.candidates)
         all_events = all(candidate.kind == "event" for candidate in context.candidates)
+        extra_route = next(
+            (
+                app_by_kind[kind]
+                for kind in app_by_kind
+                if all(
+                    candidate.kind == kind and candidate.state == "candidate"
+                    for candidate in context.candidates
+                )
+            ),
+            None,
+        )
+        if extra_route is None and any(
+            candidate.kind in app_by_kind for candidate in context.candidates
+        ):
+            # A mixed or ambiguous App group cannot be silently reclassified
+            # as an ordinary Core fact and gain a different write path.
+            raise RouterError("Scoped app candidate lacks independent authorized source group")
         route = Route(
             "tasks"
             if enable_tasks and all_tasks
             else "events"
             if enable_events and all_events
+            else extra_route
+            if extra_route is not None
             else ("temporal" if temporal else "core"),
             context.source,
             depends_on=dependency,
@@ -449,7 +483,9 @@ def compile_hybrid_candidate_bundle(
     result = CandidateRouteBundle(
         source, RoutePlan(RouteOutcome.ROUTE, tuple(routes)), tuple(units)
     )
-    catalog = hybrid_enabled_app_catalog(enable_tasks=enable_tasks, enable_events=enable_events)
+    catalog = hybrid_enabled_app_catalog(
+        enable_tasks=enable_tasks, enable_events=enable_events, registered_apps=registered_apps
+    )
     validate_route_plan(result.plan, source, catalog)
     validate_bundle_original_provenance(result, catalog=catalog)
     return result
