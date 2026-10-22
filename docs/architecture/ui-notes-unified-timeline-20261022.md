@@ -61,3 +61,36 @@ Colores ajustados a `#596476` (contraste 5,98:1 sobre blanco) y
 `#325d60` (contraste 7,32:1 sobre blanco), superiores a 4,5:1.
 Primera auditoría histórica conservada; revisión focal final y gate
 completo se actualizarán según resultados.
+
+
+## Resultado final del cambio de frontend
+
+- Código visual auditado: `c34d700af7ef86fc18bef846d6f9e72eb42fa104`.
+- Revisión independiente del parche correctivo: **PASS**; sin bloqueantes.
+  Evidencia: `/home/ragdehl/projects/.odyssey-agent-runs/ui-notes-unified-audit-20261022/fix-findings.md`.
+- Gate final permanente: **1857 Python +184 JS PASS**, incluidos
+  40 tests Notes. `/tmp/odyssey-note-timeline-auditor-fixed-gate.log`.
+- Después de publicar el frontend mediante `odyssey-dev deploy`, un
+  despliegue de Router paralelo pasó DEV a `841918a`, commit
+  descendiente del frontend aprobado. **Browser readonly final sobre
+  activos realmente publicados, sin asset interception: PASS**
+  en Chromium móvil 390x844 y escritorio 1280x960. Nota sintética de
+  usuario con **8 grupos de fechas únicos, 43 referencias entrantes,
+  sin “Añadido”, sin tarjetas de backlinks, metadatos plegados,
+  cero excepciones JS y cero scroll horizontal**.
+  Evidencia: `/tmp/odyssey-notes-timeline-deployed-final.log`.
+- Confirmado finalmente: runtime HTTP 200, n8n HTTP 200, Git DEV y
+  marcador exactamente `841918a`; GitHub origin/dev `841918a`.
+  Backups predespliegue de vault/estado y n8n verificados por SHA256
+  en `/home/ragdehl/projects/.odyssey-agent-runs/ui-notes-chronology-dev-acceptance-20261022`.
+- **Las fases E1/E2/E6 no se han perdido**: todas son ancestros de la
+  rama `dev` integrada en GitHub. PR #153 MERGED, #154 CLOSED por
+  obsolescencia, cero PR abiertos. No se tocó main/PROD.
+
+Límite de evidencias: se intentó repetir el antiguo E2E sintético
+de Events inmediatamente tras la publicación, pero coincidió con el
+checkout/despliegue paralelo de Router y falló al localizar su Event.
+Por la mezcla de versiones no se puede atribuir ese fallo al frontend
+ni certificar esa ejecución E2E; no se ha repetido el ensayo completo
+después de estabilizarse DEV. El gate offline integral y las pruebas
+de interfaz reales están verdes.
