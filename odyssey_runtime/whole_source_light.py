@@ -2632,6 +2632,21 @@ class WholeSourceLightExecutor:
                 # A per-scope provider failure is prewrite for THAT scope,
                 # but earlier independent scopes may already be durable.
                 outcome = self._abstain(locator, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+            except Exception:
+                if not event_mix:
+                    raise
+                # An unexpected downstream adapter error may happen AFTER its
+                # canonical WRITE. Never convert this to NO_WRITE, silently
+                # retry, or discard an earlier Event's verified E3 receipt.
+                # Preserve the outer operation manifest and return PARTIAL;
+                # unknown notes in this scope are deliberately not invented.
+                outcome = ApplicationResult(
+                    locator,
+                    ApplicationStatus.PARTIAL,
+                    (),
+                    (),
+                    planning_error="INDEPENDENT_EVENT_TASK_POSTWRITE_UNVERIFIED",
+                )
             if self.operation_manifest_observe is not None:
                 self.operation_manifest_observe(
                     delivery, source, actor, part.index, part.capability, outcome

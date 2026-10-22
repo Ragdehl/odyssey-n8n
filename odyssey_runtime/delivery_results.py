@@ -13,6 +13,8 @@ from typing import Any
 
 _MAX_RECORD_BYTES = 2 * 1024 * 1024
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
+_MANIFEST_CAPABILITY_PATTERN = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
+_DEFAULT_MANIFEST_CAPABILITIES = frozenset({"core", "tasks"})
 
 
 class DeliveryResultError(RuntimeError):
@@ -27,11 +29,31 @@ class LocalDeliveryResultStore:
     without planning or mutating the same logical delivery again.
     """
 
-    def __init__(self, root: Path) -> None:
-        """Bind this store to one already actor-isolated durable state root."""
+    def __init__(
+        self,
+        root: Path,
+        *,
+        manifest_capabilities: frozenset[str] = _DEFAULT_MANIFEST_CAPABILITIES,
+    ) -> None:
+        """Bind actor-local state and a trusted list of registered Apps.
+
+        The manifest is forensic, never write authorization. The default
+        retains the historical Core+Tasks contract; only application
+        composition may explicitly extend the accepted vocabulary.
+        """
         if not isinstance(root, Path):
             raise TypeError("delivery result root must be a pathlib.Path")
+        if (
+            not isinstance(manifest_capabilities, frozenset)
+            or not 1 <= len(manifest_capabilities) <= 64
+            or any(
+                not isinstance(name, str) or _MANIFEST_CAPABILITY_PATTERN.fullmatch(name) is None
+                for name in manifest_capabilities
+            )
+        ):
+            raise DeliveryResultError("registered manifest capability set is invalid")
         self._root = root
+        self._manifest_capabilities = manifest_capabilities
 
     @staticmethod
     def fingerprint(request: str, conversation_id: str) -> str:
@@ -143,7 +165,7 @@ class LocalDeliveryResultStore:
             if (
                 not isinstance(group, tuple)
                 or len(group) != 3
-                or group[0] not in ("core", "tasks")
+                or group[0] not in self._manifest_capabilities
                 or not isinstance(group[1], str)
                 or not group[1].strip()
                 or not isinstance(group[2], tuple)

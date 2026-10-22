@@ -58,11 +58,13 @@ def main():
         .check_output(["git", "-C", str(expected), "rev-parse", "HEAD"], text=True)
         .strip()
     )
-    token = uuid.uuid4().hex[:7].upper()
-    ev = f"Concierto ficticio E5 {token}"
-    task = f"entregar informe E5 {token}"
+    event_token = uuid.uuid4().hex[:7].upper()
+    task_token = uuid.uuid4().hex[:7].upper()
+    assert event_token != task_token
+    ev = f"Concierto ficticio E5 {event_token}"
+    task = f"presentar informe fiscal {task_token}"
     source = f"{ev} el 24 de noviembre de 2026. Tengo que {task} el 25 de noviembre de 2026."
-    before_ids = {meta["id"] for _, meta in scoped(token)}
+    before_ids = {meta["id"] for _, meta in scoped(event_token) + scoped(task_token)}
     assert not before_ids
     delivery = "e5-mixed-" + uuid.uuid4().hex[:20]
     http, result = api(
@@ -73,7 +75,7 @@ def main():
         + json.dumps({"http": http, "status": result.get("status"), "kind": result.get("kind")}),
         flush=True,
     )
-    records = scoped(token)
+    records = scoped(event_token) + scoped(task_token)
     print(
         "E5_MIXED_PHYSICAL="
         + json.dumps(

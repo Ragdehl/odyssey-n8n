@@ -29,6 +29,7 @@ from odyssey_core.independent_source_scopes import (
 from odyssey_core.notes import parse_note
 from odyssey_core.temporal_interpretation import TemporalInterpretation, TemporalMention
 from odyssey_core.temporal_resolution import TemporalResolution, TemporalResolutionKind
+from odyssey_runtime.delivery_results import LocalDeliveryResultStore
 from tests.runtime.test_p4_independent_mixed_scopes import TASK, _runtime
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
 
@@ -112,6 +113,25 @@ def _fixture(tmp_path: Path):
         return ApplicationResult(delivery, ApplicationStatus.COMPLETED, (), (receipt.session.id,))
 
     executor.task_delegate = run_real_task
+    # Exercise the same durable E3 manifest that active DEV uses, rather
+    # than accepting a provider-free result without operation journaling.
+    manifest = LocalDeliveryResultStore(
+        runtime.conversation_root_resolver.resolve(actor.stable_user_id) / "delivery-results",
+        manifest_capabilities=frozenset({"core", "tasks", "events"}),
+    )
+    executor.operation_manifest_begin = lambda rid, text, _who, groups: (
+        manifest.begin_operation_manifest(rid, manifest.fingerprint(text, "main"), text, groups)
+    )
+    executor.operation_manifest_observe = lambda rid, text, _who, index, cap, result: (
+        manifest.observe_operation_manifest(
+            rid,
+            manifest.fingerprint(text, "main"),
+            index,
+            cap,
+            result.status.value,
+            result.affected_stable_note_ids,
+        )
+    )
     stages = []
 
     def prepare_event(source: str, instant):
@@ -196,6 +216,14 @@ def test_mixed_event_task_one_canonical_event_and_one_session_then_byte_identica
     assert _event_notes(repo)[0].metadata["start_date"] == "2026-11-24"
     assert _event_notes(repo)[0].metadata["event_status"] == "scheduled"
     assert stages == ["task_prepared", "event_prepared", "event_written", "task_written"]
+    manifest_receipt = LocalDeliveryResultStore(
+        runtime.conversation_root_resolver.resolve(actor.stable_user_id) / "delivery-results",
+        manifest_capabilities=frozenset({"core", "tasks", "events"}),
+    ).inspect_operation_manifest(
+        "e5-real-mixed-frozen", LocalDeliveryResultStore.fingerprint(SOURCE, "main")
+    )
+    assert manifest_receipt["planned_operations"] == 2
+    assert manifest_receipt["observed_operations"] == 2
     flow = result["execution_flow"]
     assert [r["capability"] for r in flow["routes"]] == ["events", "tasks"]
     assert all(r["status"] == "completed" for r in flow["routes"])
@@ -273,3 +301,19 @@ def test_event_preparation_unavailable_prevents_first_task_write(tmp_path):
     assert result["status"] == "needs_attention", result
     assert not _event_notes(repo)
     assert stages == ["task_prepared"] and not calls
+
+
+def test_runtime_exception_after_event_write_stays_partial_and_replay_is_safe(tmp_path):
+    repo, actor, executor, runtime, calls, stages = _fixture(tmp_path)
+    executor.client = RecordedClient(_client_rows())
+    executor.independent_task_delegate = lambda *_: (_ for _ in ()).throw(
+        ValueError("unknown write status in second independent app")
+    )
+    result = runtime.execute_product(SOURCE, "e5-mixed-uncertain", "main", actor)
+    assert result["status"] == "partial", result
+    assert "INDEPENDENT_EVENT_TASK_POSTWRITE_UNVERIFIED" in str(result)
+    assert len(_event_notes(repo)) == 1
+    before = {str(path): repo.read_text(path) for path in repo.list_markdown_paths()}
+    replay = runtime.execute_product(SOURCE, "e5-mixed-uncertain", "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert {str(path): repo.read_text(path) for path in repo.list_markdown_paths()} == before

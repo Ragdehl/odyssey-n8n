@@ -181,3 +181,31 @@ def test_manifest_storage_failure_before_core_write_blocks_all_mutations(tmp_pat
     assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
     assert calls == ["prepare"]
     assert sessions.list_for_task("atlas-p4-dependent-task") == ()
+
+
+def test_registering_events_extends_only_the_forensic_capability_vocabulary(tmp_path):
+    source = "Concierto con horario. Tengo que preparar informe."
+    groups = (
+        ("events", "Concierto con horario. ", ()),
+        ("tasks", "Tengo que preparar informe.", ()),
+    )
+    root = tmp_path / "actor-events" / "delivery-results"
+    legacy = LocalDeliveryResultStore(root)
+    delivery = "e5-registered-capability"
+    fingerprint = legacy.fingerprint(source, "main")
+    legacy.claim_mutation(delivery, fingerprint)
+    with pytest.raises(DeliveryResultError, match="operation group or dependency"):
+        legacy.begin_operation_manifest(delivery, fingerprint, source, groups)
+    registered = LocalDeliveryResultStore(
+        root, manifest_capabilities=frozenset({"core", "tasks", "events"})
+    )
+    registered.begin_operation_manifest(delivery, fingerprint, source, groups)
+    registered.observe_operation_manifest(delivery, fingerprint, 0, "events", "completed", ("e-1",))
+    registered.observe_operation_manifest(delivery, fingerprint, 1, "tasks", "completed", ("t-1",))
+    evidence = registered.inspect_operation_manifest(delivery, fingerprint)
+    assert evidence["manifest_present"] is True
+    assert evidence["planned_operations"] == 2
+    assert evidence["observed_operations"] == 2
+    assert evidence["recovery_authorized"] is False
+    with pytest.raises(DeliveryResultError):
+        LocalDeliveryResultStore(root, manifest_capabilities=frozenset({"events/../unsafe"}))

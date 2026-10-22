@@ -4760,7 +4760,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
 
     def _operation_manifest_store(identity: AuthenticatedActorContext) -> LocalDeliveryResultStore:
         return LocalDeliveryResultStore(
-            conversation_root_resolver.resolve(identity.stable_user_id) / "delivery-results"
+            conversation_root_resolver.resolve(identity.stable_user_id) / "delivery-results",
+            manifest_capabilities=frozenset({"core", "tasks", *enabled_application_ids}),
         )
 
     def _begin_p4_operation_manifest(
