@@ -209,3 +209,25 @@ def test_registering_events_extends_only_the_forensic_capability_vocabulary(tmp_
     assert evidence["recovery_authorized"] is False
     with pytest.raises(DeliveryResultError):
         LocalDeliveryResultStore(root, manifest_capabilities=frozenset({"events/../unsafe"}))
+
+
+def test_failed_application_result_is_recorded_without_claiming_replay_authority(tmp_path):
+    """A legitimate failed scoped operation is observable, never a WRITE proof."""
+    store, delivery, fingerprint = _case(tmp_path)
+    store.claim_mutation(delivery, fingerprint)
+    store.begin_operation_manifest(delivery, fingerprint, SOURCE, GROUPS)
+    store.observe_operation_manifest(delivery, fingerprint, 0, "core", "failed", ())
+    store.observe_operation_manifest(delivery, fingerprint, 0, "core", "failed", ())
+    assert store.inspect_operation_manifest(delivery, fingerprint) == {
+        "manifest_present": True,
+        "planned_operations": 3,
+        "observed_operations": 1,
+        "claim_state": "unresolved_attempt",
+        "recovery_authorized": False,
+    }
+    with pytest.raises(DeliveryResultError, match="prior operation was not completed"):
+        store.observe_operation_manifest(delivery, fingerprint, 1, "tasks", "completed", ())
+    with pytest.raises(DeliveryResultError, match="affected IDs"):
+        store.observe_operation_manifest(delivery, fingerprint, 0, "core", "failed", ("note-x",))
+    with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
+        store.claim_mutation(delivery, fingerprint)

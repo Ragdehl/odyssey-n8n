@@ -215,8 +215,11 @@ class LocalDeliveryResultStore:
         """
         if not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 0:
             raise DeliveryResultError("operation ordinal is invalid")
-        if status not in ("completed", "partial", "needs_attention"):
+        if status not in ("completed", "partial", "needs_attention", "failed"):
             raise DeliveryResultError("operation status is invalid")
+        if status == "failed" and affected_ids:
+            # Failure observations must not advertise successful mutations.
+            raise DeliveryResultError("failed operation cannot claim affected IDs")
         if (
             not isinstance(affected_ids, tuple)
             or len(affected_ids) > 64
