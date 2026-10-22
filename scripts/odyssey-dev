@@ -104,7 +104,10 @@ health_once() {
 
 wait_health() {
   local attempt
-  for attempt in $(seq 1 60); do
+  # On the 4GB ARM DEV Pi the ONNX worker may need over one minute to
+  # hydrate from a cold restart under memory pressure. Do not mistake a
+  # healthy late startup for a failed deploy and launch a second cold boot.
+  for attempt in $(seq 1 180); do
     if health_once >/dev/null 2>&1; then
       return 0
     fi
