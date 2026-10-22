@@ -137,8 +137,9 @@ def test_provider_bound_create_reschedule_cancel_cas_and_markdown(tmp_path):
         now=CLOCK,
         request_id="e5-3",
     )
-    assert cancelled.status.value == "completed"
-    assert calendar(tmp_path, repo, schema).day("2026-11-24").events == ()
+    assert cancelled.status.value == "needs_attention"
+    assert cancelled.planning_error == "EVENT_CANCEL_DATE_EVIDENCE_REQUIRED"
+    assert len(calendar(tmp_path, repo, schema).day("2026-11-24").events) == 1
     assert (
         sum(repo.read_text(path).count("event_status:") == 1 for path in repo.list_markdown_paths())
         == 1

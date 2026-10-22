@@ -159,47 +159,10 @@ def _exact_anchor_for_quote(
     return TemporalAnchor.from_value(value)
 
 
-def _bare_cancel_has_no_unreviewed_qualifiers(source: str, reference: str | None) -> bool:
-    """Only an unqualified cancellation can proceed without Temporal evidence."""
-    if not isinstance(reference, str) or not reference:
+def _reference_has_no_temporal_qualifier(reference: str | None) -> bool:
+    """Fail closed when the Event name quote hides a relative day or clock."""
+    if not isinstance(reference, str) or not reference.strip():
         return False
-    hits = tuple(re.finditer(re.escape(reference), source))
-    if len(hits) != 1:
-        return False
-    hit = hits[0]
-    before = " ".join(source[: hit.start()].casefold().split())
-    after = source[hit.end() :].strip(" \t.!?¿¡:;")
-    if after:
-        return False
-    if before not in {
-        "cancela",
-        "cancela el",
-        "cancela la",
-        "cancelar",
-        "por favor cancela",
-        "por favor cancela el",
-        "por favor cancela la",
-        "cancel",
-        "cancel the",
-        "please cancel",
-        "please cancel the",
-        "annule",
-        "annule le",
-        "annule la",
-        "annuler",
-        "supprime",
-        "supprime le",
-        "supprime la",
-        "elimina",
-        "elimina el",
-        "elimina la",
-        "borra",
-        "borra el",
-        "borra la",
-    }:
-        return False
-    # A quoted reference may itself contain the omitted time qualifier.
-    # This is a veto for undated writes, not a temporal resolver.
     return (
         re.search(
             r"\b(?:next|last|today|tomorrow|yesterday|this|monday|tuesday|"
@@ -214,11 +177,102 @@ def _bare_cancel_has_no_unreviewed_qualifiers(source: str, reference: str | None
             r"january|february|march|april|may|june|july|august|september|october|"
             r"november|december|enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
             r"septiembre|octubre|noviembre|diciembre|janvier|février|fevrier|mars|"
-            r"avril|mai|juin|juillet|août|aout|décembre|decembre)\b"
-            r"|\b\d{4}\b|\b\d{1,2}[-/.]\d{1,2}\b",
+            r"avril|mai|juin|juillet|août|aout|décembre|decembre|at|on)\b"
+            r"|\b\d{4}\b|\b\d{1,2}[-/.]\d{1,2}\b"
+            r"|\b\d{1,2}(?:am|pm|st|nd|rd|th|h)\b"
+            r"|\ba\s+las\b",
             reference.casefold(),
         )
         is None
+    )
+
+
+def _cancel_source_has_full_coverage(candidate: EventCandidate) -> bool:
+    """Only an exact source-wide partition permits a dated Event mutation.
+
+    All content must be accounted for by the explicit CANCEL command, the
+    unique Event reference, one full date/time quote and harmless connectors.
+    A dropped word like 'next' or an unreviewed time can never disappear
+    from the evidence by two providers agreeing on a shorter quote.
+    """
+    event = candidate.interpretation
+    source = event.source_text
+    reference = event.event_reference
+    qualified = event.temporal_mentions
+    if (
+        not _reference_has_no_temporal_qualifier(reference)
+        or len(qualified) != 1
+        or qualified[0].role not in (EventTemporalRole.DATE, EventTemporalRole.START)
+    ):
+        return False
+    assert reference is not None
+    event_hits = list(re.finditer(re.escape(reference), source))
+    date_hits = list(re.finditer(re.escape(qualified[0].quote), source))
+    if len(event_hits) != 1 or len(date_hits) != 1:
+        return False
+    event_hit, date_hit = event_hits[0], date_hits[0]
+    if event_hit.end() >= date_hit.start():
+        return False
+    punctuation = " \\t.,;:!?¿¡"
+    prefix = " ".join(source[: event_hit.start()].strip(punctuation).casefold().split())
+    between = " ".join(
+        source[event_hit.end() : date_hit.start()].strip(punctuation).casefold().split()
+    )
+    suffix = source[date_hit.end() :].strip(punctuation)
+    return (
+        not suffix
+        and prefix
+        in {
+            "cancela",
+            "cancela el",
+            "cancela la",
+            "cancelar",
+            "por favor cancela",
+            "por favor cancela el",
+            "por favor cancela la",
+            "cancel",
+            "cancel the",
+            "please cancel",
+            "please cancel the",
+            "annule",
+            "annule le",
+            "annule la",
+            "annuler",
+            "supprime",
+            "supprime le",
+            "supprime la",
+            "elimina",
+            "elimina el",
+            "elimina la",
+            "borra",
+            "borra el",
+            "borra la",
+        }
+        and between
+        in {
+            "",
+            "el",
+            "del",
+            "de",
+            "la",
+            "de la",
+            "de los",
+            "para",
+            "para el",
+            "a",
+            "al",
+            "en",
+            "a las",
+            "on",
+            "the",
+            "at",
+            "for",
+            "le",
+            "du",
+            "au",
+            "à",
+            "pour",
+        }
     )
 
 
@@ -237,17 +291,9 @@ def _target_identity_anchor(
     if event.operation is not EventOperation.CANCEL:
         return None
     if not event.temporal_mentions:
-        # Shared E2 Temporal returns no interpretation if it detects no
-        # temporal mention. A bare CANCEL must prove its own exact-source
-        # grammar; never infer an empty TemporalInterpretation.
-        if temporal is not None:
-            if temporal.source_text != event.source_text or temporal.mentions:
-                raise EventRouteError("EVENT_CANCEL_UNMATCHED_TEMPORAL")
-        if not _bare_cancel_has_no_unreviewed_qualifiers(event.source_text, event.event_reference):
-            raise EventRouteError("EVENT_CANCEL_UNREVIEWED_DATE_QUALIFIER")
-        return None
-    if len(event.temporal_mentions) != 1:
-        raise EventRouteError("EVENT_CANCEL_MULTIPLE_DATES_AMBIGUOUS")
+        raise EventRouteError("EVENT_CANCEL_DATE_EVIDENCE_REQUIRED")
+    if not _cancel_source_has_full_coverage(candidate):
+        raise EventRouteError("EVENT_CANCEL_SOURCE_COVERAGE_UNVERIFIED")
     if len(temporal.mentions if temporal is not None else ()) != 1:
         raise EventRouteError("EVENT_CANCEL_TEMPORAL_INCOMPLETE")
     role = event.temporal_mentions[0].role
