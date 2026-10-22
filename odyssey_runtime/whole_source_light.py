@@ -642,7 +642,13 @@ class WholeSourceLightExecutor:
         # spans; never infer app ownership from input text or grant a write.
         direct_flow_repaired = False
         if (
-            result.status is ApplicationStatus.COMPLETED
+            result.status
+            in (
+                ApplicationStatus.COMPLETED,
+                ApplicationStatus.PARTIAL,
+                ApplicationStatus.NEEDS_ATTENTION,
+                ApplicationStatus.FAILED,
+            )
             and 0 < len(stages) <= 16
             and 0 < len(source) <= 4096
             and recorder.spans

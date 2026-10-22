@@ -189,7 +189,8 @@
       "max_evidence_level": "deterministic",
       "offline_test_selectors": [
         "tests/runtime/test_e6_direct_app_flow_diagnostics.py::test_direct_event_produces_contract_complete_measured_router_flow",
-        "tests/runtime/test_e6_direct_app_flow_diagnostics.py::test_direct_task_preserves_independent_source_scope_reviews_as_timed_stages"
+        "tests/runtime/test_e6_direct_app_flow_diagnostics.py::test_direct_task_preserves_independent_source_scope_reviews_as_timed_stages",
+        "tests/runtime/test_e6_direct_app_flow_diagnostics.py::test_direct_app_incomplete_outcome_preserves_observed_flow"
       ],
       "blocks_p4_dev": false,
       "verified_real_browser_n8n": false

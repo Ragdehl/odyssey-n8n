@@ -2,20 +2,22 @@
 
 from __future__ import annotations
 
+import pytest
+
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
 from odyssey_runtime.serialization import application_result_to_response
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient, _fixture
 
 
-def _app_result(capability, request):
+def _app_result(capability, request, status=ApplicationStatus.COMPLETED):
     if capability == "events":
         stages = ("events.interpretation", "temporal.interpretation")
     else:
         stages = ("tasks.interpretation", "temporal.interpretation", "planner")
     return ApplicationResult(
         request,
-        ApplicationStatus.COMPLETED,
+        status,
         (),
         (),
         operational=OperationalEvidence(
@@ -35,7 +37,7 @@ def _assert_complete_flow(result, capability, source, expected_reviews):
     assert len(flow["routes"]) == 1
     route = flow["routes"][0]
     assert route["capability"] == capability
-    assert route["status"] == "completed"
+    assert route["status"] == result.status.value
     assert route["temporal"] == []
     assert route["text"] == source
     all_stages = raw["operational"]["stages"]
@@ -103,3 +105,50 @@ def test_direct_task_preserves_independent_source_scope_reviews_as_timed_stages(
     _assert_complete_flow(result, "tasks", source, 1)
     assert calls == [(source, "e6-direct-task-flow", actor.stable_user_id)]
     assert len(repository.list_markdown_paths()) == 1
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    (ApplicationStatus.FAILED, ApplicationStatus.NEEDS_ATTENTION, ApplicationStatus.PARTIAL),
+)
+@pytest.mark.parametrize("capability", ("events", "tasks"))
+def test_direct_app_incomplete_outcome_preserves_observed_flow(tmp_path, capability, outcome):
+    """A failed or deferred app is the case where route diagnostics matter most."""
+    source = "Mañana debo revisar mi tarea ficticia."
+    repository, actor, executor, _ = _fixture(tmp_path)
+    executor.client = RecordedClient(
+        [
+            {
+                "capabilities": [capability],
+                "interpretation": "joint",
+                "reason": "single",
+                "app_scopes": [],
+            },
+            *(
+                [
+                    {
+                        "only_task_semantics": True,
+                        "exactly_one_operation": True,
+                        "source_quote": source,
+                    }
+                ]
+                if capability == "tasks"
+                else []
+            ),
+        ]
+    )
+
+    def fake_delegate(text, request, authenticated):
+        assert text == source
+        assert authenticated.stable_user_id == actor.stable_user_id
+        return _app_result(capability, request, outcome)
+
+    if capability == "tasks":
+        executor.task_delegate = fake_delegate
+    else:
+        executor.event_delegate = fake_delegate
+    result = executor(source, f"e6-{capability}-{outcome.value}", actor, "main")
+    assert result.status == outcome
+    _assert_complete_flow(result, capability, source, int(capability == "tasks"))
+    assert len(repository.list_markdown_paths()) == 1
+    assert not application_result_to_response(result)["affected_stable_note_ids"]
