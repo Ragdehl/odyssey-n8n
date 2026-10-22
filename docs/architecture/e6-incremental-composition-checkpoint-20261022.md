@@ -61,7 +61,7 @@ totalmente integrable sin cambios del compilador y esquema.
 - Gate final ampliado: **1811 Python +181 JavaScript +7 subtests PASS**,
   130 archivos en 11 grupos; Ruff check/format PASS, integridad de contratos
   de aceptación PASS, sin mutaciones en DEV/PROD.
-- PENDIENTE aquí: revisión focal de límites y commit de la rama.
+- Commit de implementación `9e4516a639f64fa64af2a93c4adc710ec815ea7d`; revisión independiente read-only **PASS**. El auditor inspeccionó el diff y confirmó las fronteras de catálogo habilitado, la ausencia de rutas para capacidades no registradas, el caso Core-only con catálogo vacío y la no alteración de actor, E3 y Events. Evidencia: `/home/ragdehl/projects/.odyssey-agent-runs/e6-app-bindings-source-review-20261022/findings.md`. La revisión no repitió la suite ni constituye prueba E2E DEV.
 - No se han modificado datos, n8n, Runtime DEV, el vault real ni PROD.
 - Próximos pasos E6.1: encapsular la validación común de source/actor y el
   contrato de evidencia tipada; NO unificar semántica de herencia de Task y
