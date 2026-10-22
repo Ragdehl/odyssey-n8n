@@ -1944,7 +1944,7 @@ def test_production_composition_routes_temporal_to_core_day_e2e(
     )
 
     runtime = composition.build_runtime_from_environment()
-    assert runtime.application_catalog.capabilities()[0].id == "tasks"
+    assert "tasks" in {item.id for item in runtime.application_catalog.capabilities()}
     assert runtime.application_catalog.capabilities()[0].enabled is False
     assert runtime.application_router is not None
     assert runtime.application_executors == {}

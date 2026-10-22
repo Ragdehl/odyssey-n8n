@@ -45,10 +45,13 @@ from .schema import EVENT_TYPE
 class EventMutationError(ValueError):
     """Unsafe transition or unresolved canonical identity."""
 
-    def __init__(self, code: str, *, physical_write: bool = False) -> None:
+    def __init__(
+        self, code: str, *, physical_write: bool = False, target_id: str | None = None
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.physical_write = physical_write
+        self.target_id = target_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +189,9 @@ class EventMutationService:
                 ),
             )
         except CanonicalPostwriteError as error:
-            raise EventMutationError("POSTWRITE_UNVERIFIED", physical_write=True) from error
+            raise EventMutationError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (
             ReferencePreflightError,
             CanonicalMutationError,
@@ -270,7 +275,9 @@ class EventMutationService:
                 ),
             )
         except CanonicalPostwriteError as error:
-            raise EventMutationError("POSTWRITE_UNVERIFIED", physical_write=True) from error
+            raise EventMutationError(
+                "POSTWRITE_UNVERIFIED", physical_write=True, target_id=error.target_id
+            ) from error
         except (CanonicalMutationError, MaterializationError, ValueError) as error:
             if isinstance(error, EventMutationError):
                 raise
@@ -278,5 +285,7 @@ class EventMutationService:
         if receipt.persistence.operation is not PersistenceOperation.UPDATED or (
             operation == "cancel" and receipt.readback.metadata.get("event_status") != "cancelled"
         ):
-            raise EventMutationError("EVENT_POSTWRITE_UNVERIFIED", physical_write=True)
+            raise EventMutationError(
+                "EVENT_POSTWRITE_UNVERIFIED", physical_write=True, target_id=note_id
+            )
         return receipt

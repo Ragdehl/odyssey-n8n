@@ -26,6 +26,10 @@ from odyssey_apps import (
 )
 from odyssey_apps.calendar import CalendarApplication, CalendarQueryService
 from odyssey_apps.events import EVENT_SCHEMA_EXTENSION
+from odyssey_apps.events.execution import execute_event_candidate
+from odyssey_apps.events.interpretation import EventInterpretationError, EventOperation
+from odyssey_apps.events.mutations import EventMutationService
+from odyssey_apps.events.provider import OpenAIEventInterpreter
 from odyssey_apps.fact_candidates import OpenAIFactCandidateRouter
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import (
@@ -252,6 +256,15 @@ def _emit_progress(stage: str, payload: Mapping[str, object] | None = None) -> N
 
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
+
+_EVENTS_DESCRIPTOR = ApplicationDescriptor(
+    id="events",
+    routing_description=(
+        "structured calendar events, school activities, appointments, meetings, "
+        "multi-day occurrences, explicit rescheduling and cancellation; not Tasks or reminders"
+    ),
+    dependencies=("temporal",),
+)
 
 _TASKS_DESCRIPTOR = ApplicationDescriptor(
     id="tasks",
@@ -3269,7 +3282,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
             execute_candidate_routed_message(
                 source,
                 router=OpenAIFactCandidateRouter(
-                    client, prompt_revision="v6" if hybrid_source_review_enabled else "v5"
+                    client,
+                    prompt_revision="v6" if hybrid_source_review_enabled else "v5",
+                    event_routing=(
+                        "events" in enabled_application_ids and hybrid_source_review_enabled
+                    ),
                 ),
                 temporal=OpenAITemporalInterpreter(
                     client,
@@ -3298,9 +3315,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
                 # Keep Task source routed only to the registered scoped Tasks lifecycle.
                 # The dispatcher has no Day/Core fallback for task candidates.
                 bundle_compiler=lambda proposal: compile_hybrid_candidate_bundle(
-                    proposal, enable_tasks=True
+                    proposal,
+                    enable_tasks=True,
+                    enable_events="events" in enabled_application_ids,
                 ),
                 task_route_executor=_ScopedTaskRouteExecutor(execute_scoped_tasks),
+                event_route_executor=execute_events
+                if "events" in enabled_application_ids
+                else None,
                 progress_callback=_emit_progress,
                 postwrite_index_refresh=refresh_affected_indexes,
                 source_boundary_reviewer=(
@@ -3368,9 +3390,9 @@ def build_runtime_from_environment() -> RuntimeComposition:
     )
 
     enabled_application_ids = _enabled_application_ids()
-    application_catalog = ApplicationRegistry.from_descriptors((_TASKS_DESCRIPTOR,)).catalog(
-        enabled_ids=enabled_application_ids
-    )
+    application_catalog = ApplicationRegistry.from_descriptors(
+        (_TASKS_DESCRIPTOR, _EVENTS_DESCRIPTOR)
+    ).catalog(enabled_ids=enabled_application_ids)
     application_router = OpenAIApplicationRouter.from_environment(application_catalog)
     application_executors: dict[str, ApplicationExecutor] = {}
     direct_task_mutations = (
@@ -4357,8 +4379,78 @@ def build_runtime_from_environment() -> RuntimeComposition:
             temporal,
         )
 
+    def execute_events(
+        source_text: str,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        conversation_context: Sequence[Mapping[str, str]] = (),
+    ) -> ApplicationResult:
+        """Run one trusted Events destination, then existing Temporal/Core/E3."""
+        if authenticated_actor is None:
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="EVENT_AUTH_REQUIRED",
+            )
+        clock = _current_time()
+        started = perf_counter()
+        event_interpreter = OpenAIEventInterpreter.from_environment()
+        try:
+            candidate = event_interpreter.interpret(source_text)
+            if candidate.interpretation.source_text != source_text:
+                raise EventInterpretationError("Events interpreter source mismatch")
+        except EventInterpretationError:
+            return ApplicationResult(
+                request_id,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="EVENT_INTERPRETATION_REJECTED",
+            )
+        event_duration = max(0.0, (perf_counter() - started) * 1000)
+        stage = OperationalStage(
+            "events.interpretation",
+            OperationalOutcome.COMPLETED,
+            event_duration,
+            model=event_interpreter.model,
+            reasoning_effort=event_interpreter.reasoning_effort,
+            usage=normalize_provider_usage(event_interpreter.last_usage),
+        )
+        temporal_result = None
+        temporal_stage = ()
+        if candidate.interpretation.operation in {EventOperation.CREATE, EventOperation.UPDATE}:
+            resolved = prepare_temporal_interpretation(
+                source_text, conversation_context, captured_clock=clock
+            )
+            temporal_result = (
+                resolved.value if isinstance(resolved.value, TemporalInterpretation) else None
+            )
+            temporal_stage = (resolved.stage,)
+        result = execute_event_candidate(
+            candidate=candidate,
+            temporal=temporal_result,
+            repository=repository,
+            schema=schema,
+            mutations=EventMutationService(repository, schema, history_recorder),
+            request_id=request_id,
+            actor=_persistence_actor(actor, authenticated_actor),
+            now=clock["timestamp"],
+            authenticated=True,
+        )
+        return replace(
+            result,
+            operational=OperationalEvidence(
+                max(0.0, (perf_counter() - started) * 1000),
+                (stage, *temporal_stage),
+            ),
+        )
+
     if "tasks" in enabled_application_ids:
         application_executors["tasks"] = execute_tasks
+    if "events" in enabled_application_ids:
+        application_executors["events"] = execute_events
 
     # In DEV workers now finish domain interpretation AND validated Core planning.
     # Only the returned execution callbacks use repositories, preflight and Git,

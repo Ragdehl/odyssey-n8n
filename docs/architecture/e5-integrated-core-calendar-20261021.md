@@ -61,3 +61,11 @@ manifest de entrega E3 antes de permitir cualquier operación con efecto.
 Después ejecutar la matriz E5 sobre vaults sintéticos con prueba de interfaz
 y aceptación funcional, **sin repetir las cuatro auditorías masivas**.
 DEV/PROD, Cloudflare y las notas personales permanecen fuera de esta etapa.
+
+## Integración E5 del Router (22-10-2026) — todavía pendiente n8n/Chromium
+
+Se ha ampliado el **Router híbrido solo cuando Events esté habilitada** con kind fuente `event`, manteniendo `occurrence` para hechos personales y `task` para tareas. El intérprete Events usa GPT real (esquema JSON estricto) y cita exacta del nombre; E2 Temporal resuelve las fechas y `EventMutationService` reutiliza Core/E3. El resultado de escritura va al `ApplicationResult` estándar; el mismo ID de entrega conserva el manifest/replay de producto existente. Se han añadido guardas: actor autenticado, referencia Event inequívoca, rechazo de herencia de fechas entre rutas no validada y `PARTIAL` con ID afectado si la lectura posterior falla. No se activan Event ni rutas nuevas en PROD.
+
+**Ensayos observados**: 3/3 solicitudes sintéticas con GPT real + Temporal + Core E3 + Markdown PASS (crear, reprogramar y cancelar; una sola nota Event); calendario cancelado sin evento visible. Una primera prueba de Router real dio 4/5: CREATE declarativo mal clasificado como `occurrence`; se corrigió el prompt opt-in y una nueva llamada real confirmó `event → events`. Regresiones transversales finales: **1.697 Python +181 JavaScript +7 subtests PASS**, Ruff PASS. Dos tests adicionales prueban que un fallo postwrite nunca se transforma en falso NO_WRITE y que QUERY sin lectura conectada se abstiene.
+
+**Pendientes que impiden declarar E5 lista:** conectar lectura QUERY con presentación visible, recurrencia semanal de lenguaje natural al contrato compartido de Temporal (sin adivinar días o DST), aprobar flujo mixto Event+Task, y **ejecutar HTTP n8n real → runtime E5 → Core/Markdown → Chromium móvil/escritorio y replay** tras un despliegue de DEV con `ODYSSEY_ENABLED_APPLICATIONS=tasks,events`. En este ensayo el servicio DEV sigue con `tasks` y commit E4 `d03737f`; todavía no se ha realizado ese despliegue ni la comprobación de navegador. NO afirmar E5 end-to-end/producto aprobada hasta superar esas pruebas. Las evidencias solo emplean vault efímero sin datos personales.

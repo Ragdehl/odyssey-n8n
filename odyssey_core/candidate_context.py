@@ -53,6 +53,7 @@ ALLOWED_CANDIDATE_KINDS = frozenset(
         "negative",
         "conditional",
         "task",
+        "event",
     }
 )
 

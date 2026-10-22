@@ -328,8 +328,28 @@ def hybrid_tasks_catalog() -> ApplicationCatalog:
     return ApplicationRegistry((descriptor,)).catalog(enabled_ids=("tasks",))
 
 
+def hybrid_enabled_app_catalog(*, enable_tasks: bool, enable_events: bool) -> ApplicationCatalog:
+    descriptors = []
+    ids = []
+    if enable_tasks:
+        descriptors.append(
+            ApplicationDescriptor(
+                "tasks", "Task lifecycle interpretation and canonical Task mutation", ("core",)
+            )
+        )
+        ids.append("tasks")
+    if enable_events:
+        descriptors.append(
+            ApplicationDescriptor(
+                "events", "Dated and recurring calendar Event lifecycle", ("temporal",)
+            )
+        )
+        ids.append("events")
+    return ApplicationRegistry(tuple(descriptors)).catalog(enabled_ids=tuple(ids))
+
+
 def compile_hybrid_candidate_bundle(
-    proposal: FactCandidateProposal, *, enable_tasks: bool = False
+    proposal: FactCandidateProposal, *, enable_tasks: bool = False, enable_events: bool = False
 ) -> CandidateRouteBundle:
     """Build exact-source groups while retaining every candidate independently.
 
@@ -405,8 +425,13 @@ def compile_hybrid_candidate_bundle(
             for role in candidate.roles
         )
         all_tasks = all(candidate.kind == "task" for candidate in context.candidates)
+        all_events = all(candidate.kind == "event" for candidate in context.candidates)
         route = Route(
-            "tasks" if enable_tasks and all_tasks else ("temporal" if temporal else "core"),
+            "tasks"
+            if enable_tasks and all_tasks
+            else "events"
+            if enable_events and all_events
+            else ("temporal" if temporal else "core"),
             context.source,
             depends_on=dependency,
             dependent_mention=mention,
@@ -424,7 +449,7 @@ def compile_hybrid_candidate_bundle(
     result = CandidateRouteBundle(
         source, RoutePlan(RouteOutcome.ROUTE, tuple(routes)), tuple(units)
     )
-    catalog = hybrid_tasks_catalog() if enable_tasks else ApplicationCatalog.empty()
+    catalog = hybrid_enabled_app_catalog(enable_tasks=enable_tasks, enable_events=enable_events)
     validate_route_plan(result.plan, source, catalog)
     validate_bundle_original_provenance(result, catalog=catalog)
     return result

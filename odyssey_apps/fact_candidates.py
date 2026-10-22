@@ -55,6 +55,7 @@ CANDIDATE_KINDS = frozenset(
         "negative",
         "conditional",
         "task",
+        "event",
     }
 )
 CANDIDATE_STATES = frozenset({"candidate", "ambiguous_identity"})
@@ -656,12 +657,17 @@ class OpenAIFactCandidateRouter:
     regression and reviewed adapter to Temporal/Core must precede activation.
     """
 
-    def __init__(self, client: Any, *, prompt_revision: str = "v1") -> None:
+    def __init__(
+        self, client: Any, *, prompt_revision: str = "v1", event_routing: bool = False
+    ) -> None:
         """Select a reviewed source-only teaching revision without changing Router v0."""
         if prompt_revision not in {"v1", "v2", "v3", "v4", "v5", "v6"}:
             raise ValueError("Unknown fact-candidate prompt revision")
         self._client = client
         self._prompt_revision = prompt_revision
+        if event_routing and prompt_revision != "v6":
+            raise ValueError("Events routing requires reviewed source v6 contract")
+        self._event_routing = event_routing
         self.last_usage: Any | None = None
         self.last_error_category: str | None = None
 
@@ -781,6 +787,22 @@ class OpenAIFactCandidateRouter:
                         + (
                             FACT_CANDIDATE_PROMPT_V6_EXTENSION
                             if self._prompt_revision == "v6"
+                            else ""
+                        )
+                        + (
+                            " Events-opt-in source segmentation: use candidate kind 'event' ONLY "
+                            "for an explicit scheduled/calendar occurrence (event creation, "
+                            "rescheduling, cancellation or querying events), including appointments, "
+                            "school activities, trips and planned meetings. A future scheduled "
+                            "activity stated declaratively without an imperative is also an "
+                            "Event: e.g. a school trip next Thursday, or a concert at eight. "
+                            "The user need not say add to my calendar. Distinguish ordinary "
+                            "past experiences/dated facts from calendar EVENTS: they remain "
+                            "'occurrence' or other factual kind. Task/Reminder is never Event. "
+                            "A separate Event interpreter later confirms lifecycle; candidate "
+                            "kind is a routing hint, never mutation authority. Split independent "
+                            "Task + Event actions into distinct source candidates. "
+                            if self._event_routing
                             else ""
                         )
                         + revision_instruction,

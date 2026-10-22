@@ -273,6 +273,7 @@ def execute_candidate_routed_message(
     route_ambiguity_recorder: Callable[[object, tuple[object, ...]], str] | None = None,
     bundle_compiler: Callable[[FactCandidateProposal], object] | None = None,
     task_route_executor: object | None = None,
+    event_route_executor: object | None = None,
     progress_callback: Callable[[str, dict[str, object]], None] | None = None,
     postwrite_index_refresh: Callable[[Sequence[str]], None] | None = None,
     source_boundary_reviewer: object | None = None,
@@ -528,19 +529,22 @@ def execute_candidate_routed_message(
         report_progress("routing.boundary_review_ready")
     report_progress("routing.ready", {"route_count": len(bundle.plan.routes)})
     uses_tasks = any(route.capability_id == "tasks" for route in bundle.plan.routes)
-    if uses_tasks:
-        from odyssey_runtime.hybrid_group_compiler import hybrid_tasks_catalog
+    uses_events = any(route.capability_id == "events" for route in bundle.plan.routes)
+    if uses_tasks or uses_events:
+        from odyssey_runtime.hybrid_group_compiler import hybrid_enabled_app_catalog
 
         if bundle_compiler is None or any(
             not scoped.context.hybrid_interpretation_mode
             or not all(
-                c.kind == "task" and c.state == "candidate" for c in scoped.context.candidates
+                c.kind == ("task" if scoped.route.capability_id == "tasks" else "event")
+                and c.state == "candidate"
+                for c in scoped.context.candidates
             )
             for scoped in bundle.units
-            if scoped.route.capability_id == "tasks"
+            if scoped.route.capability_id in {"tasks", "events"}
         ):
-            raise RouterError("Task routing requires explicitly validated hybrid task groups")
-        catalog = hybrid_tasks_catalog()
+            raise RouterError("App routing requires validated source-only app groups")
+        catalog = hybrid_enabled_app_catalog(enable_tasks=uses_tasks, enable_events=uses_events)
     else:
         catalog = ApplicationCatalog.empty()
     validate_bundle_original_provenance(bundle, catalog=catalog)
@@ -549,6 +553,8 @@ def execute_candidate_routed_message(
         or callable(getattr(task_route_executor, "execute_scoped", None))
     ):
         raise ValueError("Tasks execution must be a trusted application executor")
+    if event_route_executor is not None and not callable(event_route_executor):
+        raise ValueError("Events execution must be a trusted application executor")
     outer_id = request_id_factory()
     if not isinstance(outer_id, str) or not outer_id.strip():
         raise ValueError("Outer request id must be non-empty")
@@ -650,6 +656,44 @@ def execute_candidate_routed_message(
         report_progress("planner.started")
         result = task_route_executor(unit_source, locator, authenticated_actor, prior_turns)
         report_progress("planner.ready")
+        return result
+
+    def run_event_route(
+        unit_source: str,
+        locator: str,
+        routed_authenticated_actor: AuthenticatedActorContext | None = None,
+        routed_prior_turns: Sequence[Mapping[str, str]] = (),
+    ) -> ApplicationResult:
+        ordinal, scoped = route_scopes[locator]
+        if (
+            scoped.route.capability_id != "events"
+            or scoped.route.source_text != unit_source
+            or event_route_executor is None
+            or routed_authenticated_actor != authenticated_actor
+            or tuple(routed_prior_turns) != tuple(conversation_context)
+        ):
+            raise ValueError("Events executor source, actor or context mismatch")
+        inherited = temporal_handoff.inherited(
+            scoped.context,
+            current_route_index=ordinal,
+            start=scoped.original_start,
+            end=scoped.original_end,
+        )
+        if inherited:
+            # Do not silently reinterpret a scoped clock from a prior route:
+            # future Events integration must explicitly consume the E2 proof.
+            return ApplicationResult(
+                locator,
+                ApplicationStatus.NEEDS_ATTENTION,
+                (),
+                (),
+                planning_error="EVENT_SCOPED_TEMPORAL_EVIDENCE_UNSUPPORTED",
+            )
+        report_progress("events.started")
+        result = event_route_executor(
+            unit_source, locator, routed_authenticated_actor, routed_prior_turns
+        )
+        report_progress("events.ready")
         return result
 
     def run_unit(
@@ -1268,9 +1312,10 @@ def execute_candidate_routed_message(
         catalog=catalog,
         core_execute=run_unit,
         temporal_execute=run_unit,
-        application_executors=(
-            {"tasks": run_task_route} if task_route_executor is not None else {}
-        ),
+        application_executors={
+            **({"tasks": run_task_route} if task_route_executor is not None else {}),
+            **({"events": run_event_route} if event_route_executor is not None else {}),
+        },
         dependent_pending_executor=(
             preserve_route_ambiguity if route_ambiguity_recorder is not None else None
         ),
