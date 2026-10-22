@@ -287,3 +287,63 @@ El primer FAIL de auditoría queda registrado como hallazgo corregido,
 no convertido retroactivamente en PASS. Antes de adopción DEV debe pasar
 la verificación independiente focal de la corrección y después el
 E2E real de compatibilidad E6.
+
+
+## E6.3 — Aceptación real en DEV (22-10-2026)
+
+**Código realmente probado y desplegado:**
+`7fac3eac813bc65302bb378db26fd442943864d0`.
+Baseline de rollback:
+`b87a748f6e06028f885c38ffdb7c5b76ec13ade0`.
+
+- Primera auditoría de implementación: **FAIL** por discrepancia de
+  registro compilador/dispatcher, donde `plan` podía ir a Core aun
+  estando Projects registrado solo en el dispatcher. No se desplegó ese
+  commit. Hallazgo:
+  `/home/ragdehl/projects/.odyssey-agent-runs/e6-third-scoped-app-review-20261022/findings.md`.
+- Reparación commit `7fac3ea` y caso regresión obligatoria.
+  Revisión independiente read-only y focal del hallazgo: **PASS**;
+  evidencia:
+  `/home/ragdehl/projects/.odyssey-agent-runs/e6-third-scoped-app-fix-verification-20261022/findings.md`.
+- Gate completo de la versión corregida:
+  **1848 Python +181 JavaScript +7 subtests PASS**,
+  133 archivos/11 grupos, Ruff PASS; acceptance ledger:
+  **20 invariantes y 55 anclajes PASS**.
+- Backups DEV vault/estado y volumen n8n con SHA256 comprobados tras
+  el ensayo. Git DEV y marcador coinciden con SHA desplegado, limpias
+  las ramas DEV y de desarrollo antes de documentar el resultado;
+  runtime y n8n HTTP 200. Producción no modificada.
+- Ensayo HTTP real y sintético con versión E6.3, ejecutando el script
+  heredado `scripts/e5_dev_audited_mutations_e2e.py` (el prefijo
+  de su resultado sigue diciendo E5, pero el SHA que comprueba es E6.3):
+  **GPT/Router → n8n → Core/E3 → Markdown → Calendar PASS**.
+
+Recibo reproducible:
+`/home/ragdehl/projects/.odyssey-agent-runs/e6-third-scoped-dev-acceptance-20261022/orchestrator.log`
+y `e2e.log`.
+
+```json
+{
+  "pass": true,
+  "wrong_date_cancel_rejected": true,
+  "right_date_cancelled": true,
+  "old_new_reschedule_correct": true,
+  "no_fabricated_multi_day_event": true,
+  "replay_byte_identical": true,
+  "synthetic_only": true,
+  "production_touched": false,
+  "deployed_sha": "7fac3eac813b"
+}
+```
+
+**Decisión:** checkpoint funcional incremental E6.0–E6.3 aceptado en DEV.
+No autoriza PROD ni demuestra una app Projects real: siguen faltando
+semántica, tipo nuevo de candidato si se requiere, schema, casos de uso,
+interfaz y GPT E2E propios. Las nuevas mejoras de Clean Architecture
+continúan al añadir capacidades, no mediante reescritura general.
+
+**Medición local solo del compilador (sin GPT, 5x160 llamadas):**
+mediana Core-only 0,0961 ms y mediana con tercera App registrada
+0,0903 ms; están en la misma magnitud de coste y estas cifras **no**
+son un p95 ni miden latencia global n8n, GPT, Core o Writer. Tampoco se
+ha repetido una prueba visual Chromium en este checkpoint.
