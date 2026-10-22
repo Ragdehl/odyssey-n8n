@@ -37,6 +37,7 @@ from odyssey_core.source_boundary_review import (
     CoreSourceBoundaryUnit,
     SourceBoundaryReviewError,
 )
+from odyssey_runtime.application_bindings import bind_registered_executors
 from odyssey_runtime.context_planner_ports import ContextAwareCorePlannerFactory
 from odyssey_runtime.scoped_event_handoff import ScopedCoreEventHandoff
 from odyssey_runtime.scoped_subject_handoff import ScopedCoreSubjectHandoff
@@ -1305,6 +1306,16 @@ def execute_candidate_routed_message(
         )
 
     selected_router = SimpleNamespace(route=lambda current, _prior=(): bundle.plan)
+    # The candidate bundle may contain only Core/Temporal. Bind only entries
+    # in its validated catalog, never phantom Tasks/Events registrations.
+    trusted_app_handlers = {
+        "tasks": run_task_route if task_route_executor is not None else None,
+        "events": run_event_route if event_route_executor is not None else None,
+    }
+    bound_app_executors = bind_registered_executors(
+        catalog,
+        {cap.id: trusted_app_handlers.get(cap.id) for cap in catalog.capabilities()},
+    )
     result = execute_routed_request(
         user_request=source,
         outer_request_id=outer_id,
@@ -1312,10 +1323,7 @@ def execute_candidate_routed_message(
         catalog=catalog,
         core_execute=run_unit,
         temporal_execute=run_unit,
-        application_executors={
-            **({"tasks": run_task_route} if task_route_executor is not None else {}),
-            **({"events": run_event_route} if event_route_executor is not None else {}),
-        },
+        application_executors=bound_app_executors,
         dependent_pending_executor=(
             preserve_route_ambiguity if route_ambiguity_recorder is not None else None
         ),

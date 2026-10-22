@@ -160,6 +160,7 @@ from odyssey_core.temporal_interpretation import (
 )
 from odyssey_core.temporal_resolution import TemporalResolutionKind
 from odyssey_core.verified_source_inventory import verified_context_source_inventory
+from odyssey_runtime.application_bindings import bind_registered_executors
 
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
@@ -3400,7 +3401,6 @@ def build_runtime_from_environment() -> RuntimeComposition:
         (_TASKS_DESCRIPTOR, _EVENTS_DESCRIPTOR)
     ).catalog(enabled_ids=enabled_application_ids)
     application_router = OpenAIApplicationRouter.from_environment(application_catalog)
-    application_executors: dict[str, ApplicationExecutor] = {}
     direct_task_mutations = (
         TaskDirectMutationService(
             repository,
@@ -4494,10 +4494,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
             ),
         )
 
-    if "tasks" in enabled_application_ids:
-        application_executors["tasks"] = execute_tasks
-    if "events" in enabled_application_ids:
-        application_executors["events"] = execute_events
+    application_executors = bind_registered_executors(
+        application_catalog,
+        {"tasks": execute_tasks, "events": execute_events},
+        require_enabled=True,
+    )
 
     # In DEV workers now finish domain interpretation AND validated Core planning.
     # Only the returned execution callbacks use repositories, preflight and Git,
