@@ -541,6 +541,16 @@ def execute_candidate_routed_message(
     uses_tasks = any(route.capability_id == "tasks" for route in bundle.plan.routes)
     uses_events = any(route.capability_id == "events" for route in bundle.plan.routes)
     registered_extra = registered_app_index(registered_scoped_apps)
+    # Compiler and dispatcher receive separate trusted inputs. If either is
+    # configured for an App kind while the other is not, a candidate must
+    # never silently fall back to Core and gain a different write path.
+    for scoped in bundle.units:
+        for app_id, app in registered_extra.items():
+            if (
+                any(candidate.kind == app.candidate_kind for candidate in scoped.context.candidates)
+                and scoped.route.capability_id != app_id
+            ):
+                raise RouterError("Registered App source was misrouted by compiler")
     app_kinds = {
         "tasks": "task",
         "events": "event",

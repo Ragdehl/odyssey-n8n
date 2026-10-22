@@ -82,7 +82,8 @@ def _call(
         context_limit=5,
         request_id_factory=lambda: "e6-project-synthetic",
         bundle_compiler=partial(
-            compile_hybrid_candidate_bundle, registered_apps=compiled_apps or (app,)
+            compile_hybrid_candidate_bundle,
+            registered_apps=compiled_apps if compiled_apps is not None else (app,),
         ),
         registered_scoped_apps=bound_apps if bound_apps is not None else (app,),
     )
@@ -200,3 +201,10 @@ def test_mixed_core_and_registered_app_group_fails_closed():
     )
     with pytest.raises(RouterError, match="independent authorized source group"):
         compile_hybrid_candidate_bundle(proposal, registered_apps=(app,))
+
+
+def test_dispatcher_refuses_when_compiler_omits_trusted_app_registration(tmp_path):
+    """Opposite mismatch: Projects registered in dispatcher but Core compiler."""
+    app = _app()
+    with pytest.raises(RouterError, match="misrouted by compiler"):
+        _call(tmp_path, app, compiled_apps=(), bound_apps=(app,))

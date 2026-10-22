@@ -254,3 +254,36 @@ modelo ni registrar plugins arbitrarios.
 Pruebas locales nuevas: nueve casos E6.3 y regresión focal de
 Tasks/Events. Evidencias de aceptación transversal y DEV se
 anotarán cuando finalicen, sin anticipar su resultado.
+
+
+### Revisión independiente E6.3 y corrección del bloqueo
+
+La primera auditoría read-only del commit `74c4700` devolvió **FAIL**
+por una divergencia de configuración: si el compilador omitía la App
+`projects` pero el dispatcher sí la registraba, un candidato `plan`
+podía compilarse como `core` y tomar una ruta distinta en vez de fallar.
+Evidencia reproducible:
+`/home/ragdehl/projects/.odyssey-agent-runs/e6-third-scoped-app-review-20261022/findings.md`.
+
+**Corrección aplicada antes de promover a DEV:** el dispatcher revalida
+cada grupo compilado contra la tabla confiable de tipos de candidato de
+Apps registradas. Si algún candidato pertenece a una App explícitamente
+registrada, exige que su `route.capability_id` sea esa App; si no,
+lanza `RouterError` ANTES de la ejecución. Caso inverso (compilador
+propone App pero dispatcher no la tiene) ya fallaba con validación del
+catálogo. Nueva regresión:
+`test_dispatcher_refuses_when_compiler_omits_trusted_app_registration`.
+La corrección no cambia las rutas por defecto sin tercera App.
+Primeras regresiones corregidas: **20 PASS** focales. Pendientes: suite
+transversal final y revisión específica del bloqueo para aceptar E6.3.
+
+
+**Regresión final después de corregir el bloqueo:** gate permanente
+**1848 Python +181 JavaScript +7 subtests PASS**, 133 ficheros y
+11 grupos; ledger de aceptación íntegro con **20 invariantes y
+55 anclajes**, Ruff PASS. Pruebas sin efectos sobre DEV/PROD.
+Fuente: `/tmp/odyssey-e6-third-app-after-review-fix.log`.
+El primer FAIL de auditoría queda registrado como hallazgo corregido,
+no convertido retroactivamente en PASS. Antes de adopción DEV debe pasar
+la verificación independiente focal de la corrección y después el
+E2E real de compatibilidad E6.

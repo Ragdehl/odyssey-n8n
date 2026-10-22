@@ -205,7 +205,8 @@
         "tests/runtime/test_e6_hybrid_third_application.py::test_routed_third_app_must_also_be_explicitly_bound_before_execution",
         "tests/runtime/test_e6_hybrid_third_application.py::test_extra_app_cannot_claim_reserved_or_unknown_candidate_kind",
         "tests/runtime/test_e6_hybrid_third_application.py::test_ambiguous_registered_app_source_fails_closed_instead_of_core_fallback",
-        "tests/runtime/test_e6_hybrid_third_application.py::test_mixed_core_and_registered_app_group_fails_closed"
+        "tests/runtime/test_e6_hybrid_third_application.py::test_mixed_core_and_registered_app_group_fails_closed",
+        "tests/runtime/test_e6_hybrid_third_application.py::test_dispatcher_refuses_when_compiler_omits_trusted_app_registration"
       ],
       "blocks_p4_dev": false,
       "verified_real_browser_n8n": false
