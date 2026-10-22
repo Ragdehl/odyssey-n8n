@@ -102,7 +102,20 @@ def _exact_anchor_for_quote(
     ]
     if len(quoted) != 1:
         raise EventRouteError("EVENT_TARGET_TEMPORAL_ROLE_AMBIGUOUS")
-    matches = [m for m in temporal.mentions if m.temporal_text == quoted[0]]
+
+    def same_source_span(bound: str, resolved: str) -> bool:
+        if bound == resolved:
+            return True
+        longer, shorter = sorted((bound, resolved), key=len, reverse=True)
+        # The shorter text must remain a complete, unambiguous source
+        # phrase. Never let an isolated weekday override an explicit date.
+        if any(ch.isdigit() for ch in longer) and not any(ch.isdigit() for ch in shorter):
+            return False
+        if source.count(shorter) != 1:
+            return False
+        return re.search(r"(?<!\w)" + re.escape(shorter) + r"(?!\w)", longer) is not None
+
+    matches = [m for m in temporal.mentions if same_source_span(quoted[0], m.temporal_text)]
     if len(matches) != 1:
         raise EventRouteError("EVENT_TARGET_TEMPORAL_SOURCE_MISMATCH")
     resolution = matches[0].resolution
@@ -404,9 +417,12 @@ def execute_event_candidate(
                 (error.target_id,) if error.target_id else (),
                 planning_error="EVENT_POSTWRITE_UNVERIFIED",
             )
-        return attention("EVENT_TEMPORAL_OR_WRITE_REJECTED")
-    except (EventRouteError, ValueError):
-        return attention("EVENT_TEMPORAL_OR_WRITE_REJECTED")
+        return attention(error.code)
+    except EventRouteError as error:
+        # Preserve a fixed internal refusal code; do not expose source text.
+        return attention(str(error))
+    except ValueError:
+        return attention("EVENT_INPUT_VALIDATION_REJECTED")
     return ApplicationResult(
         request_id,
         ApplicationStatus.COMPLETED,
