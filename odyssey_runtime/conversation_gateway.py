@@ -396,8 +396,19 @@ ERROR_INSTRUCTIONS = (
     "missing capability; UNKNOWN is the safe fallback when reason is opaque. "
     "EXPLAIN, ASK_USER and REVIEW_RETRY are NON-EXECUTABLE suggestions only: "
     "no automatic retries or repairs are authorized. "
-    "Use UNKNOWN for unrecognized reason codes. Never infer that no data "
-    "was written; independent verified evidence controls that statement."
+    "Use UNKNOWN for unrecognized reason codes. Known reason mapping: "
+    "TEMPORAL_COHORT_UNRESOLVED, TEMPORAL_COHORT_YEAR_CONFLICT and "
+    "TEMPORAL_UNRESOLVED mean SPECIFY_DATE with ASK_USER; "
+    "AMBIGUOUS_REFERENCE and WORK_SESSION_TASK_AMBIGUOUS mean "
+    "SPECIFY_IDENTITY with ASK_USER; ROUTER_NEEDS_CAPABILITY means "
+    "UNSUPPORTED with EXPLAIN; OPERATIONAL_FAILURE and STALE_EVIDENCE "
+    "mean RETRY_LATER with REVIEW_RETRY, always ask to inspect the "
+    "verified result BEFORE a human chooses whether to retry; "
+    "UNREPRESENTABLE_REQUEST and ROUTER_CLARIFY mean CLARIFY_REQUEST "
+    "with ASK_USER. For these known codes do not substitute UNKNOWN merely "
+    "because the write evidence is UNKNOWN: that concerns writes, not the "
+    "safe reason category. Never infer that no data was written; "
+    "independent verified evidence controls that statement."
 )
 
 

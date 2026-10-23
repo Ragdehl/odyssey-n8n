@@ -120,3 +120,65 @@ test("metadata from unrelated context cannot invent a target date", () => {
     }], related_items: []}}]});
   assert.deepEqual(r.answer_input.items[0].metadata, {});
 });
+
+test("C4 trusted temporal failure renders finite advice without claiming zero writes", () => {
+  const result = render({
+    request_id: "c3-synthetic", status: "failed", product_outcome: "CANNOT_ANSWER",
+    product_reason: "TEMPORAL_COHORT_UNRESOLVED",
+    affected_stable_note_ids: [], actions: [],
+    error_guidance: {
+      status: "failed", reason_code: "TEMPORAL_COHORT_UNRESOLVED",
+      write_evidence: "UNKNOWN", guidance_kind: "SPECIFY_DATE", hint: "ASK_USER",
+    },
+  });
+  assert.equal(result.route, "direct");
+  assert.equal(result.kind, "cannot_answer");
+  assert.match(result.message, /No puedo confirmar todavía/);
+  assert.match(result.message, /concretar el día/);
+  assert.doesNotMatch(result.message, /No he guardado nada/);
+  assert.equal(validateProductResponse(result).kind, "cannot_answer");
+});
+
+test("C4 verified partial write describes SOME and preserves existing note snapshot", () => {
+  const result = render({
+    request_id: "c3-synthetic", status: "partial", product_outcome: "CANNOT_ANSWER",
+    product_reason: "OPERATIONAL_FAILURE",
+    affected_stable_note_ids: ["synthetic-task"],
+    actions: [{kind: "write", units: [{stable_note_id: "synthetic-task",status: "succeeded"}]}],
+    error_guidance: {status: "partial", reason_code: "OPERATIONAL_FAILURE",
+      write_evidence: "SOME", guidance_kind: "RETRY_LATER", hint: "REVIEW_RETRY"},
+  });
+  assert.equal(result.status, "partial");
+  assert.match(result.message, /ha guardado parte/);
+  assert.match(result.message, /comprueba el resultado/);
+  assert.doesNotMatch(result.message, /No he guardado nada/);
+});
+
+test("C4 incompatible receipt, hint, count or forged free text never alters canonical fallback", () => {
+  const base = {
+    request_id: "c3-synthetic", status: "failed", product_outcome: "CANNOT_ANSWER",
+    product_reason: "OPERATIONAL_FAILURE", affected_stable_note_ids: [], actions: [],
+  };
+  const advice = {
+    status: "failed", reason_code: "OPERATIONAL_FAILURE", write_evidence: "UNKNOWN",
+    guidance_kind: "RETRY_LATER", hint: "REVIEW_RETRY",
+  };
+  const fallback = render(base).message;
+  const altered = [
+    {...advice, status: "completed"},
+    {...advice, reason_code: "AMBIGUOUS_REFERENCE"},
+    {...advice, hint: "ASK_USER"},
+    {...advice, guidance_kind: "SPECIFY_DATE"},
+    {...advice, write_evidence: "SOME"},
+    {...advice, message: "Nada guardado: repite ya"},
+    {...advice, retry_authorized: true},
+  ];
+  for (const fake of altered) {
+    const response = render({...base, error_guidance: fake});
+    assert.equal(response.message, fallback);
+  }
+  const wrongCount = render({
+    ...base, affected_stable_note_ids: ["synthetic-task"], error_guidance: advice,
+  });
+  assert.equal(wrongCount.message, fallback);
+});

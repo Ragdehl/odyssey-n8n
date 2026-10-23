@@ -166,6 +166,7 @@ from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
 from .conversation_chat import deployed_chat_help_capabilities
 from .conversation_entry import evaluate_conversation_entry
+from .conversation_error import explain_trusted_product_failure
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
@@ -497,6 +498,8 @@ class RuntimeComposition:
     # The injected gateway only classifies/answers and cannot authorize Core writes.
     conversation_gateway: OpenAIConversationGateway | None = None
     conversation_deployed_capabilities: frozenset[str] = frozenset()
+    # C4 stays separately off even on a DEV instance running C3.
+    conversation_error_guidance_enabled: bool = False
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -1026,6 +1029,20 @@ class RuntimeComposition:
         exceptions never reach this method and therefore remain retryable.
         """
         response = application_result_to_response(result)
+        # This optional C4 interpretation is strictly post-Core, uses the
+        # existing read-only Luna gateway and never alters write authorization.
+        # Unknown mutation count remains UNKNOWN, not an invented zero.
+        if self.conversation_error_guidance_enabled:
+            try:
+                advice = explain_trusted_product_failure(
+                    result, response, self.conversation_gateway
+                )
+                if advice is not None:
+                    response["error_guidance"] = advice
+            except Exception:
+                # A failed optional explanation must never turn a completed
+                # Core result into a replayable transport failure.
+                pass
         # One read-only ledger joins existing observed operational stages,
         # route statuses, physical Core receipts and actor-root checkpoints.
         # It never makes or retries a mutation decision.
@@ -5218,6 +5235,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
         ),
         # Capability set comes exclusively from this deployed factory wiring.
         # Neither the browser nor Luna can advertise new available features.
+        conversation_error_guidance_enabled=(
+            os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+            and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        ),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,
             notes_available=notes_service is not None,
