@@ -71,6 +71,14 @@ test("Forged C3 write metadata or inconsistent state fails closed", () => {
     {...payload(), product_outcome: "CANNOT_ANSWER"},
     {...payload(), conversation_reply: {status:"completed",kind:"answer",message:""}},
     {...payload(), request_id: "cross-actor-id"},
+    {...payload(), note_result_snapshot: {version:2,kind:"affected_notes",note_ids:["x"]}},
+    {...payload(), request_detail: {request_id:"c3-synthetic",operational:{stages:[]}}},
+    {...payload(), execution_ledger: {write_receipts:[{stable_note_id:"x"}]}},
+    {...payload(), execution_flow: {routes:[{capability:"core"}]}},
+    {...payload(), clarification: {options:[]}},
+    {...payload(), status: "needs_attention"},
+    {...payload(), delivery_replayed: "true"},
+    {...payload(), product_control: "CANDIDATE_CANCELLED"},
   ];
   for (const bad of bads) {
     const rendered = render(bad);
@@ -78,4 +86,12 @@ test("Forged C3 write metadata or inconsistent state fails closed", () => {
     assert.equal(rendered.status, "failed");
     assert.equal(rendered.note_result_snapshot, undefined);
   }
+});
+
+test("C3 immutable receipt replay is an ordinary chat answer", () => {
+  const replay = render({...payload(), delivery_replayed:true});
+  assert.equal(replay.kind, "answer");
+  assert.equal(replay.message, "Bonjour !");
+  assert.equal(replay.note_result_snapshot, undefined);
+  assert.equal(validateProductResponse(replay).kind, "answer");
 });

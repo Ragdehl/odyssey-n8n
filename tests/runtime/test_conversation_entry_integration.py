@@ -220,3 +220,70 @@ def test_same_id_cannot_be_rebound_to_other_source_after_chat(tmp_path):
     with pytest.raises(DeliveryResultError):
         runtime.execute_product("Guardar algo diferente", "same-id", "main", actor)
     assert len(client.responses.calls) == 3 and writes == []
+
+
+def test_crash_after_chat_turn_cannot_reclassify_retry_into_core(tmp_path, monkeypatch):
+    """Durable C3 claim survives lost result; same-ID retry cannot become ROUTER."""
+    from odyssey_runtime.delivery_results import LocalDeliveryResultStore
+
+    runtime, writes, client = _runtime(
+        tmp_path,
+        [
+            {"mode": "CHAT", "context_scope": "NONE"},
+            {"purpose": "GENERAL"},
+            {"outcome": "ANSWER", "answer": "¡Hola!", "supporting_ids": []},
+            {"mode": "ROUTER", "context_scope": "NONE"},
+        ],
+    )
+    actor = _actor()
+    original_save = LocalDeliveryResultStore.save
+
+    def simulated_crash(self, request_id, fingerprint, response, completed_at):
+        if request_id == "crash-chat-c3":
+            raise OSError("synthetic crash before durable reply receipt")
+        return original_save(self, request_id, fingerprint, response, completed_at)
+
+    monkeypatch.setattr(LocalDeliveryResultStore, "save", simulated_crash)
+    with pytest.raises(OSError, match="synthetic crash"):
+        runtime.execute_product("Hola", "crash-chat-c3", "main", actor)
+    assert len(client.responses.calls) == 3 and not writes
+    assert len(_turns(runtime, actor)) == 1
+    with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
+        runtime.execute_product("Hola", "crash-chat-c3", "main", actor)
+    assert len(client.responses.calls) == 3 and not writes
+    root = runtime.conversation_root_resolver.resolve(actor.stable_user_id)
+    receipt = LocalDeliveryResultStore(root / "delivery-results")
+    assert (
+        receipt.inspect_mutation_claim("crash-chat-c3", receipt.fingerprint("Hola", "main"))[
+            "state"
+        ]
+        == "unresolved_attempt"
+    )
+
+
+def test_successful_chat_c3_claim_cleans_up_and_replay_is_nonwriting(tmp_path):
+    from odyssey_runtime.delivery_results import LocalDeliveryResultStore
+
+    runtime, writes, client = _runtime(
+        tmp_path,
+        [
+            {"mode": "CHAT", "context_scope": "NONE"},
+            {"purpose": "GENERAL"},
+            {"outcome": "ANSWER", "answer": "Bonjour", "supporting_ids": []},
+        ],
+    )
+    actor = _actor()
+    result = runtime.execute_product("Bonjour", "c3-claimed", "main", actor)
+    root = runtime.conversation_root_resolver.resolve(actor.stable_user_id)
+    receipt = LocalDeliveryResultStore(root / "delivery-results")
+    assert (
+        receipt.inspect_mutation_claim("c3-claimed", receipt.fingerprint("Bonjour", "main"))[
+            "state"
+        ]
+        == "receipt_confirmed"
+    )
+    assert (
+        runtime.execute_product("Bonjour", "c3-claimed", "main", actor)["delivery_replayed"] is True
+    )
+    assert result["product_outcome"] == "ANSWER"
+    assert writes == [] and len(client.responses.calls) == 3

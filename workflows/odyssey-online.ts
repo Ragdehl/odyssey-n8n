@@ -205,6 +205,12 @@ if (!id || !r || r.request_id !== id) return [{ json: error }];
 if (Object.hasOwn(r, 'conversation_reply')) {
   const c = r.conversation_reply;
   const safe = c && typeof c === 'object' && !Array.isArray(c) &&
+    Object.keys(r).every(key => [
+      'request_id', 'status', 'product_outcome', 'conversation_reply',
+      'actions', 'affected_stable_note_ids', 'delivery_replayed'
+    ].includes(key)) &&
+    (r.delivery_replayed === undefined || r.delivery_replayed === true) &&
+    r.status === c.status &&
     Object.keys(c).sort().join(',') === 'kind,message,status' &&
     ['answer','cannot_answer','clarification'].includes(c.kind) &&
     ['completed','needs_attention'].includes(c.status) &&

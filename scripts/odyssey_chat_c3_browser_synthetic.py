@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Actual Odyssey web UI driven in Chromium against isolated C3 HTTP runtime.
 
-A disposable local bridge stands in for n8n, and provider replies are FIXED.
-This is user-interface regression evidence, not deployed DEV/n8n/real-Luna E2E.
+A disposable local bridge stands in for n8n. Provider replies are fixed by
+default or live Luna with bounded explicit approval. Never a deployed DEV/n8n E2E.
 """
 
 from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import subprocess
 import tempfile
 from http.client import HTTPConnection
@@ -32,6 +33,12 @@ BROWSER = ROOT / "scripts/odyssey_chat_c3_browser_synthetic.cjs"
 
 
 def main() -> int:
+    real_provider = os.environ.get("ODYSSEY_CHAT_BROWSER_REAL") == "1"
+    if real_provider and (
+        os.environ.get("ODYSSEY_CHAT_LIVE_APPROVED") != "1" or not os.environ.get("OPENAI_API_KEY")
+    ):
+        print(json.dumps({"pass": False, "reason": "real provider requires bounded approval"}))
+        return 2
     with tempfile.TemporaryDirectory(prefix="odyssey-chat-c3-ui-", dir="/tmp") as folder:
         temp = Path(folder)
         vault = temp / "vault"
@@ -59,12 +66,35 @@ def main() -> int:
             return ApplicationResult(rid, ApplicationStatus.COMPLETED, (), ())
 
         audit = {"user_submissions": 0, "assistant_persisted": 0, "denied": 0}
+        gateway = (
+            OpenAIConversationGateway.from_environment()
+            if real_provider
+            else OpenAIConversationGateway(fake)
+        )
+        model_counts = {"calls": 0, "max_output_tokens": 0}
+        if real_provider:
+            invoke = gateway._complete
+
+            def capped_complete(**kwargs):
+                budget = kwargs.get("max_tokens")
+                if (
+                    type(budget) is not int
+                    or not 0 < budget <= 750
+                    or model_counts["calls"] >= 6
+                    or model_counts["max_output_tokens"] + budget > 3000
+                ):
+                    raise RuntimeError("C3 browser live model budget exhausted")
+                model_counts["calls"] += 1
+                model_counts["max_output_tokens"] += budget
+                return invoke(**kwargs)
+
+            gateway._complete = capped_complete
 
         runtime = RuntimeComposition(
             core_execute=core,
             refresh_indexes=lambda: None,
             conversation_root_resolver=ConversationRootResolver(state),
-            conversation_gateway=OpenAIConversationGateway(fake),
+            conversation_gateway=gateway,
             conversation_deployed_capabilities=frozenset({"tasks"}),
         )
         private = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(runtime))
@@ -72,7 +102,9 @@ def main() -> int:
         private_thread.start()
 
         def runtime_post(route: str, data: dict):
-            connection = HTTPConnection("127.0.0.1", private.server_port, timeout=18)
+            connection = HTTPConnection(
+                "127.0.0.1", private.server_port, timeout=55 if real_provider else 18
+            )
             connection.request(
                 "POST",
                 route,
@@ -173,7 +205,11 @@ def main() -> int:
         try:
             command = ["node", str(BROWSER), f"http://127.0.0.1:{bridge.server_port}/"]
             result = subprocess.run(
-                command, capture_output=True, text=True, timeout=80, check=False
+                command,
+                capture_output=True,
+                text=True,
+                timeout=150 if real_provider else 80,
+                check=False,
             )
             browser_output = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
             turns = runtime.main_conversation(actor)["turns"]
@@ -186,7 +222,7 @@ def main() -> int:
                 and audit["user_submissions"] == 2
                 and audit["assistant_persisted"] == 2
                 and len(turns) == 4
-                and len(fake.responses.calls) == 6
+                and (model_counts["calls"] if real_provider else len(fake.responses.calls)) == 6
             )
             print(
                 json.dumps(
@@ -196,7 +232,12 @@ def main() -> int:
                         "real_chromium_ui": True,
                         "real_runtime_http": True,
                         "real_n8n": False,
-                        "real_provider": False,
+                        "real_provider": real_provider,
+                        "provider_call_budget": 6 if real_provider else 0,
+                        "provider_calls": (
+                            model_counts["calls"] if real_provider else len(fake.responses.calls)
+                        ),
+                        "max_output_tokens_budgeted": model_counts["max_output_tokens"],
                         "real_DEV_deployed": False,
                         "browser": browser_output,
                         "requests": audit,

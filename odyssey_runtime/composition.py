@@ -549,6 +549,12 @@ class RuntimeComposition:
                     # durable write; appending it again invents an event and
                     # inflates the timeline on every n8n retry.
                     return replay
+                # A previous E3 or C3 attempt may have crashed after its
+                # irreversible claim but before the immutable reply receipt.
+                # Never reclassify the same delivery as a new Core write.
+                claim = store.inspect_mutation_claim(request_id, fingerprint)
+                if claim["state"] == "unresolved_attempt":
+                    raise DeliveryResultError("delivery has unresolved prior attempt")
             self._record_checkpoint(
                 checkpoint_store, request_id, "starting", CheckpointOutcome.MILESTONE_OBSERVED
             )
@@ -683,13 +689,18 @@ class RuntimeComposition:
                 and request_id is not None
                 and conversation_id == MAIN_CONVERSATION_ID
             ):
-                conversational = self._conversation_product_reply(actor, user_request, request_id)
+                if store is None or fingerprint is None:
+                    raise ValueError("Conversational delivery requires durable replay")
+                conversational = self._conversation_product_reply(
+                    actor, user_request, request_id, store, fingerprint
+                )
                 if conversational is not None:
-                    if store is None or fingerprint is None:
-                        raise ValueError("Conversational delivery requires durable replay")
                     store.save(
                         request_id, fingerprint, conversational, _current_time()["timestamp"]
                     )
+                    # An unconfirmed claim can never be silently replayed, but
+                    # this matching committed receipt may release its claim.
+                    store.finish_mutation_claim(request_id)
                     self._record_terminal_checkpoint(
                         checkpoint_store,
                         request_id,
@@ -741,7 +752,12 @@ class RuntimeComposition:
             return response
 
     def _conversation_product_reply(
-        self, actor: str, source: str, request_id: str
+        self,
+        actor: str,
+        source: str,
+        request_id: str,
+        store: LocalDeliveryResultStore,
+        fingerprint: str,
     ) -> dict[str, object] | None:
         """Reuse the existing durable conversation for a non-writing C1–C3 answer.
 
@@ -768,6 +784,11 @@ class RuntimeComposition:
             entry = None
         if entry is not None and entry.route == "ROUTER":
             return None
+        # This is the one-way boundary: after Chat is selected, reserve the
+        # durable delivery ID BEFORE appending the user turn. If an error or
+        # crash intervenes, a retry is blocked rather than reclassifying that
+        # same ID into a possible Core write.
+        store.claim_mutation(request_id, fingerprint)
         with self._conversation_lock:
             # A user turn must exist before the n8n assistant finalizer can
             # persist its matching result. Duplicate ID/text is idempotent.
