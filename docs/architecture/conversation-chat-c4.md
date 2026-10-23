@@ -39,6 +39,7 @@ en una solicitud de escritura.
   contra excepciones del intérprete); no se ejecuta en success ni ante las
   aclaraciones con opciones verificadas. La fábrica incorpora un interruptor
   **específico de C4**: activar C3 no lo activa implícitamente.
+- Las respuestas con orientación C4 mantienen el **status exacto de Core** (`failed`, `partial`, `needs_attention`), incluso cuando el resultado es parcial pero no hay ningún conteo de escritura verificable. No se convierte `partial` en `failed` por defecto.
 - La proyección `workflows/odyssey-online.ts` solo renderiza C4 si coincide
   la totalidad de claves esperadas, estado y razón de Core, metadatos de
   escritura `UNKNOWN/SOME` y los enums permitidos. **La redacción final
@@ -51,8 +52,8 @@ en una solicitud de escritura.
 
 ## Evidencia y límites
 
-- Gate transversal final: **2.017 Python + 195 JavaScript PASS**, 12 grupos,
-  registrado en `/tmp/odyssey-c4-source-gate-20261023.json` y su `.log`.
+- Gate transversal final: **2.017 Python + 196 JavaScript PASS**, tras ajustar la conservación del estado parcial/needs_attention, 12 grupos,
+  registrado en `/tmp/odyssey-c4-final-gate-20261023.json` y su `.log`.
 
 
 - Tests `tests/runtime/test_conversation_error.py`:

@@ -182,3 +182,20 @@ test("C4 incompatible receipt, hint, count or forged free text never alters cano
   });
   assert.equal(wrongCount.message, fallback);
 });
+
+
+test("C4 keeps verified needs_attention and partial statuses even when no write count is proven", () => {
+  for (const status of ["needs_attention", "partial"]) {
+    const r = render({request_id: "c3-synthetic", status,
+      product_outcome: "CANNOT_ANSWER", product_reason: "UNREPRESENTABLE_REQUEST",
+      affected_stable_note_ids: [], actions: [],
+      error_guidance: {status, reason_code: "UNREPRESENTABLE_REQUEST",
+        write_evidence: "UNKNOWN", guidance_kind: "CLARIFY_REQUEST", hint: "ASK_USER"},
+    });
+    assert.equal(r.status, status);
+    assert.equal(r.kind, "cannot_answer");
+    assert.equal(validateProductResponse(r).status, status);
+    assert.match(r.message, /No puedo confirmar todavía/);
+    assert.match(r.message, /reformular/);
+  }
+});
