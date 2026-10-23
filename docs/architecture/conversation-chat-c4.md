@@ -167,3 +167,65 @@ en una solicitud de escritura.
   falta un presupuesto medido por etapa y concurrencia con el proveedor real.
   **C4 funcional en DEV en el caso de identidad, APP E2E NOT VERIFIED como
   aceptación global.** Ningún dato personal ni PROD fue modificado.
+
+## Verificaciones suplementarias de DEV (23-10-2026, mismo SHA)
+
+Se mantiene desplegado **`a75685252c666609d0f2b9f3880ec357c2d87753`**;
+no ha habido redespliegue ni cambio de código ni de credenciales.
+
+- **Replay real por la misma ruta desplegada:** se partió de un mensaje
+  sintético **ya tecleado y enviado anteriormente desde Chromium** (error
+  `WORK_SESSION_TASK_UNRESOLVED`, `needs_attention`). Una solicitud diagnóstica
+  posterior a n8n DEV con **idéntico texto, conversation_id y request_id**
+  respondió HTTP 200 en **910 ms** con la misma orientación y texto. El
+  SHA256 byte a byte del recibo E3 actor-bound permaneció igual y los 166
+  archivos Markdown conservaron las mismas rutas. Esto verifica el replay
+  técnico desplegado, **no un botón de reintento de la UI**: la segunda
+  entrega se envió por HTTP como test complementario. Log
+  `/home/ragdehl/projects/.odyssey-agent-runs/c4-dev-adoption-20261023/c4-replay-diagnostic.log`.
+- **Frontera pública anónima:** HEAD/GET sin cookies ni credenciales sobre
+  `https://odyssey-dev.ragdehl.com/`, `/api/odyssey` y `/api/request`
+  obtuvieron **403 de Cloudflare**. No demuestra por sí solo que la regla
+  responsable sea Cloudflare Access; sin una sesión de prueba externa
+  autorizada no es posible certificar el recorrido autenticado, aún pendiente.
+  No se modificó ninguna regla, token ni permiso de Cloudflare.
+- **Casos parciales históricos:** el actor de DEV tiene **6 recibos previos
+  `partial` con IDs afectados**; cuatro de ellos `CANNOT_ANSWER`. Estos
+  recibos son anteriores a C4 y no contienen `error_guidance`; no sirven como
+  demostración del renderizado C4 de un parcial nuevo. Uno provenía de una
+  solicitud sintética con 3 hechos calendáricos y otro de 4 hechos.
+- **Nueva variante de 3 hechos desde Chromium:** fue **completed / ANSWER**,
+  3 acciones y 3 IDs afectados; mostró «Guardado» y tardó **38,8 s**. El
+  contador de Markdown permaneció en 166 porque Core **actualizó** los días
+  DEV `2026-10-12`, `2026-10-13` y `2026-10-14` (operaciones `UPDATED` y
+  `REFERENCE_BOUND`), añadiendo tres etiquetas de ensayo que empiezan por
+  `C4Parcial`. Estos cambios son **reales y sintéticos**, no ausencia de
+  escritura: los recibos son la autoridad, no el contador de archivos.
+- **Variante de 4 hechos desde Chromium:** generó
+  `needs_attention / CLARIFY`, código
+  `FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED`, sin ID afectado y sin
+  `error_guidance`, en **37,9 s**. No escribió ninguno de los cuatro hechos
+  sintéticos. Ambas variantes sobreviven a reload; la falta de parcial
+  confirma que **no se puede garantizar un fallo parcial mediante frases
+  diseñadas para un reproducer antiguo**. Se detienen las pruebas
+  exploratorias de escritura para evitar acumulación de notas.
+- **Lectura móvil adicional:** la UI y su marker cargaron HTTP 200;
+  scroll de historial y recarga no alteraron **ni un byte del vault** (SHA256
+  agregado idéntico con 166 notas). Los recibos parciales históricos no
+  aparecieron en la página de conversación reciente, por lo que tampoco se
+  declara visualmente aceptada esa ruta. Evidencias de navegador y
+  recibos originales en el directorio de ensayo citado arriba.
+- **Rendimiento observado:** fallo C4 de referencia ~41,6 s en navegador
+  versus ~27,6 s de ejecución registrada por Core; el tramo
+  `tasks.work_session_resolution` consumió ~12,2 s. La variante de tres
+  actualizaciones consumió ~23,35 s de Core y ~38,8 s desde el navegador.
+  Esto **no** identifica una única causa ni separa completamente clasificación
+  C1, bloqueo serializado, n8n, modelo y presentación. Se necesita una traza
+  de etapas con marcas coherentes para medir el sobrecoste de C4. No se
+  cambió la arquitectura de concurrencia ni se eliminó Luna.
+
+**Situación:** caso C4 real de identidad y replay desplegado comprobados,
+frontera anónima de Cloudflare comprobada; **APP E2E NOT VERIFIED** como
+aceptación completa hasta poder verificar escritura parcial post-C4,
+reintento iniciado desde UI si existe ese affordance y autenticación externa
+real. PROD y datos personales sin tocar.
