@@ -95,3 +95,10 @@ def test_offline_sandbox_rejects_unapproved_executable_and_bad_timeout():
             sandbox.command_for_sandbox(Path(folder), [])
         with pytest.raises(sandbox.OfflineSandboxError, match="1-60"):
             sandbox.run_synthetic(Path(folder), ["/usr/bin/python3", "-V"], timeout=0)
+
+
+def test_missing_bubblewrap_still_fails_closed_for_valid_workspace(monkeypatch):
+    monkeypatch.setattr(sandbox.shutil, "which", lambda _name: None)
+    with tempfile.TemporaryDirectory(prefix="odyssey-agent-sandbox-", dir="/tmp") as folder:
+        with pytest.raises(sandbox.OfflineSandboxError, match="Bubblewrap"):
+            sandbox.command_for_sandbox(Path(folder), ["/usr/bin/python3", "-V"])

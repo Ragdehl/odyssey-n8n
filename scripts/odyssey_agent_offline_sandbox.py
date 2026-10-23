@@ -25,8 +25,9 @@ class OfflineSandboxError(RuntimeError):
 
 def command_for_sandbox(workspace: Path, program: list[str]) -> list[str]:
     """Expose only a scratch workspace; no home, DEV, PROD, codex or LAN."""
-    if shutil.which("bwrap") != ISOLATOR:
-        raise OfflineSandboxError("Unprivileged Bubblewrap is required; fail closed")
+    # Validate the requested workspace and argv before checking host tooling.
+    # Invalid requests must be rejected consistently, including in CI hosts
+    # where Bubblewrap is not installed. A valid request still fails closed.
     workspace = workspace.resolve(strict=True)
     if not workspace.is_dir():
         raise OfflineSandboxError("Sandbox requires an existing disposable workspace")
@@ -44,6 +45,8 @@ def command_for_sandbox(workspace: Path, program: list[str]) -> list[str]:
         raise OfflineSandboxError("Command must be a nonempty argv with no NUL")
     if not program[0].startswith("/usr/") and program[0] != "/bin/sh":
         raise OfflineSandboxError("Executable must reside in a read-only system bind")
+    if shutil.which("bwrap") != ISOLATOR:
+        raise OfflineSandboxError("Unprivileged Bubblewrap is required; fail closed")
     return [
         ISOLATOR,
         "--die-with-parent",

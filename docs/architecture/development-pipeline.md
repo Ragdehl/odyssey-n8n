@@ -87,6 +87,8 @@ For production model-facing changes, deterministic checks are necessary but not 
 
 A failed gate means the branch is not ready. It does not require discarding coherent work; record a safe checkpoint when useful and continue/fix the blocker.
 
+**Hosted-CI isolation tooling incident (23 October 2026).** The `dev` contract gate ran 1,957 Python tests successfully but failed three unrelated sandbox tests on the hosted runner: its image lacked both the native Codex CLI and `/usr/bin/bwrap`. The Codex *configuration-shape* test had unnecessarily required the real binary; it now substitutes a synthetic binary path for static config inspection, while the actual native isolation test remains conditional on CLI availability. Offline sandbox argument/workspace rejection now precedes the Bubblewrap availability guard, so invalid inputs are tested even without Bubblewrap; a valid request still fails closed without the isolator (covered by a new regression). Verify with both `pytest -q tests/runtime/test_codex_scoped_permissions.py tests/runtime/test_agent_offline_sandbox.py` and the full `scripts/odyssey_cross_surface_gate.py`; confirm the hosted GitHub check separately, not from a local green gate. Never bypass the isolation guard or treat skipped live native-kernel tests as a sandbox attestation.
+
 ## Maintainability guard during feature work
 
 Code quality is a continuous constraint, not a reason to stop useful product work for speculative cleanup.

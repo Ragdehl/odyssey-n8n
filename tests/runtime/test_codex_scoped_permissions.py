@@ -19,7 +19,14 @@ ROOT = Path(__file__).resolve().parents[2]
 NATIVE = shutil.which("codex") is not None and os.name == "posix"
 
 
-def test_explicit_profiles_deny_everything_except_minimal_runtime_git_and_workspace():
+def test_explicit_profiles_deny_everything_except_minimal_runtime_git_and_workspace(monkeypatch):
+    # This test inspects generated permissions without running the Codex CLI.
+    # Hosted CI need not have the authenticated native binary installed.
+    monkeypatch.setattr(
+        scope,
+        "codex_executable",
+        lambda: Path("/tmp/synthetic-codex-install/releases/v1/codex"),
+    )
     profile, args = scope.permission_overrides(ROOT, read_only=True)
     assert profile == "odyssey-scope-read"
     config = [args[i + 1] for i, value in enumerate(args) if value == "--config"]
