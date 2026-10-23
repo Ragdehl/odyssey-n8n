@@ -14,6 +14,7 @@ from odyssey_runtime.conversation_continuity import (
     ContextHandoff,
     HistoricalTurn,
     prepare_context_handoff,
+    propose_after_context,
     read_historical_continuity,
 )
 from odyssey_runtime.conversation_gateway import (
@@ -22,7 +23,12 @@ from odyssey_runtime.conversation_gateway import (
     ConversationGateError,
     ConversationMode,
     ConversationState,
+    FollowupAssessment,
+    FollowupIntent,
     OpenAIConversationGateway,
+    ReferentEvidence,
+    followup_assessment_schema,
+    parse_followup_assessment,
 )
 
 NOW = datetime(2026, 10, 23, 8, 0, tzinfo=UTC)
@@ -137,7 +143,7 @@ class FakeClient:
 
 def test_second_pass_keeps_original_text_and_exact_prior_evidence():
     """Only Router/Chat/remaining clarification; no rewritten candidate."""
-    client = FakeClient({"mode": "ROUTER", "context_scope": "NONE"})
+    client = FakeClient({"intent": "ROUTER"})
     gateway = OpenAIConversationGateway(client)
     earlier = ({"role": "user", "text": "He visto a Bruno."},)
     choice = gateway.classify_after_context(
@@ -145,29 +151,35 @@ def test_second_pass_keeps_original_text_and_exact_prior_evidence():
         ConversationState(),
         earlier,
     )
-    assert choice == ConversationDecision(ConversationMode.ROUTER, ContextScope.NONE)
+    assert choice == FollowupAssessment(FollowupIntent.ROUTER, ReferentEvidence.UNVERIFIED)
+    assert choice.write_authorized is False
     source = json.loads(client.responses.calls[0]["input"][1]["content"])
     assert source["original_message"] == "Luego fuimos a tomar algo."
     assert source["prior_turns"] == list(earlier)
     assert "Bruno y yo" not in json.dumps(source)
 
 
-def test_second_pass_has_no_llm_loop_if_history_missing():
-    """Empty source proof returns CONTEXT instead of guessing or re-calling."""
-    client = FakeClient({"mode": "ROUTER", "context_scope": "NONE"})
+def test_empty_history_does_not_suppress_self_contained_save_intent():
+    """Empty history must not suppress an explicit save; at most one model pass."""
+    client = FakeClient({"intent": "ROUTER"})
     gateway = OpenAIConversationGateway(client)
     result = gateway.classify_after_context(
-        "Luego fuimos.",
+        "Apunta que fui al cine.",
         ConversationState(),
         (),
     )
-    assert result.mode is ConversationMode.CONTEXT
-    assert client.responses.calls == []
+    assert result.intent is FollowupIntent.ROUTER
+    assert result.referent_evidence is ReferentEvidence.UNVERIFIED
+    assert result.write_authorized is False
+    assert len(client.responses.calls) == 1
+    model_input = json.loads(client.responses.calls[0]["input"][1]["content"])
+    assert model_input["original_message"] == "Apunta que fui al cine."
+    assert model_input["prior_turns"] == []
 
 
 def test_second_pass_fails_closed_on_untrusted_context_or_model_output():
     """Reject oversized, shaped or invalid source and unsafe decisions."""
-    client = FakeClient({"mode": "ERROR", "context_scope": "NONE"})
+    client = FakeClient({"intent": "ERROR"})
     gateway = OpenAIConversationGateway(client)
     with pytest.raises(ConversationGateError):
         gateway.classify_after_context(
@@ -187,6 +199,8 @@ def test_second_pass_fails_closed_on_untrusted_context_or_model_output():
             ConversationState(),
             ({"role": "user", "text": "Vi a Bruno"},),
         )
+    assert set(followup_assessment_schema()["required"]) == {"intent"}
+    assert followup_assessment_schema()["additionalProperties"] is False
 
 
 def test_recent_handoff_does_not_reuse_stale_turn_from_before_thirty_days(tmp_path):
@@ -234,3 +248,68 @@ def test_exact_ids_survive_duplicate_text_and_future_timestamps(tmp_path):
         ("valid_id", "Hoy vi a Bruno."),
     ]
     assert result.source_request_id == "current"
+
+
+def test_missing_referents_do_not_erase_save_intent():
+    """No LLM judgment about identity is ever accepted as Core authorization."""
+    sample = parse_followup_assessment({"intent": "ROUTER"})
+    assert sample.intent is FollowupIntent.ROUTER
+    assert sample.referent_evidence is ReferentEvidence.UNVERIFIED
+    assert sample.write_authorized is False
+    with pytest.raises(ConversationGateError):
+        parse_followup_assessment(
+            {
+                "intent": "ROUTER",
+                "referent_evidence": "CANDIDATE_PRESENT",
+            }
+        )
+    with pytest.raises(ConversationGateError):
+        parse_followup_assessment(
+            {
+                "intent": "ROUTER",
+                "resolved_members": ["Bruno"],
+            }
+        )
+    with pytest.raises(ConversationGateError):
+        FollowupAssessment(FollowupIntent.ROUTER, "VERIFIED")
+
+
+def test_typed_handoff_keeps_save_intent_with_unverified_group():
+    """No pronoun completion, no automatic write, original message preserved."""
+    incoming = ContextHandoff(
+        original_message="Luego hemos ido todos a tomar algo.",
+        source_request_id="request-002",
+        prior_turns=(
+            HistoricalTurn(
+                "request-001", "user", "Ayer fui solo al cine.", "2026-10-22T09:00:00+00:00"
+            ),
+        ),
+        context_scope=ContextScope.RECENT,
+    )
+    intent = FollowupAssessment(FollowupIntent.ROUTER)
+    proposal = propose_after_context(intent, incoming)
+    assert proposal.intent is FollowupIntent.ROUTER
+    assert proposal.original_message == incoming.original_message
+    assert proposal.referent_evidence is ReferentEvidence.UNVERIFIED
+    assert proposal.recent_context == ({"role": "user", "text": "Ayer fui solo al cine."},)
+    assert proposal.write_authorized is False
+
+
+def test_handoff_does_not_reinterpret_chat_as_save():
+    """Chat versus Router is selected without synthesizing a write target."""
+    incoming = ContextHandoff(
+        original_message="¿Qué me dijiste antes?",
+        source_request_id="q",
+        prior_turns=(),
+        context_scope=ContextScope.RECENT,
+    )
+    assert (
+        propose_after_context(FollowupAssessment(FollowupIntent.CHAT), incoming).intent
+        is FollowupIntent.CHAT
+    )
+    assert (
+        propose_after_context(FollowupAssessment(FollowupIntent.CLARIFY), incoming).write_authorized
+        is False
+    )
+    with pytest.raises(ConversationGateError):
+        propose_after_context(FollowupAssessment(FollowupIntent.ROUTER), object())

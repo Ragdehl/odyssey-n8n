@@ -78,3 +78,65 @@ expected outcomes or claiming an accepted prompt.
 - A scoped independent reviewer found two genuine retrieval problems: out-of-order timestamps prematurely stopped history paging, and identical text in different turns could lead to incorrect request-ID provenance. Both were corrected by skipping out-of-window turns while paginating (bounded 8 pages) and reading **original stored IDs directly** instead of reconstructing IDs from role/text equality.
 - New regression tests cover out-of-order append timestamps and duplicate text with an excluded future timestamp. The focused follow-up review of these two repairs returned **PASS by inspection**, separately from the actual local tests.
 - The real after-context classifier remains **BLOCKED (2/3)**; this does **not** authorize a Chat route switch or error recovery on DEV. No changes were made to real user data or production, and no active deployment was performed.
+
+
+## C2.1: separación general de intención y evidencia (23-10-2026)
+
+La etapa ya no pide a Luna juzgar si una identidad está verificada: su JSON
+estricto devuelve **solamente la intención** ROUTER / CHAT / CLARIFY.
+El estado de procedencia permanece UNVERIFIED por construcción; Router/Core/E3
+deben verificar los referentes y decidir si corresponde guardar o aclarar.
+Un grupo ambiguo no elimina automáticamente una intención clara de guardar.
+
+La nueva función propose_after_context prepara únicamente un contrato de
+traspaso NO EJECUTABLE: mensaje original exacto, ID de solicitud,
+hasta ocho turnos anteriores e indicador write_authorized=False.
+No inventa participantes, ejecuta reintentos, crea notas ni muta el historial.
+
+### Evidencia real GPT-6 Luna low (datos sintéticos, store=false)
+
+- Contrato anterior (intención + supuesto nivel de evidencia): **14/19**.
+  Log: /tmp/odyssey-chat-c2-two-axis-live-20261023.log
+- Nueva intención únicamente (primer hash a9acf7cb673ebc3b): **19/19**.
+  Log: /tmp/odyssey-chat-c2-intent-only-live-20261023.log
+- Holdout multilingüe nuevo: **9/10** al principio; después de separar
+  explicación de errores de órdenes nuevas, **10/10** con hash
+  79fe029d99594536.
+  Logs: /tmp/odyssey-chat-c2-intent-only-holdout-20261023.log
+  y /tmp/odyssey-chat-c2-holdout-v2-20261023.log
+- Matriz principal tras cambio sobre preguntas de error: **18/19**;
+  un mensaje vago sin contenido se clasificó prematuramente como ROUTER.
+  Se diferenció intención expresa de operación de referencia indeterminada.
+  Matriz final: **19/19**, hash **0900ac84034e10e0**.
+  Logs: /tmp/odyssey-chat-c2-intent-only-v2-full-20261023.log
+  y /tmp/odyssey-chat-c2-final-19-case-live-20261023.log
+
+**Límite:** el holdout 10/10 es de una versión inmediatamente anterior:
+no se debe proclamar 29/29 en un mismo hash, estabilidad estadística,
+garantías semánticas generales ni aceptación E2E del chat real.
+
+Antes de activar en DEV: C3 Chat/help con respuesta fundamentada, reanudación
+segura de aclaraciones, evaluación de la versión integrada, pruebas de
+mensajes mixtos, y E2E real n8n→Core/E3→Markdown→UI con datos sintéticos.
+La fase C2.1 NO ha sido desplegada en DEV/PROD.
+
+
+### Revisión y aceptación offline del corte C2.1
+
+La revisión independiente identificó un bloqueo adicional: si el almacén de
+conversación devolvía cero mensajes anteriores, la segunda etapa devolvía
+CLARIFY sin mirar siquiera un mensaje nuevo autocontenido. Se corrigió:
+el modelo realiza **una sola** clasificación de intención con contexto
+vacío, sin bucles y sin posibilidad de autorizar escrituras. La prueba
+test_empty_history_does_not_suppress_self_contained_save_intent verifica
+la petición explícita, el mensaje exacto y una única llamada simulada.
+La revisión focal de la corrección terminó **PASS por inspección**.
+
+Última batería global completa: **1.963 pruebas Python + 184 JavaScript,
+12 grupos PASS**, Ruff y validador de skills/documentos PASS.
+Log: /tmp/odyssey-c2-final-after-review-fix-20261023.log
+
+Aún falta validar el flujo completo desde la aplicación y el comportamiento
+con Luna real en el caso de historial vacío; una prueba con SDK simulado no
+lo sustituye. **Sin aprobación de despliegue de C2/C3**: los resultados de
+esta fase no equivalen a una funcionalidad ya disponible en DEV.

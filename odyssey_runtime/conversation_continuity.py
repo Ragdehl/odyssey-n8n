@@ -17,6 +17,9 @@ from odyssey_runtime.conversation_gateway import (
     ConversationDecision,
     ConversationGateError,
     ConversationMode,
+    FollowupAssessment,
+    FollowupIntent,
+    ReferentEvidence,
 )
 
 HISTORY_DAYS = 30
@@ -186,3 +189,45 @@ def prepare_context_handoff(
     else:
         raise ConversationGateError("Invalid context scope")
     return ContextHandoff(original_message, current_request_id, turns, decision.context_scope)
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationHandoffProposal:
+    """Read-only downstream intent, with no entity or write authority."""
+
+    intent: FollowupIntent
+    original_message: str
+    request_id: str
+    recent_context: tuple[dict[str, str], ...]
+    referent_evidence: ReferentEvidence
+
+    @property
+    def write_authorized(self) -> bool:
+        """Only Core/E3 may make this decision after canonical validation."""
+        return False
+
+
+def propose_after_context(
+    assessment: FollowupAssessment, handoff: ContextHandoff
+) -> ConversationHandoffProposal:
+    """Make a bounded Router/Chat/clarification *proposal*, never execute.
+
+    ROUTER carries the exact original source plus at most eight prior turn
+    quotations. All references are unverified; a missing group is NOT a
+    reason to suppress the save intent in the conversational layer.
+    """
+    if not isinstance(assessment, FollowupAssessment) or not isinstance(handoff, ContextHandoff):
+        raise ConversationGateError("Trusted typed handoff and intent required")
+    if (
+        not handoff.original_message.strip()
+        or len(handoff.original_message) > 4096
+        or not handoff.source_request_id
+    ):
+        raise ConversationGateError("Invalid handoff source")
+    return ConversationHandoffProposal(
+        intent=assessment.intent,
+        original_message=handoff.original_message,
+        request_id=handoff.source_request_id,
+        recent_context=handoff.as_routing_context(),
+        referent_evidence=ReferentEvidence.UNVERIFIED,
+    )

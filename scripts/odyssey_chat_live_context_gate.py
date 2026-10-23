@@ -15,7 +15,7 @@ from odyssey_runtime.conversation_gateway import (
     CONTEXT_RESOLVE_INSTRUCTIONS,
     ConversationState,
     OpenAIConversationGateway,
-    decision_schema,
+    followup_assessment_schema,
 )
 
 CASES = (
@@ -26,7 +26,7 @@ CASES = (
             {"role": "user", "text": "Hoy he visto a Bruno, al que le encanta la guitarra."},
             {"role": "assistant", "text": "La información se ha guardado."},
         ),
-        ("ROUTER", "NONE"),
+        ("ROUTER",),
     ),
     (
         "missing-group-members",
@@ -35,7 +35,7 @@ CASES = (
             {"role": "user", "text": "Ayer fui solo al cine."},
             {"role": "assistant", "text": "Anotado."},
         ),
-        ("CONTEXT", "RECENT"),
+        ("ROUTER",),
     ),
     (
         "unrelated-help",
@@ -44,27 +44,35 @@ CASES = (
             {"role": "user", "text": "Hoy he terminado la declaración de la renta."},
             {"role": "assistant", "text": "La información se ha guardado."},
         ),
-        ("CHAT", "NONE"),
+        ("CHAT",),
     ),
 )
 
 
 def main() -> int:
-    """Run a maximum of three live Responses calls and report exact decisions."""
+    """Compatibility gate: three real intent-only calls, never identity proof."""
     if os.environ.get("ODYSSEY_CHAT_LIVE_APPROVED") != "1" or not os.environ.get("OPENAI_API_KEY"):
         print("CHAT_CONTEXT_GATE_REFUSED: no authorization/environment")
         return 2
     gateway = OpenAIConversationGateway.from_environment()
     digest = hashlib.sha256(
-        (CONTEXT_RESOLVE_INSTRUCTIONS + json.dumps(decision_schema(), sort_keys=True)).encode()
+        (
+            CONTEXT_RESOLVE_INSTRUCTIONS + json.dumps(followup_assessment_schema(), sort_keys=True)
+        ).encode()
     ).hexdigest()[:16]
-    print("CHAT_CONTEXT_GATE_START", gateway.model, gateway.reasoning_effort, digest, flush=True)
+    print(
+        "CHAT_CONTEXT_INTENT_GATE_START",
+        gateway.model,
+        gateway.reasoning_effort,
+        digest,
+        flush=True,
+    )
     passed = 0
     for name, message, previous, expected in CASES:
         started = time.monotonic()
         try:
             choice = gateway.classify_after_context(message, ConversationState(), previous)
-            actual = (choice.mode.value, choice.context_scope.value)
+            actual = (choice.intent.value,)
         except Exception as error:
             actual = ("ERROR", type(error).__name__)
         okay = actual == expected
