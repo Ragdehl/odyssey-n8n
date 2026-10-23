@@ -293,6 +293,20 @@ def _enabled_application_ids() -> tuple[str, ...]:
     return values
 
 
+def _chat_c4_model_advisory_enabled() -> bool:
+    """Allow diagnostic C4 advice only when DEV already has a C3 gateway.
+
+    Instantiating a C3 gateway solely for C4 would accidentally activate the
+    C3 front-door classifier; C4's deterministic guidance is independent.
+    """
+    return (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        and os.environ.get("ODYSSEY_CHAT_C3_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED") == "1"
+    )
+
+
 # Preserve the existing runtime composition injection seam while changing its production target.
 # Runtime tests and downstream composition overrides can keep patching this symbol; it now points to
 # the validated Luna-first planner rather than the former Sol-only planner.
@@ -5249,11 +5263,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
             os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
             and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
         ),
-        conversation_error_model_advisory_enabled=(
-            os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
-            and os.environ.get("ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED") == "1"
-            and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
-        ),
+        conversation_error_model_advisory_enabled=_chat_c4_model_advisory_enabled(),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,
             notes_available=notes_service is not None,

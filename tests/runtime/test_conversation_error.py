@@ -294,3 +294,74 @@ def test_c4_default_skips_redundant_model_call_but_explicit_diagnostic_still_wor
     assert replayed == original
     assert calls == ["c4-optimized"]
     assert len(gateway.advisories) == int(model_advisory_enabled)
+
+
+@pytest.mark.parametrize(
+    ("env", "enabled"),
+    [
+        (
+            {
+                "ODYSSEY_DEPLOYMENT_ENV": "DEV",
+                "ODYSSEY_CHAT_C3_ENABLED": "1",
+                "ODYSSEY_CHAT_C4_ENABLED": "1",
+                "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED": "1",
+            },
+            True,
+        ),
+        (
+            {
+                "ODYSSEY_DEPLOYMENT_ENV": "DEV",
+                "ODYSSEY_CHAT_C3_ENABLED": "0",
+                "ODYSSEY_CHAT_C4_ENABLED": "1",
+                "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED": "1",
+            },
+            False,
+        ),
+        (
+            {
+                "ODYSSEY_DEPLOYMENT_ENV": "DEV",
+                "ODYSSEY_CHAT_C4_ENABLED": "1",
+                "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED": "0",
+            },
+            False,
+        ),
+        (
+            {
+                "ODYSSEY_DEPLOYMENT_ENV": "DEV",
+                "ODYSSEY_CHAT_C4_ENABLED": "0",
+                "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED": "1",
+            },
+            False,
+        ),
+        (
+            {
+                "ODYSSEY_DEPLOYMENT_ENV": "PROD",
+                "ODYSSEY_CHAT_C4_ENABLED": "1",
+                "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED": "1",
+            },
+            False,
+        ),
+        (
+            {
+                "ODYSSEY_DEPLOYMENT_ENV": "",
+                "ODYSSEY_CHAT_C4_ENABLED": "1",
+                "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED": "1",
+            },
+            False,
+        ),
+    ],
+)
+def test_c4_model_advisory_environment_opt_in_is_scoped_to_dev(monkeypatch, env, enabled):
+    """Advisory requires C3 gateway and DEV; C4 deterministic stays independent."""
+    from odyssey_runtime.composition import _chat_c4_model_advisory_enabled
+
+    for key in (
+        "ODYSSEY_DEPLOYMENT_ENV",
+        "ODYSSEY_CHAT_C4_ENABLED",
+        "ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED",
+        "ODYSSEY_CHAT_C3_ENABLED",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    assert _chat_c4_model_advisory_enabled() is enabled

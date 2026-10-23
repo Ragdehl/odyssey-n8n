@@ -285,8 +285,10 @@ real. PROD y datos personales sin tocar.
   la misma interpretación cerrada directamente tras validar el recibo Core;
   **cero llamadas adicionales a Luna por C4**. Se conserva el modo de
   comprobación por modelo con
-  `ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED=1`, y únicamente si C4 está activo
-  **y** `ODYSSEY_DEPLOYMENT_ENV=DEV`; incluso allí, un consejo diferente de la
+  `ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED=1`, pero solo cuando además están
+  activos **C3 y C4** y `ODYSSEY_DEPLOYMENT_ENV=DEV`; C4 por sí solo sigue
+  dando orientación determinista, sin activar inadvertidamente C3. Incluso
+  en el diagnóstico, un consejo diferente de la
   categoría verificada se descarta y jamás autoriza guardar o reintentar.
   C1/C2/C3, el Planner y las llamadas de resolución de identidades no cambian.
 - **Verificación:** prueba aislada actor-scoped/E3 con `partial`, `SOME` y
@@ -322,8 +324,15 @@ real. PROD y datos personales sin tocar.
   modelo reales no estaban cargados. Se conserva la decisión contextual para
   evitar confusiones entre entidades. Perfil de producción sin privados y
   sin escrituras todavía pendiente.
-- **Gate transversal tras optimización:** **2.023 Python + 199 JavaScript PASS**, 12
-  grupos; `/tmp/odyssey-c4-optimized-gate-20261024.json` y `.log`.
+- **Revisión independiente del commit `add3814`** detectó un defecto
+  de adopción (P2): activar diagnóstico C4 sin C3 marcaba el modo como
+  habilitado, pero no había gateway. En vez de crear uno nuevo que pudiera
+  activar C3 inesperadamente, ahora el opt-in exige también C3. Las seis
+  combinaciones relevantes de DEV/PROD/C3/C4 se verifican en pruebas.
+  Resultado de revisión: **hallazgo corregido**, no una aprobación de los
+  cuatro auditores sobre este nuevo commit.
+- **Gate transversal de código corregido:** **2.029 Python + 199 JavaScript PASS**,
+  12 grupos; `/tmp/odyssey-c4-opt-reviewed-gate-20261024.json` y `.log`.
 - **Estado de despliegue:** cambios exclusivamente en la fuente posterior a
   `fc141b9`; DEV sigue instalado en `a756852` y ejecutando C4 con su modo
   anterior. Ninguna mejora de tiempos de este bloque puede atribuirse aún
