@@ -1,9 +1,12 @@
 # C4 — explicación segura de fallos a partir de recibos verificados
 
-**Estado (23-10-2026):** implementado y probado en fuente; desactivado por defecto.
-El checkout **DEV** y el marcador desplegado siguen en `ae281d1` con C3 activo;
-C4 requiere además `ODYSSEY_CHAT_C4_ENABLED=1`, limitado por fábrica a
-`ODYSSEY_DEPLOYMENT_ENV=DEV`. No se ha desplegado C4 ni tocado PROD.
+**Estado real (23-10-2026):** C4 está desplegado **solo en DEV** en
+`a75685252c666609d0f2b9f3880ec357c2d87753`, junto con C3;
+`ODYSSEY_CHAT_C4_ENABLED=1` funciona únicamente cuando
+`ODYSSEY_DEPLOYMENT_ENV=DEV`. La fuente puede ir por delante del marcador
+DEV; PROD no se ha modificado. **APP E2E NOT VERIFIED** globalmente:
+la orientación de identidad sí pasó browser real, pero falta un parcial C4
+natural desde el servicio desplegado y autenticación externa completa.
 
 ## Problema y límites
 
@@ -229,3 +232,40 @@ frontera anónima de Cloudflare comprobada; **APP E2E NOT VERIFIED** como
 aceptación completa hasta poder verificar escritura parcial post-C4,
 reintento iniciado desde UI si existe ese affordance y autenticación externa
 real. PROD y datos personales sin tocar.
+
+## Reproductor aislado de parcial post-escritura (23-10-2026)
+
+- En `tests/runtime/test_c4_isolated_partial_real_core.py` se reutiliza el
+  escenario **general F14**, con respuestas auténticas grabadas del proveedor
+  en `benchmarks/application_router/hybrid_remaining_diag_20261013/F14.json`;
+  la llamada al proveedor **NO** se repite. El Core/Writer real procesa el
+  texto sin cambios en un **vault temporal nuevo** con notas sintéticas.
+- Se induce solo en el proceso pytest una excepción del **readback posterior
+  a la mutación**. El primer hecho queda físicamente persistido en Markdown,
+  el dependiente se bloquea y Core devuelve `partial / CANNOT_ANSWER`, un ID
+  afectado `date:2026-10-03` y una etapa fallida
+  `candidate.postwrite_verification`. **No se ha modificado código Core para
+  introducir un interruptor de errores**, ni DEV habitual o PROD.
+- RuntimeComposition consume el resultado real por el guard E3 actor-scoped,
+  proyecta C4 `status=partial`, `write_evidence=SOME` y orientación
+  `UNKNOWN / EXPLAIN` para la causa no reconocida (no inventa diagnóstico).
+  `scripts/odyssey_c4_isolated_route_renderer.mjs` ejecuta el **routeCode
+  verdadero** de n8n extraído de la fuente y valida su respuesta con
+  `odyssey_web/client.js`: estado `partial`, mensaje «ha guardado parte de
+  la información», nota afectada disponible en snapshot, **sin prometer que
+  toda la solicitud se completó** ni permitir reintento automático.
+- Se reenvía el mismo request ID sobre **el mismo runtime y almacén E3
+  aislados**. `delivery_replayed=true`, el escritor y las llamadas congeladas
+  del modelo siguen con **una única ejecución**, el Markdown original no
+  cambia y no se añade otro hecho. El test está incluido en el gate
+  transversal `conversation_front_door_contract`; pytest focalizado PASS.
+  **Gate global ejecutado tras el cambio: 2.021 Python + 199 JavaScript PASS,
+  12 grupos**, artefactos `/tmp/odyssey-c4-isolated-partial-global-20261023.json`
+  y `.log`. La presentación con la causa `UNKNOWN_FAILURE` usa la plantilla
+  de causa desconocida de C4, sin inventar «reformular» ni una causa temporal.
+- Límite explícito: aunque este test une **Core físico → E3 → C4 → n8n JS
+  auténtico → validador del navegador**, usa proveedor histórico/fijado y no
+  navega por una sesión real de Chromium con n8n desplegado. Por tanto,
+  **NO sustituye una aceptación E2E pública de un parcial C4 natural**.
+  Las aclaraciones `partial / CLARIFY` legítimas siguen siendo competencia
+  de Core y no se reetiquetan artificialmente como error C4.
