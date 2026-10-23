@@ -239,7 +239,21 @@ def run(*, names: list[str], output: Path | None, python: str) -> int:
         check=False,
         env=offline_env,
     )
-    tail = "\n".join((proc.stdout + "\n" + proc.stderr).splitlines()[-30:])
+    output_lines = (proc.stdout + "\n" + proc.stderr).splitlines()
+    tail = "\n".join(output_lines[-30:])
+    if proc.returncode != 0:
+        # Pytest collection errors often occur near the START of output.
+        # Do not hide the first actionable exception behind the last 30 lines.
+        first_error = next(
+            (
+                i
+                for i, line in enumerate(output_lines)
+                if "ERROR collecting " in line or "ImportError while importing" in line
+            ),
+            0,
+        )
+        diagnostic = output_lines[max(0, first_error - 2) : first_error + 38]
+        tail = "\n".join([*diagnostic, "--- pytest ending ---", *output_lines[-30:]])
     collected = re.search(r"(\d+) passed", tail)
     # Node tests validate the actual browser client code and locally compiled
     # n8n mapping, but not a real browser/n8n webhook session.
