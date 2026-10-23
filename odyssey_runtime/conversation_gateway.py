@@ -101,7 +101,7 @@ class GuidanceKind(StrEnum):
 
 
 _GUIDANCE_TEXT = {
-    GuidanceKind.SPECIFY_IDENTITY: "¿Puedes indicar el nombre de la persona o la tarea a la que te refieres?",
+    GuidanceKind.SPECIFY_IDENTITY: "¿Puedes indicar el nombre o identificador del elemento al que te refieres?",
     GuidanceKind.SPECIFY_DATE: "¿Puedes concretar el día o la fecha de la que estás hablando?",
     GuidanceKind.CLARIFY_REQUEST: "¿Puedes reformular la parte que quieres que Odyssey interprete?",
     GuidanceKind.RETRY_LATER: "Ha habido una dificultad técnica. Antes de repetir la operación, comprueba el resultado de la solicitud.",

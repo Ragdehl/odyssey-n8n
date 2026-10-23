@@ -276,12 +276,28 @@ reasons.CONTINUATION_REVIEW_REQUIRED = 'He registrado tu elección, pero aún no
 // C4 is a trusted, closed-label post-Core hint, not a model-authored sentence.
 // Reject cross-status, unverified write claims and non-allowlisted model labels.
 const c4Template = {
-  SPECIFY_IDENTITY: ['ASK_USER','¿Puedes indicar el nombre de la persona o la tarea a la que te refieres?'],
+  SPECIFY_IDENTITY: ['ASK_USER','¿Puedes indicar el nombre o identificador del elemento al que te refieres?'],
   SPECIFY_DATE: ['ASK_USER','¿Puedes concretar el día o la fecha de la que estás hablando?'],
   CLARIFY_REQUEST: ['ASK_USER','¿Puedes reformular la parte que quieres que Odyssey interprete?'],
   RETRY_LATER: ['REVIEW_RETRY','Ha habido una dificultad técnica. Antes de repetir la operación, comprueba el resultado de la solicitud.'],
   UNSUPPORTED: ['EXPLAIN','Esa operación podría necesitar una función de Odyssey que todavía no está disponible.'],
   UNKNOWN: ['EXPLAIN','No he podido verificar la causa exacta del problema. Puedes darme algún detalle más.'],
+};
+// Authority is Core's product reason, never the guidance enum supplied by a
+// model or a future adapter. Keep this finite map aligned with the C4 adapter.
+const c4ReasonKind = {
+  AMBIGUOUS_REFERENCE: 'SPECIFY_IDENTITY',
+  WORK_SESSION_TASK_UNRESOLVED: 'SPECIFY_IDENTITY',
+  WORK_SESSION_TASK_AMBIGUOUS: 'SPECIFY_IDENTITY',
+  TEMPORAL_UNRESOLVED: 'SPECIFY_DATE',
+  TEMPORAL_COHORT_UNRESOLVED: 'SPECIFY_DATE',
+  TEMPORAL_COHORT_YEAR_CONFLICT: 'SPECIFY_DATE',
+  ROUTER_CLARIFY: 'CLARIFY_REQUEST',
+  UNREPRESENTABLE_REQUEST: 'CLARIFY_REQUEST',
+  INCOMPLETE_EVIDENCE: 'CLARIFY_REQUEST',
+  ROUTER_NEEDS_CAPABILITY: 'UNSUPPORTED',
+  STALE_EVIDENCE: 'RETRY_LATER',
+  OPERATIONAL_FAILURE: 'RETRY_LATER',
 };
 const c4 = r.error_guidance;
 const affectedCount = Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.length : null;
@@ -290,8 +306,9 @@ const c4Verified = c4 && typeof c4 === 'object' && !Array.isArray(c4) &&
   ['failed','partial','needs_attention'].includes(r.status) &&
   c4.status === r.status &&
   c4.reason_code === (typeof r.product_reason === 'string' && /^[A-Z][A-Z0-9_]{0,99}$/.test(r.product_reason) ? r.product_reason : 'UNKNOWN_FAILURE') &&
+  c4.guidance_kind === (Object.hasOwn(c4ReasonKind,c4.reason_code) ? c4ReasonKind[c4.reason_code] : 'UNKNOWN') &&
   (c4.write_evidence === 'UNKNOWN' ? affectedCount === 0 :
-    c4.write_evidence === 'SOME' && affectedCount > 0 && affectedCount <= 64) &&
+    c4.write_evidence === 'SOME' && affectedCount > 0) &&
   Object.hasOwn(c4Template,c4.guidance_kind) &&
   c4Template[c4.guidance_kind][0] === c4.hint;
 const c4Message = c4Verified ?

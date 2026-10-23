@@ -199,3 +199,51 @@ test("C4 keeps verified needs_attention and partial statuses even when no write 
     assert.match(r.message, /reformular/);
   }
 });
+
+test("C4 declines well-formed advice authorized for a different Core reason", () => {
+  const base = {
+    request_id: "c3-synthetic", status: "failed", product_outcome: "CANNOT_ANSWER",
+    product_reason: "OPERATIONAL_FAILURE", affected_stable_note_ids: [], actions: [],
+  };
+  const fallback = render(base).message;
+  const r = render({...base, error_guidance: {
+    status: "failed", reason_code: "OPERATIONAL_FAILURE", write_evidence: "UNKNOWN",
+    guidance_kind: "SPECIFY_DATE", hint: "ASK_USER",
+  }});
+  assert.equal(r.message, fallback);
+  const proper = render({...base, error_guidance: {
+    status: "failed", reason_code: "OPERATIONAL_FAILURE", write_evidence: "UNKNOWN",
+    guidance_kind: "RETRY_LATER", hint: "REVIEW_RETRY",
+  }});
+  assert.notEqual(proper.message, fallback);
+  assert.match(proper.message, /comprueba el resultado/);
+});
+
+test("C4 retains verified SOME writes for bulk affected-note counts over 64", () => {
+  const ids = Array.from({length: 71}, (_,i) => "synthetic-note-" + i);
+  const r = render({
+    request_id: "c3-synthetic", status: "partial",
+    product_outcome: "CANNOT_ANSWER", product_reason: "OPERATIONAL_FAILURE",
+    affected_stable_note_ids: ids, actions: [],
+    error_guidance: {
+      status: "partial", reason_code: "OPERATIONAL_FAILURE",
+      write_evidence: "SOME", guidance_kind: "RETRY_LATER", hint: "REVIEW_RETRY",
+    },
+  });
+  assert.equal(r.status, "partial");
+  assert.match(r.message, /ha guardado parte/);
+  assert.doesNotMatch(r.message, /No puedo confirmar todavía qué parte/);
+});
+
+test("C4 generic ambiguity includes future App document/project targets", () => {
+  const r = render({
+    request_id: "c3-synthetic", status: "failed", product_outcome: "CANNOT_ANSWER",
+    product_reason: "AMBIGUOUS_REFERENCE", affected_stable_note_ids: [], actions: [],
+    error_guidance: {
+      status: "failed", reason_code: "AMBIGUOUS_REFERENCE",
+      write_evidence: "UNKNOWN", guidance_kind: "SPECIFY_IDENTITY", hint: "ASK_USER",
+    },
+  });
+  assert.match(r.message, /identificador del elemento/);
+  assert.doesNotMatch(r.message, /persona o la tarea/);
+});

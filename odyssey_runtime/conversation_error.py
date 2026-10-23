@@ -73,7 +73,10 @@ def explain_trusted_product_failure(
     code = reason if isinstance(reason, str) and _CODE.fullmatch(reason) else "UNKNOWN_FAILURE"
     # Even Core's affected-ID list does not attest zero when empty.
     ids = result.affected_stable_note_ids
-    count = len(ids) if ids and len(ids) <= 64 else None
+    # The gateway only needs SOME vs UNKNOWN. Preserve positive evidence for
+    # arbitrarily many affected notes; clamp the private witness to the
+    # VerifiedFailure bound (do not present it as an exact count).
+    count = min(len(ids), 64) if ids else None
     receipt = VerifiedFailure(result.request_id, result.status.value, code, count)
     expected = _REASON_KIND.get(code, GuidanceKind.UNKNOWN)
     fallback = ErrorAdvice(expected, _HINT[expected])
