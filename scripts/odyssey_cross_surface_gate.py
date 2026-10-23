@@ -22,6 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # Contract coverage, not a set of special natural-language exceptions. Each
 # group owns reusable invariants and is extended when a new App is introduced.
 GROUPS: dict[str, tuple[str, ...]] = {
+    "conversation_front_door_contract": (
+        "tests/runtime/test_conversation_gateway.py",
+        "tests/core/test_local_conversations.py",
+        "tests/apps/test_router.py",
+    ),
     "e6_application_extension_contract": (
         "tests/runtime/test_e6_direct_app_flow_diagnostics.py",
         "tests/runtime/test_e6_hybrid_third_application.py",
