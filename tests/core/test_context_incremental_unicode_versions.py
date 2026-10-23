@@ -15,9 +15,7 @@ from tests.core.test_context_deterministic_projection import write
 
 @pytest.fixture
 def schema():
-    return json.loads(
-        (Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text()
-    )
+    return json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
 
 
 def test_incremental_refresh_skips_unchanged_accented_filename(tmp_path, schema):
