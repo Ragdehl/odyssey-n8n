@@ -227,3 +227,70 @@ def test_c4_receipts_are_isolated_by_authenticated_actor(tmp_path):
         (first_actor.stable_user_id, "same-id"),
         (second_actor.stable_user_id, "same-id"),
     ]
+
+
+class _CountingC4Gateway(OpenAIConversationGateway):
+    """No provider access: distinguish C1 route and optional C4 advisory calls."""
+
+    def __init__(self):
+        self.advisories = []
+
+    def classify(self, original_message, state):
+        from odyssey_runtime.conversation_gateway import (
+            ContextScope,
+            ConversationDecision,
+            ConversationMode,
+        )
+
+        return ConversationDecision(ConversationMode.ROUTER, ContextScope.NONE)
+
+    def explain_error(self, receipt):
+        from odyssey_runtime.conversation_gateway import ErrorAdvice, GuidanceKind, RecoveryHint
+
+        self.advisories.append(receipt)
+        return ErrorAdvice(GuidanceKind.SPECIFY_IDENTITY, RecoveryHint.ASK_USER)
+
+
+@pytest.mark.parametrize("model_advisory_enabled", [False, True])
+def test_c4_default_skips_redundant_model_call_but_explicit_diagnostic_still_works(
+    tmp_path, model_advisory_enabled
+):
+    """The model cannot change known Core's advice, so default is zero extra calls."""
+    gateway = _CountingC4Gateway()
+    calls = []
+
+    def hybrid(source, request_id, *_args):
+        calls.append(request_id)
+        return result(
+            "partial",
+            reason="OPERATIONAL_FAILURE",
+            affected=("synthetic-1",),
+            request_id=request_id,
+        )
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: (_ for _ in ()).throw(AssertionError("wrong route")),
+        hybrid_candidate_execute=hybrid,
+        full_source_mutation_guard=True,
+        refresh_indexes=lambda: None,
+        conversation_gateway=gateway,
+        conversation_error_guidance_enabled=True,
+        conversation_error_model_advisory_enabled=model_advisory_enabled,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "actor-root"),
+    )
+    actor = AuthenticatedActorContext(str(uuid4()))
+    original = runtime.execute_product("Synthetic failed operation", "c4-optimized", "main", actor)
+    assert original["status"] == "partial"
+    assert original["error_guidance"] == {
+        "status": "partial",
+        "reason_code": "OPERATIONAL_FAILURE",
+        "write_evidence": "SOME",
+        "guidance_kind": "RETRY_LATER",
+        "hint": "REVIEW_RETRY",
+    }
+    assert len(gateway.advisories) == int(model_advisory_enabled)
+    replayed = runtime.execute_product("Synthetic failed operation", "c4-optimized", "main", actor)
+    assert replayed.pop("delivery_replayed") is True
+    assert replayed == original
+    assert calls == ["c4-optimized"]
+    assert len(gateway.advisories) == int(model_advisory_enabled)

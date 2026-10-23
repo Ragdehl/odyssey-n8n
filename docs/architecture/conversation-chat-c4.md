@@ -269,3 +269,62 @@ real. PROD y datos personales sin tocar.
   **NO sustituye una aceptación E2E pública de un parcial C4 natural**.
   Las aclaraciones `partial / CLARIFY` legítimas siguen siendo competencia
   de Core y no se reetiquetan artificialmente como error C4.
+
+## Optimización de la interpretación C4 (24-10-2026, solo fuente)
+
+- **Problema medido:** para una causa **conocida y verificada por Core**, la
+  tabla `odyssey_runtime/conversation_error.py::_REASON_KIND` ya fija de manera
+  inequívoca `guidance_kind/hint`, y `workflows/odyssey-online.ts` valida la
+  misma relación. Antes, además se llamaba a `OpenAIConversationGateway.explain_error`
+  **dentro del bloqueo de ejecución**, aunque la salida del modelo solo podía
+  coincidir con esa tabla o descartarse. El proveedor añadía latencia y coste
+  sin poder cambiar la presentación autorizada.
+- **Solución sin modificar semántica ni prompt:** `RuntimeComposition` mantiene
+  `conversation_error_guidance_enabled` y separa de él
+  `conversation_error_model_advisory_enabled=False`. El camino normal devuelve
+  la misma interpretación cerrada directamente tras validar el recibo Core;
+  **cero llamadas adicionales a Luna por C4**. Se conserva el modo de
+  comprobación por modelo con
+  `ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED=1`, y únicamente si C4 está activo
+  **y** `ODYSSEY_DEPLOYMENT_ENV=DEV`; incluso allí, un consejo diferente de la
+  categoría verificada se descarta y jamás autoriza guardar o reintentar.
+  C1/C2/C3, el Planner y las llamadas de resolución de identidades no cambian.
+- **Verificación:** prueba aislada actor-scoped/E3 con `partial`, `SOME` y
+  modelo espía: orientación exacta y replay idéntico tanto con modo normal
+  (0 llamadas a `explain_error`) como con diagnóstico opt-in (1 llamada,
+  resultado malicioso ignorado, 0 en replay). Reproductor Raspberry
+  `python -m scripts.odyssey_chat_c4_perf_gate` contra el mismo runtime con
+  proveedor **simulado** de retardo fijo 180 ms: mediana **2,1 ms**,
+  p95 (nearest rank) **5,0 ms**, cero llamadas al proveedor; con
+  `--model-advisory`: mediana **182,4 ms**, p95 **546,2 ms**, siete llamadas.
+  Los p95 incluyen tres solicitudes solapadas y bloqueo serializado. Archivos
+  `/tmp/odyssey-c4-optimized-default-perf.json` y
+  `/tmp/odyssey-c4-optimized-advisory-perf.json`. No son medidas con Luna real;
+  la anterior campaña de seis errores con Luna (1,4–8,4 s observados)
+  permite estimar el coste evitado por C4, no una ganancia total garantizada.
+- **WorkSession:** se conserva `resolve_existing_entity` sin shortcuts ni
+  umbrales nuevos. La etapa DEV real `tasks.work_session_resolution` costó
+  ~12,2 s, pero incluye búsqueda exacta, semántica y posible decisión
+  contextual; los recibos no desglosan esa etapa. No está demostrado qué
+  subpaso domina y es **incorrecto reducir candidatos o saltarse el
+  razonamiento contextual** sin verificar identidad y ambigüedad. El siguiente
+  análisis debe desglosarla en vault sintético con instrumentación acotada y
+  comparar exact, sin candidatos, candidatos ambiguos y resultado positivo.
+- **WorkSession, perfilado seguro adicional:** `/tmp/odyssey_work_session_safe_profile_20261024.json`
+  desglosa cuatro caminos del mismo resolver genérico sobre notas exclusivamente
+  sintéticas, indexador fake y contextualizador fake con retraso impuesto de
+  180 ms. Resultado: identidad exacta ~0,82 ms / **0 llamadas contextuales**;
+  sin candidatos ~0,14 ms / **0 llamadas contextuales**; candidato semántico
+  ~181,35 ms / **1 llamada contextual simulada**; ambigüedad de alias
+  ~183,32 ms / **1 llamada contextual simulada**. La búsqueda exacta y
+  semántica local fue submilisegundo **solo en estas fixtures**; no permite
+  atribuir los 12,2 s observados en DEV a Luna porque el indexador y el
+  modelo reales no estaban cargados. Se conserva la decisión contextual para
+  evitar confusiones entre entidades. Perfil de producción sin privados y
+  sin escrituras todavía pendiente.
+- **Gate transversal tras optimización:** **2.023 Python + 199 JavaScript PASS**, 12
+  grupos; `/tmp/odyssey-c4-optimized-gate-20261024.json` y `.log`.
+- **Estado de despliegue:** cambios exclusivamente en la fuente posterior a
+  `fc141b9`; DEV sigue instalado en `a756852` y ejecutando C4 con su modo
+  anterior. Ninguna mejora de tiempos de este bloque puede atribuirse aún
+  al DEV desplegado. No se ha tocado PROD, credenciales ni vaults.

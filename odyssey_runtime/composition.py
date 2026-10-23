@@ -500,6 +500,10 @@ class RuntimeComposition:
     conversation_deployed_capabilities: frozenset[str] = frozenset()
     # C4 stays separately off even on a DEV instance running C3.
     conversation_error_guidance_enabled: bool = False
+    # The deterministic Core reason code fully determines the public C4 hint.
+    # Optional live-model advisory remains available for bounded diagnostics
+    # but must be explicitly requested and never changes canonical authority.
+    conversation_error_model_advisory_enabled: bool = False
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -1035,7 +1039,13 @@ class RuntimeComposition:
         if self.conversation_error_guidance_enabled:
             try:
                 advice = explain_trusted_product_failure(
-                    result, response, self.conversation_gateway
+                    result,
+                    response,
+                    (
+                        self.conversation_gateway
+                        if self.conversation_error_model_advisory_enabled
+                        else None
+                    ),
                 )
                 if advice is not None:
                     response["error_guidance"] = advice
@@ -5237,6 +5247,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         # Neither the browser nor Luna can advertise new available features.
         conversation_error_guidance_enabled=(
             os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+            and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        ),
+        conversation_error_model_advisory_enabled=(
+            os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+            and os.environ.get("ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED") == "1"
             and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
         ),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(

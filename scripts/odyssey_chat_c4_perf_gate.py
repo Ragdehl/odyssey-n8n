@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import statistics
+import sys
 import tempfile
 import threading
 import time
@@ -89,6 +90,9 @@ class DelayedFakeGateway(OpenAIConversationGateway):
 
 
 def main() -> None:
+    if sys.argv[1:] not in ([], ["--model-advisory"]):
+        raise SystemExit("Usage: python -m scripts.odyssey_chat_c4_perf_gate [--model-advisory]")
+    advisory = sys.argv[1:] == ["--model-advisory"]
     delay = 0.18
     gateway = DelayedFakeGateway(delay)
     samples = []
@@ -125,6 +129,7 @@ def main() -> None:
             conversation_root_resolver=ConversationRootResolver(Path(d) / "state"),
             conversation_gateway=gateway,  # fake, synthetic, deliberately 180ms
             conversation_error_guidance_enabled=True,
+            conversation_error_model_advisory_enabled=advisory,
         )
 
         def invoke(name):
@@ -145,7 +150,8 @@ def main() -> None:
         with ThreadPoolExecutor(max_workers=3) as pool:
             futs = [pool.submit(invoke, f"synthetic-parallel-{i}") for i in range(3)]
             measurements += [{"scope": "3-overlapping", **f.result()} for f in futs]
-        assert len(calls) == len(measurements) == gateway.calls == 7
+        assert len(calls) == len(measurements) == 7
+        assert gateway.calls == (7 if advisory else 0)
     stop.set()
     monitor.join(1)
     last = snapshot()
@@ -155,6 +161,8 @@ def main() -> None:
         "pass": True,
         "calls": len(measurements),
         "model": "DELAYED_FAKE_NOT_REAL_PROVIDER",
+        "model_advisory_enabled": advisory,
+        "C4_advisory_calls": gateway.calls,
         "synthetic_provider_delay_ms": int(delay * 1000),
         "worker_concurrency": 3,
         "replay_core_extra_calls": 0,
