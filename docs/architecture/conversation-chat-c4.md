@@ -1,7 +1,7 @@
 # C4 — explicación segura de fallos a partir de recibos verificados
 
-**Estado real (23-10-2026):** C4 está desplegado **solo en DEV** en
-`a75685252c666609d0f2b9f3880ec357c2d87753`, junto con C3;
+**Estado real (24-10-2026):** C4 está desplegado **solo en DEV** en
+`75404428e085b70b3dbce0c29a972b50af3a9bb3`, junto con C3;
 `ODYSSEY_CHAT_C4_ENABLED=1` funciona únicamente cuando
 `ODYSSEY_DEPLOYMENT_ENV=DEV`. La fuente puede ir por delante del marcador
 DEV; PROD no se ha modificado. **APP E2E NOT VERIFIED** globalmente:
@@ -270,7 +270,7 @@ real. PROD y datos personales sin tocar.
   Las aclaraciones `partial / CLARIFY` legítimas siguen siendo competencia
   de Core y no se reetiquetan artificialmente como error C4.
 
-## Optimización de la interpretación C4 (24-10-2026, solo fuente)
+## Optimización de la interpretación C4 (24-10-2026, desplegada en DEV)
 
 - **Problema medido:** para una causa **conocida y verificada por Core**, la
   tabla `odyssey_runtime/conversation_error.py::_REASON_KIND` ya fija de manera
@@ -333,7 +333,40 @@ real. PROD y datos personales sin tocar.
   cuatro auditores sobre este nuevo commit.
 - **Gate transversal de código corregido:** **2.029 Python + 199 JavaScript PASS**,
   12 grupos; `/tmp/odyssey-c4-opt-reviewed-gate-20261024.json` y `.log`.
-- **Estado de despliegue:** cambios exclusivamente en la fuente posterior a
-  `fc141b9`; DEV sigue instalado en `a756852` y ejecutando C4 con su modo
-  anterior. Ninguna mejora de tiempos de este bloque puede atribuirse aún
-  al DEV desplegado. No se ha tocado PROD, credenciales ni vaults.
+- **Adopción en DEV (24-10-2026):** `75404428e085b70b3dbce0c29a972b50af3a9bb3`
+  desplegado solo en DEV por el procedimiento existente, tras CI independiente
+  **PASS** (`40032888073`), segunda revisión independiente sin nuevos hallazgos,
+  backup SHA256 del estado/notas (~2,3 MB) y n8n (~113 MB), rollback conservado
+  en `a75685252c666609d0f2b9f3880ec357c2d87753`. Frontend, runtime,
+  marcador y n8n coinciden; DEV y PROD health HTTP 200. Ninguna configuración
+  de red, credenciales o PROD fue modificada.
+- **Chromium con aplicación DEV auténtica (proxy local de prueba actor-bound,
+  NO Cloudflare Access externo):** un usuario sintético envió por el formulario
+  una instrucción para iniciar WorkSession sobre una tarea inexistente
+  `C4EnsayoRapidez241026`. Fue **`needs_attention`** con
+  `WORK_SESSION_TASK_UNRESOLVED`, `CANNOT_ANSWER`, `write_evidence=UNKNOWN`,
+  `SPECIFY_IDENTITY/ASK_USER`; el navegador mostró la explicación esperada y
+  la recuperó tras recargar. Runtime/n8n y modelo de clasificación reales,
+  sin segunda llamada Luna por C4 (`MODEL_ADVISORY` desactivado).
+  **37,890 ms observados** desde el envío en Chromium, frente a **41,649 ms**
+  de la muestra anterior; los mensajes, historia y carga difieren, de modo
+  que **NO es un A/B controlado ni acredita un ahorro fijo de 3,8 s**.
+  El recibo de Core registró **22.747 ms** frente a ~27.600 ms históricos;
+  `tasks.work_session_resolution` tardó **8.851 ms** frente a 12.184 ms
+  anteriores, por lo que **WorkSession sigue siendo el cuello de botella**.
+  Las tres advertencias genéricas del proxy de ensayo aparecieron también
+  en la prueba anterior; la prueba de UI terminó PASS, sin errores JS,
+  pero no se atribuye ni se ignora ese ruido sin más diagnóstico.
+- **Integridad:** SHA256 combinado del contenido de **166 Markdown** idéntico
+  antes del despliegue, antes del navegador y después del navegador; ninguna
+  mutación accidental. Copias y resultados en
+  `/home/ragdehl/projects/.odyssey-agent-runs/c4-optimized-dev-adoption-20261024/`;
+  logs `deploy.log`, `optimized-browser-e2e.log`, `backup-sha256`, huellas de
+  vault y captura de Chromium. RAM disponible ~1,5 GiB, swap usado ~738 MiB,
+  temperatura ~48,5 °C (instantánea posterior, no pico).
+- **Pendientes:** el resultado aislado de `partial / SOME` sigue probado por
+  Core físico, E3, n8n JS y browser-validator, pero NO en Chromium público
+  sobre un fallo parcial natural con Luna real; sesión Cloudflare Access
+  externa autenticada, trazas detalladas de WorkSession y **aprobación formal
+  de los cuatro auditores sobre el SHA desplegado** siguen pendientes.
+  **No promover a PROD.**
