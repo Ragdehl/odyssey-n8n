@@ -20,7 +20,11 @@ Desde una tarea puedes iniciar una **sesión de trabajo**, anotar actividades, e
 
 ## Calendario
 
-Odyssey ofrece una vista de calendario, permite navegar por días y visualizar eventos y otras actividades compatibles. Algunas operaciones de creación o modificación de eventos pueden necesitar una fecha y una identidad suficientemente precisas. Si no se pueden verificar, Odyssey debería pedir una aclaración y no inventarlas.
+Odyssey ofrece una vista de calendario, permite navegar por días y visualizar los registros y actividades compatibles disponibles. La visualización del calendario no significa por sí sola que esté activada la creación o modificación de eventos.
+
+## Eventos
+
+Cuando la aplicación de Eventos está habilitada, Odyssey puede crear y modificar eventos. Estas operaciones pueden necesitar una fecha y una identidad suficientemente precisas. Si no se pueden verificar, Odyssey debería pedir una aclaración y no inventarlas.
 
 ## Cuando Odyssey no entiende algo
 

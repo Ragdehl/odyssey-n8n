@@ -422,3 +422,52 @@ def test_chat_reply_reuses_existing_authenticated_http_persistence_and_idempoten
         ("assistant", "Bonjour !"),
     ]
     assert core_calls == []
+
+
+def test_calendar_viewing_help_cannot_advertise_disabled_event_app():
+    """An installed Calendar viewer is not evidence that Event mutations are on."""
+    from odyssey_runtime.conversation_chat import deployed_chat_help_capabilities
+
+    without_events = deployed_chat_help_capabilities(
+        {"tasks": object()},
+        notes_available=True,
+        calendar_available=True,
+        work_sessions_available=True,
+    )
+    assert without_events == frozenset(
+        {"notes", "clarifications", "calendar", "tasks", "work_sessions"}
+    )
+    excerpts = load_verified_help(without_events)
+    assert "events" not in {paragraph.id for paragraph in excerpts}
+    calendar = next(item.text for item in excerpts if item.id == "calendar")
+    assert "no significa por sí sola que esté activada" in calendar
+    assert "Cuando la aplicación de Eventos está habilitada" not in calendar
+
+    with_events = deployed_chat_help_capabilities(
+        {"tasks": object(), "events": object()},
+        notes_available=True,
+        calendar_available=True,
+        work_sessions_available=True,
+    )
+    assert "events" in with_events
+    evidence = load_verified_help(with_events)
+    event_help = next(item.text for item in evidence if item.id == "events")
+    assert "crear y modificar eventos" in event_help
+
+
+def test_help_capability_adoption_requires_own_bound_app(monkeypatch):
+    """A future registered App inherits generic gating rather than another if branch."""
+    from odyssey_runtime.conversation_chat import HELP_TOPICS, deployed_chat_help_capabilities
+
+    monkeypatch.setitem(HELP_TOPICS, "Funcionalidad de prueba", "synthetic_app")
+    base = dict(notes_available=False, calendar_available=False, work_sessions_available=True)
+    assert deployed_chat_help_capabilities({}, **base) == frozenset()
+    assert deployed_chat_help_capabilities({"synthetic_app": object()}, **base) == frozenset(
+        {"synthetic_app"}
+    )
+    assert (
+        deployed_chat_help_capabilities({"work_sessions": object(), "calendar": object()}, **base)
+        == frozenset()
+    )
+    with pytest.raises(ConversationGateError, match="Trusted runtime"):
+        deployed_chat_help_capabilities([], **base)

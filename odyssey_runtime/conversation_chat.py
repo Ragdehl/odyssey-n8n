@@ -37,9 +37,47 @@ HELP_TOPICS = {
     "Tareas y subtareas": "tasks",
     "Sesiones de trabajo": "work_sessions",
     "Calendario": "calendar",
+    "Eventos": "events",
     "Cuando Odyssey no entiende algo": "clarifications",
 }
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
+
+
+def deployed_chat_help_capabilities(
+    bound_application_executors: Mapping[str, object],
+    *,
+    notes_available: bool,
+    calendar_available: bool,
+    work_sessions_available: bool,
+) -> frozenset[str]:
+    """Publish only installed readers and bound, enabled App help topics.
+
+    A schema extension, Calendar viewer, model, or browser hint cannot enable
+    Events or any other App. Future App topics must be bound as executors.
+    """
+    if (
+        not isinstance(bound_application_executors, Mapping)
+        or any(not isinstance(name, str) for name in bound_application_executors)
+        or any(
+            type(flag) is not bool
+            for flag in (notes_available, calendar_available, work_sessions_available)
+        )
+    ):
+        raise ConversationGateError("Trusted runtime help capabilities required")
+    app_topics = set(HELP_TOPICS.values()) - {
+        "notes",
+        "clarifications",
+        "calendar",
+        "work_sessions",
+    }
+    capabilities = set(bound_application_executors) & app_topics
+    if notes_available:
+        capabilities.update({"notes", "clarifications"})
+    if calendar_available:
+        capabilities.add("calendar")
+    if work_sessions_available and "tasks" in capabilities:
+        capabilities.add("work_sessions")
+    return frozenset(capabilities)
 
 
 class ChatPurpose(StrEnum):

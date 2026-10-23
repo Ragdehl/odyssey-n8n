@@ -164,6 +164,7 @@ from odyssey_runtime.application_bindings import bind_registered_executors
 
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
+from .conversation_chat import deployed_chat_help_capabilities
 from .conversation_entry import evaluate_conversation_entry
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
@@ -5196,10 +5197,11 @@ def build_runtime_from_environment() -> RuntimeComposition:
         ),
         # Capability set comes exclusively from this deployed factory wiring.
         # Neither the browser nor Luna can advertise new available features.
-        conversation_deployed_capabilities=frozenset(
-            {"notes", "clarifications"}
-            | ({"tasks", "work_sessions"} if work_session_service is not None else set())
-            | ({"calendar"} if calendar_application is not None else set())
+        conversation_deployed_capabilities=deployed_chat_help_capabilities(
+            application_executors,
+            notes_available=notes_service is not None,
+            calendar_available=calendar_application is not None,
+            work_sessions_available=work_session_service is not None,
         ),
     )
 
