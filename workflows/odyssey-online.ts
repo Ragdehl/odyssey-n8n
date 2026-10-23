@@ -200,7 +200,23 @@ const flowMatchesStages = (flow, stages) => {
   }
   return true;
 };
-if (!id || !r || r.request_id !== id) return [{ json: error }]; const hasOperationalEvidence = r.operational && typeof r.operational === 'object'; const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions); const request_detail_base = hasOperationalEvidence || hasChangeEvidence ? { request_id: id, operational: hasOperationalEvidence ? safeOperational(r.operational) : { total_duration_ms: null, stages: [] }, changes: { affected_stable_note_ids: Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter((item) => typeof item === 'string' && item.length <= 128).slice(0, 64) : [], units: Array.isArray(r.actions) ? r.actions.flatMap(a => Array.isArray(a.units) ? a.units.map(u => ({ stable_note_id: typeof u.stable_note_id === 'string' && u.stable_note_id.length <= 128 ? u.stable_note_id : null, operation: typeof u.operation === 'string' && u.operation.length <= 80 ? u.operation : null, status: typeof u.status === 'string' && u.status.length <= 80 ? u.status : 'unknown' })) : []).slice(0, 64) : [] } } : undefined; const routeFlow = safeFlow(r.execution_flow);
+if (!id || !r || r.request_id !== id) return [{ json: error }];
+// C3 is a trusted runtime-only, non-writing reply. Never infer this from text.
+if (Object.hasOwn(r, 'conversation_reply')) {
+  const c = r.conversation_reply;
+  const safe = c && typeof c === 'object' && !Array.isArray(c) &&
+    Object.keys(c).sort().join(',') === 'kind,message,status' &&
+    ['answer','cannot_answer','clarification'].includes(c.kind) &&
+    ['completed','needs_attention'].includes(c.status) &&
+    (c.status === 'completed') === (c.kind === 'answer') &&
+    typeof c.message === 'string' && c.message.trim().length > 0 &&
+    c.message.length <= 1800 && Array.isArray(r.actions) && !r.actions.length &&
+    Array.isArray(r.affected_stable_note_ids) && !r.affected_stable_note_ids.length &&
+    r.product_outcome === (c.status === 'completed' ? 'ANSWER' : 'CANNOT_ANSWER');
+  if (!safe) return [{json:error}];
+  return [{json:{route:'direct',request_id:id,status:c.status,kind:c.kind,message:c.message}}];
+}
+const hasOperationalEvidence = r.operational && typeof r.operational === 'object'; const hasChangeEvidence = Array.isArray(r.affected_stable_note_ids) || Array.isArray(r.actions); const request_detail_base = hasOperationalEvidence || hasChangeEvidence ? { request_id: id, operational: hasOperationalEvidence ? safeOperational(r.operational) : { total_duration_ms: null, stages: [] }, changes: { affected_stable_note_ids: Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter((item) => typeof item === 'string' && item.length <= 128).slice(0, 64) : [], units: Array.isArray(r.actions) ? r.actions.flatMap(a => Array.isArray(a.units) ? a.units.map(u => ({ stable_note_id: typeof u.stable_note_id === 'string' && u.stable_note_id.length <= 128 ? u.stable_note_id : null, operation: typeof u.operation === 'string' && u.operation.length <= 80 ? u.operation : null, status: typeof u.status === 'string' && u.status.length <= 80 ? u.status : 'unknown' })) : []).slice(0, 64) : [] } } : undefined; const routeFlow = safeFlow(r.execution_flow);
 // The optional E2 ledger joins only already-observed checkpoints, stages and Core receipts.
 // Malformed diagnostics cannot invalidate the authoritative delivery result.
 const safeLedger = value => {

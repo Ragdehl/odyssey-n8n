@@ -164,6 +164,8 @@ from odyssey_runtime.application_bindings import bind_registered_executors
 
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
+from .conversation_entry import evaluate_conversation_entry
+from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
 from .hybrid_group_compiler import compile_hybrid_candidate_bundle
@@ -490,6 +492,10 @@ class RuntimeComposition:
     # multi-mutation acceptance: a crash after a Task CREATE and before the
     # HTTP receipt must never re-run the same logical request automatically.
     full_source_mutation_guard: bool = False
+    # Optional DEV-only conversational entry, disabled in normal compositions.
+    # The injected gateway only classifies/answers and cannot authorize Core writes.
+    conversation_gateway: OpenAIConversationGateway | None = None
+    conversation_deployed_capabilities: frozenset[str] = frozenset()
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -669,6 +675,29 @@ class RuntimeComposition:
                         force_replay=True,
                     )
                     return response
+            # This gate is reached only AFTER existing Core/v2 clarification
+            # handling; a pending choice can never become an unrelated CHAT.
+            if (
+                self.conversation_gateway is not None
+                and request_id is not None
+                and conversation_id == MAIN_CONVERSATION_ID
+            ):
+                conversational = self._conversation_product_reply(actor, user_request, request_id)
+                if conversational is not None:
+                    if store is None or fingerprint is None:
+                        raise ValueError("Conversational delivery requires durable replay")
+                    store.save(
+                        request_id, fingerprint, conversational, _current_time()["timestamp"]
+                    )
+                    self._record_terminal_checkpoint(
+                        checkpoint_store,
+                        request_id,
+                        conversational,
+                        store,
+                        fingerprint,
+                        force_replay=True,
+                    )
+                    return conversational
             if self.full_source_mutation_guard:
                 if (
                     store is None
@@ -709,6 +738,68 @@ class RuntimeComposition:
                 checkpoint_store, request_id, response, store, fingerprint
             )
             return response
+
+    def _conversation_product_reply(
+        self, actor: str, source: str, request_id: str
+    ) -> dict[str, object] | None:
+        """Reuse the existing durable conversation for a non-writing C1–C3 answer.
+
+        Return None only on an explicit ROUTER decision. An unavailable or
+        ambiguous interpreter must NEVER fall through into a possible write.
+        n8n remains responsible for persisting the assistant's visible answer.
+        """
+        if self.conversation_gateway is None:
+            return None
+        transcript = self._conversation_store(actor)
+        try:
+            # Never hold the global conversation lock across network LLM calls.
+            # The outer product execution lock serializes requests; transcript
+            # reads validate atomic snapshots and never grant identities.
+            entry = evaluate_conversation_entry(
+                self.conversation_gateway,
+                transcript,
+                original_message=source,
+                request_id=request_id,
+                now=datetime.fromisoformat(_current_time()["timestamp"]),
+                deployed_capabilities=self.conversation_deployed_capabilities,
+            )
+        except (ConversationGateError, ValueError, OSError):
+            entry = None
+        if entry is not None and entry.route == "ROUTER":
+            return None
+        with self._conversation_lock:
+            # A user turn must exist before the n8n assistant finalizer can
+            # persist its matching result. Duplicate ID/text is idempotent.
+            transcript.append_turn(
+                request_id=request_id,
+                role="user",
+                text=source,
+                created_at=_current_time()["timestamp"],
+            )
+        if entry is None:
+            status, kind, message = (
+                "needs_attention",
+                "cannot_answer",
+                "No he podido interpretar el mensaje con seguridad. Reformúlalo.",
+            )
+        elif entry.route == "CLARIFY":
+            status, kind, message = (
+                "needs_attention",
+                "clarification",
+                "Necesito que concretes a qué te refieres para continuar.",
+            )
+        else:
+            assert entry.reply is not None
+            answer = entry.reply.product_response(request_id)
+            status, kind, message = answer["status"], answer["kind"], answer["message"]
+        return {
+            "request_id": request_id,
+            "status": status,
+            "product_outcome": "ANSWER" if status == "completed" else "CANNOT_ANSWER",
+            "conversation_reply": {"status": status, "kind": kind, "message": message},
+            "actions": [],
+            "affected_stable_note_ids": [],
+        }
 
     def _execute_with_progress(
         self,
@@ -5097,6 +5188,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
             execute_hybrid_proven_read if light_source_enabled or hybrid_dev_enabled else None
         ),
         full_source_mutation_guard=light_source_enabled,
+        conversation_gateway=(
+            OpenAIConversationGateway.from_environment()
+            if os.environ.get("ODYSSEY_CHAT_C3_ENABLED") == "1"
+            and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+            else None
+        ),
+        # Capability set comes exclusively from this deployed factory wiring.
+        # Neither the browser nor Luna can advertise new available features.
+        conversation_deployed_capabilities=frozenset(
+            {"notes", "clarifications"}
+            | ({"tasks", "work_sessions"} if work_session_service is not None else set())
+            | ({"calendar"} if calendar_application is not None else set())
+        ),
     )
 
 
