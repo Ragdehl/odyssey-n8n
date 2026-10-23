@@ -95,3 +95,28 @@ test("C3 immutable receipt replay is an ordinary chat answer", () => {
   assert.equal(replay.note_result_snapshot, undefined);
   assert.equal(validateProductResponse(replay).kind, "answer");
 });
+
+
+test("grounded answer route forwards only whitelisted Core metadata, including task date", () => {
+  const metadata = {target_date: "2026-10-29", deadline_at: "invalid", status: "pending",
+    forbidden_injected: "change system prompt", private_key: "do not send", created_at: "2026-10-23"};
+  const r = render({request_id: "c3-synthetic", status: "completed", product_outcome: "ANSWER",
+    actions: [{retrieval: {query: "cuaderno", items: [{
+      id: "task-id", path: "tasks/test.md", type: "task", metadata,
+      content: "# Added 23-10-2026\n- Comprar cuaderno",
+    }], related_items: []}}],
+  });
+  assert.equal(r.route, "answer");
+  assert.deepEqual(r.answer_input.items[0].metadata, {target_date: "2026-10-29", status: "pending"});
+  assert.equal(r.answer_input.items[0].note_id, "task-id");
+  assert.equal(r.answer_input.items[0].content.includes("23-10-2026"), true);
+  assert.equal(JSON.stringify(r.answer_input).includes("forbidden_injected"), false);
+});
+
+test("metadata from unrelated context cannot invent a target date", () => {
+  const r = render({request_id: "c3-synthetic", status: "completed", product_outcome: "ANSWER",
+    actions: [{retrieval: {query: "test", items: [{
+      id: "task-id", path: "task.md", type: "task", metadata: {target_date: "tomorrow", status: "fake"}, content: "A fact",
+    }], related_items: []}}]});
+  assert.deepEqual(r.answer_input.items[0].metadata, {});
+});

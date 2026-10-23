@@ -98,7 +98,7 @@ def test_synthetic_self_read_keeps_grounded_evidence_on_the_answer_route() -> No
     assert "Works at Synthetic Systems." in fixture
     assert "route: 'answer'" in source
     assert (
-        "items: items.map(i => ({ id: i.id, note_id: i.note_id, type: i.type, path: i.path, content: i.content }))"
+        "items: items.map(i => ({ id: i.id, note_id: i.note_id, type: i.type, path: i.path, content: i.content, metadata: i.metadata || {} }))"
         in source
     )
 
@@ -266,7 +266,7 @@ def test_provider_reads_only_explicit_route_evidence() -> None:
     assert "JSON.stringify($('Route bounded product result').item.json.answer_input)" in source
     assert "JSON.stringify($json.answer_input)" not in source
     assert (
-        "items: items.map(i => ({ id: i.id, note_id: i.note_id, type: i.type, path: i.path, content: i.content }))"
+        "items: items.map(i => ({ id: i.id, note_id: i.note_id, type: i.type, path: i.path, content: i.content, metadata: i.metadata || {} }))"
         in source
     )
 

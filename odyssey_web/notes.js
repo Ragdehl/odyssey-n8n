@@ -68,7 +68,7 @@ export function mountNotes(root, {
   const state = {
     query: "", filters: [], sort: "relevance", items: [], cursor: null, loading: false,
     current: null, back: [], forward: [], feedScroll: 0, historical: false, mode: "feed",
-    snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false,
+    snapshot: null, total: 0, capabilities: {types: [], fields: []}, editing: false, pendingLoad: null,
     editingWorkSessionId: null, editingWorkSessionActivityId: null, workSessionActivityComposerId: null,
     workSessionDisclosure: new Map(), feedDirty: false, groups: new Map(), pendingGroupRefresh: false,
     introOpen: false,
@@ -98,6 +98,18 @@ export function mountNotes(root, {
   }
 
   async function load({reset = false, mode = state.mode, snapshotIds = state.snapshot?.note_ids ?? [], throwOnError = false} = {}) {
+    // An explicit snapshot/open request can arrive while the initial feed is
+    // loading. Preserve the latest navigation instead of silently dropping it.
+    if (state.loading) {
+      if (reset && mode === "snapshot") {
+        state.pendingLoad = {reset, mode, snapshotIds: [...snapshotIds], throwOnError};
+      } else if (reset) {
+        // Clearing a search while another load runs must restore the feed.
+        state.pendingLoad = null;
+        state.pendingGroupRefresh = true;
+      }
+      return;
+    }
     if (!state.historical && ["feed", "local"].includes(mode)) {
       await loadGroups({reset, mode, throwOnError});
       return;
@@ -106,7 +118,15 @@ export function mountNotes(root, {
   }
 
   function flushPendingGroupRefresh() {
-    if (!state.pendingGroupRefresh || state.loading) return;
+    if (state.loading) return;
+    const pending = state.pendingLoad;
+    if (pending) {
+      state.pendingLoad = null;
+      state.pendingGroupRefresh = false;
+      void load(pending);
+      return;
+    }
+    if (!state.pendingGroupRefresh || state.historical) return;
     state.pendingGroupRefresh = false;
     void load({reset: true, mode: state.query.trim() ? "local" : "feed"});
   }

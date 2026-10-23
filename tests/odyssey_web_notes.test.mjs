@@ -1425,3 +1425,63 @@ test("heading-only incoming links inherit their recorded capture day without sho
   assert.equal(groups[0].textContent.includes("Referencia desde el encabezado"), true);
   assert.equal(groups[0].querySelector(".note-fact-origin").textContent.includes("Día 28 oct"), true);
 });
+
+
+test("opening affected Notes while the initial grouped feed is loading is never lost", async () => {
+  let releaseFeed;
+  const feedGate = new Promise((resolve) => { releaseFeed = resolve; });
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return groupedCapabilities();
+      calls.push(payload);
+      if (payload.mode === "feed") {
+        await feedGate;
+        return page({items: [pageItem("old", "Antigua")], total: 1});
+      }
+      assert.equal(payload.mode, "snapshot");
+      assert.deepEqual(payload.snapshot_ids, ["new-task"]);
+      return page({mode: "snapshot", items: [pageItem("new-task", "Comprar cuaderno", "task")], total: 1});
+    },
+  });
+  assert.equal(mounted.controller.state.loading, true);
+  const selection = {version: 2, kind: "affected_notes", note_ids: ["new-task"], total: 1, truncated: false};
+  mounted.document.emit("odyssey:open-note-snapshot", {detail: selection});
+  assert.equal(mounted.controller.state.pendingLoad?.mode, "snapshot");
+  releaseFeed();
+  await flush();
+  await flush();
+  assert.equal(mounted.controller.state.loading, false);
+  assert.equal(mounted.controller.state.pendingLoad, null);
+  assert.equal(mounted.controller.state.snapshot, selection);
+  assert.equal(mounted.elements.list.textContent.includes("Comprar cuaderno"), true);
+  assert.equal(mounted.elements.list.textContent.includes("Antigua"), false);
+  assert.equal(calls.filter(x => x.mode === "snapshot").length, 1);
+});
+
+test("latest Notes navigation wins when user leaves pending affected snapshot before feed finishes", async () => {
+  let releaseFeed;
+  const feedGate = new Promise((resolve) => { releaseFeed = resolve; });
+  const calls = [];
+  const mounted = await mountNotes({
+    requestNotes: async ({operation, payload}) => {
+      if (operation === "capabilities") return groupedCapabilities();
+      calls.push(payload);
+      if (payload.mode === "feed" && calls.length <= 2) await feedGate;
+      return page({items: [pageItem("normal", "Normal")], total: 1});
+    },
+  });
+  const selection = {version: 2, kind: "affected_notes", note_ids: ["obsolete"], total: 1, truncated: false};
+  mounted.document.emit("odyssey:open-note-snapshot", {detail: selection});
+  // Reverting to a normal feed during a pending load discards the stale snapshot.
+  mounted.controller.state.snapshot = null;
+  mounted.controller.state.historical = false;
+  mounted.controller.state.query = "";
+  await mounted.controller.refresh();
+  releaseFeed();
+  await flush();
+  await flush();
+  assert.equal(mounted.controller.state.pendingLoad, null);
+  assert.equal(calls.filter(x => x.mode === "snapshot").length, 0);
+  assert.equal(mounted.elements.list.textContent.includes("Normal"), true);
+});
