@@ -123,9 +123,47 @@ en una solicitud de escritura.
   Python + 199 JavaScript PASS** (12 grupos),
   `/tmp/odyssey-c4-post-audit-final-gate-20261023.log`. Las correcciones son
   posteriores al SHA auditado y **no heredan sus veredictos**.
-- Pendientes de aceptación: revisión de las correcciones, autorización
-  explícita para desplegar un SHA nuevo en DEV con backup/rollback y pruebas
-  user-driven desde Chromium **autenticado** con n8n, Luna y Core/E3 reales,
-  incluyendo errores sin evidencia de cero y de escritura parcial; medir
-  recursos/latencia con proveedor real y no tocar datos personales ni PROD.
-  **APP E2E NOT VERIFIED para C4.**
+- **Aprobación de despliegue DEV recibida** y adopción real del commit inmutable
+  `a75685252c666609d0f2b9f3880ec357c2d87753`. C4 activo solo en
+  el servicio DEV por `c4-chat.conf` con `ODYSSEY_CHAT_C4_ENABLED=1`, C3
+  sigue activo, sin cambios en PROD. El estado anterior y el volumen de n8n
+  están respaldados con `tar` y **SHA256** en
+  `/home/ragdehl/projects/.odyssey-agent-runs/c4-dev-adoption-20261023/`;
+  rollback `ae281d1bd53b048b5a5f192c8bf4657b1a399cb8`.
+- **Aceptación interna desde Chromium con frontend desplegado, n8n real, Core/E3
+  real y actor DEV sintético**, enviando texto con el formulario y el botón:
+  - **C3 regresión:** «Hola, Odyssey. ¿Qué tal estás?» → respuesta social
+    legible, persistida tras recarga, sin notas nuevas; ~10,6 s observados.
+  - **C4 caso real:** iniciar una sesión para la tarea inexistente
+    `C4NoExisteEnsayo231026` → **`needs_attention`**, Core
+    `WORK_SESSION_TASK_UNRESOLVED`, `product_outcome=CANNOT_ANSWER`,
+    `write_evidence=UNKNOWN`, `SPECIFY_IDENTITY/ASK_USER`. La UI respondió:
+    «No puedo confirmar todavía qué parte de la solicitud se ha guardado.
+    ¿Puedes indicar el nombre o identificador del elemento al que te refieres?»;
+    visible tras recarga. Duración total del envío ~41,6 s. El recibo persistido
+    contiene 0 IDs afectados, pero **eso no prueba cero escrituras**.
+  - **Aclaración normal** de una solicitud para enviar un correo sin cuenta
+    conectada: `FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED`, outcome `CLARIFY`,
+    **sin C4**. La UI pidió precisar el ámbito; ~17,6 s. Una solicitud mixta
+    (crear tarea sintética y empezar sesión de otra tarea inexistente) también
+    fue `CLARIFY` **antes de guardar**, no `partial`; ~42,6 s.
+  - En las tres campañas **166 notas Markdown antes y después**, cero nuevas;
+    chat/error/clarificación visibles tras reload. Evidencias
+    `real-c4-user-browser-01.log`, `real-c4-user-browser-unsupported.log`,
+    `real-c4-user-browser-mixed.log` y capturas en el directorio del ensayo.
+  - Gate de UI de solo lectura móvil+escritorio sobre ese mismo marker:
+    **PASS**; 16 paneles de detalles renderizados con SVG en el perfil de
+    escritorio, cero duplicados visuales o advertencias legacy; mutaciones
+    por el proxy de solo lectura rechazadas HTTP 403.
+- **Límites y siguiente paso:** prueba desde **frontend DEV real servido por
+  un proxy local protegido por cookie**, sin validar la sesión pública de
+  Cloudflare Access desde un dispositivo externo. El modelo real/n8n forman
+  parte del runtime desplegado, pero una orientación C4 podría haber usado su
+  fallback determinista si Luna falló. **No se pudo inducir desde UI un fallo
+  parcial después de alguna escritura, ni se certificó desde UI un reenvío
+  literal con el mismo request ID**; ambos están comprobados solo por pruebas
+  de contrato y E3 aislado. Tampoco hay nueva auditoría de los cuatro
+  revisores sobre `a756852`. Las latencias observadas (10,6–42,6 s) son altas:
+  falta un presupuesto medido por etapa y concurrencia con el proveedor real.
+  **C4 funcional en DEV en el caso de identidad, APP E2E NOT VERIFIED como
+  aceptación global.** Ningún dato personal ni PROD fue modificado.
