@@ -613,6 +613,7 @@ class WholeSourceLightExecutor:
                 scoped_note_decode_cache(),
                 self.repository.scoped_unchanged_reads(),
                 scoped_verified_metadata_catalog(index_path=str(self.context_index.path)),
+                timed_dev_hot_path(delivery, "p4.source"),
             ):
                 try:
                     result = self._execute_source(source, delivery, actor, conversation_id)
@@ -836,15 +837,16 @@ class WholeSourceLightExecutor:
         route_schema, route_instructions = capability_route_contract(
             enable_events=self.event_delegate is not None
         )
-        route = self._ask(
-            ROUTER_MODEL,
-            route_instructions,
-            {"original_source": source, "clock": clock},
-            route_schema,
-            "odyssey_light_capability_route_events_v1"
-            if self.event_delegate is not None
-            else "odyssey_light_capability_route_v1",
-        )
+        with timed_dev_hot_path(delivery, "p4.router"):
+            route = self._ask(
+                ROUTER_MODEL,
+                route_instructions,
+                {"original_source": source, "clock": clock},
+                route_schema,
+                "odyssey_light_capability_route_events_v1"
+                if self.event_delegate is not None
+                else "odyssey_light_capability_route_v1",
+            )
         capabilities = route.get("capabilities")
         allowed = {"core", "tasks", "temporal"}
         if self.event_delegate is not None:
@@ -1076,13 +1078,14 @@ class WholeSourceLightExecutor:
             # operation; otherwise no semantic unit may be silently dropped.
             scope = prechecked_task_scope
             if scope is None:
-                scope = self._ask(
-                    PLANNER_MODEL,
-                    TASK_ONLY_SCOPE_PROMPT,
-                    {"original_source": source},
-                    TASK_ONLY_SCOPE_SCHEMA,
-                    "odyssey_task_only_scope_v1",
-                )
+                with timed_dev_hot_path(delivery, "p4.task_scope_primary"):
+                    scope = self._ask(
+                        PLANNER_MODEL,
+                        TASK_ONLY_SCOPE_PROMPT,
+                        {"original_source": source},
+                        TASK_ONLY_SCOPE_SCHEMA,
+                        "odyssey_task_only_scope_v1",
+                    )
             self._observe_prewrite(
                 delivery,
                 "task_scope_verdict",
@@ -1100,13 +1103,14 @@ class WholeSourceLightExecutor:
                 # evidence before calling the single-operation Task delegate.
                 # Only the exact unchanged source passes to the second
                 # auditor; neither reviewer receives the other's judgment.
-                independent = self._ask(
-                    ROUTER_MODEL,
-                    TASK_ONLY_SCOPE_PROMPT,
-                    {"original_source": source},
-                    TASK_ONLY_SCOPE_SCHEMA,
-                    "odyssey_task_only_scope_v1",
-                )
+                with timed_dev_hot_path(delivery, "p4.task_scope_independent"):
+                    independent = self._ask(
+                        ROUTER_MODEL,
+                        TASK_ONLY_SCOPE_PROMPT,
+                        {"original_source": source},
+                        TASK_ONLY_SCOPE_SCHEMA,
+                        "odyssey_task_only_scope_v1",
+                    )
                 self._observe_prewrite(
                     delivery,
                     "task_second_scope_verdict",

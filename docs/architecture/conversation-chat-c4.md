@@ -684,3 +684,34 @@ PROD salud HTTP 200 e intacto. Evidencia operativa en
 identificadores, especialmente P4 y ambas atestaciones; recopilar varias
 muestras comparables y conservar las dos comprobaciones independientes.
 No hacer optimizaciones semánticas a partir de cuatro casos solamente.
+
+### Segunda resolución del residual P4 y n8n (24-10-2026, fuente)
+
+Objetivo acotado: distinguir el tiempo del Router, cada una de las dos
+atestaciones de alcance Tasks y el tiempo del P4 completo antes de atribuir
+el intervalo de la interfaz. **No se altera la semántica**: mismo proveedor,
+contratos, independencia de revisores, validación de fuentes y E3 Writer.
+
+- En el mismo archivo privado de diagnóstico y bajo la misma doble bandera
+  exclusiva de DEV, se admiten `p4.source` (envoltura global de `_execute_source`
+  incluidos checks locales), `p4.router` (llamada Router),
+  `p4.task_scope_primary` (primera atestación no precomprobada) y
+  `p4.task_scope_independent` (segunda atestación realmente ejecutada).
+  Las sondas son **anidadas**: `p4.router`, las atestaciones y
+  `tasks.delegate` están contenidas en `p4.source`; no sumarlas al total.
+  Si una ruta prevalidada o un rechazo no ejecuta determinada etapa, no
+  debe generarse un valor cero ficticio.
+- Regresiones específicas de no filtración/errores/proveedor y dos
+  atestaciones **7 PASS**; gate transversal **2.058 Python + 199 JS PASS**,
+  12 grupos (`/tmp/odyssey-p4-phase-timing-gate-20261024.json`); revisión
+  independiente `codex exec review --uncommitted` **sin hallazgos accionables**
+  (`/home/ragdehl/projects/.odyssey-agent-runs/p4-breakdown-dev-adoption-20261024/independent-review.txt`).
+- La medición exterior browser→n8n y la presentación UI se recogerán en un
+  harness Chromium sintético restrictivo, sin añadir telemetría a n8n/PROD:
+  intervalos de muro de n8n HTTP y botón→respuesta UI, evitando registrar
+  cuerpos, nombres, entidades y secretos. `n8nRoundTripMs` puede contener
+  Core/IA y nunca se suma a `p4.source`. Tampoco demuestra Cloudflare externo.
+
+**Estado de implementación de sondas: código fuente pendiente de adopción DEV
+hasta confirmar CI y el despliegue exacto.** El último deploy verificado sigue
+siendo `02daa74`, interruptor retirado tras la anterior sesión y PROD intacto.

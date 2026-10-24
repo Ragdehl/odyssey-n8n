@@ -17,7 +17,16 @@ from pathlib import Path
 from time import perf_counter
 
 _ALLOWED_STAGES = frozenset(
-    {"conversation.entry", "conversation.classify", "tasks.delegate", "runtime.finish_product"}
+    {
+        "conversation.entry",
+        "conversation.classify",
+        "p4.source",
+        "p4.router",
+        "p4.task_scope_primary",
+        "p4.task_scope_independent",
+        "tasks.delegate",
+        "runtime.finish_product",
+    }
 )
 
 

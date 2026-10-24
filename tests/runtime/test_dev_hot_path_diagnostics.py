@@ -122,6 +122,89 @@ def test_independent_tasks_delegate_keeps_same_result_and_timing(tmp_path, monke
     result = executor(source, "diagnostic-task", actor, "main")
     assert result.status is ApplicationStatus.NEEDS_ATTENTION
     assert len(called) == 1 and called[0][:2] == (source, "diagnostic-task")
-    assert [e["stage"] for e in _read(target)] == ["tasks.delegate"]
+    assert [e["stage"] for e in _read(target)] == [
+        "p4.router",
+        "p4.task_scope_primary",
+        "tasks.delegate",
+        "p4.source",
+    ]
     assert source not in target.read_text()
     assert len(repo.list_markdown_paths()) == 1
+
+
+def test_task_independent_scope_and_outer_source_are_measured_without_skipping_review(
+    tmp_path, monkeypatch
+):
+    target = _enable(tmp_path, monkeypatch)
+    source = "Una tarea sintética acotada."
+    calls = []
+
+    def delegate(message, request, actor):
+        calls.append((message, request, actor.stable_user_id))
+        return _app_result("tasks", request, ApplicationStatus.NEEDS_ATTENTION)
+
+    _, actor, executor, _ = _fixture(tmp_path, task_delegate=delegate)
+    executor.task_create_batch_enabled = True
+    executor.client = RecordedClient(
+        [
+            {
+                "capabilities": ["tasks"],
+                "interpretation": "joint",
+                "reason": "single",
+                "app_scopes": [],
+            },
+            {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": source},
+            {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": source},
+        ]
+    )
+    result = executor(source, "two-scope-task", actor, "main")
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert len(calls) == 1
+    assert executor.client.calls == [
+        "odyssey_light_capability_route_v1",
+        "odyssey_task_only_scope_v1",
+        "odyssey_task_only_scope_v1",
+    ]
+    spans = _read(target)
+    assert [e["stage"] for e in spans] == [
+        "p4.router",
+        "p4.task_scope_primary",
+        "p4.task_scope_independent",
+        "tasks.delegate",
+        "p4.source",
+    ]
+    assert not any(e["failed"] for e in spans)
+    assert source not in target.read_text()
+
+
+def test_task_delegate_failure_is_traced_but_not_swallowed(tmp_path, monkeypatch):
+    target = _enable(tmp_path, monkeypatch)
+    source = "Un fallo sintético al delegar."
+
+    def delegate(*_):
+        raise RuntimeError("private-model-or-source-cannot-be-logged")
+
+    _, actor, executor, _ = _fixture(tmp_path, task_delegate=delegate)
+    executor.client = RecordedClient(
+        [
+            {
+                "capabilities": ["tasks"],
+                "interpretation": "joint",
+                "reason": "single",
+                "app_scopes": [],
+            },
+            {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": source},
+        ]
+    )
+    with pytest.raises(RuntimeError, match="private-model-or-source"):
+        executor(source, "failed-task-delegate", actor, "main")
+    spans = _read(target)
+    assert [e["stage"] for e in spans] == [
+        "p4.router",
+        "p4.task_scope_primary",
+        "tasks.delegate",
+        "p4.source",
+    ]
+    assert [e["failed"] for e in spans] == [False, False, True, True]
+    assert source not in target.read_text()
+    assert "private-model-or-source" not in target.read_text()
