@@ -527,3 +527,83 @@ primer aviso no debe bloquear la hidratación ni autorizar escrituras.
   transitorios fuera del Git. Los SHA256 combinados de los **166 Markdown**
   permanecieron idénticos en ambos ensayos. DEV y PROD no han sido
   modificados, ni se han cambiado tokens o permisos.
+
+### Investigación de latencia total con ONNX caliente (24-10-2026; solo lectura)
+
+**Ningún cambio de modelo, prompt, validador o deploy.** Se releyeron **los
+recibos sintéticos ya existentes** en DEV (`7cade85`) sin extraer textos,
+IDs de notas, prompts ni identidad y se inspeccionó el código activo.
+
+El recorrido `web-19d3335f-...` ya registrado tardó **28,111 s desde Chromium**;
+`OperationalEvidence.total_duration_ms` de la ejecución Core fue **21,161 s**.
+Las etapas declaradas por Core/P4 fueron:
+
+| Etapa | Tiempo de la ejecución caliente |
+|---|---:|
+| `application.router` (modelo `gpt-6-luna`, low) | 7,759 s |
+| Primer `candidate.scope_prewrite` | 1,936 s |
+| Segundo `candidate.scope_prewrite` | 2,063 s |
+| `tasks.interpretation` | 2,152 s |
+| `tasks.work_session_resolution` | 1,992 s |
+| Tiempo de Core no atribuido a esas etapas | ~5,259 s |
+
+**Los dos revisores de alcance no son una repetición involuntaria.** En la
+rama *Tasks-only*, `WholeSourceLightExecutor._execute_source` ejecuta primero
+un auditor de alcance de `gpt-5.6-luna`; si confirma una sola operación, el
+modo de lote habilitado en DEV requiere una **segunda atestación independiente**
+con `gpt-6-luna`, recibiendo ambos el mensaje original y no la decisión del
+otro. Este contrato evita perder una segunda acción o convertir una transición
+de WorkSession en CREATE. Suprimir un revisor o hacer que uno copie la salida
+del otro sería una regresión de seguridad. Ejecutar ambos en paralelo **sin
+condición** anticiparía gasto en solicitudes ya rechazadas, además de cambiar
+orden y concurrencia; requiere diseño y ensayos específicos antes de plantearlo.
+
+**Antes de empezar Router hay otra llamada distinta a Luna**: el clasificador
+conversacional `C1` de `evaluate_conversation_entry` decide CHAT / CONTEXT /
+ROUTER, sin seleccionar capacidades, entidades ni autorizar escrituras.
+Después de ROUTER, la ruta P4 decide Core / Tasks / Events. En los checkpoints
+persistidos (resolución de timestamp de **1 segundo**) transcurrieron:
+
+| Intervalo de checkpoints | ONNX caliente | ONNX frío | Muestra DEV anterior |
+|---|---:|---:|---:|
+| `starting` → `routing.started` | 6 s | 14 s | 8 s |
+| `routing.started` → `routing.ready` | 8 s | 3 s | 2 s |
+| `routing.ready` → `action.delegate.started` | 5 s | 4 s | 6 s |
+| `action.delegate.started` → `finalizing` | 5 s | 20 s | 11 s |
+
+El primer tramo **incluye** C1, acceso a conversación/checkpoints y preparación
+local, por lo que 6 s **no son una medida pura de Luna**. El segundo coincide
+con Router y el tercero con dos validaciones de alcance. Estos intervalos no
+son sumandos exactos de `OperationalEvidence` porque los checkpoints comienzan
+antes y sus timestamps tienen resolución de un segundo.
+
+La variabilidad es sustancial: Router fue ~2,49–2,53 s en dos recorridos
+anteriores y **7,76 s** en el caliente. El perfil local sin red de
+`OpenAITaskInterpreter.from_environment()` con **clave dummy** (sin proveedor)
+dio ~1,09 s en la primera construcción del SDK y ~1 ms en las siguientes,
+lo que **no justifica atribuir cinco segundos siempre a inicializar el SDK**.
+En la muestra caliente hubo ~5,26 s de Core no atribuidos a las cinco etapas,
+pero el recibo actual carece de intervalos completos para localizar ese
+residual; no confundirlo con los ~6,95 s de diferencia entre Core y Chromium,
+que contienen C1, n8n, almacenamiento y recorrido HTTP/UI.
+
+**Orden recomendado de investigación:**
+
+1. Instrumentar opcionalmente en DEV, sin contenido ni IDs, los tiempos de
+   clasificación C1 y los límites de `WholeSourceLightExecutor` (preparación
+   anterior a delegar, entrada/salida de `task_delegate` y finalización).
+   Registrar inicio/fin monotónicos reales y proyección anidada para no
+   contabilizar dos veces los intervalos; no cambiar semántica.
+2. Medir en varias solicitudes sintéticas con modelo real **solo si se concede
+   un presupuesto acotado**, porque una ejecución tiene variación relevante.
+   Separar latencias de n8n y UI de las etapas del runtime.
+3. Mantener las dos atestaciones de cardinalidad, el clasificador C1 y el
+   Router P4 hasta demostrar una alternativa que preserve intención de
+   escritura, completitud multiactividad, exact source, negativa, referencias
+   ambiguas, idempotencia y replay. Cualquier cambio de prompt/modelo debe
+   pasar por `odyssey-llm-stage` y evaluación real, no solo el gate determinista.
+
+**Resultado:** el siguiente foco no es WorkSession ni ONNX caliente, sino el
+coste de decisiones lingüísticas **C1 + Router + dos atestaciones**, y unos
+intervalos no atribuidos que requieren telemetría más fina antes de optimizar.
+DEV, PROD y notas no se modificaron en esta investigación.
