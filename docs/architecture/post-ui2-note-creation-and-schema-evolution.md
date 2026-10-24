@@ -681,6 +681,37 @@ habilitar publicación), con control de concurrencia, validación del esquema
 candidate sobre el vault de prueba y reconstrucción/reutilización justificada
 de índices. Nunca habilitar un endpoint de confirmación sin ese contrato.
 
+**Tercer corte: generación coherente por reinicio controlado (source-only).**
+La composición carga una revisión exacta del registro, y el servidor conserva
+un **lease compartido de sistema operativo durante toda su vida**. La
+publicación de otra revisión necesita el mismo lease en exclusiva y se rechaza
+con `SCHEMA_RUNTIME_ACTIVE` mientras el servidor funcione. Al arrancar, el
+servidor compara la revisión ya compuesta con la revisión duradera y se niega a
+servir una composición obsoleta (`SCHEMA_RUNTIME_GENERATION_STALE`). Así todos
+los consumidores que capturan el esquema al crear Core/Apps/Writer/Notes e
+índices siguen utilizando **la misma generación por proceso**, aprovechando la
+recomposición y validación de índices en el arranque. El lock no intenta
+reconfigurarlos a medias. Prueba Linux entre procesos y fake `serve()` real
+comprueban exclusión durante servicio y reinicio correcto; los recibos futuros
+huérfanos tampoco se ignoran silenciosamente.
+
+**Límite operativo todavía pendiente:** esto es una *primitiva de seguridad*,
+**no** una activación UX automática. Una confirmación desde la interfaz no puede
+llamar `publish` con el servidor activo; deberá quedar validada y encolada en
+estado duradero (idempotencia y permiso explícito), mientras el coordinador
+realiza arranque/reconstrucción de la nueva generación y publica un estado
+consistente. La frontera operativa debe preservar chat y navegación tanto como
+sea posible y evitar detener un proceso con escrituras en curso. Aún no existe
+el flujo de orquestación, por lo que no habilitar `schema_confirm` o simular
+«creado» antes de un recibo activo y leído de vuelta. No declarar sin pruebas
+que un reinicio es invisible para el usuario. No altera el contrato de notas
+físicas v3 ni las escrituras E3.
+
+**Pequeña corrección de UI:** la pantalla de Notas deja de mostrar al usuario
+el atributo técnico «filtrable» en las descripciones de propiedades y explica
+el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen
+informativos («Próximamente»), no simulan una operación de IA publicada.
+
 **No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
 previa conectadas, publicación caliente con barrera de índices, migración de
 esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,

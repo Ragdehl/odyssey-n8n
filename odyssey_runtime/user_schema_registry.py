@@ -107,6 +107,44 @@ class UserSchemaRegistry:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
 
+    @contextmanager
+    def _generation_lease(self, *, serving: bool) -> Iterator[None]:
+        """Share a generation while serving; publication needs exclusive ownership.
+
+        The lease spans *the entire HTTP server lifetime*, not one request.
+        Without that boundary a published v4 user registry could silently
+        diverge from the Core/Apps/Notes schema captured by a running process.
+        """
+        lock = self._root / ".runtime-generation.lock"
+        if lock.is_symlink():
+            raise UserSchemaError("Schema runtime lease is a symlink")
+        fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            try:
+                mode = fcntl.LOCK_SH if serving else fcntl.LOCK_EX
+                fcntl.flock(fd, mode | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise UserSchemaError(
+                    "SCHEMA_PUBLICATION_IN_PROGRESS" if serving else "SCHEMA_RUNTIME_ACTIVE"
+                ) from error
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    @contextmanager
+    def serving_generation(self, expected_revision: int) -> Iterator[None]:
+        """Keep an exact boot-composed schema active until the server stops.
+
+        This intentionally opts for a controlled restart, not an unsafe
+        dict replacement of captured Core/Writer/App/index dependencies.
+        """
+        with self._generation_lease(serving=True):
+            revision, _ = self.snapshot()
+            if revision != expected_revision:
+                raise UserSchemaError("SCHEMA_RUNTIME_GENERATION_STALE")
+            yield
+
     @staticmethod
     def _blank() -> dict[str, Any]:
         return {
@@ -162,6 +200,11 @@ class UserSchemaRegistry:
                 raise UserSchemaError("Schema confirmation history is invalid")
         if len({x["request_id"] for x in state["confirmations"]}) != rev:
             raise UserSchemaError("Schema confirmation replay is invalid")
+        # An orphan future receipt means the publisher crashed between the
+        # durable journal and the pointer. Never let another publisher reuse
+        # that revision or silently ignore an incomplete commit.
+        if len(tuple(self._history.iterdir())) != rev:
+            raise UserSchemaError("Schema publication history is incomplete")
         # A committed revision must have an immutable matching on-disk receipt.
         digest = _digest(state)
         receipt = self._history / f"r{rev:06d}-{digest[:16]}.json"
@@ -225,7 +268,9 @@ class UserSchemaRegistry:
         ):
             raise UserSchemaError("Trusted confirmation required")
         canonical = _roundtrip(change)
-        with self._locked():
+        # Serialize other publishers first; contention for the serving lease
+        # then means an active runtime, not a rival publication in progress.
+        with self._locked(), self._generation_lease(serving=False):
             state = self._read()
             known = {x["request_id"]: x for x in state["confirmations"]}
             if confirmation.request_id in known:

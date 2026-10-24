@@ -52,6 +52,18 @@ no DEV/PROD deploy or real user notes. Next: coherent Core/Apps/index schema act
 confirmation, then conversational editor and backfills. See detailed [checkpoint
 and trust limits](post-ui2-note-creation-and-schema-evolution.md#primera-entrega-técnica-registro-compatible-24-10-2026-rama-de-desarrollo).
 
+**Schema source slice 3 (same PR #155, not deployed):** coherent process
+schema generation via shared runtime lease and exclusive revision publication;
+refuse serving a revision different from the frozen startup composition, and
+fail closed on orphan publication receipts. Reuse existing restart-time schema
+and index composition; OS-process and server-lifecycle synthetic tests added.
+Notes browser hides the technical `filterable` string and explains the benefit
+of new types without claiming creation works. Third-slice source gate
+**2,103 Python + 202 JavaScript PASS**, Ruff and docs guards passed.
+**Missing:** user-approved
+pending publication + orchestrated zero-confusion activation and browser UI;
+do not enable public schema mutations or alter PROD/private vault.
+
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
 trusting these static values. Two merged clean C4 audit-only branches/worktrees

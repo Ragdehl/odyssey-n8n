@@ -458,8 +458,7 @@ export function mountNotes(root, {
       for (const property of type.properties) {
         const item = document.createElement("li");
         const requirement = property.required ? "obligatoria" : "opcional";
-        const filtering = property.filterable ? "filtrable" : "no filtrable";
-        item.textContent = `${filterLabel(property.id)}: ${localizedPropertyDescription(type.id, property)} (${requirement} · ${localizedValueType(property.value_type)} · ${filtering})`;
+        item.textContent = `${filterLabel(property.id)}: ${localizedPropertyDescription(type.id, property)} (${requirement} · ${localizedValueType(property.value_type)})`;
         properties.append(item);
       }
       details.append(properties);
@@ -472,7 +471,7 @@ export function mountNotes(root, {
     edit.setAttribute("aria-expanded", "false");
     const editMessage = document.createElement("p");
     editMessage.className = "notes-type-edit-message";
-    editMessage.textContent = "Próximamente · Podrás editar la descripción y las propiedades de este tipo.";
+    editMessage.textContent = "Próximamente · Podrás explicarle a Odyssey qué deseas cambiar y revisar la propuesta antes de confirmarla.";
     editMessage.hidden = true;
     details.append(edit, editMessage);
     return details;
@@ -496,7 +495,7 @@ export function mountNotes(root, {
     control.setAttribute("aria-expanded", "false");
     const message = document.createElement("p");
     message.className = "notes-create-type-message";
-    message.textContent = "Próximamente · Esta función está en desarrollo.";
+    message.textContent = "Un tipo nuevo te ayuda a organizar y consultar cosas que comparten información específica, como libros, recetas o plantas. Próximamente Odyssey te ayudará a crearlo hablando con la IA; primero comprobará si puedes reutilizar un tipo existente.";
     message.hidden = true;
     card.append(control, message);
     return card;

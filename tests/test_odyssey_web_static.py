@@ -438,3 +438,14 @@ def test_isolated_dev_n8n_serves_browser_modules_without_opaque_origin() -> None
     assert "content-security-policy:[[:space:]]*sandbox" in operator
     assert "content-type:[[:space:]]*text/javascript" in operator
     assert "content-type:[[:space:]]*text/html" in operator
+
+
+def test_schema_information_explains_user_value_without_filterable_technical_toggle() -> None:
+    """Do not promise a working schema editor or make users configure filter mechanics."""
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "odyssey_web/notes.js").read_text()
+    assert "const filtering = property.filterable" not in source
+    assert "Un tipo nuevo te ayuda a organizar y consultar cosas" in source
+    assert "Próximamente Odyssey te ayudará" in source
+    assert "revisar la propuesta antes de confirmarla" in source

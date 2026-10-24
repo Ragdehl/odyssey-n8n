@@ -446,7 +446,8 @@ test("type information is localized and future authoring controls are presentati
   assert.equal(task.textContent.includes("Current lifecycle state"), false);
 
   task.querySelector(".notes-type-edit-button").click();
-  assert.equal(task.textContent.includes("Podrás editar la descripción y las propiedades"), true);
+  assert.equal(task.textContent.includes("Podrás explicarle a Odyssey qué deseas cambiar"), true);
+  assert.equal(task.textContent.includes("filtrable"), false);
 
   task.querySelector(".notes-type-create-button").click();
   assert.equal(task.textContent.includes("Podrás crear una nota de tipo Tarea desde aquí"), true);

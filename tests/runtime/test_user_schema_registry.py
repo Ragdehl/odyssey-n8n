@@ -327,7 +327,7 @@ def test_missing_receipt_fails_closed(tmp_path: Path) -> None:
     user.publish(type_change(), confirm(p))
     receipt = next((tmp_path / "user-schema/history").glob("*.json"))
     receipt.unlink()
-    with pytest.raises(UserSchemaError, match="receipt"):
+    with pytest.raises(UserSchemaError, match="receipt|history is incomplete"):
         registry(tmp_path).snapshot()
 
 
@@ -467,3 +467,82 @@ def test_cross_type_same_filter_contract_remains_supported(tmp_path: Path) -> No
     kind["type"]["properties"][0].update({"id": "occupation", "value_type": "string"})
     q = user.preview(kind, expected_revision=1)
     assert q.effective_schema["schema_version"] == 3
+
+
+def test_runtime_lease_prevents_publishing_while_an_old_generation_serves(
+    tmp_path: Path,
+) -> None:
+    """Do not allow partial v4 schema publication into an active v3 composition."""
+    first, second = registry(tmp_path), registry(tmp_path)
+    proposal = first.preview(type_change(), expected_revision=0)
+    with first.serving_generation(0):
+        assert second.snapshot()[0] == 0
+        with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
+            second.publish(type_change(), confirm(proposal))
+        assert first.snapshot()[0] == 0
+    second.publish(type_change(), confirm(proposal))
+    assert first.snapshot()[0] == 1
+    with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_GENERATION_STALE"):
+        first.serving_generation(0).__enter__()
+    with first.serving_generation(1):
+        assert "book" in ordinary_type_ids(first.snapshot()[1])
+
+
+def test_orphaned_next_revision_receipt_is_not_silently_ignored(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    proposal = user.preview(type_change(), expected_revision=0)
+    user.publish(type_change(), confirm(proposal))
+    # Mimic the crash window after the immutable receipt, before pointer swap.
+    (tmp_path / "user-schema/history/r000002-orphan.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(UserSchemaError, match="history is incomplete"):
+        registry(tmp_path).snapshot()
+    with pytest.raises(UserSchemaError, match="history is incomplete"):
+        registry(tmp_path).publish(
+            property_change(), SchemaConfirmation("synthetic-actor", "another-request", 1, "0" * 64)
+        )
+
+
+def test_running_lease_rejects_symlink_swap(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    lock = tmp_path / "user-schema/.runtime-generation.lock"
+    lock.symlink_to(tmp_path / "target")
+    with pytest.raises(UserSchemaError, match="lease is a symlink"):
+        with user.serving_generation(0):
+            pass
+
+
+def test_runtime_lease_blocks_publication_from_separate_process(tmp_path: Path) -> None:
+    """Exercise OS process-level flock, not merely competing Python threads."""
+    import subprocess
+    import sys
+
+    user = registry(tmp_path)
+    script = """
+import json, sys
+from pathlib import Path
+from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+from odyssey_runtime.user_schema_registry import UserSchemaRegistry, SchemaConfirmation, UserSchemaError
+base = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+user = UserSchemaRegistry(Path(sys.argv[1]), base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+change = {"operation": "add_type", "type": {
+ "id": "book", "name": "Book", "description": "Book note", "examples": [], "properties": []}}
+proposal = user.preview(change, expected_revision=0)
+try:
+ user.publish(change, SchemaConfirmation("synthetic-actor", "cross-process", 0, proposal.proposal_hash))
+except UserSchemaError as error:
+ print(str(error))
+else:
+ print("UNEXPECTED_PUBLICATION")
+"""
+    with user.serving_generation(0):
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(tmp_path), str(ROOT / "config/note-schema.json")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+        assert result.stdout.strip() == "SCHEMA_RUNTIME_ACTIVE"
+        assert user.snapshot()[0] == 0

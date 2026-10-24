@@ -2476,3 +2476,84 @@ def test_http_schema_preview_is_read_only_authenticated_and_bounded(tmp_path: Pa
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_actual_serve_holds_schema_generation_lease_until_shutdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runtime HTTP server lifetime, not individual requests, protects schema generation."""
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime import server as runtime_server
+    from odyssey_runtime.user_schema_registry import (
+        SchemaConfirmation,
+        UserSchemaError,
+        UserSchemaRegistry,
+    )
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    user = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    change = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Book",
+            "description": "A named book",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    preview = user.preview(change, expected_revision=0)
+    confirmation = SchemaConfirmation(
+        "synthetic-actor", "schema-once", preview.revision, preview.proposal_hash
+    )
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        user_schema_registry=user,
+        user_schema_revision=0,
+    )
+
+    class InstrumentedServer:
+        def __init__(self, address, handler):
+            assert address == ("127.0.0.1", 19001)
+            assert handler is not None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def serve_forever(self):
+            if user.snapshot()[0] == 0:
+                with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
+                    user.publish(change, confirmation)
+            else:
+                assert user.snapshot()[0] == 1
+
+    monkeypatch.setattr(runtime_server, "ThreadingHTTPServer", InstrumentedServer)
+    runtime_server.serve(runtime, port=19001)
+    assert user.snapshot()[0] == 0
+    # After the old process has fully stopped, a trusted operator can publish.
+    user.publish(change, confirmation)
+    assert user.snapshot()[0] == 1
+    with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_GENERATION_STALE"):
+        runtime_server.serve(runtime, port=19001)
+    restarted = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        user_schema_registry=registry_for_restarted_runtime(tmp_path, base),
+        user_schema_revision=1,
+    )
+    runtime_server.serve(restarted, port=19001)
+
+
+def registry_for_restarted_runtime(tmp_path: Path, base_schema: dict):
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    return UserSchemaRegistry(
+        tmp_path, base_schema, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
+    )

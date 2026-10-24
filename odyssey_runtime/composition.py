@@ -508,6 +508,7 @@ class RuntimeComposition:
     # User schema proposals are read-only in the active runtime. Confirm/publish
     # requires a separate authenticated rollout and consistent schema/index swap.
     user_schema_registry: object | None = None
+    user_schema_revision: int | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -2847,6 +2848,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
     application_schema_extensions = (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
     schema = compose_application_schema(base_schema, application_schema_extensions)
     user_schema_registry = None
+    user_schema_revision = None
     user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
     if user_schema_flag not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
@@ -2858,7 +2860,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         user_schema_registry = UserSchemaRegistry(
             state_root, base_schema, application_schema_extensions
         )
-        _, schema = user_schema_registry.snapshot()
+        user_schema_revision, schema = user_schema_registry.snapshot()
     # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
     # UI publication/hot-reload boundary is deliberately NOT available yet.
 
@@ -5316,6 +5318,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         vault_repository=repository,
         canonical_schema=schema,
         user_schema_registry=user_schema_registry,
+        user_schema_revision=user_schema_revision,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(
