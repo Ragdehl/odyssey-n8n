@@ -6,6 +6,7 @@ import inspect
 import json
 from collections.abc import Sequence
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import pytest
@@ -14,9 +15,11 @@ from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.contextual import ContextualProviderError, ContextualResolutionError
 from odyssey_core.identity import ExactEntityLookupError
 from odyssey_core.notes import Note, serialize_note, validate_note
+from odyssey_core.observability import OperationalOutcome, SpanRecorder
 from odyssey_core.resolution import (
     ExistingEntityOutcome,
     ResolutionSource,
+    _resolution_timing,
     build_provider_evidence,
     resolve_existing_entity,
 )
@@ -483,3 +486,117 @@ def test_invalid_candidate_note_is_rejected_before_provider_evidence(
     with pytest.raises(ExactEntityLookupError):
         run_resolution(tmp_path, schema, "unknown", index, reasoner, semantic_limit=5)
     assert reasoner.requests == []
+
+
+def test_resolution_profile_records_only_fixed_phase_times_for_exact_and_no_candidates(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Opt-in diagnostics preserve exact/no-match behavior without exposing names."""
+    write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
+    index = FakeIndex()
+    reasoner = FakeReasoner({"outcome": "RESOLVED", "id": "ada", "ambiguous_ids": []})
+    base = dict(
+        type="person",
+        repository=VaultRepository(tmp_path),
+        schema=schema,
+        semantic_index=index,
+        embedder=FakeEmbedder(),
+        contextual_reasoner=reasoner,
+        semantic_limit=5,
+    )
+    exact_spans = SpanRecorder(perf_counter(), perf_counter)
+    exact = resolve_existing_entity("Ada", "synthetic", **base, resolution_spans=exact_spans)
+    assert exact.outcome is ExistingEntityOutcome.RESOLVED
+    assert tuple(span.name for span in exact_spans.spans) == ("exact_lookup",)
+    assert index.calls == 0 and reasoner.requests == []
+    missing_spans = SpanRecorder(perf_counter(), perf_counter)
+    missing = resolve_existing_entity(
+        "fictional unbound", "synthetic", **base, resolution_spans=missing_spans
+    )
+    assert missing.outcome is ExistingEntityOutcome.UNRESOLVED
+    assert {span.name for span in missing_spans.spans} == {
+        "exact_lookup",
+        "semantic_search",
+        "candidate_validation",
+    }
+    assert index.calls == 1 and reasoner.requests == []
+    assert all(
+        isinstance(span.duration_ms, float) and span.duration_ms >= 0
+        for span in (*exact_spans.spans, *missing_spans.spans)
+    )
+    assert not any(
+        "Ada" in span.name or "fictional" in span.name
+        for span in (*exact_spans.spans, *missing_spans.spans)
+    )
+
+
+def test_resolution_profile_observes_contextual_and_provider_failure_without_changing_authority(
+    tmp_path: Path, schema: dict[str, Any]
+) -> None:
+    """Provider failures still raise; no telemetry counter selects a candidate."""
+    write_note(tmp_path, "people/Ada.md", valid_note("ada", "person", "Engineer."))
+    index = FakeIndex((candidate("ada", "people/Ada.md", "Ada"),))
+    base = dict(
+        type="person",
+        repository=VaultRepository(tmp_path),
+        schema=schema,
+        semantic_index=index,
+        embedder=FakeEmbedder(),
+        semantic_limit=5,
+        expand_relationship_context=True,
+    )
+    ok_spans = SpanRecorder(perf_counter(), perf_counter)
+    result = resolve_existing_entity(
+        "the engineer",
+        "synthetic",
+        **base,
+        contextual_reasoner=FakeReasoner({"outcome": "RESOLVED", "id": "ada", "ambiguous_ids": []}),
+        resolution_spans=ok_spans,
+    )
+    assert result.outcome is ExistingEntityOutcome.RESOLVED
+    assert {span.name for span in ok_spans.spans} == {
+        "exact_lookup",
+        "semantic_search",
+        "candidate_validation",
+        "relationship_context",
+        "provider_evidence",
+        "contextual_provider",
+        "decision_validation",
+    }
+
+    class FailedReasoner:
+        def resolve(self, request):
+            raise ContextualProviderError("synthetic provider error")
+
+    failed_spans = SpanRecorder(perf_counter(), perf_counter)
+    with pytest.raises(ContextualProviderError):
+        resolve_existing_entity(
+            "the engineer",
+            "synthetic",
+            **base,
+            contextual_reasoner=FailedReasoner(),
+            resolution_spans=failed_spans,
+        )
+    assert "contextual_provider" in {span.name for span in failed_spans.spans}
+    assert "decision_validation" not in {span.name for span in failed_spans.spans}
+    assert all(span.duration_ms >= 0 for span in failed_spans.spans)
+    assert failed_spans.spans[-1].outcome is OperationalOutcome.FAILED
+    assert failed_spans.spans[-1].error_category == "ContextualProviderError"
+
+
+def test_resolution_nested_span_uses_injected_clock_for_offsets_and_failure() -> None:
+    """A caller's fake/monotonic time domain is authoritative for nested spans."""
+    samples = iter((40.0, 40.125, 40.5, 40.75))
+    recorder = SpanRecorder(40.0, lambda: next(samples))
+    with _resolution_timing(recorder, "exact_lookup"):
+        pass
+    assert recorder.spans[0].start_offset_ms == 0
+    assert recorder.spans[0].duration_ms == 125.0
+    assert recorder.spans[0].outcome is OperationalOutcome.COMPLETED
+    with pytest.raises(ContextualProviderError):
+        with _resolution_timing(recorder, "contextual_provider"):
+            raise ContextualProviderError("private failure details")
+    assert recorder.spans[1].start_offset_ms == 500.0
+    assert recorder.spans[1].duration_ms == 250.0
+    assert recorder.spans[1].outcome is OperationalOutcome.FAILED
+    assert recorder.spans[1].error_category == "ContextualProviderError"

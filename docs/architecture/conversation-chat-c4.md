@@ -370,3 +370,48 @@ real. PROD y datos personales sin tocar.
   externa autenticada, trazas detalladas de WorkSession y **aprobación formal
   de los cuatro auditores sobre el SHA desplegado** siguen pendientes.
   **No promover a PROD.**
+
+## Diagnóstico seguro de WorkSession (24-10-2026, SOLO FUENTE)
+
+La aceptación DEV de `7540442` mostró `tasks.work_session_resolution` a
+**8.851 ms**, con otra muestra de **12.184 ms** y resoluciones de otras tareas
+sintéticas en **23, 59 y 61 ms**. Estos tiempos son etapas completas, no
+una separación de consulta local, embedding y razonador contextual. No está
+justificado saltar la validación semántica ni fijar un umbral de confianza.
+
+- Core `resolve_existing_entity` admite ahora un `SpanRecorder` opcional que
+  mide `exact_lookup`, `semantic_search` (incluye embedding e índice),
+  `candidate_validation`, `relationship_context`, `provider_evidence`,
+  `contextual_provider` y `decision_validation`. El resolvedor conserva
+  íntegramente su selección, candidatos, límites, respuesta y excepciones.
+  Cada subetapa registra **nombre cerrado, estado, desplazamiento temporal y
+  duración**; ante una excepción marca el span fallido sin ocultar la causa.
+  No registra texto fuente, títulos, IDs, puntuaciones, contenido de candidatos,
+  prompt, respuesta del modelo ni credenciales.
+- La composición de Tasks lo inserta **solo** si
+  `ODYSSEY_DEPLOYMENT_ENV=DEV` **y**
+  `ODYSSEY_WORK_SESSION_RESOLUTION_TIMING_ENABLED=1`. No hay llamadas extra
+  a proveedor, escrituras nuevas ni cambios de reglas de identidad. Las
+  mediciones cuelgan de la etapa original como **substeps nativos**; no se
+  duplican los milisegundos en el tiempo total, el donut ni las coberturas.
+  PROD no puede activarlo por una única bandera.
+- Regresiones con notas de personas y tareas **sintéticas**: coincidencia
+  exacta sin consulta semántica, ausencia de candidatos sin razonador,
+  candidato semántico con resolución contextual, fallo de proveedor que
+  sigue propagándose, nombres fijos, aislamiento de la proyección, conservación
+  de `OperationalEvidence.total_duration_ms` y cobertura de intervalos anidados.
+  Una revisión independiente detectó que se usaba inicialmente el reloj global
+  en vez del reloj inyectado del `SpanRecorder`; corregido y cubierto con
+  un reloj determinista que verifica offsets, tiempos y etapa fallida.
+  Se añaden al gate transversal de Work Sessions; no requieren IA de pago.
+  Gate global tras la corrección: **2.051 Python + 199 JavaScript PASS**, 12
+  grupos (`/tmp/odyssey-worksession-reviewfixed-gate-20261024.json` y `.log`).
+  La segunda revisión independiente del diff con la corrección del reloj
+  terminó **sin hallazgos accionables**; no sustituye la futura auditoría
+  formal de los cuatro roles de la etapa completa.
+- **ESTADO:** instrumentación todavía **NO desplegada**; DEV mantiene
+  `7540442`. Hasta una nueva aceptación DEV con bandera activada y recibos
+  de etapas reales no sabemos qué porcentaje de los 8–12 s es embedding,
+  consulta al índice o la llamada contextual. Un ajuste de latencia del modelo
+  requerirá preservar el prompt validado, pruebas con Luna real y la revisión
+  independiente antes de activar ese cambio; no se ha hecho.

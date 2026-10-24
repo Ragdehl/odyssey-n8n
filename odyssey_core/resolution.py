@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePosixPath
@@ -27,6 +28,7 @@ from odyssey_core.identity import (
     resolve_exact_entity,
 )
 from odyssey_core.notes import Note, NoteFormatError, NoteValidationError, parse_note, validate_note
+from odyssey_core.observability import OperationalOutcome, SpanRecorder
 from odyssey_core.relationship_evidence import (
     RelationshipEvidence,
     RelationshipEvidenceProjector,
@@ -172,6 +174,22 @@ def _humanize_wikilink(match: re.Match[str]) -> str:
     return PurePosixPath(target).name.strip()
 
 
+@contextmanager
+def _resolution_timing(recorder: SpanRecorder | None, stage: str) -> Iterator[None]:
+    """Reuse Odyssey's nested, non-overcounted spans without collecting content."""
+    if recorder is None:
+        yield
+        return
+    started = recorder.monotonic()
+    try:
+        yield
+    except Exception as error:
+        recorder.add(stage, started, OperationalOutcome.FAILED, error)
+        raise
+    else:
+        recorder.add(stage, started)
+
+
 def resolve_existing_entity(
     reference: str,
     context: str,
@@ -186,6 +204,7 @@ def resolve_existing_entity(
     allowed_candidate_ids: frozenset[str] | None = None,
     expand_relationship_context: bool = False,
     self_note_id: str | None = None,
+    resolution_spans: SpanRecorder | None = None,
 ) -> ExistingEntityResolution:
     """Resolve one extracted entity reference against existing validated notes.
 
@@ -213,6 +232,9 @@ def resolve_existing_entity(
             one-hop canonical relationship evidence and co-targets before the contextual decision.
         self_note_id: Optional authenticated self identity used only to label canonical relationship
             evidence for first-person contextual resolution; it never selects a candidate directly.
+        resolution_spans: Optional caller-owned, request-scoped Odyssey SpanRecorder;
+            fixed phase names, relative timing and failure category only. Never source,
+            candidate IDs, selected identity, prompts or model response.
 
     Returns:
         A typed local or contextual production result.
@@ -228,9 +250,10 @@ def resolve_existing_entity(
         raise ValueError("Allowed candidate IDs must be non-empty strings")
     if self_note_id is not None and (not isinstance(self_note_id, str) or not self_note_id):
         raise ValueError("Self note ID must be a non-empty string")
-    exact = _restrict_exact_resolution(
-        resolve_exact_entity(repository, schema, reference, type=type), allowed_candidate_ids
-    )
+    with _resolution_timing(resolution_spans, "exact_lookup"):
+        exact = _restrict_exact_resolution(
+            resolve_exact_entity(repository, schema, reference, type=type), allowed_candidate_ids
+        )
     if exact.outcome is ExactResolutionOutcome.EXACT_MATCH:
         candidate = exact.candidate
         assert candidate is not None
@@ -241,35 +264,40 @@ def resolve_existing_entity(
             candidate_ids=(),
         )
 
-    semantic_candidates = find_semantic_entity_candidates(
-        semantic_index,
-        embedder,
-        reference,
-        context=context,
-        type=type,
-        limit=semantic_limit,
-    )
-    if allowed_candidate_ids is not None:
-        semantic_candidates = tuple(
-            candidate for candidate in semantic_candidates if candidate.id in allowed_candidate_ids
+    with _resolution_timing(resolution_spans, "semantic_search"):
+        semantic_candidates = find_semantic_entity_candidates(
+            semantic_index,
+            embedder,
+            reference,
+            context=context,
+            type=type,
+            limit=semantic_limit,
         )
-    semantic_candidates = tuple(
-        candidate
-        for candidate in semantic_candidates
-        if _is_current_active_candidate(repository, schema, candidate.path, candidate.id)
-    )
-    candidates = _merge_candidates(semantic_candidates, exact.candidates)
+    with _resolution_timing(resolution_spans, "candidate_validation"):
+        if allowed_candidate_ids is not None:
+            semantic_candidates = tuple(
+                candidate
+                for candidate in semantic_candidates
+                if candidate.id in allowed_candidate_ids
+            )
+        semantic_candidates = tuple(
+            candidate
+            for candidate in semantic_candidates
+            if _is_current_active_candidate(repository, schema, candidate.path, candidate.id)
+        )
+        candidates = _merge_candidates(semantic_candidates, exact.candidates)
     relationship_evidence: dict[str, tuple[str, ...]] = {}
     if expand_relationship_context and candidates:
-        candidates, relationship_evidence = _expand_relationship_candidates(
-            repository,
-            schema,
-            candidates,
-            note_type=type,
-            expansion_limit=semantic_limit,
-            allowed_candidate_ids=allowed_candidate_ids,
-            self_note_id=self_note_id,
-        )
+        with _resolution_timing(resolution_spans, "relationship_context"):
+            candidates, relationship_evidence = _expand_relationship_candidates(
+                repository,
+                schema,
+                candidates,
+                note_type=type,
+                expansion_limit=semantic_limit,
+                allowed_candidate_ids=allowed_candidate_ids,
+                self_note_id=self_note_id,
+            )
     if not candidates:
         return ExistingEntityResolution(
             outcome=ExistingEntityOutcome.UNRESOLVED,
@@ -278,28 +306,31 @@ def resolve_existing_entity(
             candidate_ids=(),
         )
 
-    contextual_candidates = tuple(
-        ContextualCandidate(
-            candidate.id,
-            _load_provider_evidence(
-                repository,
-                schema,
-                candidate.path,
-                relationship_evidence=relationship_evidence.get(candidate.id, ()),
-            ),
+    with _resolution_timing(resolution_spans, "provider_evidence"):
+        contextual_candidates = tuple(
+            ContextualCandidate(
+                candidate.id,
+                _load_provider_evidence(
+                    repository,
+                    schema,
+                    candidate.path,
+                    relationship_evidence=relationship_evidence.get(candidate.id, ()),
+                ),
+            )
+            for candidate in candidates
         )
-        for candidate in candidates
-    )
-    request = ContextualResolutionRequest(
-        reference=reference,
-        context=context,
-        entity_type=type or "unspecified",
-        candidates=contextual_candidates,
-    )
-    raw_decision, usage = contextual_reasoner.resolve(request)
-    decision = validate_contextual_decision(
-        raw_decision, {candidate.id for candidate in candidates}
-    )
+        request = ContextualResolutionRequest(
+            reference=reference,
+            context=context,
+            entity_type=type or "unspecified",
+            candidates=contextual_candidates,
+        )
+    with _resolution_timing(resolution_spans, "contextual_provider"):
+        raw_decision, usage = contextual_reasoner.resolve(request)
+    with _resolution_timing(resolution_spans, "decision_validation"):
+        decision = validate_contextual_decision(
+            raw_decision, {candidate.id for candidate in candidates}
+        )
     candidate_ids = _decision_candidate_ids(decision, candidates, exact)
     clarification = _decision_clarification(
         reference, candidate_ids, candidates, repository, schema

@@ -125,8 +125,10 @@ from odyssey_core.note_result_snapshots import NoteResultSnapshot, affected_note
 from odyssey_core.observability import (
     OperationalEvidence,
     OperationalOutcome,
+    OperationalSpan,
     OperationalStage,
     ProviderCallEvidence,
+    SpanRecorder,
     normalize_provider_usage,
 )
 from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
@@ -259,6 +261,24 @@ def _emit_progress(stage: str, payload: Mapping[str, object] | None = None) -> N
     reporter = _PROGRESS_REPORTER.get()
     if reporter is not None:
         reporter(stage, payload or {})
+
+
+_WORK_SESSION_RESOLUTION_PHASES = (
+    "exact_lookup",
+    "semantic_search",
+    "candidate_validation",
+    "relationship_context",
+    "provider_evidence",
+    "contextual_provider",
+    "decision_validation",
+)
+
+
+def _work_session_resolution_substeps(recorder: SpanRecorder | None) -> tuple[OperationalSpan, ...]:
+    """Emit only recognized nested spans; never inflate parent stage totals."""
+    if recorder is None:
+        return ()
+    return tuple(span for span in recorder.spans if span.name in _WORK_SESSION_RESOLUTION_PHASES)
 
 
 _VAULT_REPOSITORY_TYPE = VaultRepository
@@ -4033,7 +4053,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         operational=OperationalEvidence(total_duration, tuple(stages)),
                     )
             elif task.task_reference is not None:
+                # Only the opted-in DEV runtime publishes substep timings.
+                # No prompts, candidate IDs, user text, or note content are recorded.
                 resolution_started = perf_counter()
+                resolution_spans = (
+                    SpanRecorder(resolution_started, perf_counter)
+                    if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+                    and os.environ.get("ODYSSEY_WORK_SESSION_RESOLUTION_TIMING_ENABLED") == "1"
+                    else None
+                )
                 try:
                     task_schema = planning_schema_for_capability(schema, "tasks")
                     resolution = resolve_existing_entity(
@@ -4047,6 +4075,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         contextual_reasoner=contextual_reasoner,
                         semantic_limit=context_limit,
                         expand_relationship_context=True,
+                        resolution_spans=resolution_spans,
                     )
                 except Exception as error:
                     duration = max(0.0, (perf_counter() - resolution_started) * 1000)
@@ -4056,6 +4085,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                             OperationalOutcome.FAILED,
                             duration,
                             error_category=type(error).__name__,
+                            substeps=_work_session_resolution_substeps(resolution_spans),
                         )
                     )
                     return ApplicationResult(
@@ -4073,6 +4103,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
                         "tasks.work_session_resolution",
                         OperationalOutcome.COMPLETED,
                         duration,
+                        substeps=_work_session_resolution_substeps(resolution_spans),
                     )
                 )
                 if (
