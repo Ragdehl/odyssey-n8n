@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Historical v1 contract; Slices 1–3 merged in PR #133.** Current phase status belongs in the [Functional Roadmap](functional-roadmap.md); the next-stage design belongs in [Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md).
+Status: **Historical v1 contract plus approved new conversational-schema design in section C.** Previous Slices 1–3 merged in PR #133; the current implementation status belongs in the [Functional Roadmap](functional-roadmap.md).
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -635,6 +635,38 @@ con contrato de seguridad y tests; (C) conversación/vista previa y confirmació
 por lote; (F) fecha parcial genérica y prueba `birth_date` si ese sigue siendo
 el primer caso que interesa al usuario. Cada corte se acepta con pruebas
 reales de interfaz y no se solapa con una refactorización general de E6.
+
+### Primera entrega técnica: registro compatible (24-10-2026, rama de desarrollo)
+
+El módulo interno `odyssey_runtime/user_schema_registry.py` reutiliza
+`compose_application_schema`, `scripts/validate_note_schema.py`, las
+capacidades de filtros y el modelo Core, **sin introducir una segunda autoridad
+para notas**. Ya permite preparar y validar propuestas estructuradas de
+`add_type`, `add_property`, `edit_type_text` y
+`edit_property_description`. Los campos nuevos nacen **opcionales** y
+consultables; los cambios incompatibles y los tipos gestionados por Apps se
+rechazan. El esquema físico permanece v3; el registro del usuario tiene una
+revisión independiente. La API interna valida conflicto CAS, consentimiento
+estructurado de un llamador de confianza, hash de propuesta, `request_id`
+no reutilizable, persistencia atómica y recibos de historial. Pruebas sintéticas
+verifican compatibilidad de Markdown, concurrencia y reinicio. No modifica
+ningún esquema del repositorio ni vault real.
+
+`RuntimeComposition` puede leer el esquema compuesto desde ese registro **solo
+si** `ODYSSEY_USER_SCHEMA_ENABLED=1` y `ODYSSEY_DEPLOYMENT_ENV=DEV`;
+el valor predeterminado es apagado. Esta es una lectura de snapshot al arrancar,
+**no hot reload** ni aceptación de publicación desde Chat/UI. El objeto
+`SchemaConfirmation` NO autentica usuarios por sí mismo; el futuro endpoint
+actor-bound deberá verificar la sesión, solicitud original y confirmación
+real antes de invocar `publish`. Los recibos son evidencia para recuperación,
+no implementan todavía una reversión automática de notas ni publicaciones.
+
+**No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
+previa conectadas, publicación caliente con barrera de índices, migración de
+esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,
+confirmación por lotes, fecha parcial o aceptación E2E del navegador en DEV.
+No debe presentarse esta entrega de infraestructura como una función utilizable
+por el usuario.
 
 ## D. Notes presentation and browsing follow-ups
 

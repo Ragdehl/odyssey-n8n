@@ -125,6 +125,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_conversation_reply_server_commit_p4.py",
     ),
     "canonical_graph_and_notes": (
+        "tests/runtime/test_user_schema_registry.py",
         "tests/core/test_note_queries.py",
         "tests/core/test_context_deterministic_projection.py",
         "tests/core/test_reference_preflight.py",

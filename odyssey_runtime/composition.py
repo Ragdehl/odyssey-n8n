@@ -2804,6 +2804,19 @@ def build_runtime_from_environment() -> RuntimeComposition:
         base_schema = json.load(schema_file)
     application_schema_extensions = (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
     schema = compose_application_schema(base_schema, application_schema_extensions)
+    user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
+    if user_schema_flag not in {"0", "1"}:
+        raise ValueError("User schema registry flag is invalid")
+    if user_schema_flag == "1":
+        if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
+            raise ValueError("User schema registry is restricted to DEV until its E2E adoption")
+        from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+        _, schema = UserSchemaRegistry(
+            state_root, base_schema, application_schema_extensions
+        ).snapshot()
+    # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
+    # UI publication/hot-reload boundary is deliberately NOT available yet.
 
     repository = VaultRepository(vault_root)
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":

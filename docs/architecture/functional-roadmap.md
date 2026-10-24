@@ -43,6 +43,22 @@ made for this new phase.
   with synthetic data and physical Markdown readback. **No PROD or private
   vault changes without specific authorization.**
 
+**First implementation slice — internal compatible registry (24-10-2026):**
+Work isolated in `feat/user-schema-registry-v1`, NOT merged or deployed.
+Introduced `UserSchemaRegistry` with strictly additive user type/property
+proposals, text-only compatible editing, default-queryable optional fields,
+version/CAS/hash/confirmation receipt, atomic private state and immutable
+history; composes existing base schema v3 + app-owned types without changing
+Markdown. Application-owned and legacy-not-writable types are rejected. The
+optional DEV-only `ODYSSEY_USER_SCHEMA_ENABLED=1` loads a boot-time snapshot;
+**default disabled**, PROD never enabled. Focused registry tests **33 PASS**; official full gate **2,091 Python +
+199 JS PASS** (12 groups including the new registry tests), Ruff and docs
+validation PASS. No provider calls or user-note mutations. Scope incomplete by design: no authenticated UI/API/prompt,
+hot reload, migration, backfill or real deployed user-browser acceptance yet.
+Next implement trusted actor-scoped confirmation and consistent hot publishing
+before presenting the creation buttons as working. See the implementation
+checkpoint in the design document.
+
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
 trusting these static values. Two merged clean C4 audit-only branches/worktrees
