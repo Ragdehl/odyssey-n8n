@@ -510,6 +510,50 @@ posteriores. Una consulta de otro dominio no se bloquea por rellenados en curso;
 una consulta dependiente de la propiedad requiere resultados completos o una
 advertencia explícita de incompletitud, nunca silenciosa.
 
+**Crear un tipo no es reclasificar notas.** Toda nota canónica ya tiene un
+tipo, así que registrar uno nuevo no cambia automáticamente el `type` de ninguna
+nota existente. El trabajo retrospectivo de un tipo nuevo es diferente del
+rellenado de una propiedad: detectar **menciones de posibles entidades nuevas**
+en los hechos de notas de cualquier tipo, incluso si antes no existía un tipo
+adecuado. Nunca se presupone que una mención representa una entidad distinta;
+primero comprobar la identidad/duplicados frente al repositorio actual.
+
+**Reutilizar referencias pendientes, sin fingir cobertura completa.**
+`odyssey_core/reference_binding.py::PendingReference` ya representa una
+referencia no resuelta con mención original, papel, índices locales, motivo y
+candidatos. `PendingWorkRepository` conserva solicitudes incompletas y sus
+referencias en estado fuera del vault. La dirección aprobada
+[Future pending-reference evolution](future-pending-reference-evolution.md)
+ya prevé pistas *orientativas* de tipo semántico todavía no registrado y
+revisitar menciones tras cambios de esquema. **Esto es infraestructura parcial,
+no una cola completa de todas las menciones**: el renderizador emite
+`PendingReference` sin persistir por sí mismo y muchas menciones ordinarias
+quedan como hechos de texto literal sin registro pendiente. Por tanto el nuevo
+proceso debe empezar por pendientes duraderos adecuados **y también** considerar
+hechos literales canónicos como fuentes de candidatos; no limitarse a una cola
+que no cubre todos los casos.
+
+**Tratamiento de posibles entidades al añadir un tipo.** Con una sola aprobación
+del nuevo esquema, arrancar una inspección asíncrona, reanudable, acotada y
+paralelizable de evidencias; no detener Chat, Notes, Tasks o Calendar. Las
+menciones generan **propuestas verificables** de futuras notas del nuevo tipo,
+no creaciones automáticas. Mostrar nombre tentativo, clase, hechos/citas origen
+y eventuales duplicados/ambigüedad. El usuario podrá confirmar un lote de
+propuestas; Core/E3 validará individualmente identidad, fuente vigente y
+creación. Sólo entonces se podrá enlazar la **ocurrencia exacta** en la fuente
+mediante el contrato determinista de referencias; jamás sustituir cadenas
+arbitrarias en Markdown ni modificar los tipos de las notas fuente. Los casos
+sin evidencia o con varios candidatos quedan pendientes o se descartan.
+
+**Invariantes cruzados de los dos backfills.** Añadir una propiedad habilita
+completar valores de las **notas del tipo existente**; crear un tipo habilita
+explorar **menciones en notas de todos los tipos** y sugerir *nuevas notas*, sin
+reclasificar ninguna. Ambos procesos reutilizan la preparación concurrente,
+estado recuperable e índices derivados, pero no eluden E3 ni la confirmación
+de creación de identidades. No prometer retrospectiva total hasta demostrar
+captura/escaneo de menciones, evidencia de fuente, deduplicación y coste
+acotado en corpus sintéticos.
+
 **Límites de decisión.** La IA detecta posible solapamiento conceptual y propone
 valor/evidencia, pero no crea autónomamente un tipo, ni altera el esquema
 sin confirmación, ni escribe valores que no puedan sustentarse en hechos
