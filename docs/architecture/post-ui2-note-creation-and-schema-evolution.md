@@ -787,7 +787,19 @@ inesperados, hash ausente, propiedades mal formadas o autoridad adicional.
 La confirmación solo se habilita si `schema_status` anuncia un opt-in DEV
 explícito; por defecto se muestra la vista previa **sin mutación**. Una
 respuesta incierta no se reenvía automáticamente: se conserva el `request_id`
-en sesión y se consulta `schema_status`, incluso después de recargar. Un
+en sesión y se consulta `schema_status`, incluso después de recargar.
+Tras una revisión independiente de la UI se identificaron tres P2: un
+seguimiento atascado si el POST no llegó al servidor, botones de edición
+incorrectos para ciertos tipos de Core y ausencia de nueva propuesta tras
+completar. La solución es no interpretar un 400 genérico como ausencia
+segura: solo el status autenticado con error acotado
+`SCHEMA_ACTIVATION_NOT_FOUND` permite ofrecer **por elección explícita**
+«Descartar seguimiento»; fallos de red conservan el identificador. La
+capacidad `schema_editable` procede de la propiedad `managed_by`/
+`planner_writable` canónica del tipo, no de nombres especiales. Al activarse
+un cambio, se ofrece «Preparar otra propuesta». Pruebas HTTP locales y
+JS cubren los tres casos; puerta transversal tras reparación
+**2.125 Python + 217 JS PASS**. Un
 `status=active` actualiza las capacidades/índices de Notas, **no significa
 que haya terminado un análisis retrospectivo**. El módulo está registrado en
 el inventario/ruta estática real de n8n (evita el fallo de módulo ES ausente).

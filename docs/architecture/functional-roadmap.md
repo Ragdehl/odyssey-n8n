@@ -56,8 +56,13 @@ el estado por `request_id` informa `queued` o `active`, sin exponer otro actor.
 Panel de Notas `Modelo de notas` integrado en fuente (guía provisional,
 no IA conversacional), con propuestas aditivas, vista previa validada,
 confirmación de clic explícito solo bajo flag DEV, estado recuperable tras
-recarga y rutas estáticas n8n. Gate fuente **2.123 Python + 214 JS PASS**,
-12 grupos. Sin backfill ni despliegue; auditoría/CI de la nueva UI pendientes.
+recarga y rutas estáticas n8n. Primera puerta **2.123 Python + 214 JS PASS**.
+Revisión independiente encontró tres P2 de UX: seguimiento atascado cuando
+la aprobación nunca llegó, edición ofrecida a un tipo Core-owned y falta de
+acción «Nueva propuesta» tras completar. Corregidos mediante status negativo
+explícito, editabilidad derivada de Core y recuperación controlada, con pruebas
+regresivas. Gate corregido **2.125 Python + 217 JS PASS**, 12 grupos.
+Sin backfill ni despliegue; GitHub CI de SHA corregido pendiente.
 Gate oficial tras reparar auditoría **2.123 Python + 204 JavaScript PASS**
 (`5e3870a`, 12 grupos). Primera revisión independiente: P1 tamaño de la
 publicación no prevalidado, P2 replay de confirmación incompleto; ambos

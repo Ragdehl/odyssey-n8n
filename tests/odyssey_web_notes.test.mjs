@@ -273,14 +273,14 @@ test("generic open-note event opens the stable note ID through the existing deta
 });
 
 function capabilities() {
-  return {types: [{id: "person", name: "Person", description: "A person with stable identity.", properties: []}], fields: []};
+  return {types: [{id: "person", name: "Person", description: "A person with stable identity.", schema_editable: true, properties: []}], fields: []};
 }
 
 function groupedCapabilities() {
   return {
     types: [
-      {id: "person", name: "Person", description: "A person with stable identity.", properties: []},
-      {id: "task", name: "Task", description: "An actionable item.", properties: [{
+      {id: "person", name: "Person", description: "A person with stable identity.", schema_editable: true, properties: []},
+      {id: "task", name: "Task", description: "An actionable item.", schema_editable: false, properties: [{
         id: "status", description: "Current lifecycle state.", value_type: "string",
         required: true, filterable: true,
       }]},

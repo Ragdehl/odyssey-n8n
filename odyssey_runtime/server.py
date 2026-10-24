@@ -30,7 +30,7 @@ from odyssey_core.note_queries import NotesQueryError, StaleCursorError
 from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
 from .serialization import operational_to_response
-from .user_schema_registry import UserSchemaRegistry
+from .user_schema_registry import UserSchemaError, UserSchemaRegistry
 
 
 class SchemaActivationRestartRequested(RuntimeError):
@@ -381,6 +381,15 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                             "operational": operational_to_response(error.operational),
                         },
                     )
+                except UserSchemaError as error:
+                    # Unknown or another actor's request share one response.
+                    # Only this read-only status condition allows safe local reset.
+                    if operation == "schema_status" and str(error) == "Schema activation not found":
+                        self._write_json(
+                            HTTPStatus.NOT_FOUND, {"error": "SCHEMA_ACTIVATION_NOT_FOUND"}
+                        )
+                    else:
+                        self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid notes request"})
                 except (IdentityBoundaryError, NotesQueryError, TypeError, ValueError):
                     self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid notes request"})
                 return

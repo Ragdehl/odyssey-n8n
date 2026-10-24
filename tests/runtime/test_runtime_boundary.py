@@ -2769,3 +2769,45 @@ def test_http_authenticated_confirmation_drains_server_and_activates_at_next_boo
         "revision": 1,
     }
     assert not (tmp_path / "user-schema/pending-activation.json").exists()
+
+
+def test_http_schema_missing_activation_has_one_indistinguishable_not_found_code(
+    tmp_path: Path,
+) -> None:
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+        user_schema_revision=0,
+        schema_activation_enabled=True,
+    )
+    actor = OdysseyUser.new().stable_user_id
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(
+                {
+                    "operation": "schema_status",
+                    "request_id": "not-here",
+                    "authenticated_actor": {"stable_user_id": actor},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 404
+        assert json.loads(response.read()) == {"error": "SCHEMA_ACTIVATION_NOT_FOUND"}
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()

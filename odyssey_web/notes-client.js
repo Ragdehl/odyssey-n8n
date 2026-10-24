@@ -168,13 +168,17 @@ function validatePage(value) {
 }
 function validateSummary(value) { if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.name) || !isText(value.type) || !Array.isArray(value.tags) || !isText(value.created_at) || !isText(value.updated_at) || !value.properties || typeof value.properties !== "object" || Array.isArray(value.properties)) throw new NotesRequestError("Nota inválida."); return {id: value.id, name: value.name, type: value.type, tags: value.tags.filter(isText), created_at: value.created_at, updated_at: value.updated_at, properties: value.properties}; }
 function validateType(value) {
-  const allowed = new Set(["id", "name", "description", "properties"]);
+  const allowed = new Set(["id", "name", "description", "properties", "schema_editable"]);
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).some((key) => !allowed.has(key)) || !isText(value.id) ||
       !isText(value.name) || !isText(value.description) || !Array.isArray(value.properties)) {
     throw new NotesRequestError("Tipo inválido.");
   }
+  if (value.schema_editable !== undefined && typeof value.schema_editable !== "boolean") {
+    throw new NotesRequestError("Permisos del tipo inválidos.");
+  }
   return {id: value.id, name: value.name, description: value.description,
+    schema_editable: value.schema_editable === true,
     properties: value.properties.map(validateTypeProperty)};
 }
 function validateTypeProperty(value) {

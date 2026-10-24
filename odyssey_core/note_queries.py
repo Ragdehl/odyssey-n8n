@@ -454,6 +454,8 @@ class NotesQueryService:
                     "id": item["id"],
                     "name": item["name"],
                     "description": item["description"],
+                    "schema_editable": "managed_by" not in item
+                    and item.get("planner_writable") is not False,
                     "properties": tuple(
                         {
                             "id": property_["id"],

@@ -217,3 +217,64 @@ test("pending approval survives Notes reload and uses actor-scoped status instea
   assert.equal(store.size, 0);
   assert.match(second.element.textContent, /Cambio activo/);
 });
+
+test("a definitely absent approval can be dismissed, but only by a deliberate recovery click", async () => {
+  const store = new Map([["odyssey.schema.model.pending.v1", "schema_" + "0".repeat(32)]]);
+  const storage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => store.set(key, value),
+    removeItem: (key) => store.delete(key),
+  };
+  const {client, calls} = makeClient(({operation, payload}) => {
+    if (operation === "schema_status" && !payload) return ready(false);
+    if (operation === "schema_status") throw Object.assign(new Error("missing"),
+      {code: "SCHEMA_ACTIVATION_NOT_FOUND"});
+    throw Error("No other operation expected");
+  });
+  const panel = createSchemaModel({root: new Element("section"), client, storage});
+  await panel.open({kind: "new"});
+  assert.match(panel.element.textContent, /no existe esta solicitud/);
+  assert.equal(store.size, 1);
+  assert.equal(panel.element.querySelector(".schema-model-form").hidden, true);
+  const recover = panel.element.querySelector(".schema-model-recover");
+  assert.equal(recover.hidden, false);
+  recover.click(); await flush();
+  assert.equal(store.size, 0);
+  assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
+  assert.equal(calls.filter((call) => call.operation === "schema_confirm").length, 0);
+});
+
+test("unknown network errors cannot discard an uncertain approval", async () => {
+  const store = new Map([["odyssey.schema.model.pending.v1", "schema_" + "a".repeat(32)]]);
+  const storage = {getItem: (k) => store.get(k), setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k)};
+  const {client} = makeClient(({operation, payload}) => {
+    if (operation === "schema_status" && !payload) return ready(true);
+    throw new Error("temporary gateway outage");
+  });
+  const panel = createSchemaModel({root: new Element("section"), client, storage});
+  await panel.open({kind: "new"});
+  assert.equal(panel.element.querySelector(".schema-model-recover").hidden, true);
+  assert.equal(panel.element.querySelector(".schema-model-retry").hidden, false);
+  assert.equal(store.size, 1);
+});
+
+test("after pending approval is active on first load user can start a new proposal", async () => {
+  const store = new Map([["odyssey.schema.model.pending.v1", "schema_" + "c".repeat(32)]]);
+  const storage = {getItem: (k) => store.get(k), setItem: (k, v) => store.set(k, v),
+    removeItem: (k) => store.delete(k)};
+  const {client} = makeClient(({operation, payload}) => {
+    if (operation === "schema_status" && !payload) return ready(false);
+    if (operation === "schema_status") return {kind: "schema_status", status: "active",
+      revision: 1, request_id: payload.request_id};
+    throw Error("Unexpected operation");
+  });
+  const panel = createSchemaModel({root: new Element("section"), client, storage});
+  await panel.open({kind: "new"});
+  assert.equal(store.size, 0);
+  assert.match(panel.element.textContent, /Cambio activo/);
+  const action = panel.element.querySelector(".schema-model-new-draft");
+  assert.equal(action.hidden, false);
+  action.click(); await flush();
+  assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
+});

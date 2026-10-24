@@ -948,3 +948,28 @@ def test_completed_ack_replay_requires_original_change_and_base_revision(
         "revision": 1,
     }
     assert user.snapshot()[0] == 1
+
+
+def test_notes_type_schema_editability_uses_core_ownership_not_ui_name_lists(
+    tmp_path: Path,
+) -> None:
+    from odyssey_core.note_queries import NotesQueryService
+
+    user = registry(tmp_path)
+    _, schema = user.snapshot()
+    types = {
+        item["id"]: item
+        for item in NotesQueryService(object(), schema, object()).capabilities().types
+    }
+    assert types["person"]["schema_editable"] is True
+    assert "calendar_day" not in types  # Core-managed type is intentionally hidden.
+    for managed_id in ("journal_entry", "task", "event"):
+        assert types[managed_id]["schema_editable"] is False
+    proposal = user.preview(type_change(), expected_revision=0)
+    user.publish(type_change(), confirm(proposal))
+    _, schema = user.snapshot()
+    types = {
+        item["id"]: item
+        for item in NotesQueryService(object(), schema, object()).capabilities().types
+    }
+    assert types["book"]["schema_editable"] is True

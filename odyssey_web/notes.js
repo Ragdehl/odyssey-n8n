@@ -467,7 +467,7 @@ export function mountNotes(root, {
       }
       details.append(properties);
     }
-    if (!["task", "event", "journal_entry"].includes(type.id)) {
+    if (type.schema_editable === true) {
       const edit = button("Personalizar tipo", () => {
         void schemaModel.open({kind: "add-property", type});
       });

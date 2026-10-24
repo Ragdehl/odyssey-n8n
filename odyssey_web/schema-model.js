@@ -88,7 +88,15 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   preview.append(summary, confirmation, controls);
   const retry = button("Comprobar activación", () => void checkActivation(), "schema-model-retry");
   retry.hidden = true;
-  sheet.append(top, intro, availability, form, preview, retry);
+  const recover = button("Descartar seguimiento y empezar otra propuesta", () => {
+    clearPending();
+    void open({kind: mode, type: activeType});
+  }, "schema-model-recover");
+  recover.hidden = true;
+  const newDraft = button("Preparar otra propuesta", () => void open({kind: mode, type: activeType}),
+    "schema-model-new-draft");
+  newDraft.hidden = true;
+  sheet.append(top, intro, availability, form, preview, retry, recover, newDraft);
   root.append(sheet);
 
   let generation = 0;
@@ -181,7 +189,11 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     sheet.hidden = false;
     preview.hidden = true;
     retry.hidden = true;
+    recover.hidden = true;
+    newDraft.hidden = true;
     form.hidden = true;
+    current = null;
+    canConfirm = false;
     mode = kind;
     activeType = type;
     availability.textContent = "Comprobando si el editor está disponible…";
@@ -282,7 +294,12 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       availability.textContent = result.status === "queued"
         ? "Cambio aprobado. Odyssey lo está activando; puedes comprobar el resultado aquí."
         : "Cambio activo. Ya puedes consultar este tipo desde Notas.";
-      if (result.status === "active") { clearPending(); onActive(); }
+      if (result.status === "active") {
+        clearPending();
+        retry.hidden = true;
+        newDraft.hidden = false;
+        onActive();
+      }
     } catch {
       if (seq === generation) availability.textContent =
         "No se ha podido verificar la confirmación. No la repitas: comprueba primero el estado en Odyssey.";
@@ -308,12 +325,23 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         : "Odyssey sigue activando el cambio. Puedes volver a comprobarlo.";
       if (result.status === "active") {
         retry.hidden = true;
+        newDraft.hidden = false;
         clearPending();
+        pendingId = null;
         onActive();
       }
-    } catch {
-      if (seq === generation) availability.textContent =
-        "El servidor puede estar reiniciándose. Vuelve a comprobar el estado; no confirmes otra vez.";
+    } catch (error) {
+      if (seq === generation) {
+        if (error?.code === "SCHEMA_ACTIVATION_NOT_FOUND") {
+          // A typed negative receipt is different from a timeout. Only the
+          // explicit recovery action can discard its original request ID.
+          availability.textContent = "Odyssey confirma que no existe esta solicitud para tu usuario. Puedes descartar el seguimiento y empezar otra propuesta.";
+          recover.hidden = false;
+          retry.hidden = true;
+        } else {
+          availability.textContent = "El servidor puede estar reiniciándose. Vuelve a comprobar el estado; no confirmes otra vez.";
+        }
+      }
     } finally {
       if (seq === generation) setBusy(false);
     }
