@@ -728,6 +728,12 @@ respuesta visible HTTP 200 y persistencia tras recarga. Tiempos observados:
 
 `p4.source` contiene Router, ambas atestaciones y `tasks.delegate`:
 residual P4 no incluido en esas llamadas ≈**0,17 / 1,82 s** en Tasks 1/2.
+Se contrastó además el **recibo E3 físico** de ambas solicitudes sintéticas,
+sin exponer cuerpo o identidades: `tasks.interpretation` **10,17 / 5,56 s** y
+`tasks.work_session_resolution` **11,63 / 3,20 s**; sus sumas reproducen
+`tasks.delegate` (diferencia de redondeo). Los subspans más finos de
+WorkSession estaban desactivados durante estas solicitudes; **no** atribuir
+sus diferencias a ONNX o al modelo sin esa prueba adicional.
 `n8n HTTP total` incluye C1, P4, recibo, Core/puente/otras etapas:
 residual no atribuido directamente ≈**4,01 / 5,86 s** en Tasks; **no**
 es una medición aislada del coste propio de n8n. Diferencia botón UI→respuesta
