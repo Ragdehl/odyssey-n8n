@@ -1,7 +1,7 @@
 # C4 — explicación segura de fallos a partir de recibos verificados
 
 **Estado real (24-10-2026):** C4 está desplegado **solo en DEV** en
-`75404428e085b70b3dbce0c29a972b50af3a9bb3`, junto con C3;
+`050f26f6ce9330bbb7c694fdf8b21db2feb067ac`, junto con C3;
 `ODYSSEY_CHAT_C4_ENABLED=1` funciona únicamente cuando
 `ODYSSEY_DEPLOYMENT_ENV=DEV`. La fuente puede ir por delante del marcador
 DEV; PROD no se ha modificado. **APP E2E NOT VERIFIED** globalmente:
@@ -846,3 +846,51 @@ control de UI, un solo mensaje de usuario, resultado visible y vault sin
 mutaciones. Esto acredita recuperación observable desde la interfaz, pero no
 permite inferir un `delivery_replayed` que el navegador nunca recibió.
 Tampoco acredita Cloudflare exterior o un fallo parcial natural desde Chromium.
+
+### Cierre de revisión especializada y decisión de alcance (24-10-2026)
+
+**Candidato de fuente auditado:** `ca0d385ae7eee9b4d21a2b6068e9719dc188f442`
+(solo docs/harness desde el desplegado funcional DEV `050f26f`). El gate
+oficial ejecutado por `odyssey_agent_cycle.py` dio **PASS** en cross-surface
+(**2.058 Python + 199 JavaScript**), aceptación y Ruff; CI GitHub sobre el
+commit de documentación `ca0d385` **success**. Copias y SHA256 de los
+ensayos DEV documentados arriba siguen intactos.
+
+**Revisión de cuatro especialidades, distinción de procedencia necesaria:**
+
+| Especialidad | Veredicto | Registro | Observaciones |
+|---|---|---|---|
+| Generalidad | **PASS** | supervisor formal, ronda 1 | Una advertencia: mantener contrato de tabla código/consejo equivalente entre Python y n8n |
+| Calidad | **PASS** | supervisor formal, ronda 1 | Un encabezado de estado desfasado (corregido en este cierre) y las pruebas externas conocidas |
+| Pruebas | **PASS** | evaluador independiente complementario, sobre mismo SHA | Parcial natural por navegador y sesión Cloudflare externa siguen sin demostrar |
+| Rendimiento | **PASS** | evaluador independiente complementario, sobre mismo SHA | Sin p95 representativo en tráfico real; observar memoria y comportamiento del worker ONNX con mayor carga |
+
+El supervisor oficial quedó en fase **`blocked`** por reserva preventiva
+de tokens tras los dos primeros PASS (211.804 consumidos frente a presupuesto
+de 300.000; reservaba 105.000 para ambas tareas, quedaban 88.196). **No
+se alteró el presupuesto ni se falsificaron recibos**; los dos informes
+complementarios se distinguen claramente de aprobaciones registradas por
+el supervisor. Evidencias en
+`/home/ragdehl/projects/.odyssey-agent-runs/c4-final-dev-four-role-20261024/`
+(`status.json`, `round-1/*-completed.json`, `qa-supplementary.json`,
+`perf-supplementary.json`). Todos los revisores examinaron la misma fuente
+funcional de cierre. Ninguno encontró un defecto bloqueante nuevo.
+
+**Nota metodológica:** un hook genérico `pytest` de todo el repositorio
+recorrió también benchmarks históricos congelados y acabó con **27 FAIL,
+4.874 PASS, 80 SKIP**; no es el gate transversal canónico, que PASS y
+está acotado al contrato implementado. No se retocaron esos tests antiguos,
+ni se ha afirmado que toda la historia pase. El commit documental posterior
+se hizo con el hook genérico `pytest` omitido y `odyssey_docs_guard.py`,
+validación del esquema y `git diff --check` superados.
+
+**Decisión:** dar por cerrado el **alcance de desarrollo funcional C1–C4
+probado en DEV**, sin modificar Tasks para perseguir segundos. DEV mantiene
+la versión funcional `050f26f`. No declarar aceptación end-to-end global,
+ni `ready_for_user=true` del supervisor ni aprobación para promoción PROD:
+quedan pendientes autenticación externa Cloudflare con sesión autorizada y
+parcial C4 natural por interfaz (más métricas de carga reales si se exige
+objetivo de p95). La reproducción parcial Writer+E3+n8n web aislada sí
+consta, pero no se hará fault injection en el vault personal para conseguir
+una demo. Estas puertas son propias de una futura promoción, no justificación
+para reabrir Tasks o bloquear el diseño de la siguiente fase de notas.
