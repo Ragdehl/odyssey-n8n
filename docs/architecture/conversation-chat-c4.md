@@ -758,3 +758,63 @@ Resultados y script de navegador con controles de sesión en
 Siguiente diagnóstico acotado: subetapas Tasks/WorkSession con varios casos
 comparables, intervalo Core↔n8n residual (4–6 s) y variabilidad de Router.
 No cambiar modelo, prompts o autoridad E3 sin nueva evaluación real específica.
+
+### Presencia auténtica del navegador y efecto en WorkSession (24-10-2026)
+
+**Diagnóstico complementario sin cambios de código de producto ni despliegue.**
+La investigación confirmó una distorsión de las últimas medidas: el
+harness Chromium/n8n respondía a `presence` con `ignored_test_presence`
+sin transmitir el aviso real que `odyssey_web/presence.js` envía al abrir
+la aplicación. Así no se precalentaba el worker ONNX en las pruebas, pese
+a estar ya implementado en el navegador auténtico.
+
+Se reutilizó el mismo DEV desplegado `050f26f`, mismo recorrido de interfaz,
+actor sintético y modelo real, permitiendo esta vez que el proxy de sesión
+**reenviara `active`/`heartbeat`/`inactive` a n8n** y comprobando la llegada
+de `active`. Worker local RSS al comenzar el primer envío **~584 MB**,
+tras ~4,96 s de espera para el precalentamiento; RSS por sí solo no asegura
+que las inferencias ya estén calientes. Dos WorkSession inexistentes enviadas
+desde el formulario con IDs nuevos, HTTP 200, `needs_attention`, recarga
+correcta y **166 Markdown idénticos** en la huella del vault. El proceso
+runtime/servicio siguió aislado de PROD. Resultados:
+
+| Sesión con presencia real | UI total | n8n HTTP | Task interpret | WorkSession total | WorkSession semantic_search | WorkSession contextual_provider |
+|---|---:|---:|---:|---:|---:|---:|
+| Primera | 28,33 s | 27,82 s | 8,62 s | **2,73 s** | 0,540 s | 1,71 s |
+| Segunda | 30,54 s | 30,12 s | 7,42 s | **1,98 s** | 0,035 s | 1,47 s |
+
+Referencia anterior **sin presence** (otro par de solicitudes, condiciones
+diferentes): WorkSession **11,63 y 3,20 s**. La reducción de la primera
+muestra es compatible con eliminar buena parte del arranque ONNX, pero no
+prueba causalidad ni percentiles con n=2. No se debe confundir la mejora
+**ya implementada** con una nueva optimización de producto; no cambiar el
+resolver ni borrar validación contextual. El coste relevante que permanece
+es interpretación Tasks (~7–9 s), contextual (~1,5 s), Router y revisiones
+independientes, variables por latencia de proveedor. Los recibos reales
+anteriores de Tasks (`gpt-6-luna`, low effort) registran 908 tokens de
+entrada y 55/107 de salida, pero no justifican cambiar prompt, modelo,
+paralelismo o máximo de tokens sin evaluación semántica acotada. Como
+contraprueba no facturable, la creación local del cliente OpenAI usado por
+Tasks (`OpenAITaskInterpreter.from_environment`) tardó **~0,66 ms de mediana**
+tras el primer arranque de importaciones (6 muestras, token ficticio,
+ninguna solicitud de red); **reutilizar ese objeto por sí solo no promete
+una mejora apreciable** sobre los 7–9 s de interpretación real.
+
+**Hallazgo sobre avisos del proxy:** los tres `proxy_error:Error` de las
+pruebas anteriores correspondían a solicitudes GET `/favicon.ico` no
+incluidas en los activos locales del harness, no a fallos confirmados del
+backend. El harness privado de investigación identificó la ruta sin
+registrar payloads de usuario. El procedimiento `odyssey-dev-e2e` exige
+ahora mantener el `presence` auténtico en los benchmarks de UX y distinguir
+404 de recursos opcionales de errores en las solicitudes de negocio.
+
+Se activaron únicamente durante el ensayo las banderas DEV
+`ODYSSEY_WORK_SESSION_RESOLUTION_TIMING_ENABLED=1` y
+`ODYSSEY_HOT_PATH_TIMING_ENABLED=1`; se **retiraron ambas y se reinició solo
+el runtime DEV** con salud HTTP 200 en DEV y PROD, marcador de DEV `050f26f`
+y vault sin modificaciones. Evidencia y harness controlado en
+`/home/ragdehl/projects/.odyssey-agent-runs/p4-worksession-real-presence-20261024/`.
+**Próximo trabajo:** optimizar el coste total de llamadas GPT solo con una
+prueba de seguridad y comportamiento por idioma/negación/multitarea, y
+separar los 4–6 s residuales en Core/n8n; no acelerar poniendo en riesgo
+las atestaciones independientes ni la autoridad E3.
