@@ -467,9 +467,63 @@ justificado saltar la validación semántica ni fijar un umbral de confianza.
   n8n y PROD **HTTP 200**, source/marker DEV `7cade85`, drop-in ausente y
   flags de unidad sin diagnóstico, backup SHA256 válido, notas inmutadas.
   No se desplegó ningún cambio en PROD.
-- **Siguiente hipótesis a validar:** comportamiento de `presence` real en la
-  app y precalentamiento de worker al entrar a Chat; medir por separado
-  lanzamiento ONNX, inferencia y búsqueda SQLite con pruebas controladas antes
-  de proponer cambios en RAM, tiempo de retención o recarga. La latencia total
-  incluso en caliente fue 28,1 s y tiene otros costes de Core; optimizar por
-  evidencias sin relajar permisos ni identidad.
+- **Siguiente prioridad:** investigar los costes de Core restantes y medir
+  el precalentamiento en una sesión Cloudflare Access externa autorizada. Las
+  verificaciones con proxy local, tiempos de worker y SQLite se documentan a
+  continuación; no autorizan por sí solas un cambio en RAM, TTL o modelo.
+
+### Verificación real del precalentamiento sin escrituras (24-10-2026)
+
+**La funcionalidad ya existía; no se necesitó código nuevo ni redespliegue.**
+En el marcador DEV `7cade85566d536f32abf74075aa186e41d9479e1` y con
+`ODYSSEY_EMBEDDING_SUBPROCESS=1`, el frontend `odyssey_web/app.js` carga
+asíncronamente `presence.js`, que avisa `active` al abrir y `inactive` al
+cerrar la pestaña. El workflow `odyssey-online.ts` autentica y reenvía a
+`/conversation/presence`; `RuntimeComposition.embedding_presence` solo lo
+acepta en DEV y delega al adaptador aislado de ONNX. En una sesión normal el
+primer aviso no debe bloquear la hidratación ni autorizar escrituras.
+
+- **Chromium móvil, frontend desplegado real, n8n y runtime reales:** un proxy
+  localhost con **cookie de prueba** limitó las operaciones a `presence` y
+  una lectura de conversación; **no permitió `/api/request` ni mutaciones**.
+  La sesión abrió el Chat y emitió `active` a los **129 ms**, con HTTP 200 y
+  `{ok:true}` de n8n/runtime; el proceso worker apareció a los **496 ms**.
+  Su RSS alcanzó **~651 MB** a los **5.547 ms**. Tras cerrar la pestaña,
+  llegó `inactive` con HTTP 200 a los **5.555 ms**. Que el RSS creciera no
+  significa por sí solo que ONNX estuviera listo exactamente en ese instante.
+  `externalCloudflareAuth=false`: **no** se certificó autenticación pública
+  desde Internet. Hubo un aviso del proxy de prueba de una petición auxiliar,
+  sin incidencia sobre las dos respuestas de presencia. La prueba no envió
+  ningún mensaje al modelo y no modificó Markdown.
+- **Medición local, solo entradas sintéticas, modelo cacheado offline:**
+  creación de `FastEmbedTextEmbedder` **4.398 ms**; primer
+  `embed_queries` **86 ms**, segundo/tercero **23 ms**; lectura SQLite de las
+  **31 filas del índice de tareas** **6,8 ms** y cálculo vectorial sobre
+  estas filas **1 ms**. Dos consultas completas en índice ya caliente
+  ~**22 ms**. Estas medidas no son del recorrido browser→Core.
+- **Worker aislado real, nueva instancia, sin proveedor ni índices privados:**
+  arranque + precalentamiento mediante el protocolo privado `warm`:
+  **4.624 ms**; primera inferencia una vez listo: **73 ms**, segunda **68 ms**.
+  En ninguno de estos tests se hizo descarga de modelos ni llamadas externas;
+  el modelo se cargó de la caché local en un proceso descartable. No se
+  imprimieron IDs, títulos, candidatos o textos de notas.
+- **Interpretación:** el efecto **frío 14.957 ms vs caliente 153 ms** en la
+  etapa `semantic_search` de WorkSession está bien sustentado. La construcción
+  del modelo y del proceso explica varios segundos; **no se puede atribuir
+  cada uno de los otros segundos** sin un perfil conjunto bajo idénticas
+  condiciones de carga, caché, memoria y concurrencia. Tampoco se ha probado
+  que el cliente conectado por Cloudflare tenga el mismo tiempo de prewarm
+  que el proxy de prueba. La latencia de la aplicación sigue teniendo
+  otros tramos relevantes aun con ONNX caliente.
+- **Retención y cierre:** `idle_seconds=900` mantiene el worker cargado hasta
+  el plazo de gracia después de la última sesión. Las pruebas con worker
+  sintético confirman `heartbeat`, `inactive`, expiración de pestañas perdidas
+  y liberación del proceso al vencer el periodo de inactividad; esta prueba
+  de navegador **no esperó 900 segundos** para verificar el reaper real.
+  No se cambió el TTL ni se volvió permanente el uso de ~650 MB.
+- **Evidencias:**
+  `/home/ragdehl/projects/.odyssey-agent-runs/worksession-timing-dev-adoption-20261024/dev-presence-browser-acceptance.log`,
+  `benchmark-onnx-readonly.log`, `benchmark-worker-warmup.log`, con scripts
+  transitorios fuera del Git. Los SHA256 combinados de los **166 Markdown**
+  permanecieron idénticos en ambos ensayos. DEV y PROD no han sido
+  modificados, ni se han cambiado tokens o permisos.
