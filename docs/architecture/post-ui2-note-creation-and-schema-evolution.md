@@ -435,7 +435,7 @@ A future Odyssey capability should let the user talk naturally with Odyssey abou
 - which note types currently exist;
 - what each type means;
 - which properties belong to each type;
-- which properties are filterable and how;
+- which natural-language queries a property supports, without asking the user to configure a technical `filterable` switch;
 - creating a new note type;
 - renaming or otherwise modifying an existing type where safe;
 - adding/modifying/removing type properties;
@@ -455,6 +455,67 @@ Before implementation, define explicit mutation semantics for schema changes, in
 - distinction between changing the schema and changing the type of one existing note.
 
 Natural-language Chat may be the user-facing control surface, but schema mutation must pass through one typed, validated Core capability rather than granting the planner or browser direct authority over `config/note-schema.json`.
+
+### Diseño conversado para la próxima fase (24-10-2026; propuesta, no implementada)
+
+**Experiencia de usuario y finalidad.** La sección «Modelo de notas» se abriría desde
+los controles ya presentes «Crear nuevo tipo» y «Editar tipo» de Notes, o desde
+un diálogo de Chat que derive a la misma superficie. Una conversación con la IA
+prepara una **vista previa de tipo/propiedad como una nota**, editable por la
+conversación, con nombre y descripción comprensibles, ejemplos de búsquedas y
+advertencias sobre posibles solapamientos. Una breve explicación junto a
+«Crear nuevo tipo» debe enseñar **qué aporta al usuario**: agrupar y explorar
+notas con necesidades comunes, pedir búsquedas más precisas y aprovechar
+campos específicos. No presentar cada etiqueta, rol o relación como un tipo
+nuevo; sugerir primero reutilizar una clase ya registrada y añadir una
+propiedad solo si hay una ventaja concreta. Registrar tipos no concede por sí
+solo nuevas automatizaciones ni capacidades de Apps.
+
+**Sin configuración técnica de filtros.** No mostrar un interruptor
+«filtrable» en la creación. Toda propiedad nueva debe resultar consultable;
+los operadores concretos son responsabilidad del modelo de datos y del motor
+de consulta: fecha parcial (coincidencia por componentes/rangos acreditados),
+número (comparación/rango), texto (coincidencia o búsqueda textual/semántica)
+o referencias (identidades canónicas y relaciones), según capacidades realmente
+implementadas. No prometer el mismo operador para todas ni presentar resultados
+incompletos como exhaustivos.
+
+**Fecha parcial genérica.** La primera prueba candidata es una propiedad de
+`person` equivalente a «fecha de nacimiento» (`birth_date` como identificador
+interno propuesto), **sin segunda propiedad `age` persistida**: la edad puede
+derivarse solo cuando la evidencia disponible lo permita. La propiedad ha de
+poder retener *únicamente* los componentes acreditados `{year?, month?, day?}`:
+1985; marzo de 1985; 12 de marzo sin año; fecha completa; incluso día del mes
+sin mes/año si ese es todo el conocimiento confirmado. Ausencia de un componente
+no se codifica con ceros, fechas ficticias ni valores inventados. Validar
+coherencia de combinaciones y días de mes, preservando la precisión original.
+El usuario describe en lenguaje natural qué quiere registrar y el asistente
+propone cómo representarlo; no se exige que entienda o elija entre cinco tipos
+internos. **El `date` canónico actual valida fechas completas**; por tanto,
+introducir una fecha parcial requiere un contrato de valor, validación, filtro,
+serialización y presentación nuevos y **genéricos**, reutilizando el intérprete
+temporal vigente donde tenga sentido sin cambiar las reglas de fechas completas
+de Calendar/Events/Tasks. Este detalle técnico queda para diseñar antes de
+implementar; no se declara que la función ya exista.
+
+**Una sola confirmación.** El usuario revisa la propuesta de esquema y autoriza
+con una acción también la inspección/rellenado de las notas del tipo afectado.
+Después la UI queda libre, muestra progreso reanudable y resultados separados:
+valor rellenado con fuente; datos insuficientes (vacío legítimo); conflicto o
+ambigüedad a revisar. Interpretación/evidencia para notas distintas puede ser
+paralela y acotada; **las escrituras no** se hacen en paralelo sin sincronizar:
+reutilizar Core/E3, CAS, historia, idempotencia y readback por nota. El estado
+de cada elemento debe sobrevivir reinicios y evitar sobrescribir correcciones
+posteriores. Una consulta de otro dominio no se bloquea por rellenados en curso;
+una consulta dependiente de la propiedad requiere resultados completos o una
+advertencia explícita de incompletitud, nunca silenciosa.
+
+**Límites de decisión.** La IA detecta posible solapamiento conceptual y propone
+valor/evidencia, pero no crea autónomamente un tipo, ni altera el esquema
+sin confirmación, ni escribe valores que no puedan sustentarse en hechos
+actuales. Core valida ID, tipo, formato, autoridad y compatibilidad.
+Editar/eliminar propiedades o tipos con notas existentes exige fases y garantías
+adicionales; no forma parte del primer corte de creación compatible.
 
 ## D. Notes presentation and browsing follow-ups
 
