@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import traceback
+from contextlib import nullcontext
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -28,6 +29,7 @@ from odyssey_core.note_queries import NotesQueryError, StaleCursorError
 from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
 from .serialization import operational_to_response
+from .user_schema_registry import UserSchemaRegistry
 
 MAX_REQUEST_BYTES = 1_048_576
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
@@ -84,7 +86,22 @@ def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
     handler = _handler_for(runtime)
-    with ThreadingHTTPServer((host, port), handler) as server:
+    registry = runtime.user_schema_registry
+    if registry is None:
+        lease = nullcontext()
+    elif not isinstance(registry, UserSchemaRegistry) or runtime.user_schema_revision is None:
+        raise ValueError("Schema runtime generation is unavailable")
+    else:
+        lease = registry.serving_generation(runtime.user_schema_revision)
+    # The lock is held while there can be any HTTP requests against the
+    # frozen generation. Publication is exclusively allowed once it stops.
+    with lease, ThreadingHTTPServer((host, port), handler) as server:
+        # Python's ThreadingHTTPServer normally daemonizes request threads.
+        # On shutdown that would release our generation lease while an old
+        # Core/Git mutation or index read could still be in flight. Wait for
+        # every active request to finish before letting any publisher in.
+        server.daemon_threads = False
+        server.block_on_close = True
         server.serve_forever()
 
 
@@ -266,6 +283,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     operation = payload.pop("operation", None)
                     if operation not in {
                         "capabilities",
+                        "schema_preview",
                         "query",
                         "intelligent",
                         "detail",

@@ -1,6 +1,6 @@
 # Post-UI-2 note creation and schema evolution exploration
 
-Status: **Historical v1 contract; Slices 1–3 merged in PR #133.** Current phase status belongs in the [Functional Roadmap](functional-roadmap.md); the next-stage design belongs in [Semantic set resolution and evidence](semantic-set-resolution-and-evidence.md).
+Status: **Historical v1 contract plus approved new conversational-schema design in section C.** Previous Slices 1–3 merged in PR #133; the current implementation status belongs in the [Functional Roadmap](functional-roadmap.md).
 Performance / Latency / Cost P1 is complete; UI-2 merged in PR #124.
 
 ## Why this exists
@@ -635,6 +635,116 @@ con contrato de seguridad y tests; (C) conversación/vista previa y confirmació
 por lote; (F) fecha parcial genérica y prueba `birth_date` si ese sigue siendo
 el primer caso que interesa al usuario. Cada corte se acepta con pruebas
 reales de interfaz y no se solapa con una refactorización general de E6.
+
+### Primera entrega técnica: registro compatible (24-10-2026, rama de desarrollo)
+
+El módulo interno `odyssey_runtime/user_schema_registry.py` reutiliza
+`compose_application_schema`, `scripts/validate_note_schema.py`, las
+capacidades de filtros y el modelo Core, **sin introducir una segunda autoridad
+para notas**. Ya permite preparar y validar propuestas estructuradas de
+`add_type`, `add_property`, `edit_type_text` y
+`edit_property_description`. Los campos nuevos nacen **opcionales** y
+consultables; los cambios incompatibles y los tipos gestionados por Apps se
+rechazan. El esquema físico permanece v3; el registro del usuario tiene una
+revisión independiente. La API interna valida conflicto CAS, consentimiento
+estructurado de un llamador de confianza, hash de propuesta, `request_id`
+no reutilizable, persistencia atómica y recibos de historial. Pruebas sintéticas
+verifican compatibilidad de Markdown, concurrencia y reinicio. No modifica
+ningún esquema del repositorio ni vault real.
+
+`RuntimeComposition` puede leer el esquema compuesto desde ese registro **solo
+si** `ODYSSEY_USER_SCHEMA_ENABLED=1` y `ODYSSEY_DEPLOYMENT_ENV=DEV`;
+el valor predeterminado es apagado. Esta es una lectura de snapshot al arrancar,
+**no hot reload** ni aceptación de publicación desde Chat/UI. El objeto
+`SchemaConfirmation` NO autentica usuarios por sí mismo; el futuro endpoint
+actor-bound deberá verificar la sesión, solicitud original y confirmación
+real antes de invocar `publish`. Los recibos son evidencia para recuperación,
+no implementan todavía una reversión automática de notas ni publicaciones.
+
+**Segundo corte de integración, solo lectura:** `/notes` y el nodo
+Notes de n8n aceptan `schema_preview`, que obliga a suministrar la identidad
+ya validada del actor/principal y acepta únicamente `change` y
+`expected_revision`. Devuelve revisión, hash exacto de propuesta y la tarjeta
+del tipo afectado; no expone todas las definiciones ni publica cambios.
+Propuestas sin identidad, con flags ocultos, revisión obsoleta o sin soporte de
+consulta se rechazan. Las pruebas ejecutan el **código JS real del validador
+n8n** y la ruta HTTP Python con actor sintético: gate final **2.097 Python +
+202 JavaScript PASS**. La interfaz actual conserva sus botones informativos
+sin presentar todavía este preview como editor conversacional completado.
+
+**Hallazgo de integración:** `schema` aparece en múltiples cierres de Core,
+Apps, `NotesQueryService`, escritor e índices construidos al arrancar.
+Mutar el diccionario en caliente o reemplazar solo `canonical_schema` sería
+inconsistente. La siguiente fase requiere **una transición coherente** para
+todos los consumidores (o una frontera explícita de reinicio seguro antes de
+habilitar publicación), con control de concurrencia, validación del esquema
+candidate sobre el vault de prueba y reconstrucción/reutilización justificada
+de índices. Nunca habilitar un endpoint de confirmación sin ese contrato.
+
+**Tercer corte: generación coherente por reinicio controlado (source-only).**
+La composición carga una revisión exacta del registro, y el servidor conserva
+un **lease compartido de sistema operativo durante toda su vida**. La
+publicación de otra revisión necesita el mismo lease en exclusiva y se rechaza
+con `SCHEMA_RUNTIME_ACTIVE` mientras el servidor funcione. Al arrancar, el
+servidor compara la revisión ya compuesta con la revisión duradera y se niega a
+servir una composición obsoleta (`SCHEMA_RUNTIME_GENERATION_STALE`). Así todos
+los consumidores que capturan el esquema al crear Core/Apps/Writer/Notes e
+índices siguen utilizando **la misma generación por proceso**, aprovechando la
+recomposición y validación de índices en el arranque. El lock no intenta
+reconfigurarlos a medias. Prueba Linux entre procesos y fake `serve()` real
+comprueban exclusión durante servicio y reinicio correcto; los recibos futuros
+huérfanos tampoco se ignoran silenciosamente.
+
+**Corrección tras revisión independiente (P1/P2):** el validador rechaza
+colisiones de identificadores con tipos o restricciones incompatibles **aunque
+el campo previo no fuera filtrable** (`calendar_day.date` es la regresión). El
+bloqueo comienza **antes** de construir Core o reconstruir índices:
+`build_runtime_from_environment` toma un lease **exclusivo durante todo el
+bootstrap**; después el servidor toma su lease compartido y comprueba que la
+revisión de arranque siga vigente. Ninguna publicación puede coincidir con un
+arranque/servicio; no hay escrituras de índices desde una generación obsoleta.
+Si el bootstrap falla, libera el lock. Si una publicación gana el intervalo
+entre creación y servicio, ese runtime viejo se niega a atender peticiones.
+El digest del esquema de `verified_metadata_catalog._from_complete_index`
+además impide reutilizar índices de filtros incompatibles. El servicio HTTP también espera a que finalicen los hilos de peticiones
+existentes antes de liberar su lease (`daemon_threads=False`,
+`block_on_close=True`); una petición lenta no permite colar una revisión nueva
+durante el apagado. Se ha verificado con HTTP local real y respuesta retardada.
+Este protocolo es intencionalmente conservador: **no implementa** reinicio
+transparente.
+
+**Segunda revisión independiente (boot guard):** antes de adquirir el lease
+el factory comprueba el entorno de despliegue, flag, raíces DEV del vault,
+índices, pendientes, estado y caché, y que ninguna resuelva bajo
+`/data/odyssey`. Si el estado DEV todavía no existe, lo crea **solo después**
+de pasar la validación. Esto evita cualquier efecto secundario sobre PROD
+cuando una configuración DEV es rechazada; pruebas sobre raíces sintéticas
+cubren `ODYSSEY_LIGHT_SOURCE_V1` activo/inactivo, un primer arranque y un
+estado enlazado por symlink. No se ejecutaron pruebas sobre datos PROD.
+
+**Límite operativo todavía pendiente:** esto es una *primitiva de seguridad*,
+**no** una activación UX automática. Una confirmación desde la interfaz no puede
+llamar `publish` con el servidor activo; deberá quedar validada y encolada en
+estado duradero (idempotencia y permiso explícito), mientras el coordinador
+realiza arranque/reconstrucción de la nueva generación y publica un estado
+consistente. La frontera operativa debe preservar chat y navegación tanto como
+sea posible y evitar detener un proceso con escrituras en curso. Aún no existe
+el flujo de orquestación, por lo que no habilitar `schema_confirm` o simular
+«creado» antes de un recibo activo y leído de vuelta. No declarar sin pruebas
+que un reinicio es invisible para el usuario. No altera el contrato de notas
+físicas v3 ni las escrituras E3.
+
+**Pequeña corrección de UI:** la pantalla de Notas deja de mostrar al usuario
+el atributo técnico «filtrable» en las descripciones de propiedades y explica
+el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen
+informativos («Próximamente»), no simulan una operación de IA publicada.
+
+**No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
+previa conectadas, publicación caliente con barrera de índices, migración de
+esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,
+confirmación por lotes, fecha parcial o aceptación E2E del navegador en DEV.
+No debe presentarse esta entrega de infraestructura como una función utilizable
+por el usuario.
 
 ## D. Notes presentation and browsing follow-ups
 

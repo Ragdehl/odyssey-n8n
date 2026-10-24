@@ -505,6 +505,10 @@ class RuntimeComposition:
     pending_recorder: PendingWorkRepository | None = None
     vault_repository: VaultRepository | None = None
     canonical_schema: dict[str, object] | None = None
+    # User schema proposals are read-only in the active runtime. Confirm/publish
+    # requires a separate authenticated rollout and consistent schema/index swap.
+    user_schema_registry: object | None = None
+    user_schema_revision: int | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1719,6 +1723,45 @@ class RuntimeComposition:
             and self.await_index_refresh is not None
         ):
             self.await_index_refresh()
+        if operation == "schema_preview":
+            # The runtime's ordinary fallback `odyssey-runtime` is not an
+            # authenticated user. Previewing schema changes requires one
+            # validated principal even though this operation is read-only.
+            if authenticated_actor is None and external_principal is None:
+                raise ValueError("Schema preview requires authenticated actor")
+            if self.user_schema_registry is None:
+                raise ValueError("User schema preview is disabled")
+            if set(payload) != {"change", "expected_revision"}:
+                raise ValueError("Schema preview payload is invalid")
+            expected_revision = payload["expected_revision"]
+            change = payload["change"]
+            if (
+                not isinstance(expected_revision, int)
+                or isinstance(expected_revision, bool)
+                or expected_revision < 0
+                or not isinstance(change, dict)
+            ):
+                raise ValueError("Schema preview payload is invalid")
+            from .user_schema_registry import UserSchemaRegistry
+
+            if not isinstance(self.user_schema_registry, UserSchemaRegistry):
+                raise ValueError("Schema registry is unavailable")
+            proposal = self.user_schema_registry.preview(
+                change, expected_revision=expected_revision
+            )
+            kind = next(
+                item
+                for item in proposal.effective_schema["types"]
+                if item["id"] == proposal.affected_type_id
+            )
+            return {
+                "revision": proposal.revision,
+                "next_revision": proposal.next_revision,
+                "proposal_hash": proposal.proposal_hash,
+                "operation": proposal.operation,
+                "affected_type_id": proposal.affected_type_id,
+                "type_preview": kind,
+            }
         if operation == "capabilities":
             if payload:
                 raise ValueError("Notes capabilities payload is invalid")
@@ -2768,7 +2811,51 @@ class RuntimeComposition:
         )
 
 
+_USER_SCHEMA_PROTECTED_ROOT = Path("/data/odyssey")
+
+
 def build_runtime_from_environment() -> RuntimeComposition:
+    """Build all schema consumers and derived indexes under one boot-time lease.
+
+    The serving boundary then acquires a shared lease and checks revision.
+    If a publisher wins the tiny gap after this factory returns, serve fails
+    safely before exposing the stale runtime; neither can rebuild indexes
+    against a live newer generation.
+    """
+    schema_enabled = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
+    if schema_enabled not in {"0", "1"}:
+        raise ValueError("User schema registry flag is invalid")
+    if schema_enabled == "0":
+        return _build_runtime_from_environment_unlocked()
+    if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
+        raise ValueError("User schema registry is restricted to DEV until its E2E adoption")
+    from .user_schema_registry import UserSchemaRegistry
+
+    vault_root = _path_env("ODYSSEY_VAULT_ROOT", "/data/odyssey/vault")
+    runtime_root = _path_env("ODYSSEY_RUNTIME_ROOT", "/data/odyssey/runtime")
+    pending_root = _path_env("ODYSSEY_PENDING_ROOT", "/data/odyssey/state/pending")
+    state_root = _path_env("ODYSSEY_STATE_ROOT", str(pending_root.parent))
+    embedding_cache = _path_env(
+        "ODYSSEY_EMBEDDING_CACHE", "/data/odyssey/runtime/phase11a-benchmark/embedding-cache"
+    )
+    # This preflight MUST precede mkdir/chmod/lease creation: a rejected DEV
+    # experiment must never create files under PROD even on invalid settings.
+    protected = _USER_SCHEMA_PROTECTED_ROOT.resolve()
+    if any(
+        path.resolve().is_relative_to(protected)
+        for path in (vault_root, runtime_root, pending_root, state_root, embedding_cache)
+    ):
+        raise ValueError("DEV user schema cannot access production storage")
+    if state_root.is_symlink():
+        raise ValueError("User schema state root must not be a symlink")
+    # Legacy composition creates the pending root later, but the schema lease
+    # needs the state parent now on a first DEV boot.
+    state_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with UserSchemaRegistry.bootstrap_lease(state_root):
+        return _build_runtime_from_environment_unlocked()
+
+
+def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     """Build the production Core composition from environment-owned configuration.
 
     Returns:
@@ -2804,6 +2891,22 @@ def build_runtime_from_environment() -> RuntimeComposition:
         base_schema = json.load(schema_file)
     application_schema_extensions = (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
     schema = compose_application_schema(base_schema, application_schema_extensions)
+    user_schema_registry = None
+    user_schema_revision = None
+    user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
+    if user_schema_flag not in {"0", "1"}:
+        raise ValueError("User schema registry flag is invalid")
+    if user_schema_flag == "1":
+        if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
+            raise ValueError("User schema registry is restricted to DEV until its E2E adoption")
+        from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+        user_schema_registry = UserSchemaRegistry(
+            state_root, base_schema, application_schema_extensions
+        )
+        user_schema_revision, schema = user_schema_registry.snapshot()
+    # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
+    # UI publication/hot-reload boundary is deliberately NOT available yet.
 
     repository = VaultRepository(vault_root)
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
@@ -5258,6 +5361,8 @@ def build_runtime_from_environment() -> RuntimeComposition:
         pending_recorder=pending_recorder,
         vault_repository=repository,
         canonical_schema=schema,
+        user_schema_registry=user_schema_registry,
+        user_schema_revision=user_schema_revision,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

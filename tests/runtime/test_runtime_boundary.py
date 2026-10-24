@@ -2411,3 +2411,258 @@ def test_index_refresh_coordinator_coalesces_pending_ids_and_fails_closed() -> N
     with pytest.raises(RuntimeError, match="derived index refresh failed"):
         coordinator.wait_until_clean()
     assert calls == [("a",), ("b", "c")]
+
+
+def test_http_schema_preview_is_read_only_authenticated_and_bounded(tmp_path: Path) -> None:
+    """Browser/n8n-facing Notes envelope reuses identity and never grants publication."""
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    user = OdysseyUser.new()
+    base = json.loads(
+        (Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+    )
+    request = {
+        "operation": "schema_preview",
+        "expected_revision": 0,
+        "change": {
+            "operation": "add_property",
+            "type_id": "person",
+            "property": {
+                "id": "occupation",
+                "value_type": "string",
+                "description": "Profession when known.",
+            },
+        },
+    }
+    server = _test_server(runtime)
+    try:
+
+        def send(body: dict) -> tuple[int, dict]:
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            connection.request("POST", "/notes", body=json.dumps(body))
+            response = connection.getresponse()
+            result = response.status, json.loads(response.read())
+            connection.close()
+            return result
+
+        status, response = send(request)
+        assert status == 400 and response == {"error": "invalid notes request"}
+        status, response = send(
+            {**request, "authenticated_actor": {"stable_user_id": user.stable_user_id}}
+        )
+        assert status == 200
+        assert response["revision"] == 0
+        assert response["type_preview"]["properties"][0]["id"] == "occupation"
+        assert not (tmp_path / "user-schema/current.json").exists()
+        for payload in (
+            {**request, "expected_revision": True},
+            {**request, "approved": True},
+            {**request, "authenticated_actor": {"stable_user_id": "bad"}},
+        ):
+            status, response = send(payload)
+            assert status == 400 and response == {"error": "invalid notes request"}
+        assert registry.snapshot()[0] == 0
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_actual_serve_holds_schema_generation_lease_until_shutdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runtime HTTP server lifetime, not individual requests, protects schema generation."""
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime import server as runtime_server
+    from odyssey_runtime.user_schema_registry import (
+        SchemaConfirmation,
+        UserSchemaError,
+        UserSchemaRegistry,
+    )
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    user = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    change = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Book",
+            "description": "A named book",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    preview = user.preview(change, expected_revision=0)
+    confirmation = SchemaConfirmation(
+        "synthetic-actor", "schema-once", preview.revision, preview.proposal_hash
+    )
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        user_schema_registry=user,
+        user_schema_revision=0,
+    )
+
+    class InstrumentedServer:
+        def __init__(self, address, handler):
+            assert address == ("127.0.0.1", 19001)
+            assert handler is not None
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def serve_forever(self):
+            assert self.daemon_threads is False
+            assert self.block_on_close is True
+            if user.snapshot()[0] == 0:
+                with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
+                    user.publish(change, confirmation)
+            else:
+                assert user.snapshot()[0] == 1
+
+    monkeypatch.setattr(runtime_server, "ThreadingHTTPServer", InstrumentedServer)
+    runtime_server.serve(runtime, port=19001)
+    assert user.snapshot()[0] == 0
+    # After the old process has fully stopped, a trusted operator can publish.
+    user.publish(change, confirmation)
+    assert user.snapshot()[0] == 1
+    with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_GENERATION_STALE"):
+        runtime_server.serve(runtime, port=19001)
+    restarted = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        user_schema_registry=registry_for_restarted_runtime(tmp_path, base),
+        user_schema_revision=1,
+    )
+    runtime_server.serve(restarted, port=19001)
+
+
+def registry_for_restarted_runtime(tmp_path: Path, base_schema: dict):
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    return UserSchemaRegistry(
+        tmp_path, base_schema, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
+    )
+
+
+def test_runtime_lease_outlives_an_inflight_http_request_during_shutdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publication may not start after shutdown while an old Writer request still runs."""
+    from http.server import ThreadingHTTPServer
+
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime import server as runtime_server
+    from odyssey_runtime.user_schema_registry import (
+        SchemaConfirmation,
+        UserSchemaError,
+        UserSchemaRegistry,
+    )
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    change = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Book",
+            "description": "Book entity",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    preview = registry.preview(change, expected_revision=0)
+    confirmation = SchemaConfirmation("synthetic-actor", "shutdown-race", 0, preview.proposal_hash)
+    in_request = threading.Event()
+    release_request = threading.Event()
+    listening = threading.Event()
+    created: list[ThreadingHTTPServer] = []
+    faults: list[Exception] = []
+    receipts: list[tuple[int, dict]] = []
+
+    class SlowRuntime:
+        user_schema_registry = registry
+        user_schema_revision = 0
+
+        def notes(self, operation, payload, actor, principal):
+            del payload, actor, principal
+            assert operation == "capabilities"
+            in_request.set()
+            if not release_request.wait(6):
+                raise RuntimeError("synthetic Notes handler was not released")
+            return {"status": "ok"}
+
+    class RecordedServer(ThreadingHTTPServer):
+        def __init__(self, address, handler):
+            super().__init__(address, handler)
+            created.append(self)
+            listening.set()
+
+    monkeypatch.setattr(runtime_server, "ThreadingHTTPServer", RecordedServer)
+    # Production serve correctly forbids port zero. Reserve an ephemeral local
+    # test port, release it, then bind through the real serve() entry point.
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        test_port = probe.getsockname()[1]
+
+    def run_server():
+        try:
+            runtime_server.serve(SlowRuntime(), host="127.0.0.1", port=test_port)
+        except Exception as error:
+            faults.append(error)
+
+    thread = threading.Thread(target=run_server, daemon=True)
+    thread.start()
+    assert listening.wait(3)
+    server = created[0]
+
+    def client():
+        try:
+            connection = HTTPConnection("127.0.0.1", server.server_port, timeout=8)
+            connection.request("POST", "/notes", body=json.dumps({"operation": "capabilities"}))
+            reply = connection.getresponse()
+            receipts.append((reply.status, json.loads(reply.read())))
+            connection.close()
+        except Exception as error:
+            faults.append(error)
+
+    client_thread = threading.Thread(target=client, daemon=True)
+    client_thread.start()
+    try:
+        assert in_request.wait(3)
+        shutdown_thread = threading.Thread(target=server.shutdown, daemon=True)
+        shutdown_thread.start()
+        shutdown_thread.join(timeout=3)
+        assert not shutdown_thread.is_alive()  # serve_forever has already stopped
+        assert thread.is_alive()  # server_close still waits for the HTTP handler
+        with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
+            registry.publish(change, confirmation)
+    finally:
+        release_request.set()
+        server.shutdown()
+        client_thread.join(timeout=6)
+        thread.join(timeout=6)
+    assert not thread.is_alive()
+    assert not faults
+    assert receipts == [(200, {"status": "ok"})]
+    registry.publish(change, confirmation)
+    assert registry.snapshot()[0] == 1

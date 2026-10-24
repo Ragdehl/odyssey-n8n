@@ -436,3 +436,22 @@ def test_calendar_route_is_deterministic_bounded_and_provider_free() -> None:
     assert "conversationIdentity" in calendar
     assert "Luna" not in calendar
     assert "openai.com" not in calendar
+
+
+def test_schema_preview_webhook_is_read_only_and_keeps_n8n_actor_injection() -> None:
+    """Schema preview crosses existing Notes identity-bound envelope, never write authority."""
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "schema_preview: new Set(['operation', 'change', 'expected_revision'])" in source
+    assert (
+        "const schema_change = body.change; const schema_revision = body.expected_revision;"
+        in source
+    )
+    assert "operation !== 'schema_preview' || (schema_change" in source
+    assert "JSON.stringify(schema_change).length <= 16384" in source
+    assert (
+        "if (operation === 'schema_preview') { forwarded.change = schema_change; forwarded.expected_revision = schema_revision; }"
+        in source
+    )
+    # This operation is neither a Note mutation nor a public schema-publish endpoint.
+    assert "schema_publish: new Set" not in source
+    assert "schema_confirm: new Set" not in source
