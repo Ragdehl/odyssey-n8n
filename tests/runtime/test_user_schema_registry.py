@@ -896,3 +896,48 @@ def test_confirm_replay_reports_original_revision_after_later_schema_changes(
         "request_id": "second-ack",
         "revision": 2,
     }
+
+
+def test_confirm_prechecks_exact_published_size_before_queuing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A valid but oversized next revision must never strand the managed restart."""
+    import odyssey_runtime.user_schema_registry as schema_mod
+
+    user = registry(tmp_path)
+    proposed = user.preview(type_change(), expected_revision=0)
+    monkeypatch.setattr(schema_mod, "_MAX_BYTES", 160)
+    with pytest.raises(UserSchemaError, match="size limit"):
+        user.request_activation(type_change(), confirm(proposed))
+    assert user.snapshot()[0] == 0
+    assert not (tmp_path / "user-schema/pending-activation.json").exists()
+    assert not list((tmp_path / "user-schema/history").glob("*.json"))
+
+
+def test_completed_ack_replay_requires_original_change_and_base_revision(
+    tmp_path: Path,
+) -> None:
+    user = registry(tmp_path)
+    initial = type_change()
+    proposed = user.preview(initial, expected_revision=0)
+    confirmation = confirm(proposed, "same-click")
+    user.request_activation(initial, confirmation)
+    user.activate_pending_at_boot()
+    with pytest.raises(UserSchemaError, match="ALREADY_PUBLISHED"):
+        user.request_activation(type_change("Other Title", "other_book"), confirmation)
+    with pytest.raises(UserSchemaError, match="ALREADY_PUBLISHED"):
+        user.request_activation(
+            initial,
+            SchemaConfirmation(
+                confirmation.actor_id,
+                confirmation.request_id,
+                1,
+                confirmation.proposal_hash,
+            ),
+        )
+    assert user.request_activation(initial, confirmation) == {
+        "status": "active",
+        "request_id": "same-click",
+        "revision": 1,
+    }
+    assert user.snapshot()[0] == 1

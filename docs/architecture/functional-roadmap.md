@@ -54,9 +54,11 @@ y solicita salida gestionada por el `Restart=on-failure` existente. El bootstrap
 bajo lease exclusivo publica una sola vez el esquema y recompone índices;
 el estado por `request_id` informa `queued` o `active`, sin exponer otro actor.
 Sin editor de IA/UI, sin cambios Markdown, sin backfill, ni despliegue nuevo.
-Gate fuente inicial **2.120 Python + 204 JavaScript PASS**, con el
-nuevo caso de replay histórico focalizado adicional; repetir gate sobre SHA
-final. Pendiente auditoría independiente y CI. Siguientes: adopción DEV
+Gate oficial inicial **2.121 Python + 204 JavaScript PASS** y CI PASS en
+`83e38d8`. Una revisión independiente detectó dos defectos corregidos:
+prevalidar el tamaño de la publicación ANTES de aceptar el clic, y exigir
+cambio/revisión idénticos al reintentar una aprobación ya aplicada. Pruebas
+regresivas focalizadas PASS; verificar gate/CI del commit corregido. Siguientes: adopción DEV
 sintética por navegador solo cuando exista un diálogo real, editor
 conversacional, backfill E3 y descubrimiento bajo demanda para tipos. No declarar «APP E2E PASS» por
 pruebas locales HTTP/n8n.

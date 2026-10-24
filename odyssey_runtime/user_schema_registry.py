@@ -379,6 +379,8 @@ class UserSchemaRegistry:
                     if (
                         applied["actor_id"] == confirmation.actor_id
                         and applied["proposal_hash"] == confirmation.proposal_hash
+                        and confirmation.expected_revision == applied_revision - 1
+                        and state["changes"][applied_revision - 1] == canonical
                     ):
                         return {
                             "status": "active",
@@ -399,6 +401,10 @@ class UserSchemaRegistry:
                 "proposal_hash": digest,
                 "change": canonical,
             }
+            # A click MUST NOT be acknowledged unless the eventual committed
+            # registry is already guaranteed to fit. Otherwise the first
+            # restart would fail before serving and could repeat indefinitely.
+            self._build_publication_state(state, canonical, record)
             _atomic_publish(self._root / "pending-activation.json", record, immutable=False)
             return {
                 "status": "queued",
@@ -473,9 +479,11 @@ class UserSchemaRegistry:
             (self._root / "pending-activation.json").unlink()
             return True
 
-    def _write_publication_locked(
-        self, state: dict[str, Any], change: dict[str, Any], record: Mapping[str, Any]
-    ) -> None:
+    @staticmethod
+    def _build_publication_state(
+        state: dict[str, Any], change: dict[str, Any], record: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Exactly the same bounded immutable state for approval and publication."""
         updated = {
             **state,
             "revision": state["revision"] + 1,
@@ -491,6 +499,12 @@ class UserSchemaRegistry:
         }
         if len(_encoded(updated)) > _MAX_BYTES:
             raise UserSchemaError("Schema registry exceeds size limit")
+        return updated
+
+    def _write_publication_locked(
+        self, state: dict[str, Any], change: dict[str, Any], record: Mapping[str, Any]
+    ) -> None:
+        updated = self._build_publication_state(state, change, record)
         receipt = self._history / (f"r{updated['revision']:06d}-{_digest(updated)[:16]}.json")
         _atomic_publish(receipt, updated, immutable=True)
         _atomic_publish(self._root / "current.json", updated, immutable=False)

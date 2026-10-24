@@ -734,7 +734,12 @@ petición de activación en el directorio privado versionado (registro
 `pending-activation.json`). No cambia de esquema ni de índices en caliente.
 Una propuesta distinta, otra identidad, un hash modificado, la revisión vieja
 o dos aprobaciones paralelas no pasan el CAS; reintentar el mismo `request_id`
-y mismo actor conserva la respuesta, no genera otra publicación.
+exige además **el mismo cambio y revisión**, incluso después de activarse:
+no genera otra publicación ni falsea qué se aprobó. La confirmación calcula
+**antes del ACK** el estado publicado exacto y comprueba el límite físico de
+tamaño: no acepta una propuesta que dejaría el reinicio inservible.
+Ambos requisitos proceden de defectos P1/P2 hallados en la primera revisión
+independiente del PR #156 y reparados con regresiones específicas.
 
 Tras entregar la respuesta HTTP, el runtime inicia **apagado ordenado** por
 un hilo distinto: termina nuevas esperas, drena los handlers HTTP activos
