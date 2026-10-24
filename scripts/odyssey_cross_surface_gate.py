@@ -101,6 +101,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_direct_note_mutations.py",
     ),
     "work_sessions_shared": (
+        "tests/runtime/test_dev_hot_path_diagnostics.py",
         "tests/core/test_resolution.py",
         "tests/runtime/test_work_session_resolution_diagnostics.py",
         "tests/apps/tasks/test_work_sessions.py",

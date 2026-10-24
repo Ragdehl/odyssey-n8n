@@ -29,6 +29,7 @@ from odyssey_runtime.conversation_gateway import (
     FollowupIntent,
     OpenAIConversationGateway,
 )
+from odyssey_runtime.dev_hot_path_diagnostics import timed_dev_hot_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +93,8 @@ def evaluate_conversation_entry(
         }:
             last_status = final["status"]
     state = ConversationState(last_status=last_status)
-    decision = gateway.classify(original_message, state)
+    with timed_dev_hot_path(request_id, "conversation.classify"):
+        decision = gateway.classify(original_message, state)
     if decision.mode is ConversationMode.ROUTER:
         return ConversationEntry("ROUTER")
     if decision.mode is ConversationMode.CHAT:

@@ -171,6 +171,7 @@ from .conversation_entry import evaluate_conversation_entry
 from .conversation_error import explain_trusted_product_failure
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
+from .dev_hot_path_diagnostics import timed_dev_hot_path
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
 from .hybrid_group_compiler import compile_hybrid_candidate_bundle
 from .progress import ProductProgressStore
@@ -732,9 +733,10 @@ class RuntimeComposition:
             ):
                 if store is None or fingerprint is None:
                     raise ValueError("Conversational delivery requires durable replay")
-                conversational = self._conversation_product_reply(
-                    actor, user_request, request_id, store, fingerprint
-                )
+                with timed_dev_hot_path(request_id, "conversation.entry"):
+                    conversational = self._conversation_product_reply(
+                        actor, user_request, request_id, store, fingerprint
+                    )
                 if conversational is not None:
                     store.save(
                         request_id, fingerprint, conversational, _current_time()["timestamp"]
@@ -774,14 +776,15 @@ class RuntimeComposition:
                 else None,
                 None,
             )
-            response = self._finish_product_result(
-                result,
-                store,
-                fingerprint,
-                clarification_store,
-                actor=actor,
-                conversation_id=conversation_id,
-            )
+            with timed_dev_hot_path(request_id or "", "runtime.finish_product"):
+                response = self._finish_product_result(
+                    result,
+                    store,
+                    fingerprint,
+                    clarification_store,
+                    actor=actor,
+                    conversation_id=conversation_id,
+                )
             if self.full_source_mutation_guard:
                 assert store is not None and request_id is not None
                 # Never remove the claim until a durable immutable replay

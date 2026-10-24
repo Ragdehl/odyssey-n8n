@@ -105,6 +105,7 @@ from odyssey_core.whole_source_compiler import (
     compile_reviewed_operations,
 )
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
+from odyssey_runtime.dev_hot_path_diagnostics import timed_dev_hot_path
 from odyssey_runtime.routing import _aggregate as aggregate_verified_application_results
 from odyssey_runtime.whole_source_model_contract import (
     DEPENDENT_GRAPH_PARTITION_PROMPT,
@@ -1127,7 +1128,8 @@ class WholeSourceLightExecutor:
                 # the standard Task interpreter including lifecycle/sessions.
                 if self.progress is not None:
                     self.progress("action.delegate.started", {})
-                return self.task_delegate(source, delivery, actor)
+                with timed_dev_hot_path(delivery, "tasks.delegate"):
+                    return self.task_delegate(source, delivery, actor)
             if not self.task_create_batch_enabled:
                 self._observe_prewrite(delivery, "task_scope_rejected")
                 return self._abstain(delivery)

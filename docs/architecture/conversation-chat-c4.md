@@ -607,3 +607,49 @@ que contienen C1, n8n, almacenamiento y recorrido HTTP/UI.
 coste de decisiones lingüísticas **C1 + Router + dos atestaciones**, y unos
 intervalos no atribuidos que requieren telemetría más fina antes de optimizar.
 DEV, PROD y notas no se modificaron en esta investigación.
+
+### Diagnóstico optativo de la ruta caliente C1/P4/Tasks (24-10-2026, SOLO FUENTE)
+
+La investigación anterior identificó el intervalo `starting → routing.started`
+(~6 s en un caso caliente), sin separar clasificación C1 de preparación. También
+faltaba distinguir si el tiempo restante de P4/Tasks estaba dentro de la
+llamada efectiva al delegado. Se ha añadido **observabilidad opcional y
+sin semántica nueva**, reutilizando la composición y el `WholeSourceLightExecutor`
+existentes, sin modificar prompts, modelos, contratos de Core/E3 o rutas n8n:
+
+- `odyssey_runtime.dev_hot_path_diagnostics.timed_dev_hot_path` mide
+  exclusivamente las etapas `conversation.classify` (primera llamada C1),
+  `conversation.entry` (incluye carga de estado y hasta otras llamadas si se
+  selecciona CHAT/CONTEXT), `tasks.delegate` (Tasks + resolución, sin atestaciones
+  previas) y `runtime.finish_product` (proyección/recibo del resultado en la
+  ruta normal). Las primeras dos **se anidan** y no deben sumarse dos veces.
+  `tasks.delegate` contiene `tasks.interpretation` y `tasks.work_session_resolution`,
+  no se deben sumar como pasos independientes del tiempo de delegación.
+- **Doble activación DEV obligatoria:** `ODYSSEY_DEPLOYMENT_ENV=DEV` y
+  `ODYSSEY_HOT_PATH_TIMING_ENABLED=1`. Desactivada por defecto en todos los
+  despliegues y no activable en PROD aunque alguien defina solo la segunda
+  variable. El resto de caminos conserva resultados, excepciones y autorización.
+- Salida en `ODYSSEY_RUNTIME_ROOT/hot-path-timing.jsonl`, con archivo regular
+  `0600`, `O_NOFOLLOW`, tamaño limitado, ruta validada fuera de `/data/odyssey`;
+  solo `request_digest=sha256(id)[:16]`, etapa de vocabulario fijo, milisegundos
+  redondeados y bandera de fallo. No registra mensaje, texto, notas, IDs
+  canónicos, actor, respuesta/prompt de IA, contadores privados ni secretos.
+  El fichero es **diagnóstico**, no autoridad de ejecución, historial ni UI.
+  Un error de escritura del diagnóstico no interrumpe ni reintenta una acción.
+- Regresiones sintéticas: desactivación PROD/sin bandera, lista blanca,
+  `NaN`, bloqueo de enlaces simbólicos, permisos `0600`, no filtración de texto,
+  fallo del delegado y conservación de rutas CHAT/ROUTER y Task. Se incluyen en
+  el gate transversal existente. **25 pruebas específicas PASS** y gate global
+  **2.056 Python + 199 JavaScript PASS**, 12 grupos
+  (`/tmp/odyssey-hotpath-source-gate-20261024.json`, `.log`); revisión
+  independiente **sin defectos accionables** en
+  `/home/ragdehl/projects/.odyssey-agent-runs/hotpath-c1-tasks-20261024/independent-review.txt`.
+  La ejecución de CI y un E2E tras desplegar son comprobaciones distintas.
+  Para inspeccionar una distribución de latencia
+  REAL en DEV necesitará una autorización de despliegue propia con backup,
+  bandera temporal y ensayo browser→n8n→Core.
+
+**Estado de este bloque: solo código en `dev`; no se ha desplegado ni llamado
+al proveedor para esta instrumentación.** DEV sigue en `7cade85`, sin bandera
+de diagnóstico adicional; PROD intacto. Una duración aislada no es una mejora
+por sí misma: el objetivo es decidir una optimización posterior con evidencias.
