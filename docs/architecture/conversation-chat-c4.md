@@ -818,3 +818,31 @@ y vault sin modificaciones. Evidencia y harness controlado en
 prueba de seguridad y comportamiento por idioma/negación/multitarea, y
 separar los 4–6 s residuales en Core/n8n; no acelerar poniendo en riesgo
 las atestaciones independientes ni la autoridad E3.
+
+### Recuperación efectiva desde el botón de la UI, pérdida de respuesta (24-10-2026)
+
+Ensayo de aceptación **sin cambio de producto** sobre DEV `050f26f`:
+Chromium pulsó «Enviar» en la aplicación desplegada con petición WorkSession
+sintética inexistente. n8n, el modelo y Core/E3 completaron la primera
+petición en **26,461 s**, pero el proxy local devolvió **HTTP 503 artificial
+solo al navegador, después** de recibir el HTTP 200 auténtico y un recibo
+físico persistido. El navegador mostró «Reintentar»; se pulsó el control
+visible. El nuevo envío conservó **exactamente el mismo request ID** y n8n
+respondió HTTP 200 en **0,867 s**, en lugar de repetir la llamada al modelo.
+El hash SHA256 del recibo físico fue idéntico antes/después; se observó **un
+único globo de usuario** y respuesta final tras recuperar. Manifiestos SHA256
+de los **166 Markdown idénticos**. Ningún error de JS observado. La sesión
+sintética se confinó al proxy de DEV con allowlist de mensajes y cookie; no
+se alteró Cloudflare, permisos ni PROD. Carpeta privada de evidencias:
+`/home/ragdehl/projects/.odyssey-agent-runs/c4-ui-retry-acceptance-20261024/`,
+especialmente `validated-retry.json`, `c4-ui-retry.log`, comprobaciones SHA256.
+
+**Precisión importante:** la primera versión del harness esperaba el campo
+interno `delivery_replayed` en el resultado **proyectado por n8n**, aunque el
+contrato web actual deliberadamente no lo expone. La aserción originó un
+falso negativo (la entrega sí se recuperó); una validación posterior comprobó
+11 propiedades observables: ID idéntico, tiempos HTTP, recibo inmutable,
+control de UI, un solo mensaje de usuario, resultado visible y vault sin
+mutaciones. Esto acredita recuperación observable desde la interfaz, pero no
+permite inferir un `delivery_replayed` que el navegador nunca recibió.
+Tampoco acredita Cloudflare exterior o un fallo parcial natural desde Chromium.
