@@ -773,6 +773,36 @@ El endpoint de confirmación solo se puede conectar al diálogo visual después
 de una prueba real desde la app DEV, con usuario sintético, aceptación
 visible y lectura de notas/índices tras recargar. Nunca activar en PROD.
 
+**Quinto corte, interfaz fuente guiada (25-10-2026, NO interfaz final de IA).**
+Se incorpora un panel `Modelo de notas` bajo el botón «Crear nuevo tipo» y
+«Personalizar tipo», con acceso también por el evento de navegación de Chat.
+Formula preguntas sencillas de nombre, finalidad y datos deseados (o añade
+una propiedad a un tipo ordinario); el navegador genera un **borrador
+explícito** y se lo envía al `schema_preview` autenticado. El backend valida
+la propuesta y devuelve una tarjeta visible antes de habilitar el único botón
+«Confirmar este cambio». Todos los campos son consultables por construcción;
+el usuario no configura `filterable`. Los tipos App-owned no ofrecen editor.
+La respuesta de Notas cruza un validador JS por operación que rechaza estados
+inesperados, hash ausente, propiedades mal formadas o autoridad adicional.
+La confirmación solo se habilita si `schema_status` anuncia un opt-in DEV
+explícito; por defecto se muestra la vista previa **sin mutación**. Una
+respuesta incierta no se reenvía automáticamente: se conserva el `request_id`
+en sesión y se consulta `schema_status`, incluso después de recargar. Un
+`status=active` actualiza las capacidades/índices de Notas, **no significa
+que haya terminado un análisis retrospectivo**. El módulo está registrado en
+el inventario/ruta estática real de n8n (evita el fallo de módulo ES ausente).
+
+**No confundir este corte con conversación IA completada:** la guía es
+provisional y no interpreta todavía un relato libre, infiere tipos de dato
+semánticamente ni valida solapamientos conceptuales mediante un modelo. Un
+campo de texto libre se almacena como `string` salvo elección explícita de
+número/fecha completa en la vista de propiedad. Se indica en la pantalla de
+manera honesta; no se ha habilitado ni desplegado en DEV. Antes de aceptación
+final: integrar el prompt y proveedor aprobados con evaluación real de
+modelo, reajustar la propuesta desde lenguaje natural, completar el backfill
+E3 y descubrir entidades mencionadas solo tras crear un tipo nuevo; después
+hacer pruebas reales desde la app DEV, navegación/recarga y readback físico.
+
 **Pequeña corrección de UI:** la pantalla de Notas deja de mostrar al usuario
 el atributo técnico «filtrable» en las descripciones de propiedades y explica
 el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen

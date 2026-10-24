@@ -791,7 +791,11 @@ def test_actor_bound_schema_confirm_and_status_are_feature_gated(tmp_path: Path)
         runtime.notes("schema_status", {"request_id": "actor-confirmation"}, actor)["status"]
         == "queued"
     )
-    assert runtime.notes("schema_status", {}, actor) == {"revision": 0, "status": "ready"}
+    assert runtime.notes("schema_status", {}, actor) == {
+        "revision": 0,
+        "status": "ready",
+        "can_confirm": True,
+    }
     other = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
     with pytest.raises(UserSchemaError, match="not found"):
         runtime.notes("schema_status", {"request_id": "actor-confirmation"}, other)
@@ -867,8 +871,11 @@ def test_schema_confirmation_disabled_by_default_on_composed_runtime(tmp_path: P
         user_schema_revision=0,
     )
     actor = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
-    with pytest.raises(ValueError, match="unavailable"):
-        runtime.notes("schema_status", {}, actor)
+    assert runtime.notes("schema_status", {}, actor) == {
+        "status": "ready",
+        "revision": 0,
+        "can_confirm": False,
+    }
     with pytest.raises(ValueError, match="unavailable"):
         runtime.notes("schema_confirm", {}, actor)
 

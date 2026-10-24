@@ -53,15 +53,19 @@ pone un registro durable en `queued`; el servidor entrega ACK, drena peticiones
 y solicita salida gestionada por el `Restart=on-failure` existente. El bootstrap
 bajo lease exclusivo publica una sola vez el esquema y recompone índices;
 el estado por `request_id` informa `queued` o `active`, sin exponer otro actor.
-Sin editor de IA/UI, sin cambios Markdown, sin backfill, ni despliegue nuevo.
+Panel de Notas `Modelo de notas` integrado en fuente (guía provisional,
+no IA conversacional), con propuestas aditivas, vista previa validada,
+confirmación de clic explícito solo bajo flag DEV, estado recuperable tras
+recarga y rutas estáticas n8n. Gate fuente **2.123 Python + 214 JS PASS**,
+12 grupos. Sin backfill ni despliegue; auditoría/CI de la nueva UI pendientes.
 Gate oficial tras reparar auditoría **2.123 Python + 204 JavaScript PASS**
 (`5e3870a`, 12 grupos). Primera revisión independiente: P1 tamaño de la
 publicación no prevalidado, P2 replay de confirmación incompleto; ambos
 corregidos y con regresiones. Segunda revisión del commit corregido sin
 hallazgos; no pudo ejecutar pytest por entorno propio, pero gate local
-completo PASS. GitHub CI para `5e3870a` se verifica por separado. Siguientes: adopción DEV
-sintética por navegador solo cuando exista un diálogo real, editor
-conversacional, backfill E3 y descubrimiento bajo demanda para tipos. No declarar «APP E2E PASS» por
+completo PASS. GitHub CI para `5e3870a` se verifica por separado. Siguientes: evaluar prompt/modelo de la conversación de esquema;
+completar backfill E3 y descubrimiento bajo demanda de tipos; luego adopción
+DEV con prueba real de usuario en navegador. Este panel no equivale a IA. No declarar «APP E2E PASS» por
 pruebas locales HTTP/n8n.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;

@@ -628,3 +628,33 @@ button:disabled { opacity: .55; }
 
 /* Uncertain delivery and invalid optional telemetry remain inspectable from (i). */
 .flow-diagnostic-warning { margin: .45rem 0 .75rem; padding: .65rem .75rem; color: #f1c6be; background: #35262d; border: 1px solid #95626a; border-radius: .6rem; font-size: .78rem; line-height: 1.45; }
+
+/* Note-model proposal review: isolated from Chat/Notes scroll and disabled by default in PROD. */
+.notes-workspace { position: relative; }
+.schema-model-sheet {
+  position: absolute; inset: 0; z-index: 8; min-height: 0; overflow-y: auto;
+  padding: .9rem; background: #f9faff; border: 1px solid #d7dce9;
+  border-radius: .85rem; box-shadow: 0 1rem 2.5rem rgba(20,31,54,.16);
+}
+.schema-model-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.schema-model-header h2 { font-size: 1.05rem; margin: 0; }
+.schema-model-close { padding: .35rem .65rem; background: #e9ecf5; color: #3e4964; }
+.schema-model-intro { margin: .75rem 0; font-size: .84rem; line-height: 1.45; color: #495673; }
+.schema-model-message { margin: .65rem 0; color: #43547c; font-size: .8rem; line-height: 1.45; }
+.schema-model-form { display: grid; gap: .75rem; }
+.schema-model-field { display: grid; gap: .28rem; }
+.schema-model-label { font-size: .8rem; font-weight: 650; color: #46516a; }
+.schema-model-input { width: 100%; min-height: 2.65rem; padding: .65rem .7rem; border: 1px solid #cbd3e5; border-radius: .6rem; background: white; color: #172033; font: inherit; }
+textarea.schema-model-input { resize: vertical; min-height: 4.1rem; }
+.schema-model-input:focus-visible, .schema-model-button:focus-visible { outline: 2px solid #665ee8; outline-offset: 2px; }
+.schema-model-hint { font-size: .75rem; color: #6a7287; line-height: 1.35; }
+.schema-model-button { border: 0; border-radius: .58rem; min-height: 2.4rem; padding: .45rem .72rem; background: #e8ecf8; color: #30437c; cursor: pointer; }
+.schema-model-propose, .schema-model-confirm { background: #5754b2; color: white; }
+.schema-model-button:disabled { opacity: .5; cursor: default; }
+.schema-model-preview { display: grid; gap: .7rem; padding: .75rem; border: 1px solid #cad1e5; border-radius: .75rem; background: white; }
+.schema-model-preview-summary { display: grid; gap: .35rem; }
+.schema-model-preview-summary h3 { margin: 0; font-size: 1rem; }
+.schema-model-preview-summary p, .schema-model-confirmation { color: #58637a; font-size: .8rem; line-height: 1.4; }
+.schema-model-preview-summary ul { margin: .35rem 0; padding-left: 1.15rem; font-size: .8rem; }
+.schema-model-controls { display: flex; flex-wrap: wrap; gap: .45rem; }
+.schema-model-retry { margin-top: .65rem; }

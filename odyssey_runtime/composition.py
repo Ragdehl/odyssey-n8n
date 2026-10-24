@@ -1729,7 +1729,7 @@ class RuntimeComposition:
                 authenticated_actor is None
                 and external_principal is None
                 or self.user_schema_registry is None
-                or not self.schema_activation_enabled
+                or (operation == "schema_confirm" and not self.schema_activation_enabled)
             ):
                 raise ValueError("Schema activation is unavailable")
             from .user_schema_registry import SchemaConfirmation, UserSchemaRegistry
@@ -1739,7 +1739,11 @@ class RuntimeComposition:
                 raise ValueError("Schema activation registry is unavailable")
             if operation == "schema_status":
                 if not payload:
-                    return {"revision": registry.snapshot()[0], "status": "ready"}
+                    return {
+                        "revision": registry.snapshot()[0],
+                        "status": "ready",
+                        "can_confirm": self.schema_activation_enabled,
+                    }
                 if set(payload) != {"request_id"} or not isinstance(payload["request_id"], str):
                     raise ValueError("Schema activation status request is invalid")
                 return registry.activation_status(resolved_actor, payload["request_id"])

@@ -344,6 +344,7 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
         "client.js",
         "notes.js",
         "notes-client.js",
+        "schema-model.js",
         "calendar.js",
         "calendar-client.js",
         "progress.js",
@@ -446,6 +447,6 @@ def test_schema_information_explains_user_value_without_filterable_technical_tog
 
     source = (Path(__file__).resolve().parents[1] / "odyssey_web/notes.js").read_text()
     assert "const filtering = property.filterable" not in source
-    assert "Un tipo nuevo te ayuda a organizar y consultar cosas" in source
-    assert "Próximamente Odyssey te ayudará" in source
-    assert "revisar la propuesta antes de confirmarla" in source
+    assert "Organiza tus notas a tu manera" in source
+    assert "el asistente conversacional con IA está en desarrollo" in source
+    assert "createSchemaModel" in source

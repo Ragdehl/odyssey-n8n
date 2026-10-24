@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -33,13 +33,76 @@ export async function requestNotes({endpoint = "/api/notes", operation, payload 
   if (!response.ok || responseError) {
     throw new NotesRequestError("No se ha podido completar la consulta.", responseError);
   }
-  const result = validateNotesResponse(value);
+  const result = operation.startsWith("schema_")
+    ? validateSchemaOperationResponse(operation, value)
+    : validateNotesResponse(value);
   const finished = typeof monotonicImpl === "function" ? monotonicImpl() : null;
   if (result.operational && typeof started === "number" && Number.isFinite(started) &&
       typeof finished === "number" && Number.isFinite(finished) && finished >= started) {
     result.operational.browser_product_duration_ms = finished - started;
   }
   return result;
+}
+
+/** Validate actor-bound schema responses before any UI can display or confirm them.
+ *
+ * The private runtime intentionally returns no kind tag for these operations;
+ * classify by the operation the browser actually sent, not untrusted content.
+ */
+export function validateSchemaOperationResponse(operation, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      operation === "schema_confirm" && value.status !== "queued" && value.status !== "active") {
+    throw new NotesRequestError("Respuesta de modelo de notas inválida.");
+  }
+  const keys = Object.keys(value);
+  const expected = (names) => keys.length === names.length && keys.every((key) => names.includes(key));
+  const validRevision = (revision) => Number.isSafeInteger(revision) && revision >= 0 && revision <= 100;
+  const validId = (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id);
+  if (operation === "schema_status") {
+    if (value.status === "ready" && expected(["revision", "status", "can_confirm"]) &&
+        validRevision(value.revision) && typeof value.can_confirm === "boolean") {
+      return {kind: "schema_status", status: "ready", revision: value.revision, can_confirm: value.can_confirm};
+    }
+    if (["queued", "active"].includes(value.status) &&
+        expected(value.status === "queued" ? ["status", "request_id", "revision", "next_revision"] :
+          ["status", "request_id", "revision"]) && validId(value.request_id) && validRevision(value.revision) &&
+        (value.status !== "queued" || value.next_revision === value.revision + 1)) {
+      return {kind: "schema_status", ...value};
+    }
+  }
+  if (operation === "schema_preview" && expected([
+    "revision", "next_revision", "proposal_hash", "operation", "affected_type_id", "type_preview",
+  ]) && validRevision(value.revision) && value.next_revision === value.revision + 1 &&
+      /^[a-f0-9]{64}$/.test(value.proposal_hash) &&
+      ["add_type", "add_property", "edit_type_text", "edit_property_description"].includes(value.operation) &&
+      typeof value.affected_type_id === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value.affected_type_id)) {
+    const type = value.type_preview;
+    if (type && typeof type === "object" && !Array.isArray(type) &&
+        typeof type.id === "string" && type.id === value.affected_type_id &&
+        isText(type.name) && type.name.length <= 240 &&
+        isText(type.description) && type.description.length <= 2000 &&
+        Array.isArray(type.properties) && type.properties.length <= 40 &&
+        type.properties.every((property) => property && typeof property === "object" &&
+          /^[a-z][a-z0-9_]{0,63}$/.test(property.id ?? "") &&
+          isText(property.description) && isText(property.value_type) &&
+          typeof property.required === "boolean")) {
+      return {kind: "schema_preview", revision: value.revision,
+        next_revision: value.next_revision, proposal_hash: value.proposal_hash,
+        operation: value.operation, affected_type_id: value.affected_type_id,
+        type_preview: {id: type.id, name: type.name, description: type.description,
+          properties: type.properties.map((property) => ({id: property.id,
+            description: property.description, value_type: property.value_type,
+            required: property.required}))}};
+    }
+  }
+  if (operation === "schema_confirm" && expected(
+    value.status === "queued" ? ["status", "request_id", "revision", "next_revision"] :
+      ["status", "request_id", "revision"],
+  ) && validId(value.request_id) && validRevision(value.revision) &&
+      (value.status !== "queued" || value.next_revision === value.revision + 1)) {
+    return {kind: "schema_confirm", ...value};
+  }
+  throw new NotesRequestError("Respuesta de modelo de notas inválida.");
 }
 
 /** Validate the small public Notes response union before it reaches rendering code. */

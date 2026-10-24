@@ -117,6 +117,11 @@ for (const control of [calendarTab, notesCalendarTab, calendarHomeTab]) {
   });
 }
 document.addEventListener("odyssey:open-note", () => selectSurface("notes"));
+document.addEventListener("odyssey:open-schema-model", (event) => {
+  notesController?.showList?.();
+  selectSurface("notes");
+  void notesController?.openSchemaModel?.(event.detail ?? {kind: "new"});
+});
 document.addEventListener("odyssey:open-calendar-day", () => selectSurface("calendar"));
 selectSurface("chat");
 
