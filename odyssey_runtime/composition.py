@@ -2811,6 +2811,9 @@ class RuntimeComposition:
         )
 
 
+_USER_SCHEMA_PROTECTED_ROOT = Path("/data/odyssey")
+
+
 def build_runtime_from_environment() -> RuntimeComposition:
     """Build all schema consumers and derived indexes under one boot-time lease.
 
@@ -2819,14 +2822,35 @@ def build_runtime_from_environment() -> RuntimeComposition:
     safely before exposing the stale runtime; neither can rebuild indexes
     against a live newer generation.
     """
-    if os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0") != "1":
+    schema_enabled = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
+    if schema_enabled not in {"0", "1"}:
+        raise ValueError("User schema registry flag is invalid")
+    if schema_enabled == "0":
         return _build_runtime_from_environment_unlocked()
     if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
         raise ValueError("User schema registry is restricted to DEV until its E2E adoption")
     from .user_schema_registry import UserSchemaRegistry
 
+    vault_root = _path_env("ODYSSEY_VAULT_ROOT", "/data/odyssey/vault")
+    runtime_root = _path_env("ODYSSEY_RUNTIME_ROOT", "/data/odyssey/runtime")
     pending_root = _path_env("ODYSSEY_PENDING_ROOT", "/data/odyssey/state/pending")
     state_root = _path_env("ODYSSEY_STATE_ROOT", str(pending_root.parent))
+    embedding_cache = _path_env(
+        "ODYSSEY_EMBEDDING_CACHE", "/data/odyssey/runtime/phase11a-benchmark/embedding-cache"
+    )
+    # This preflight MUST precede mkdir/chmod/lease creation: a rejected DEV
+    # experiment must never create files under PROD even on invalid settings.
+    protected = _USER_SCHEMA_PROTECTED_ROOT.resolve()
+    if any(
+        path.resolve().is_relative_to(protected)
+        for path in (vault_root, runtime_root, pending_root, state_root, embedding_cache)
+    ):
+        raise ValueError("DEV user schema cannot access production storage")
+    if state_root.is_symlink():
+        raise ValueError("User schema state root must not be a symlink")
+    # Legacy composition creates the pending root later, but the schema lease
+    # needs the state parent now on a first DEV boot.
+    state_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     with UserSchemaRegistry.bootstrap_lease(state_root):
         return _build_runtime_from_environment_unlocked()
 

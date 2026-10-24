@@ -713,6 +713,15 @@ durante el apagado. Se ha verificado con HTTP local real y respuesta retardada.
 Este protocolo es intencionalmente conservador: **no implementa** reinicio
 transparente.
 
+**Segunda revisión independiente (boot guard):** antes de adquirir el lease
+el factory comprueba el entorno de despliegue, flag, raíces DEV del vault,
+índices, pendientes, estado y caché, y que ninguna resuelva bajo
+`/data/odyssey`. Si el estado DEV todavía no existe, lo crea **solo después**
+de pasar la validación. Esto evita cualquier efecto secundario sobre PROD
+cuando una configuración DEV es rechazada; pruebas sobre raíces sintéticas
+cubren `ODYSSEY_LIGHT_SOURCE_V1` activo/inactivo, un primer arranque y un
+estado enlazado por symlink. No se ejecutaron pruebas sobre datos PROD.
+
 **Límite operativo todavía pendiente:** esto es una *primitiva de seguridad*,
 **no** una activación UX automática. Una confirmación desde la interfaz no puede
 llamar `publish` con el servidor activo; deberá quedar validada y encolada en

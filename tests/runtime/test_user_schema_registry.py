@@ -579,6 +579,19 @@ def test_matching_existing_property_type_can_be_reused(tmp_path: Path) -> None:
     assert user.preview(change, expected_revision=0).effective_schema["schema_version"] == 3
 
 
+def _set_dev_schema_test_paths(monkeypatch: pytest.MonkeyPatch, root: Path) -> None:
+    monkeypatch.setenv("ODYSSEY_USER_SCHEMA_ENABLED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+    for key, path in (
+        ("ODYSSEY_STATE_ROOT", root),
+        ("ODYSSEY_VAULT_ROOT", root.parent / "vault"),
+        ("ODYSSEY_RUNTIME_ROOT", root.parent / "runtime"),
+        ("ODYSSEY_PENDING_ROOT", root / "pending"),
+        ("ODYSSEY_EMBEDDING_CACHE", root.parent / "embedding-cache"),
+    ):
+        monkeypatch.setenv(key, str(path))
+
+
 def test_full_runtime_factory_acquires_exclusive_lease_before_any_index_rebuild(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -588,9 +601,7 @@ def test_full_runtime_factory_acquires_exclusive_lease_before_any_index_rebuild(
     user = registry(tmp_path)
     proposal = user.preview(type_change(), expected_revision=0)
     confirmation = confirm(proposal)
-    monkeypatch.setenv("ODYSSEY_USER_SCHEMA_ENABLED", "1")
-    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
-    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(tmp_path))
+    _set_dev_schema_test_paths(monkeypatch, tmp_path)
     inside = []
 
     def fake_build():
@@ -615,9 +626,7 @@ def test_failed_bootstrap_releases_generation_lease(
 ) -> None:
     from odyssey_runtime import composition
 
-    monkeypatch.setenv("ODYSSEY_USER_SCHEMA_ENABLED", "1")
-    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
-    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(tmp_path))
+    _set_dev_schema_test_paths(monkeypatch, tmp_path)
 
     def fail_boot():
         raise RuntimeError("synthetic index rebuild failure")
@@ -630,3 +639,51 @@ def test_failed_bootstrap_releases_generation_lease(
     proposal = user.preview(type_change(), expected_revision=0)
     user.publish(type_change(), confirm(proposal))
     assert user.snapshot()[0] == 1
+
+
+@pytest.mark.parametrize("light_source", ["0", "1"])
+def test_dev_bootstrap_denies_protected_paths_before_any_filesystem_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, light_source: str
+) -> None:
+    from odyssey_runtime import composition
+
+    protected = tmp_path / "protected-storage"
+    unsafe_root = protected / "state"
+    _set_dev_schema_test_paths(monkeypatch, tmp_path / "safe-state")
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(unsafe_root))
+    monkeypatch.setenv("ODYSSEY_LIGHT_SOURCE_V1", light_source)
+    monkeypatch.setattr(composition, "_USER_SCHEMA_PROTECTED_ROOT", protected)
+    monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", lambda: 1)
+    with pytest.raises(ValueError, match="production storage"):
+        composition.build_runtime_from_environment()
+    assert not protected.exists()  # no mkdir, chmod, or lock was attempted
+
+
+def test_first_schema_bootstrap_creates_missing_safe_dev_state_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from odyssey_runtime import composition
+
+    fresh = tmp_path / "new-dev" / "state"
+    _set_dev_schema_test_paths(monkeypatch, fresh)
+    monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", lambda: "OK")
+    assert not fresh.exists()
+    assert composition.build_runtime_from_environment() == "OK"
+    assert fresh.is_dir()
+    assert (fresh / "user-schema/.runtime-generation.lock").is_file()
+
+
+def test_schema_bootstrap_rejects_symlink_root_without_following_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from odyssey_runtime import composition
+
+    target = tmp_path / "trusted"
+    target.mkdir()
+    alias = tmp_path / "symlink-state"
+    alias.symlink_to(target, target_is_directory=True)
+    _set_dev_schema_test_paths(monkeypatch, alias)
+    monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", lambda: "BAD")
+    with pytest.raises(ValueError, match="symlink"):
+        composition.build_runtime_from_environment()
+    assert not (target / "user-schema").exists()
