@@ -712,6 +712,43 @@ contratos, independencia de revisores, validación de fuentes y E3 Writer.
   cuerpos, nombres, entidades y secretos. `n8nRoundTripMs` puede contener
   Core/IA y nunca se suma a `p4.source`. Tampoco demuestra Cloudflare externo.
 
-**Estado de implementación de sondas: código fuente pendiente de adopción DEV
-hasta confirmar CI y el despliegue exacto.** El último deploy verificado sigue
-siendo `02daa74`, interruptor retirado tras la anterior sesión y PROD intacto.
+**Adopción y ensayo REAL, 24-10-2026:** fuente `050f26f6ce9330bbb7c694fdf8b21db2feb067ac`, CI `40100600431` **PASS**;
+backups SHA256 verificados de vault/estado (~2,4 MB) y volumen n8n (~113 MB),
+rollback `02daa74`. Desplegado en **DEV** con checkout, marker, runtime/n8n y
+rutas `MATCH`. Chromium interactuó en la página real mediante proxy de sesión
+sintética local, n8n y proveedor auténticos. Tres acciones por el formulario,
+una Chat social y dos peticiones de WorkSession inexistente (IDs diferentes),
+respuesta visible HTTP 200 y persistencia tras recarga. Tiempos observados:
+
+| Solicitud | UI total | n8n HTTP total | C1 entry (incluye classify) | P4 source | Router | scope primaria | scope independiente | Task delegate |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Chat social | 13,36 s | 12,07 s | 10,44 s | — | — | — | — | — |
+| WorkSession 1 | 37,89 s | 37,40 s | 2,34 s | 31,02 s | 2,99 s | 3,06 s | 3,00 s | 21,80 s |
+| WorkSession 2 | 30,99 s | 30,50 s | 1,39 s | 23,22 s | 8,09 s | 2,35 s | 2,20 s | 8,76 s |
+
+`p4.source` contiene Router, ambas atestaciones y `tasks.delegate`:
+residual P4 no incluido en esas llamadas ≈**0,17 / 1,82 s** en Tasks 1/2.
+`n8n HTTP total` incluye C1, P4, recibo, Core/puente/otras etapas:
+residual no atribuido directamente ≈**4,01 / 5,86 s** en Tasks; **no**
+es una medición aislada del coste propio de n8n. Diferencia botón UI→respuesta
+frente a HTTP n8n ≈**0,49 / 0,49 s** para Tasks, y 1,29 s para Chat.
+El C1 aislado costó 5,36 / 2,33 / 1,38 s: está **incluido** en
+`conversation.entry` (10,44 / 2,34 / 1,39 s). Las dos atestaciones
+se ejecutaron realmente; no hay justificación para quitarlas. La volatilidad
+del Router (2,99→8,09 s) y del delegado (21,80→8,76 s) impide atribuir
+causalidad a una única optimización tras dos muestras.
+
+Verificación: **166 Markdown sin cambio byte a byte en el hash SHA256 del
+manifiesto antes/después**, log de cuatro claves fijas en modo **0600**, cero
+spans fallidos; bandera temporal retirada con reinicio DEV saludable y PROD
+HTTP 200. El navegador reportó `pass=true` y recarga correcta, pero el proxy
+local siguió reportando tres errores accesorios `proxy_error:Error` sin causa
+caracterizada y **NO** se validó sesión Cloudflare Access autenticada exterior.
+No representa aceptación E2E global de C4 ni pruebas de escritura/casos parciales.
+Resultados y script de navegador con controles de sesión en
+`/home/ragdehl/projects/.odyssey-agent-runs/p4-breakdown-dev-adoption-20261024/`.
+
+**Decisión respaldada:** no optimizar la UI ni eliminar atestaciones de fuente.
+Siguiente diagnóstico acotado: subetapas Tasks/WorkSession con varios casos
+comparables, intervalo Core↔n8n residual (4–6 s) y variabilidad de Router.
+No cambiar modelo, prompts o autoridad E3 sin nueva evaluación real específica.
