@@ -2411,3 +2411,68 @@ def test_index_refresh_coordinator_coalesces_pending_ids_and_fails_closed() -> N
     with pytest.raises(RuntimeError, match="derived index refresh failed"):
         coordinator.wait_until_clean()
     assert calls == [("a",), ("b", "c")]
+
+
+def test_http_schema_preview_is_read_only_authenticated_and_bounded(tmp_path: Path) -> None:
+    """Browser/n8n-facing Notes envelope reuses identity and never grants publication."""
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    user = OdysseyUser.new()
+    base = json.loads(
+        (Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+    )
+    request = {
+        "operation": "schema_preview",
+        "expected_revision": 0,
+        "change": {
+            "operation": "add_property",
+            "type_id": "person",
+            "property": {
+                "id": "occupation",
+                "value_type": "string",
+                "description": "Profession when known.",
+            },
+        },
+    }
+    server = _test_server(runtime)
+    try:
+
+        def send(body: dict) -> tuple[int, dict]:
+            connection = HTTPConnection("127.0.0.1", server.server_port)
+            connection.request("POST", "/notes", body=json.dumps(body))
+            response = connection.getresponse()
+            result = response.status, json.loads(response.read())
+            connection.close()
+            return result
+
+        status, response = send(request)
+        assert status == 400 and response == {"error": "invalid notes request"}
+        status, response = send(
+            {**request, "authenticated_actor": {"stable_user_id": user.stable_user_id}}
+        )
+        assert status == 200
+        assert response["revision"] == 0
+        assert response["type_preview"]["properties"][0]["id"] == "occupation"
+        assert not (tmp_path / "user-schema/current.json").exists()
+        for payload in (
+            {**request, "expected_revision": True},
+            {**request, "approved": True},
+            {**request, "authenticated_actor": {"stable_user_id": "bad"}},
+        ):
+            status, response = send(payload)
+            assert status == 400 and response == {"error": "invalid notes request"}
+        assert registry.snapshot()[0] == 0
+    finally:
+        server.shutdown()
+        server.server_close()

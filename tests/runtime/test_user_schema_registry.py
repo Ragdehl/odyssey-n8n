@@ -395,3 +395,75 @@ def test_missing_current_pointer_with_retained_history_fails_closed(tmp_path: Pa
     (tmp_path / "user-schema/current.json").unlink()
     with pytest.raises(UserSchemaError, match="pointer is missing"):
         registry(tmp_path).snapshot()
+
+
+def test_runtime_notes_schema_preview_needs_authenticated_actor_and_does_not_publish(
+    tmp_path: Path,
+) -> None:
+    from odyssey_core.identity_boundary import AuthenticatedActorContext, OdysseyUser
+    from odyssey_runtime.composition import RuntimeComposition
+
+    user = registry(tmp_path)
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: None,
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=user,
+    )
+    data = {"change": property_change(), "expected_revision": 0}
+    with pytest.raises(ValueError, match="authenticated actor"):
+        runtime.notes("schema_preview", data)
+    actor = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
+    result = runtime.notes("schema_preview", data, actor)
+    assert result["affected_type_id"] == "person"
+    assert result["revision"] == 0
+    assert result["next_revision"] == 1
+    assert result["type_preview"]["properties"][0]["id"] == "occupation"
+    assert len(result["proposal_hash"]) == 64
+    assert "metadata_fields" not in result
+    assert user.snapshot()[0] == 0
+    assert not (tmp_path / "user-schema/current.json").exists()
+    with pytest.raises(ValueError, match="payload"):
+        runtime.notes("schema_preview", {**data, "approved": True}, actor)
+    with pytest.raises(ValueError, match="payload"):
+        runtime.notes("schema_preview", {**data, "expected_revision": True}, actor)
+    with pytest.raises(UserSchemaError, match="REVISION_STALE"):
+        runtime.notes("schema_preview", {**data, "expected_revision": 5}, actor)
+    assert user.snapshot()[0] == 0
+
+
+def test_runtime_notes_schema_preview_feature_disabled_is_closed(tmp_path: Path) -> None:
+    from odyssey_core.identity_boundary import AuthenticatedActorContext, OdysseyUser
+    from odyssey_runtime.composition import RuntimeComposition
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: None,
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+    )
+    actor = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
+    with pytest.raises(ValueError, match="disabled"):
+        runtime.notes("schema_preview", {"change": type_change(), "expected_revision": 0}, actor)
+
+
+def test_cross_type_property_filter_value_mismatch_is_rejected_at_preview(tmp_path: Path) -> None:
+    """A single global filter ID cannot silently mix string and numeric values."""
+    user = registry(tmp_path)
+    first = user.preview(property_change("string"), expected_revision=0)
+    user.publish(property_change("string"), confirm(first))
+    conflicting = type_change()
+    conflicting["type"]["properties"][0]["id"] = "occupation"
+    with pytest.raises(UserSchemaError, match="query fields"):
+        user.preview(conflicting, expected_revision=1)
+    assert user.snapshot()[0] == 1
+
+
+def test_cross_type_same_filter_contract_remains_supported(tmp_path: Path) -> None:
+    """Reusing a field ID with the same value contract is not inherently unsafe."""
+    user = registry(tmp_path)
+    p = user.preview(property_change(), expected_revision=0)
+    user.publish(property_change(), confirm(p))
+    kind = type_change()
+    kind["type"]["properties"][0].update({"id": "occupation", "value_type": "string"})
+    q = user.preview(kind, expected_revision=1)
+    assert q.effective_schema["schema_version"] == 3

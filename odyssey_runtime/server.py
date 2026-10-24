@@ -266,6 +266,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     operation = payload.pop("operation", None)
                     if operation not in {
                         "capabilities",
+                        "schema_preview",
                         "query",
                         "intelligent",
                         "detail",

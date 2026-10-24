@@ -2,15 +2,14 @@
 
 **Normative current-state entry point.** Verify these snapshots against Git and the actual DEV/PROD deployment marker before acting. **Historical checkpoints are NOT active decisions:** the complete previous 1,957-line roadmap is preserved at [October 2026 roadmap archive](functional-roadmap-history-20261023.md).
 
-## Current — 24 October 2026: next phase agreed, DESIGN ONLY
+## Current — 24 October 2026: schema evolution source development
 
 **User-approved next direction: conversational evolution of note types and
 properties**. Full agreement, reuse inventory, implementation order and
 acceptance contract: [Post-UI2 conversational schema evolution, section C](post-ui2-note-creation-and-schema-evolution.md#contrato-de-implementación-acordado-para-la-siguiente-fase-24-10-2026).
 This is the *canonical next-step owner*; historic C4 latency/worktree/audit
 notes below are NOT current blockers or an instruction to restart old work.
-No functional implementation, migration, note mutation or deployment has been
-made for this new phase.
+Source-only isolated work is underway; no note mutation or deployment has been made for this phase.
 
 - **UI:** one AI-assisted «Modelo de notas» surface in Notes, deep-link from
   Chat; card preview, human-readable reasons, no technical «filterable» toggle;
@@ -34,30 +33,24 @@ made for this new phase.
   rollback and backward compatibility first. Use bounded parallel *analysis*,
   durable resumable job progress and Core/E3 guarded *writes*; fix global index
   wait behavior before promising nonblocking unrelated queries.
-- **Start next turn:** architecture challenge + narrow reuse inventory, then
-  implement the minimal compatible schema registry and typed deterministic
-  proposal/validation in DEV with tests; next add AI/chat + UI preview,
-  background property filling, on-demand type discovery, and partial-date
-  end-to-end example. Prompt tests must use real selected models only with
-  bounded authorized provider gate; actual acceptance is deployed Chromium
-  with synthetic data and physical Markdown readback. **No PROD or private
-  vault changes without specific authorization.**
+- **Next:** design/verify one consistent activation contract for Core, Apps,
+  index readers and Writer (no mutable shared-schema shortcut); then trusted
+  actor-bound approval, AI-guided UI, resumable property backfill and
+  type-discovery-on-demand. Real-model gate and deployed synthetic-user UI E2E
+  before adoption. PROD/private vault changes remain out of scope.
 
-**First implementation slice — internal compatible registry (24-10-2026):**
-Work isolated in `feat/user-schema-registry-v1`, NOT merged or deployed.
-Introduced `UserSchemaRegistry` with strictly additive user type/property
-proposals, text-only compatible editing, default-queryable optional fields,
-version/CAS/hash/confirmation receipt, atomic private state and immutable
-history; composes existing base schema v3 + app-owned types without changing
-Markdown. Application-owned and legacy-not-writable types are rejected. The
-optional DEV-only `ODYSSEY_USER_SCHEMA_ENABLED=1` loads a boot-time snapshot;
-**default disabled**, PROD never enabled. Focused registry tests **33 PASS**; official full gate **2,091 Python +
-199 JS PASS** (12 groups including the new registry tests), Ruff and docs
-validation PASS. No provider calls or user-note mutations. Scope incomplete by design: no authenticated UI/API/prompt,
-hot reload, migration, backfill or real deployed user-browser acceptance yet.
-Next implement trusted actor-scoped confirmation and consistent hot publishing
-before presenting the creation buttons as working. See the implementation
-checkpoint in the design document.
+**Schema evolution — source implementation in PR #155 (24-10-2026):**
+Unmerged, disabled-by-default DEV-only feature. Slice 1 implemented user-schema
+registry, compatible additive type/property preview, text edits, v3 compatibility,
+revision/CAS/history, owner-safe app exclusions and deterministic queryability;
+2,091 Python + 199 JS original gate PASS. Slice 2 adds **read-only authenticated
+schema_preview** through the existing Notes/n8n route and validates cross-type
+filter collisions before publication. Neither a confirm/publish API nor a live schema swap exists. The tested
+source passes the official gate: **2,097 Python + 202 JavaScript PASS**
+(including executable n8n schema-preview validator tests). Synthetic data only;
+no DEV/PROD deploy or real user notes. Next: coherent Core/Apps/index schema activation plus trusted UI
+confirmation, then conversational editor and backfills. See detailed [checkpoint
+and trust limits](post-ui2-note-creation-and-schema-evolution.md#primera-entrega-técnica-registro-compatible-24-10-2026-rama-de-desarrollo).
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than

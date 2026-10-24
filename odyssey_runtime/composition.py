@@ -505,6 +505,9 @@ class RuntimeComposition:
     pending_recorder: PendingWorkRepository | None = None
     vault_repository: VaultRepository | None = None
     canonical_schema: dict[str, object] | None = None
+    # User schema proposals are read-only in the active runtime. Confirm/publish
+    # requires a separate authenticated rollout and consistent schema/index swap.
+    user_schema_registry: object | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1719,6 +1722,45 @@ class RuntimeComposition:
             and self.await_index_refresh is not None
         ):
             self.await_index_refresh()
+        if operation == "schema_preview":
+            # The runtime's ordinary fallback `odyssey-runtime` is not an
+            # authenticated user. Previewing schema changes requires one
+            # validated principal even though this operation is read-only.
+            if authenticated_actor is None and external_principal is None:
+                raise ValueError("Schema preview requires authenticated actor")
+            if self.user_schema_registry is None:
+                raise ValueError("User schema preview is disabled")
+            if set(payload) != {"change", "expected_revision"}:
+                raise ValueError("Schema preview payload is invalid")
+            expected_revision = payload["expected_revision"]
+            change = payload["change"]
+            if (
+                not isinstance(expected_revision, int)
+                or isinstance(expected_revision, bool)
+                or expected_revision < 0
+                or not isinstance(change, dict)
+            ):
+                raise ValueError("Schema preview payload is invalid")
+            from .user_schema_registry import UserSchemaRegistry
+
+            if not isinstance(self.user_schema_registry, UserSchemaRegistry):
+                raise ValueError("Schema registry is unavailable")
+            proposal = self.user_schema_registry.preview(
+                change, expected_revision=expected_revision
+            )
+            kind = next(
+                item
+                for item in proposal.effective_schema["types"]
+                if item["id"] == proposal.affected_type_id
+            )
+            return {
+                "revision": proposal.revision,
+                "next_revision": proposal.next_revision,
+                "proposal_hash": proposal.proposal_hash,
+                "operation": proposal.operation,
+                "affected_type_id": proposal.affected_type_id,
+                "type_preview": kind,
+            }
         if operation == "capabilities":
             if payload:
                 raise ValueError("Notes capabilities payload is invalid")
@@ -2804,6 +2846,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         base_schema = json.load(schema_file)
     application_schema_extensions = (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
     schema = compose_application_schema(base_schema, application_schema_extensions)
+    user_schema_registry = None
     user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
     if user_schema_flag not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
@@ -2812,9 +2855,10 @@ def build_runtime_from_environment() -> RuntimeComposition:
             raise ValueError("User schema registry is restricted to DEV until its E2E adoption")
         from odyssey_runtime.user_schema_registry import UserSchemaRegistry
 
-        _, schema = UserSchemaRegistry(
+        user_schema_registry = UserSchemaRegistry(
             state_root, base_schema, application_schema_extensions
-        ).snapshot()
+        )
+        _, schema = user_schema_registry.snapshot()
     # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
     # UI publication/hot-reload boundary is deliberately NOT available yet.
 
@@ -5271,6 +5315,7 @@ def build_runtime_from_environment() -> RuntimeComposition:
         pending_recorder=pending_recorder,
         vault_repository=repository,
         canonical_schema=schema,
+        user_schema_registry=user_schema_registry,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from odyssey_apps.schema_extensions import ApplicationSchemaExtension, compose_application_schema
+from odyssey_core.context import _filter_definitions
 from odyssey_core.filtering import supported_filter_operators
 from scripts.validate_note_schema import ID_PATTERN, SchemaValidationError, validate_schema
 
@@ -181,8 +182,12 @@ class UserSchemaRegistry:
             schema, _ = _apply(schema, item)
         try:
             validate_schema(schema)
-        except SchemaValidationError as error:
-            raise UserSchemaError("Composed schema is invalid") from error
+            # Retrieval has a single field-ID registry across note types: a
+            # collision of value types/constraints cannot be deferred until a
+            # user first filters or runs an index rebuild.
+            _filter_definitions(schema)
+        except (SchemaValidationError, ValueError) as error:
+            raise UserSchemaError("Composed schema or query fields are invalid") from error
         return schema
 
     def snapshot(self) -> tuple[int, dict[str, Any]]:

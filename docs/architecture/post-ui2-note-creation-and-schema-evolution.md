@@ -661,6 +661,26 @@ actor-bound deberá verificar la sesión, solicitud original y confirmación
 real antes de invocar `publish`. Los recibos son evidencia para recuperación,
 no implementan todavía una reversión automática de notas ni publicaciones.
 
+**Segundo corte de integración, solo lectura:** `/notes` y el nodo
+Notes de n8n aceptan `schema_preview`, que obliga a suministrar la identidad
+ya validada del actor/principal y acepta únicamente `change` y
+`expected_revision`. Devuelve revisión, hash exacto de propuesta y la tarjeta
+del tipo afectado; no expone todas las definiciones ni publica cambios.
+Propuestas sin identidad, con flags ocultos, revisión obsoleta o sin soporte de
+consulta se rechazan. Las pruebas ejecutan el **código JS real del validador
+n8n** y la ruta HTTP Python con actor sintético: gate final **2.097 Python +
+202 JavaScript PASS**. La interfaz actual conserva sus botones informativos
+sin presentar todavía este preview como editor conversacional completado.
+
+**Hallazgo de integración:** `schema` aparece en múltiples cierres de Core,
+Apps, `NotesQueryService`, escritor e índices construidos al arrancar.
+Mutar el diccionario en caliente o reemplazar solo `canonical_schema` sería
+inconsistente. La siguiente fase requiere **una transición coherente** para
+todos los consumidores (o una frontera explícita de reinicio seguro antes de
+habilitar publicación), con control de concurrencia, validación del esquema
+candidate sobre el vault de prueba y reconstrucción/reutilización justificada
+de índices. Nunca habilitar un endpoint de confirmación sin ese contrato.
+
 **No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
 previa conectadas, publicación caliente con barrera de índices, migración de
 esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,
