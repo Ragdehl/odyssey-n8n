@@ -695,6 +695,24 @@ reconfigurarlos a medias. Prueba Linux entre procesos y fake `serve()` real
 comprueban exclusión durante servicio y reinicio correcto; los recibos futuros
 huérfanos tampoco se ignoran silenciosamente.
 
+**Corrección tras revisión independiente (P1/P2):** el validador rechaza
+colisiones de identificadores con tipos o restricciones incompatibles **aunque
+el campo previo no fuera filtrable** (`calendar_day.date` es la regresión). El
+bloqueo comienza **antes** de construir Core o reconstruir índices:
+`build_runtime_from_environment` toma un lease **exclusivo durante todo el
+bootstrap**; después el servidor toma su lease compartido y comprueba que la
+revisión de arranque siga vigente. Ninguna publicación puede coincidir con un
+arranque/servicio; no hay escrituras de índices desde una generación obsoleta.
+Si el bootstrap falla, libera el lock. Si una publicación gana el intervalo
+entre creación y servicio, ese runtime viejo se niega a atender peticiones.
+El digest del esquema de `verified_metadata_catalog._from_complete_index`
+además impide reutilizar índices de filtros incompatibles. El servicio HTTP también espera a que finalicen los hilos de peticiones
+existentes antes de liberar su lease (`daemon_threads=False`,
+`block_on_close=True`); una petición lenta no permite colar una revisión nueva
+durante el apagado. Se ha verificado con HTTP local real y respuesta retardada.
+Este protocolo es intencionalmente conservador: **no implementa** reinicio
+transparente.
+
 **Límite operativo todavía pendiente:** esto es una *primitiva de seguridad*,
 **no** una activación UX automática. Una confirmación desde la interfaz no puede
 llamar `publish` con el servidor activo; deberá quedar validada y encolada en

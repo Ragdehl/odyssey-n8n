@@ -453,7 +453,7 @@ def test_cross_type_property_filter_value_mismatch_is_rejected_at_preview(tmp_pa
     user.publish(property_change("string"), confirm(first))
     conflicting = type_change()
     conflicting["type"]["properties"][0]["id"] = "occupation"
-    with pytest.raises(UserSchemaError, match="query fields"):
+    with pytest.raises(UserSchemaError, match="existing type metadata|query fields"):
         user.preview(conflicting, expected_revision=1)
     assert user.snapshot()[0] == 1
 
@@ -546,3 +546,87 @@ else:
         )
         assert result.stdout.strip() == "SCHEMA_RUNTIME_ACTIVE"
         assert user.snapshot()[0] == 0
+
+
+def test_nonfilterable_calendar_field_id_cannot_gain_incompatible_filter_type(
+    tmp_path: Path,
+) -> None:
+    """Calendar Day `date` is not filterable but still contributes physical index rows."""
+    user = registry(tmp_path)
+    person_date = {
+        "operation": "add_property",
+        "type_id": "person",
+        "property": {"id": "date", "value_type": "integer", "description": "An invalid date field"},
+    }
+    with pytest.raises(UserSchemaError, match="conflicts with existing type metadata"):
+        user.preview(person_date, expected_revision=0)
+    new_type = type_change("My Year", "year_book")
+    new_type["type"]["properties"] = [
+        {"id": "date", "value_type": "string", "description": "Incompatible date text"}
+    ]
+    with pytest.raises(UserSchemaError, match="conflicts with existing type metadata"):
+        user.preview(new_type, expected_revision=0)
+    assert user.snapshot()[0] == 0
+
+
+def test_matching_existing_property_type_can_be_reused(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    change = {
+        "operation": "add_property",
+        "type_id": "person",
+        "property": {"id": "date", "value_type": "date", "description": "Date of a person event."},
+    }
+    assert user.preview(change, expected_revision=0).effective_schema["schema_version"] == 3
+
+
+def test_full_runtime_factory_acquires_exclusive_lease_before_any_index_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stale bootstrap must not rebuild source-shared indexes during publication."""
+    from odyssey_runtime import composition
+
+    user = registry(tmp_path)
+    proposal = user.preview(type_change(), expected_revision=0)
+    confirmation = confirm(proposal)
+    monkeypatch.setenv("ODYSSEY_USER_SCHEMA_ENABLED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(tmp_path))
+    inside = []
+
+    def fake_build():
+        inside.append("building-indexes")
+        with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
+            user.publish(type_change(), confirmation)
+        with pytest.raises(UserSchemaError, match="SCHEMA_PUBLICATION_IN_PROGRESS"):
+            with user.serving_generation(0):
+                pass
+        return "synthetic-assembled-runtime"
+
+    monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", fake_build)
+    assert composition.build_runtime_from_environment() == "synthetic-assembled-runtime"
+    assert inside == ["building-indexes"]
+    assert user.snapshot()[0] == 0
+    user.publish(type_change(), confirmation)
+    assert user.snapshot()[0] == 1
+
+
+def test_failed_bootstrap_releases_generation_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from odyssey_runtime import composition
+
+    monkeypatch.setenv("ODYSSEY_USER_SCHEMA_ENABLED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+    monkeypatch.setenv("ODYSSEY_STATE_ROOT", str(tmp_path))
+
+    def fail_boot():
+        raise RuntimeError("synthetic index rebuild failure")
+
+    monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", fail_boot)
+    with pytest.raises(RuntimeError, match="synthetic index rebuild failure"):
+        composition.build_runtime_from_environment()
+    # A crashed bootstrap cannot hold the activation lock indefinitely.
+    user = registry(tmp_path)
+    proposal = user.preview(type_change(), expected_revision=0)
+    user.publish(type_change(), confirm(proposal))
+    assert user.snapshot()[0] == 1

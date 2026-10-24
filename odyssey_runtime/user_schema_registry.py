@@ -107,6 +107,25 @@ class UserSchemaRegistry:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
 
+    @staticmethod
+    @contextmanager
+    def bootstrap_lease(state_root: Path) -> Iterator[None]:
+        """Protect the ENTIRE runtime composition, including shared index writes.
+
+        Unlike serving_generation, no expected revision exists yet at this
+        point; the factory takes its snapshot under an *exclusive* lease so
+        other servers, publishers and simultaneous index rebuilds cannot run.
+        """
+        if not state_root.is_dir() or state_root.is_symlink():
+            raise UserSchemaError("Trusted schema state root is unavailable")
+        path = state_root.resolve() / "user-schema"
+        if path.is_symlink():
+            raise UserSchemaError("Schema registry path is a symlink")
+        path.mkdir(mode=0o700, exist_ok=True)
+        path.chmod(0o700)
+        with _runtime_generation_lease(path, serving=False):
+            yield
+
     @contextmanager
     def _generation_lease(self, *, serving: bool) -> Iterator[None]:
         """Share a generation while serving; publication needs exclusive ownership.
@@ -115,22 +134,8 @@ class UserSchemaRegistry:
         Without that boundary a published v4 user registry could silently
         diverge from the Core/Apps/Notes schema captured by a running process.
         """
-        lock = self._root / ".runtime-generation.lock"
-        if lock.is_symlink():
-            raise UserSchemaError("Schema runtime lease is a symlink")
-        fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-        try:
-            try:
-                mode = fcntl.LOCK_SH if serving else fcntl.LOCK_EX
-                fcntl.flock(fd, mode | fcntl.LOCK_NB)
-            except BlockingIOError as error:
-                raise UserSchemaError(
-                    "SCHEMA_PUBLICATION_IN_PROGRESS" if serving else "SCHEMA_RUNTIME_ACTIVE"
-                ) from error
+        with _runtime_generation_lease(self._root, serving=serving):
             yield
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            os.close(fd)
 
     @contextmanager
     def serving_generation(self, expected_revision: int) -> Iterator[None]:
@@ -346,6 +351,7 @@ def _apply(schema: dict[str, Any], change: dict[str, Any]) -> tuple[dict[str, An
             raise UserSchemaError("Too many or invalid type properties")
         for field in raw["properties"]:
             _new_property(field, universal_ids)
+            _ensure_existing_property_contract(schema, field)
         if len(types) >= _MAX_TYPES:
             raise UserSchemaError("Too many types")
         if any(x["id"] == raw["id"] or _label(x["name"]) == _label(raw["name"]) for x in types):
@@ -358,6 +364,7 @@ def _apply(schema: dict[str, Any], change: dict[str, Any]) -> tuple[dict[str, An
         _keys(change, {"operation", "type_id", "property"})
         owner = _ordinary_type(types, change["type_id"])
         _new_property(change["property"], universal_ids)
+        _ensure_existing_property_contract(schema, change["property"])
         field = change["property"]
         if any(p["id"] == field["id"] for p in owner["properties"]):
             raise UserSchemaError("Property already exists")
@@ -413,6 +420,23 @@ def _new_property(field: Any, universal_ids: set[str]) -> None:
         raise UserSchemaError("Property type has no supported query operators")
     if not supported_filter_operators({"value_type": field["value_type"]}):
         raise UserSchemaError("Property cannot be queried")
+
+
+def _ensure_existing_property_contract(schema: dict[str, Any], new: dict[str, Any]) -> None:
+    """Reject conflicting field IDs EVEN on non-filterable existing App/Core fields.
+
+    The indexed attribute reader projects values of all physical note types;
+    a new filter field named like a non-filterable calendar value can corrupt
+    the shared index if its type differs. The filter-only registry misses it.
+    """
+    for note_type in schema["types"]:
+        for existing in note_type["properties"]:
+            if existing["id"] != new["id"]:
+                continue
+            if existing["value_type"] != new["value_type"] or existing.get(
+                "constraints", {}
+            ) != new.get("constraints", {}):
+                raise UserSchemaError("Property conflicts with existing type metadata")
 
 
 def _normal_property(field: dict[str, Any]) -> dict[str, Any]:
@@ -481,3 +505,24 @@ def _atomic_publish(destination: Path, payload: dict[str, Any], *, immutable: bo
     finally:
         if temp_name is not None:
             Path(temp_name).unlink(missing_ok=True)
+
+
+@contextmanager
+def _runtime_generation_lease(root: Path, *, serving: bool) -> Iterator[None]:
+    """Share one symlink-safe file lock for runtime bootstrap, serve and publication."""
+    lock = root / ".runtime-generation.lock"
+    if lock.is_symlink():
+        raise UserSchemaError("Schema runtime lease is a symlink")
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            mode = fcntl.LOCK_SH if serving else fcntl.LOCK_EX
+            fcntl.flock(fd, mode | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise UserSchemaError(
+                "SCHEMA_PUBLICATION_IN_PROGRESS" if serving else "SCHEMA_RUNTIME_ACTIVE"
+            ) from error
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)

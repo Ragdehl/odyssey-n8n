@@ -96,6 +96,12 @@ def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765
     # The lock is held while there can be any HTTP requests against the
     # frozen generation. Publication is exclusively allowed once it stops.
     with lease, ThreadingHTTPServer((host, port), handler) as server:
+        # Python's ThreadingHTTPServer normally daemonizes request threads.
+        # On shutdown that would release our generation lease while an old
+        # Core/Git mutation or index read could still be in flight. Wait for
+        # every active request to finish before letting any publisher in.
+        server.daemon_threads = False
+        server.block_on_close = True
         server.serve_forever()
 
 

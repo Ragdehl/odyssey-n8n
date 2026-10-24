@@ -64,6 +64,16 @@ of new types without claiming creation works. Third-slice source gate
 pending publication + orchestrated zero-confusion activation and browser UI;
 do not enable public schema mutations or alter PROD/private vault.
 
+**Review findings repaired (same PR #155):** independent code review
+found incompatible IDs colliding with **nonfilterable** type properties and
+a generation lease acquired too late, after index writes. Source corrected:
+new property checks every existing type definition; startup holds an exclusive
+lease around the entire factory/index rebuilding, then serving checks the
+frozen generation under a shared lifetime lease. HTTP shutdown waits for
+in-flight worker requests before the lease is released. Targeted tests pass;
+corrected source full gate **2,108 Python + 202 JavaScript PASS**;
+independent post-fix verification still required before merge.
+
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
 trusting these static values. Two merged clean C4 audit-only branches/worktrees

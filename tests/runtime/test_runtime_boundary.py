@@ -2526,6 +2526,8 @@ def test_actual_serve_holds_schema_generation_lease_until_shutdown(
             return False
 
         def serve_forever(self):
+            assert self.daemon_threads is False
+            assert self.block_on_close is True
             if user.snapshot()[0] == 0:
                 with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
                     user.publish(change, confirmation)
@@ -2557,3 +2559,110 @@ def registry_for_restarted_runtime(tmp_path: Path, base_schema: dict):
     return UserSchemaRegistry(
         tmp_path, base_schema, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION)
     )
+
+
+def test_runtime_lease_outlives_an_inflight_http_request_during_shutdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publication may not start after shutdown while an old Writer request still runs."""
+    from http.server import ThreadingHTTPServer
+
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_runtime import server as runtime_server
+    from odyssey_runtime.user_schema_registry import (
+        SchemaConfirmation,
+        UserSchemaError,
+        UserSchemaRegistry,
+    )
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    change = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Book",
+            "description": "Book entity",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    preview = registry.preview(change, expected_revision=0)
+    confirmation = SchemaConfirmation("synthetic-actor", "shutdown-race", 0, preview.proposal_hash)
+    in_request = threading.Event()
+    release_request = threading.Event()
+    listening = threading.Event()
+    created: list[ThreadingHTTPServer] = []
+    faults: list[Exception] = []
+    receipts: list[tuple[int, dict]] = []
+
+    class SlowRuntime:
+        user_schema_registry = registry
+        user_schema_revision = 0
+
+        def notes(self, operation, payload, actor, principal):
+            del payload, actor, principal
+            assert operation == "capabilities"
+            in_request.set()
+            if not release_request.wait(6):
+                raise RuntimeError("synthetic Notes handler was not released")
+            return {"status": "ok"}
+
+    class RecordedServer(ThreadingHTTPServer):
+        def __init__(self, address, handler):
+            super().__init__(address, handler)
+            created.append(self)
+            listening.set()
+
+    monkeypatch.setattr(runtime_server, "ThreadingHTTPServer", RecordedServer)
+    # Production serve correctly forbids port zero. Reserve an ephemeral local
+    # test port, release it, then bind through the real serve() entry point.
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        test_port = probe.getsockname()[1]
+
+    def run_server():
+        try:
+            runtime_server.serve(SlowRuntime(), host="127.0.0.1", port=test_port)
+        except Exception as error:
+            faults.append(error)
+
+    thread = threading.Thread(target=run_server, daemon=True)
+    thread.start()
+    assert listening.wait(3)
+    server = created[0]
+
+    def client():
+        try:
+            connection = HTTPConnection("127.0.0.1", server.server_port, timeout=8)
+            connection.request("POST", "/notes", body=json.dumps({"operation": "capabilities"}))
+            reply = connection.getresponse()
+            receipts.append((reply.status, json.loads(reply.read())))
+            connection.close()
+        except Exception as error:
+            faults.append(error)
+
+    client_thread = threading.Thread(target=client, daemon=True)
+    client_thread.start()
+    try:
+        assert in_request.wait(3)
+        shutdown_thread = threading.Thread(target=server.shutdown, daemon=True)
+        shutdown_thread.start()
+        shutdown_thread.join(timeout=3)
+        assert not shutdown_thread.is_alive()  # serve_forever has already stopped
+        assert thread.is_alive()  # server_close still waits for the HTTP handler
+        with pytest.raises(UserSchemaError, match="SCHEMA_RUNTIME_ACTIVE"):
+            registry.publish(change, confirmation)
+    finally:
+        release_request.set()
+        server.shutdown()
+        client_thread.join(timeout=6)
+        thread.join(timeout=6)
+    assert not thread.is_alive()
+    assert not faults
+    assert receipts == [(200, {"status": "ok"})]
+    registry.publish(change, confirmation)
+    assert registry.snapshot()[0] == 1

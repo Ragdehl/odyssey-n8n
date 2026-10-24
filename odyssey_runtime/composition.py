@@ -2812,6 +2812,26 @@ class RuntimeComposition:
 
 
 def build_runtime_from_environment() -> RuntimeComposition:
+    """Build all schema consumers and derived indexes under one boot-time lease.
+
+    The serving boundary then acquires a shared lease and checks revision.
+    If a publisher wins the tiny gap after this factory returns, serve fails
+    safely before exposing the stale runtime; neither can rebuild indexes
+    against a live newer generation.
+    """
+    if os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0") != "1":
+        return _build_runtime_from_environment_unlocked()
+    if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
+        raise ValueError("User schema registry is restricted to DEV until its E2E adoption")
+    from .user_schema_registry import UserSchemaRegistry
+
+    pending_root = _path_env("ODYSSEY_PENDING_ROOT", "/data/odyssey/state/pending")
+    state_root = _path_env("ODYSSEY_STATE_ROOT", str(pending_root.parent))
+    with UserSchemaRegistry.bootstrap_lease(state_root):
+        return _build_runtime_from_environment_unlocked()
+
+
+def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     """Build the production Core composition from environment-owned configuration.
 
     Returns:
