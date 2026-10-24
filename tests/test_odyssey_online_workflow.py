@@ -454,4 +454,12 @@ def test_schema_preview_webhook_is_read_only_and_keeps_n8n_actor_injection() -> 
     )
     # This operation is neither a Note mutation nor a public schema-publish endpoint.
     assert "schema_publish: new Set" not in source
-    assert "schema_confirm: new Set" not in source
+    assert (
+        "schema_confirm: new Set(['operation', 'change', 'expected_revision', 'proposal_hash', 'request_id'])"
+        in source
+    )
+    assert "schema_status: new Set(['operation', 'request_id'])" in source
+    assert (
+        "forwarded.proposal_hash = schema_proposal_hash; forwarded.request_id = request_id"
+        in source
+    )

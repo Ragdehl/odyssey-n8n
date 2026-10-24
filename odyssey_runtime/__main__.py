@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from .composition import build_runtime_from_environment
-from .server import serve
+from .server import SchemaActivationRestartRequested, serve
 
 
 def main() -> None:
@@ -16,7 +16,12 @@ def main() -> None:
         port = int(os.environ.get("ODYSSEY_RUNTIME_PORT", "8765"))
     except ValueError as error:
         raise ValueError("ODYSSEY_RUNTIME_PORT must be an integer") from error
-    serve(runtime, host=host, port=port)
+    try:
+        serve(runtime, host=host, port=port)
+    except SchemaActivationRestartRequested:
+        # The DEV unit already uses Restart=on-failure. Avoid spawning a
+        # competing runtime in-process or asking the user to restart anything.
+        raise SystemExit(75) from None
 
 
 if __name__ == "__main__":

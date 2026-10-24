@@ -11,6 +11,7 @@ from contextlib import nullcontext
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Event, Thread
 from time import perf_counter
 from typing import Any
 from urllib.parse import urlsplit
@@ -30,6 +31,11 @@ from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
 from .serialization import operational_to_response
 from .user_schema_registry import UserSchemaRegistry
+
+
+class SchemaActivationRestartRequested(RuntimeError):
+    """An acknowledged schema confirmation requests a managed service restart."""
+
 
 MAX_REQUEST_BYTES = 1_048_576
 _REQUEST_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}\Z")
@@ -102,7 +108,30 @@ def serve(runtime: RuntimeComposition, host: str = "127.0.0.1", port: int = 8765
         # every active request to finish before letting any publisher in.
         server.daemon_threads = False
         server.block_on_close = True
-        server.serve_forever()
+        activation_trigger = Event()
+        server.schema_activation_trigger = activation_trigger
+        stopping = Event()
+
+        def shutdown_on_confirmation() -> None:
+            # shutdown() must be called from a DIFFERENT thread from
+            # serve_forever(). The ACK is sent before the trigger is set.
+            while not stopping.is_set():
+                if activation_trigger.wait(0.1):
+                    server.shutdown()
+                    return
+
+        watcher = Thread(target=shutdown_on_confirmation, name="schema-activation", daemon=True)
+        watcher.start()
+        try:
+            server.serve_forever()
+        finally:
+            stopping.set()
+            watcher.join(timeout=2)
+    # HTTP server context drained every in-flight request; the old schema
+    # generation lock has now been released. systemd Restart=on-failure will
+    # create one fresh composition with the confirmed pending change.
+    if activation_trigger.is_set():
+        raise SchemaActivationRestartRequested("Approved schema activation requires restart")
 
 
 def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
@@ -284,6 +313,8 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     if operation not in {
                         "capabilities",
                         "schema_preview",
+                        "schema_confirm",
+                        "schema_status",
                         "query",
                         "intelligent",
                         "detail",
@@ -320,6 +351,10 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                             },
                         }
                     self._write_json(HTTPStatus.OK, notes_response)
+                    if operation == "schema_confirm" and notes_response.get("status") == "queued":
+                        trigger = getattr(self.server, "schema_activation_trigger", None)
+                        if trigger is not None:
+                            trigger.set()
                 except StaleCursorError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
                 except (

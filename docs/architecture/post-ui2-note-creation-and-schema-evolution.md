@@ -722,17 +722,48 @@ cuando una configuración DEV es rechazada; pruebas sobre raíces sintéticas
 cubren `ODYSSEY_LIGHT_SOURCE_V1` activo/inactivo, un primer arranque y un
 estado enlazado por symlink. No se ejecutaron pruebas sobre datos PROD.
 
-**Límite operativo todavía pendiente:** esto es una *primitiva de seguridad*,
-**no** una activación UX automática. Una confirmación desde la interfaz no puede
-llamar `publish` con el servidor activo; deberá quedar validada y encolada en
-estado duradero (idempotencia y permiso explícito), mientras el coordinador
-realiza arranque/reconstrucción de la nueva generación y publica un estado
-consistente. La frontera operativa debe preservar chat y navegación tanto como
-sea posible y evitar detener un proceso con escrituras en curso. Aún no existe
-el flujo de orquestación, por lo que no habilitar `schema_confirm` o simular
-«creado» antes de un recibo activo y leído de vuelta. No declarar sin pruebas
-que un reinicio es invisible para el usuario. No altera el contrato de notas
-físicas v3 ni las escrituras E3.
+**Cuarto corte — confirmación autorizada + reactivación gestionada (25-10-2026,
+source-only, por probar en DEV):** `schema_confirm` desde el circuito
+Notes/n8n existente recibe un **clic explícito** sobre la propuesta ya
+previsualizada: `change`, revisión, hash SHA256 de esa propuesta y
+`request_id`, asociado al actor autenticado que n8n inyecta. Una puerta
+adicional `ODYSSEY_SCHEMA_CONFIRM_ENABLED=1`, solo con
+`ODYSSEY_USER_SCHEMA_ENABLED=1` y entorno `DEV`, impide habilitarlo en un
+despliegue accidental. El servidor confirma **«queued»**, guardando una única
+petición de activación en el directorio privado versionado (registro
+`pending-activation.json`). No cambia de esquema ni de índices en caliente.
+Una propuesta distinta, otra identidad, un hash modificado, la revisión vieja
+o dos aprobaciones paralelas no pasan el CAS; reintentar el mismo `request_id`
+y mismo actor conserva la respuesta, no genera otra publicación.
+
+Tras entregar la respuesta HTTP, el runtime inicia **apagado ordenado** por
+un hilo distinto: termina nuevas esperas, drena los handlers HTTP activos
+(incluidos E3/Git), suelta el lease de generación y sale con código 75.
+El `Restart=on-failure` que **ya existe** en la unidad systemd DEV ejecuta un
+nuevo proceso; no se añade servicio ni permiso. Durante el próximo bootstrap,
+con lock exclusivo, Core valida de nuevo la solicitud, la publica a través
+del registro versionado/recibos y reconstruye los índices y todas las
+composiciones con esa revisión. Si el proceso cae tras aceptar el clic y antes
+del cierre ordenado, ese mismo bootstrap también encuentra la solicitud
+persistida. `schema_status` ofrece la revisión actual (sin identificador) o
+el estado de **ese** `request_id` solo a su actor: `queued`/`active`.
+«active» no equivale a que el posterior rellenado retrospectivo haya
+terminado; esa etapa tendrá estados y contadores propios.
+
+**Límites de seguridad y producto:** el servidor debe estar ejecutándose bajo
+el supervisor configurado (`Restart=on-failure`); el API está desactivado por
+defecto y aún NO hay botón conectado ni la conversación de IA. La validación
+actual comprueba la estructura del esquema, filtros compatibles, identidad y
+revisión, **no hace todavía un backfill ni un examen completo del corpus
+antes del clic**. No se promete cero interrupción: el reinicio puede hacer
+que una consulta próxima observe indisponibilidad temporal; el cliente debe
+consultar `schema_status` por `request_id` y esperar la generación activa.
+Una caída entre el recibo histórico nuevo y el cambio de puntero mantiene
+el mecanismo existente de **fallo cerrado** y exige recuperación explícita;
+no se debe afirmar recuperación automática de cualquier punto de fallo.
+El endpoint de confirmación solo se puede conectar al diálogo visual después
+de una prueba real desde la app DEV, con usuario sintético, aceptación
+visible y lectura de notas/índices tras recargar. Nunca activar en PROD.
 
 **Pequeña corrección de UI:** la pantalla de Notas deja de mostrar al usuario
 el atributo técnico «filtrable» en las descripciones de propiedades y explica
@@ -740,7 +771,7 @@ el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen
 informativos («Próximamente»), no simulan una operación de IA publicada.
 
 **No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
-previa conectadas, publicación caliente con barrera de índices, migración de
+previa conectadas, aceptación real con navegador en DEV, migración de
 esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,
 confirmación por lotes, fecha parcial o aceptación E2E del navegador en DEV.
 No debe presentarse esta entrega de infraestructura como una función utilizable

@@ -2666,3 +2666,106 @@ def test_runtime_lease_outlives_an_inflight_http_request_during_shutdown(
     assert receipts == [(200, {"status": "ok"})]
     registry.publish(change, confirmation)
     assert registry.snapshot()[0] == 1
+
+
+def test_http_authenticated_confirmation_drains_server_and_activates_at_next_boot(
+    tmp_path: Path,
+) -> None:
+    """Real local HTTP: one explicit approval -> queued -> restart -> active, no note writes."""
+    import socket
+    from threading import Event
+
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime import server as runtime_server
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    new_type = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Book",
+            "description": "A book",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    proposal = registry.preview(new_type, expected_revision=0)
+    actor = OdysseyUser.new().stable_user_id
+    ready = Event()
+    errors = []
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+        user_schema_revision=0,
+        schema_activation_enabled=True,
+    )
+
+    def host():
+        try:
+            ready.set()
+            runtime_server.serve(runtime, host="127.0.0.1", port=port)
+        except runtime_server.SchemaActivationRestartRequested:
+            return
+        except Exception as error:
+            errors.append(error)
+
+    listener = threading.Thread(target=host, daemon=True)
+    listener.start()
+    try:
+        # Probe the actual HTTP entrypoint until its bound port is ready.
+        for _ in range(100):
+            try:
+                connection = HTTPConnection("127.0.0.1", port, timeout=2)
+                connection.request("GET", "/healthz")
+                response = connection.getresponse()
+                assert response.status == 200
+                response.read()
+                connection.close()
+                break
+            except OSError:
+                threading.Event().wait(0.02)
+        else:
+            pytest.fail("Synthetic runtime did not bind")
+        body = {
+            "operation": "schema_confirm",
+            "change": new_type,
+            "expected_revision": 0,
+            "request_id": "click-one",
+            "proposal_hash": proposal.proposal_hash,
+            "authenticated_actor": {"stable_user_id": actor},
+        }
+        connection = HTTPConnection("127.0.0.1", port, timeout=6)
+        connection.request("POST", "/notes", body=json.dumps(body))
+        response = connection.getresponse()
+        outcome = json.loads(response.read())
+        assert response.status == 200
+        assert outcome["status"] == "queued"
+        connection.close()
+    finally:
+        listener.join(timeout=6)
+    assert not listener.is_alive(), "Runtime must stop after queued schema confirmation"
+    assert not errors
+    assert registry.snapshot()[0] == 0
+    assert registry.activation_status(actor, "click-one")["status"] == "queued"
+    # This mirrors systemd's Restart=on-failure -> factory exclusive boot lease.
+    with UserSchemaRegistry.bootstrap_lease(tmp_path):
+        assert registry.activate_pending_at_boot() is True
+        loaded_revision, loaded_schema = registry.snapshot()
+    assert loaded_revision == 1
+    assert any(kind["id"] == "book" for kind in loaded_schema["types"])
+    assert registry.activation_status(actor, "click-one") == {
+        "status": "active",
+        "request_id": "click-one",
+        "revision": 1,
+    }
+    assert not (tmp_path / "user-schema/pending-activation.json").exists()

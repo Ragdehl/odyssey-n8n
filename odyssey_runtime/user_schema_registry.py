@@ -277,6 +277,8 @@ class UserSchemaRegistry:
         # then means an active runtime, not a rival publication in progress.
         with self._locked(), self._generation_lease(serving=False):
             state = self._read()
+            if self._pending() is not None:
+                raise UserSchemaError("SCHEMA_ACTIVATION_ALREADY_PENDING")
             known = {x["request_id"]: x for x in state["confirmations"]}
             if confirmation.request_id in known:
                 raise UserSchemaError("SCHEMA_REQUEST_ALREADY_PUBLISHED")
@@ -286,32 +288,212 @@ class UserSchemaRegistry:
             if digest != confirmation.proposal_hash:
                 raise UserSchemaError("SCHEMA_PROPOSAL_CHANGED")
             effective = self._compose([*state["changes"], canonical])
-            updated = {
-                **state,
-                "revision": state["revision"] + 1,
-                "changes": [*state["changes"], canonical],
-                "confirmations": [
-                    *state["confirmations"],
-                    {
-                        "actor_id": confirmation.actor_id,
-                        "request_id": confirmation.request_id,
-                        "proposal_hash": digest,
-                    },
-                ],
-            }
-            if len(_encoded(updated)) > _MAX_BYTES:
-                raise UserSchemaError("Schema registry exceeds size limit")
-            receipt = self._history / (f"r{updated['revision']:06d}-{_digest(updated)[:16]}.json")
-            _atomic_publish(receipt, updated, immutable=True)
-            _atomic_publish(self._root / "current.json", updated, immutable=False)
+            self._write_publication_locked(
+                state,
+                canonical,
+                {
+                    "actor_id": confirmation.actor_id,
+                    "request_id": confirmation.request_id,
+                    "proposal_hash": digest,
+                },
+            )
             return SchemaPreview(
                 state["revision"],
-                updated["revision"],
+                state["revision"] + 1,
                 digest,
                 canonical["operation"],
                 _affected(canonical),
                 effective,
             )
+
+    def _pending(self) -> dict[str, Any] | None:
+        """Read one durable, unactivated user confirmation (under registry lock)."""
+        path = self._root / "pending-activation.json"
+        if path.is_symlink():
+            raise UserSchemaError("Schema activation queue is a symlink")
+        if not path.exists():
+            return None
+        try:
+            if path.stat().st_size > 20000:
+                raise UserSchemaError("Schema activation is oversized")
+            item = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeError) as error:
+            raise UserSchemaError("Schema activation cannot be read") from error
+        if (
+            not isinstance(item, dict)
+            or set(item)
+            != {"actor_id", "request_id", "expected_revision", "proposal_hash", "change"}
+            or not isinstance(item["actor_id"], str)
+            or not isinstance(item["request_id"], str)
+            or not isinstance(item["proposal_hash"], str)
+            or not isinstance(item["expected_revision"], int)
+            or isinstance(item["expected_revision"], bool)
+            or not isinstance(item["change"], dict)
+        ):
+            raise UserSchemaError("Schema activation format is invalid")
+        if (
+            _digest({"revision": item["expected_revision"], "change": item["change"]})
+            != item["proposal_hash"]
+        ):
+            raise UserSchemaError("Schema activation proposal changed")
+        return item
+
+    def request_activation(
+        self, change: Mapping[str, Any], confirmation: SchemaConfirmation
+    ) -> dict[str, object]:
+        """Durably queue one explicit authenticated confirmation; never update the active schema.
+
+        A trusted caller MUST bind actor_id to the authenticated principal and
+        demand a confirmation action distinct from AI-generated suggestions.
+        """
+        if not isinstance(confirmation, SchemaConfirmation) or not all(
+            isinstance(x, str) and x and len(x) <= 128
+            for x in (confirmation.actor_id, confirmation.request_id, confirmation.proposal_hash)
+        ):
+            raise UserSchemaError("Trusted schema confirmation required")
+        if not isinstance(confirmation.expected_revision, int) or isinstance(
+            confirmation.expected_revision, bool
+        ):
+            raise UserSchemaError("Schema activation revision is invalid")
+        canonical = _roundtrip(change)
+        with self._locked():
+            state = self._read()
+            pending = self._pending()
+            if pending is not None:
+                if (
+                    pending["request_id"] == confirmation.request_id
+                    and pending["actor_id"] == confirmation.actor_id
+                    and pending["change"] == canonical
+                    and pending["proposal_hash"] == confirmation.proposal_hash
+                    and pending["expected_revision"] == confirmation.expected_revision
+                ):
+                    return {
+                        "status": "queued",
+                        "request_id": confirmation.request_id,
+                        "revision": confirmation.expected_revision,
+                        "next_revision": confirmation.expected_revision + 1,
+                    }
+                raise UserSchemaError("SCHEMA_ACTIVATION_ALREADY_PENDING")
+            for applied_revision, applied in enumerate(state["confirmations"], start=1):
+                if applied["request_id"] == confirmation.request_id:
+                    if (
+                        applied["actor_id"] == confirmation.actor_id
+                        and applied["proposal_hash"] == confirmation.proposal_hash
+                    ):
+                        return {
+                            "status": "active",
+                            "request_id": confirmation.request_id,
+                            "revision": applied_revision,
+                        }
+                    raise UserSchemaError("SCHEMA_REQUEST_ALREADY_PUBLISHED")
+            if confirmation.expected_revision != state["revision"]:
+                raise UserSchemaError("SCHEMA_REVISION_STALE")
+            digest = _digest({"revision": state["revision"], "change": canonical})
+            if digest != confirmation.proposal_hash:
+                raise UserSchemaError("SCHEMA_PROPOSAL_CHANGED")
+            self._compose([*state["changes"], canonical])
+            record = {
+                "actor_id": confirmation.actor_id,
+                "request_id": confirmation.request_id,
+                "expected_revision": confirmation.expected_revision,
+                "proposal_hash": digest,
+                "change": canonical,
+            }
+            _atomic_publish(self._root / "pending-activation.json", record, immutable=False)
+            return {
+                "status": "queued",
+                "request_id": confirmation.request_id,
+                "revision": state["revision"],
+                "next_revision": state["revision"] + 1,
+            }
+
+    def activation_status(self, actor_id: str, request_id: str) -> dict[str, object]:
+        """Read only one's own queued/completed request without exposing proposal data."""
+        if (
+            not isinstance(actor_id, str)
+            or not actor_id
+            or not isinstance(request_id, str)
+            or not request_id
+        ):
+            raise UserSchemaError("Schema activation identity is invalid")
+        with self._locked():
+            state = self._read()
+            pending = self._pending()
+            if pending is not None and pending["request_id"] == request_id:
+                if pending["actor_id"] != actor_id:
+                    raise UserSchemaError("Schema activation not found")
+                return {
+                    "status": "queued",
+                    "request_id": request_id,
+                    "revision": pending["expected_revision"],
+                    "next_revision": pending["expected_revision"] + 1,
+                }
+            for index, applied in enumerate(state["confirmations"], start=1):
+                if applied["request_id"] == request_id:
+                    if applied["actor_id"] != actor_id:
+                        raise UserSchemaError("Schema activation not found")
+                    return {"status": "active", "request_id": request_id, "revision": index}
+        raise UserSchemaError("Schema activation not found")
+
+    def activate_pending_at_boot(self) -> bool:
+        """Run only with the bootstrap's exclusive generation lease held.
+
+        Compatible change was previously validated and explicitly approved.
+        Revalidate it against current state and write through the existing
+        atomic immutable-receipt publisher; safe to retry after clean restart.
+        """
+        with self._locked():
+            pending = self._pending()
+            if pending is None:
+                return False
+            state = self._read()
+            if pending["expected_revision"] != state["revision"]:
+                # Crash after publication but before consuming the pending
+                # envelope: accept only the EXACT same immutable receipt.
+                applied = state["confirmations"][-1] if state["confirmations"] else None
+                if (
+                    state["revision"] == pending["expected_revision"] + 1
+                    and applied is not None
+                    and all(
+                        applied[k] == pending[k]
+                        for k in ("actor_id", "request_id", "proposal_hash")
+                    )
+                    and state["changes"][-1] == pending["change"]
+                ):
+                    (self._root / "pending-activation.json").unlink()
+                    return False
+                raise UserSchemaError("SCHEMA_ACTIVATION_REVISION_CONFLICT")
+            digest = _digest({"revision": state["revision"], "change": pending["change"]})
+            if digest != pending["proposal_hash"]:
+                raise UserSchemaError("SCHEMA_ACTIVATION_PROPOSAL_CHANGED")
+            # A current pending record is owned by a previously validated actor.
+            # Do not touch code-defined types or use an LLM as write authority.
+            self._compose([*state["changes"], pending["change"]])
+            self._write_publication_locked(state, pending["change"], pending)
+            (self._root / "pending-activation.json").unlink()
+            return True
+
+    def _write_publication_locked(
+        self, state: dict[str, Any], change: dict[str, Any], record: Mapping[str, Any]
+    ) -> None:
+        updated = {
+            **state,
+            "revision": state["revision"] + 1,
+            "changes": [*state["changes"], change],
+            "confirmations": [
+                *state["confirmations"],
+                {
+                    "actor_id": record["actor_id"],
+                    "request_id": record["request_id"],
+                    "proposal_hash": record["proposal_hash"],
+                },
+            ],
+        }
+        if len(_encoded(updated)) > _MAX_BYTES:
+            raise UserSchemaError("Schema registry exceeds size limit")
+        receipt = self._history / (f"r{updated['revision']:06d}-{_digest(updated)[:16]}.json")
+        _atomic_publish(receipt, updated, immutable=True)
+        _atomic_publish(self._root / "current.json", updated, immutable=False)
 
 
 def _roundtrip(value: Mapping[str, Any]) -> dict[str, Any]:

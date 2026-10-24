@@ -509,6 +509,7 @@ class RuntimeComposition:
     # requires a separate authenticated rollout and consistent schema/index swap.
     user_schema_registry: object | None = None
     user_schema_revision: int | None = None
+    schema_activation_enabled: bool = False
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1723,6 +1724,44 @@ class RuntimeComposition:
             and self.await_index_refresh is not None
         ):
             self.await_index_refresh()
+        if operation in {"schema_confirm", "schema_status"}:
+            if (
+                authenticated_actor is None
+                and external_principal is None
+                or self.user_schema_registry is None
+                or not self.schema_activation_enabled
+            ):
+                raise ValueError("Schema activation is unavailable")
+            from .user_schema_registry import SchemaConfirmation, UserSchemaRegistry
+
+            registry = self.user_schema_registry
+            if not isinstance(registry, UserSchemaRegistry):
+                raise ValueError("Schema activation registry is unavailable")
+            if operation == "schema_status":
+                if not payload:
+                    return {"revision": registry.snapshot()[0], "status": "ready"}
+                if set(payload) != {"request_id"} or not isinstance(payload["request_id"], str):
+                    raise ValueError("Schema activation status request is invalid")
+                return registry.activation_status(resolved_actor, payload["request_id"])
+            if set(payload) != {"change", "expected_revision", "proposal_hash", "request_id"}:
+                raise ValueError("Schema confirmation payload is invalid")
+            if (
+                not isinstance(payload["change"], dict)
+                or not isinstance(payload["expected_revision"], int)
+                or isinstance(payload["expected_revision"], bool)
+                or not isinstance(payload["proposal_hash"], str)
+                or not isinstance(payload["request_id"], str)
+            ):
+                raise ValueError("Schema confirmation payload is invalid")
+            return registry.request_activation(
+                payload["change"],
+                SchemaConfirmation(
+                    actor_id=resolved_actor,
+                    request_id=payload["request_id"],
+                    expected_revision=payload["expected_revision"],
+                    proposal_hash=payload["proposal_hash"],
+                ),
+            )
         if operation == "schema_preview":
             # The runtime's ordinary fallback `odyssey-runtime` is not an
             # authenticated user. Previewing schema changes requires one
@@ -2893,6 +2932,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     schema = compose_application_schema(base_schema, application_schema_extensions)
     user_schema_registry = None
     user_schema_revision = None
+    schema_activation_enabled = False
     user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
     if user_schema_flag not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
@@ -2904,7 +2944,15 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         user_schema_registry = UserSchemaRegistry(
             state_root, base_schema, application_schema_extensions
         )
+        # The caller holds the exclusive bootstrap generation lease before
+        # any shared indexes are read/written. Recovery also handles a process
+        # failure after the browser's approval was durably accepted.
+        user_schema_registry.activate_pending_at_boot()
         user_schema_revision, schema = user_schema_registry.snapshot()
+        confirmation_flag = os.environ.get("ODYSSEY_SCHEMA_CONFIRM_ENABLED", "0")
+        if confirmation_flag not in {"0", "1"}:
+            raise ValueError("Schema confirmation flag is invalid")
+        schema_activation_enabled = confirmation_flag == "1"
     # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
     # UI publication/hot-reload boundary is deliberately NOT available yet.
 
@@ -5363,6 +5411,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         canonical_schema=schema,
         user_schema_registry=user_schema_registry,
         user_schema_revision=user_schema_revision,
+        schema_activation_enabled=schema_activation_enabled,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

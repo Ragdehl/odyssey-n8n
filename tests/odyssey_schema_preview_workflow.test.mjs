@@ -70,3 +70,36 @@ test("adding schema preview does not change the existing Notes capabilities rout
   });
   assert.equal(run({operation: "capabilities", change}).invalid, true);
 });
+
+
+test("n8n forwards explicit typed schema confirmations, not caller-supplied identities", () => {
+  const body = {operation: "schema_confirm", change, expected_revision: 0,
+    proposal_hash: "a".repeat(64), request_id: "schema-ack-123"};
+  const result = run(body);
+  assert.deepEqual(result, {...body,
+    authenticated_actor: {stable_user_id: "00000000-0000-4000-8000-000000000001"}});
+  assert.deepEqual(run({operation: "schema_status", request_id: "schema-ack-123"}), {
+    operation: "schema_status", request_id: "schema-ack-123",
+    authenticated_actor: {stable_user_id: "00000000-0000-4000-8000-000000000001"},
+  });
+  assert.deepEqual(run({operation: "schema_status"}), {operation: "schema_status",
+    authenticated_actor: {stable_user_id: "00000000-0000-4000-8000-000000000001"}});
+});
+
+test("n8n confirmation rejects malformed digests, authority overrides and extra fields", () => {
+  const valid = {operation: "schema_confirm", change, expected_revision: 0,
+    proposal_hash: "a".repeat(64), request_id: "schema-ack-123"};
+  for (const extra of [
+    {proposal_hash: "wrong"}, {request_id: ""}, {request_id: "bad id"},
+    {expected_revision: true}, {expected_revision: -1},
+    {change: []}, {change: null},
+    {approved: true}, {actor_id: "attacker"},
+    {authenticated_actor: {stable_user_id: "attacker"}},
+  ]) {
+    assert.equal(run({...valid, ...extra}).invalid, true, JSON.stringify(extra));
+  }
+  for (const invalid of [{operation: "schema_status", request_id: "bad id"},
+    {operation: "schema_status", actor_id: "attacker"}]) {
+    assert.equal(run(invalid).invalid, true);
+  }
+});

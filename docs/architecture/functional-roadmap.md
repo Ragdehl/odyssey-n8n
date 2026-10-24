@@ -33,43 +33,33 @@ Source-only isolated work is underway; no note mutation or deployment has been m
   rollback and backward compatibility first. Use bounded parallel *analysis*,
   durable resumable job progress and Core/E3 guarded *writes*; fix global index
   wait behavior before promising nonblocking unrelated queries.
-- **Next:** design/verify one consistent activation contract for Core, Apps,
-  index readers and Writer (no mutable shared-schema shortcut); then trusted
-  actor-bound approval, AI-guided UI, resumable property backfill and
-  type-discovery-on-demand. Real-model gate and deployed synthetic-user UI E2E
+- **Next:** terminar confirmación duradera y reinicio seguro por generación;
+  después conectar una vista previa guiada por IA en Notas/Chat, el backfill
+  duradero E3 y el descubrimiento bajo demanda para tipos. Real-model gate and deployed synthetic-user UI E2E
   before adoption. PROD/private vault changes remain out of scope.
 
-**Schema evolution — source implementation in PR #155 (24-10-2026):**
-Unmerged, disabled-by-default DEV-only feature. Slice 1 implemented user-schema
-registry, compatible additive type/property preview, text edits, v3 compatibility,
-revision/CAS/history, owner-safe app exclusions and deterministic queryability;
-2,091 Python + 199 JS original gate PASS. Slice 2 adds **read-only authenticated
-schema_preview** through the existing Notes/n8n route and validates cross-type
-filter collisions before publication. Neither a confirm/publish API nor a live schema swap exists. The tested
-source passes the official gate: **2,097 Python + 202 JavaScript PASS**
-(including executable n8n schema-preview validator tests). Synthetic data only;
-no DEV/PROD deploy or real user notes. Next: coherent Core/Apps/index schema activation plus trusted UI
-confirmation, then conversational editor and backfills. See detailed [checkpoint
-and trust limits](post-ui2-note-creation-and-schema-evolution.md#primera-entrega-técnica-registro-compatible-24-10-2026-rama-de-desarrollo).
+**Base integrada en `dev`: PR #155 (`07dd13b`, 24-10-2026).**
+Registro versionado aditivo, propuesta autenticada de solo lectura, composición
+v3 compatible, campos consultables y protección de generaciones del runtime
+(arranque exclusivo, servicio compartido y drenaje de peticiones), con
+verificaciones de rutas DEV protegidas. Gate final **2.112 Python + 202 JS
+PASS**, GitHub CI PASS y revisiones independientes con defectos corregidos.
+Deshabilitado por defecto; DEV desplegado sigue en `050f26f`.
 
-**Schema source slice 3 (same PR #155, not deployed):** coherent process
-schema generation via shared runtime lease and exclusive revision publication;
-refuse serving a revision different from the frozen startup composition, and
-fail closed on orphan publication receipts. Reuse existing restart-time schema
-and index composition; OS-process and server-lifecycle synthetic tests added.
-Notes browser hides the technical `filterable` string and explains the benefit
-of new types without claiming creation works. Third-slice source gate
-**2,103 Python + 202 JavaScript PASS**, Ruff and docs guards passed.
-**Missing:** user-approved
-pending publication + orchestrated zero-confusion activation and browser UI;
-do not enable public schema mutations or alter PROD/private vault.
-
-**PR #155 independent review repairs:** P1 incompatible property IDs (including
-nonfilterable), P2 late lock after index writes, and a follow-up P1/P2 on
-protected-root validation / fresh DEV root. All addressed with field checks,
-exclusive lock before index assembly, HTTP shutdown drain, DEV-only protected
-path preflight and safe first-state creation. Synthetic tests added; latest
-gate and CI required before merging. Details in [design contract](post-ui2-note-creation-and-schema-evolution.md).
+**Fase actual — PR de confirmación y reactivación (25-10-2026, source-only).**
+El circuito Notes/n8n agrega `schema_confirm` y `schema_status` bajo bandera
+exclusiva DEV y actor autenticado. Una única confirmación de revisión/hash
+pone un registro durable en `queued`; el servidor entrega ACK, drena peticiones
+y solicita salida gestionada por el `Restart=on-failure` existente. El bootstrap
+bajo lease exclusivo publica una sola vez el esquema y recompone índices;
+el estado por `request_id` informa `queued` o `active`, sin exponer otro actor.
+Sin editor de IA/UI, sin cambios Markdown, sin backfill, ni despliegue nuevo.
+Gate fuente inicial **2.120 Python + 204 JavaScript PASS**, con el
+nuevo caso de replay histórico focalizado adicional; repetir gate sobre SHA
+final. Pendiente auditoría independiente y CI. Siguientes: adopción DEV
+sintética por navegador solo cuando exista un diálogo real, editor
+conversacional, backfill E3 y descubrimiento bajo demanda para tipos. No declarar «APP E2E PASS» por
+pruebas locales HTTP/n8n.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
