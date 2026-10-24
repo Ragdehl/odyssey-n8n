@@ -409,9 +409,67 @@ justificado saltar la validación semántica ni fijar un umbral de confianza.
   La segunda revisión independiente del diff con la corrección del reloj
   terminó **sin hallazgos accionables**; no sustituye la futura auditoría
   formal de los cuatro roles de la etapa completa.
-- **ESTADO:** instrumentación todavía **NO desplegada**; DEV mantiene
-  `7540442`. Hasta una nueva aceptación DEV con bandera activada y recibos
-  de etapas reales no sabemos qué porcentaje de los 8–12 s es embedding,
-  consulta al índice o la llamada contextual. Un ajuste de latencia del modelo
-  requerirá preservar el prompt validado, pruebas con Luna real y la revisión
-  independiente antes de activar ese cambio; no se ha hecho.
+- **Estado final 24-10-2026:** instrumentación de `7cade85566d536f32abf74075aa186e41d9479e1`
+  **desplegada solo en DEV**, revisada y CI `40067639565` aprobado.
+  Bandera `ODYSSEY_WORK_SESSION_RESOLUTION_TIMING_ENABLED=1` **habilitada
+  solamente durante las dos pruebas** y después retirada con reinicio de
+  runtime, salud DEV/n8n/PROD HTTP 200. No se modificaron reglas de identidad,
+  modelo, prompt ni configuración de PROD. **No promover a PROD.**
+
+### Aceptación desde la app y aislamiento del arranque en frío (24-10-2026)
+
+- **Precondiciones:** fuente limpia fijada en `7cade85`, gate transversal
+  **2.051 Python + 199 JavaScript PASS**, CI GitHub `40067639565` success,
+  revisión independiente detectó fallo de reloj inyectable y su segunda
+  revisión tras corregirlo no tuvo hallazgos accionables. Antes de desplegar,
+  se detuvieron solo servicios DEV y se guardaron **backups verificados SHA256**
+  del vault/state (~2,3 MB) y volumen de n8n (~113 MB) en
+  `/home/ragdehl/projects/.odyssey-agent-runs/worksession-timing-dev-adoption-20261024/`.
+  **Rollback**: `75404428e085b70b3dbce0c29a972b50af3a9bb3`.
+- **Prueba usuario real desde Chromium ARM64 móvil → app desplegada → n8n
+  auténtico → proveedor → Core/E3 → recibo → navegador y recarga** usando
+  una petición sintética de WorkSession sobre una tarea inexistente,
+  sin autorizar su creación. Proxy localhost restringido con cookie de prueba;
+  **no** se probó autenticación pública Cloudflare Access. Dos ejecuciones
+  secuenciales con IDs nuevos, ambas `needs_attention`, código
+  `WORK_SESSION_TASK_UNRESOLVED`, `write_evidence=UNKNOWN`, consejo
+  `SPECIFY_IDENTITY/ASK_USER`, UI correspondiente y recuperación tras recarga.
+  El contenido **de los 166 Markdown fue idéntico antes/después/tras retirar
+  la bandera**, comprobado con SHA256. Los logs del proxy conservaron 2–3
+  avisos de peticiones canceladas; no invalidaron la aceptación del flujo.
+- **Recibo en frío** (primera llamada sin proceso ONNX previamente cargado):
+  Chromium **44.803 ms**; Core **30.038 ms**; WorkSession **17.473 ms**.
+  Subetapas: `exact_lookup` 67,5 ms; `semantic_search` **14.957,4 ms**;
+  `candidate_validation` 1,3 ms; `relationship_context` 403,0 ms;
+  `provider_evidence` 1,4 ms; `contextual_provider` 2.042,2 ms.
+  Cobertura de intervalos WorkSession 99,997 %.
+- **Recibo en caliente** (mismo runtime, proceso de embeddings local activo;
+  nueva petición autenticada de prueba): Chromium **28.111 ms**;
+  Core **21.161 ms**; WorkSession **1.992 ms**. Subetapas:
+  `exact_lookup` 102,0 ms; `semantic_search` **153,3 ms**;
+  `candidate_validation` 1,4 ms; `relationship_context` 402,9 ms;
+  `provider_evidence` 1,6 ms; `contextual_provider` 1.330,2 ms.
+  Cobertura de intervalos 99,964 %.
+- **Interpretación y límite importante:** `ODYSSEY_EMBEDDING_SUBPROCESS=1`
+  y `ODYSSEY_EMBEDDING_IDLE_SECONDS=900` ejecutan FastEmbed en un proceso
+  local reutilizable. El proxy de pruebas **ignoraba `presence`**, por lo
+  que la primera solicitud cargó el worker de embeddings bajo demanda, y la
+  segunda reutilizó el worker caliente. `semantic_search` incluye IPC,
+  posible carga del modelo, cálculo de embedding y consulta SQLite: los datos
+  **sugieren fuertemente** arranque en frío como factor dominante, pero no
+  separan esos subcostes ni prueban el precalentamiento normal de una pestaña
+  autenticada externa. No usar una comparación de dos solicitudes como p95.
+  No se eliminan llamadas contextuales ni se altera selección de candidatos.
+- **Cierre seguro:** tras ambos tests se retiró el drop-in temporal de
+  `ODYSSEY_WORK_SESSION_RESOLUTION_TIMING_ENABLED`, se recargó systemd y
+  reinició solo runtime DEV. La comprobación inmediata coincidió con un
+  instante de arranque (socket aún no listo); comprobación posterior: runtime,
+  n8n y PROD **HTTP 200**, source/marker DEV `7cade85`, drop-in ausente y
+  flags de unidad sin diagnóstico, backup SHA256 válido, notas inmutadas.
+  No se desplegó ningún cambio en PROD.
+- **Siguiente hipótesis a validar:** comportamiento de `presence` real en la
+  app y precalentamiento de worker al entrar a Chat; medir por separado
+  lanzamiento ONNX, inferencia y búsqueda SQLite con pruebas controladas antes
+  de proponer cambios en RAM, tiempo de retención o recarga. La latencia total
+  incluso en caliente fue 28,1 s y tiene otros costes de Core; optimizar por
+  evidencias sin relajar permisos ni identidad.
