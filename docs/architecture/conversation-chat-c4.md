@@ -608,7 +608,7 @@ coste de decisiones lingüísticas **C1 + Router + dos atestaciones**, y unos
 intervalos no atribuidos que requieren telemetría más fina antes de optimizar.
 DEV, PROD y notas no se modificaron en esta investigación.
 
-### Diagnóstico optativo de la ruta caliente C1/P4/Tasks (24-10-2026, SOLO FUENTE)
+### Diagnóstico optativo de la ruta caliente C1/P4/Tasks (24-10-2026, fuente y DEV)
 
 La investigación anterior identificó el intervalo `starting → routing.started`
 (~6 s en un caso caliente), sin separar clasificación C1 de preparación. También
@@ -644,12 +644,43 @@ existentes, sin modificar prompts, modelos, contratos de Core/E3 o rutas n8n:
   (`/tmp/odyssey-hotpath-source-gate-20261024.json`, `.log`); revisión
   independiente **sin defectos accionables** en
   `/home/ragdehl/projects/.odyssey-agent-runs/hotpath-c1-tasks-20261024/independent-review.txt`.
-  La ejecución de CI y un E2E tras desplegar son comprobaciones distintas.
-  Para inspeccionar una distribución de latencia
-  REAL en DEV necesitará una autorización de despliegue propia con backup,
-  bandera temporal y ensayo browser→n8n→Core.
+  CI independiente del commit `02daa74` completó **PASS** (ejecución
+  `40097489239`). La adopción DEV y el E2E se verificaron por separado.
 
-**Estado de este bloque: solo código en `dev`; no se ha desplegado ni llamado
-al proveedor para esta instrumentación.** DEV sigue en `7cade85`, sin bandera
-de diagnóstico adicional; PROD intacto. Una duración aislada no es una mejora
-por sí misma: el objetivo es decidir una optimización posterior con evidencias.
+**Adopción DEV acotada, 24-10-2026:** backup verificable SHA256 de vault/estado
+(2,3 MB) y volumen n8n (113 MB), rollback fijado en `7cade85`; `odyssey-dev
+deploy` de SHA completo `02daa747ff77e9b09e5f27692c7ae9eaf8dee2b7` con
+runtime/n8n saludables, identidad de flujos `MATCH` y rutas públicas `MATCH`.
+Cuatro mensajes sintéticos enviados **desde el formulario en Chromium** a n8n
+DEV, proveedor/modelo real, runtime y respuesta visible con persistencia tras
+recarga; dos sesiones de navegador, tres casos iniciales y una repetición de
+Tasks. Sus tiempos UI fueron **13,97 / 31,71 / 33,85 / 57,73 s**.
+Spans privados asociados por digest, en ese orden:
+
+| Caso | C1 classify | conversation.entry* | Tasks delegate | finish_product |
+|---|---:|---:|---:|---:|
+| Chat social | 4,22 s | 7,68 s | no aplica | no aplica |
+| WorkSession inexistente (1) | 2,05 s | 2,07 s | 14,86 s | 0,018 s |
+| Corrección/consulta de sesión | 7,24 s | 7,26 s | no aplica | 0,364 s |
+| WorkSession inexistente (2, proceso caliente) | 6,63 s | 6,64 s | 4,63 s | 0,050 s |
+
+* `conversation.classify` está **incluida** en `conversation.entry`; no sumar
+sus tiempos. Descenso del delegado entre las dos muestras compatible con
+precarga ONNX, **no causalidad demostrada**. La solicitud total de 57,73 s
+incluso con delegado 4,63 s demuestra un intervalo grande aún no explicado
+por estas cuatro sondas, fuera de Tasks: comprobar Router, atestaciones,
+Core/n8n/red y UI antes de cambiar prompts o omitir validaciones.
+
+Vault DEV: **166 Markdown**, huella SHA256 agregada de contenido/ubicaciones
+**idéntica antes/después** de los cuatro envíos. Log `hot-path-timing.jsonl`
+solo digest/etapa/tiempo/error y modo `0600`; ningún span fallido. El test
+Chromium marcó `pass=true`, pero el proxy local restringido anotó tres errores
+no caracterizados por sesión (`proxy_error:Error`), por lo que **no equivale**
+a aceptar la ruta externa Cloudflare autenticada ni todos los E2E C4. El
+interruptor temporal fue **retirado** y el runtime DEV reiniciado saludable;
+PROD salud HTTP 200 e intacto. Evidencia operativa en
+`/home/ragdehl/projects/.odyssey-agent-runs/hotpath-c1-tasks-dev-adoption-20261024/`.
+**Siguiente paso:** instrumentación DEV de tramos faltantes sin contenido ni
+identificadores, especialmente P4 y ambas atestaciones; recopilar varias
+muestras comparables y conservar las dos comprobaciones independientes.
+No hacer optimizaciones semánticas a partir de cuatro casos solamente.
