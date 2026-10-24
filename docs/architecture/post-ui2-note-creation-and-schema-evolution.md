@@ -456,110 +456,185 @@ Before implementation, define explicit mutation semantics for schema changes, in
 
 Natural-language Chat may be the user-facing control surface, but schema mutation must pass through one typed, validated Core capability rather than granting the planner or browser direct authority over `config/note-schema.json`.
 
-### Diseño conversado para la próxima fase (24-10-2026; propuesta, no implementada)
+### Decisiones de producto confirmadas el 24-10-2026
 
-**Experiencia de usuario y finalidad.** La sección «Modelo de notas» se abriría desde
-los controles ya presentes «Crear nuevo tipo» y «Editar tipo» de Notes, o desde
-un diálogo de Chat que derive a la misma superficie. Una conversación con la IA
-prepara una **vista previa de tipo/propiedad como una nota**, editable por la
-conversación, con nombre y descripción comprensibles, ejemplos de búsquedas y
-advertencias sobre posibles solapamientos. Una breve explicación junto a
-«Crear nuevo tipo» debe enseñar **qué aporta al usuario**: agrupar y explorar
-notas con necesidades comunes, pedir búsquedas más precisas y aprovechar
-campos específicos. No presentar cada etiqueta, rol o relación como un tipo
-nuevo; sugerir primero reutilizar una clase ya registrada y añadir una
-propiedad solo si hay una ventaja concreta. Registrar tipos no concede por sí
-solo nuevas automatizaciones ni capacidades de Apps.
+- **IA asistida, no editor técnico:** en «Modelo de notas», desde Notes o Chat,
+  conversación y vista previa como una nota; explicaciones y ejemplos de valor
+  para el usuario antes de crear tipos. Reutilizar el tipo/propiedad existente
+  si resuelve la necesidad; evitar duplicados semánticos.
+- **Cualquier propiedad nueva será consultable** mediante las operaciones
+  adecuadas a su valor; no mostrar «filtrable» al usuario. Primera prueba
+  prevista: nacimiento de una persona con precisión parcial, sin inventar
+  componentes ni duplicar la edad calculable.
+- **Una confirmación** publica un cambio compatible de esquema y autoriza
+  inspeccionar/rellenar propiedades con evidencia clara, en segundo plano.
+  Las nuevas identidades descubiertas tras crear un tipo se proponen y
+  confirman **en lote, por separado**.
+- **Propiedad nueva:** enriquecer notas existentes de ese tipo. **Tipo nuevo:**
+  buscar menciones de posibles entidades en hechos de todas las notas y
+  proponer notas nuevas; nunca reclasificar una nota ya existente.
+- **Sin previsión de tipos futuros:** `PendingReference` solo responde a
+  referencias realmente irresueltas. La búsqueda retrospectiva comienza
+  *cuando se aprueba el nuevo tipo*, no durante cada captura cotidiana.
 
-**Sin configuración técnica de filtros.** No mostrar un interruptor
-«filtrable» en la creación. Toda propiedad nueva debe resultar consultable;
-los operadores concretos son responsabilidad del modelo de datos y del motor
-de consulta: fecha parcial (coincidencia por componentes/rangos acreditados),
-número (comparación/rango), texto (coincidencia o búsqueda textual/semántica)
-o referencias (identidades canónicas y relaciones), según capacidades realmente
-implementadas. No prometer el mismo operador para todas ni presentar resultados
-incompletos como exhaustivos.
+La especificación técnica de estas decisiones y el orden de implantación
+están en el contrato siguiente. **Nada de ello está implementado todavía.**
 
-**Fecha parcial genérica.** La primera prueba candidata es una propiedad de
-`person` equivalente a «fecha de nacimiento» (`birth_date` como identificador
-interno propuesto), **sin segunda propiedad `age` persistida**: la edad puede
-derivarse solo cuando la evidencia disponible lo permita. La propiedad ha de
-poder retener *únicamente* los componentes acreditados `{year?, month?, day?}`:
-1985; marzo de 1985; 12 de marzo sin año; fecha completa; incluso día del mes
-sin mes/año si ese es todo el conocimiento confirmado. Ausencia de un componente
-no se codifica con ceros, fechas ficticias ni valores inventados. Validar
-coherencia de combinaciones y días de mes, preservando la precisión original.
-El usuario describe en lenguaje natural qué quiere registrar y el asistente
-propone cómo representarlo; no se exige que entienda o elija entre cinco tipos
-internos. **El `date` canónico actual valida fechas completas**; por tanto,
-introducir una fecha parcial requiere un contrato de valor, validación, filtro,
-serialización y presentación nuevos y **genéricos**, reutilizando el intérprete
-temporal vigente donde tenga sentido sin cambiar las reglas de fechas completas
-de Calendar/Events/Tasks. Este detalle técnico queda para diseñar antes de
-implementar; no se declara que la función ya exista.
+### Contrato de implementación acordado para la siguiente fase (24-10-2026)
 
-**Una sola confirmación.** El usuario revisa la propuesta de esquema y autoriza
-con una acción también la inspección/rellenado de las notas del tipo afectado.
-Después la UI queda libre, muestra progreso reanudable y resultados separados:
-valor rellenado con fuente; datos insuficientes (vacío legítimo); conflicto o
-ambigüedad a revisar. Interpretación/evidencia para notas distintas puede ser
-paralela y acotada; **las escrituras no** se hacen en paralelo sin sincronizar:
-reutilizar Core/E3, CAS, historia, idempotencia y readback por nota. El estado
-de cada elemento debe sobrevivir reinicios y evitar sobrescribir correcciones
-posteriores. Una consulta de otro dominio no se bloquea por rellenados en curso;
-una consulta dependiente de la propiedad requiere resultados completos o una
-advertencia explícita de incompletitud, nunca silenciosa.
+**Objetivo único.** Que cualquier usuario describa en lenguaje natural la
+necesidad de un tipo o propiedad y Odyssey reutilice su modelo actual siempre
+que baste. Preferir la intención ya interpretada por C1/Chat y el contrato de
+Core antes que añadir otro clasificador o agente. Superficie «Modelo de notas» en Notes, enlazada por los botones de
+tipo ya visibles y accesible desde Chat; IA asiste a elaborar una propuesta y
+muestra una tarjeta tipo Nota con nombre, explicación, propiedades, ejemplos de
+consultas, cambios e impacto. No editor JSON ni interruptores técnicos de
+filtros. Breve texto pedagógico explica el beneficio: encontrar, comparar,
+organizar y consultar clases de cosas con sus propios atributos; no crear tipos
+porque sí. Modificar por conversación la propuesta **no** modifica esquema ni
+Markdown hasta confirmar. En la primera versión también puede editarse de
+forma compatible el **nombre visible, la descripción y las explicaciones** de
+tipos/propiedades ya existentes sin cambiar su identificador estable ni el
+tipo de valor; renombrar IDs, convertir propiedades, cambiar el tipo canónico
+de una nota y retirar/eliminar definiciones requieren migraciones aparte.
 
-**Crear un tipo no es reclasificar notas.** Toda nota canónica ya tiene un
-tipo, así que registrar uno nuevo no cambia automáticamente el `type` de ninguna
-nota existente. El trabajo retrospectivo de un tipo nuevo es diferente del
-rellenado de una propiedad: detectar **menciones de posibles entidades nuevas**
-en los hechos de notas de cualquier tipo, incluso si antes no existía un tipo
-adecuado. Nunca se presupone que una mención representa una entidad distinta;
-primero comprobar la identidad/duplicados frente al repositorio actual.
+**Fuentes de verdad y reutilización efectiva.** El JSON base actual
+`config/note-schema.json` (v3), el compositor
+`odyssey_apps/schema_extensions.py` para tipos gestionados por Apps,
+`odyssey_core/schema_types.py`, el validador `scripts/validate_note_schema.py`,
+la proyección de capacidades/consultas de Notes, los hechos
+`AtomicFact(request_id, ordinal)`, `PendingReference` **real**,
+`PendingWorkRepository` (solo donde el contrato sea adecuado), el gate
+`CanonicalMutationGate`/`execute_prepared_property_mutation` de E3,
+identidad/referencias, recibos, historial Git y el refresco derivado son
+material de partida. No son una plataforma completa de evolución de esquema;
+**identificar explícitamente la laguna antes de ampliar cada componente**.
+La preparación simultánea de interpretaciones ya tiene precedentes con
+`ThreadPoolExecutor`; la serialización/coordinación segura de escrituras queda
+en Core/E3. No proponer un servicio, broker, framework de agentes, índice
+semántico alternativo ni base de datos nuevos sin necesidad demostrada.
 
-**Reutilizar referencias pendientes, sin fingir cobertura completa.**
-`odyssey_core/reference_binding.py::PendingReference` ya representa una
-referencia no resuelta con mención original, papel, índices locales, motivo y
-candidatos. `PendingWorkRepository` conserva solicitudes incompletas y sus
-referencias en estado fuera del vault. La dirección aprobada
-[Future pending-reference evolution](future-pending-reference-evolution.md)
-ya prevé pistas *orientativas* de tipo semántico todavía no registrado y
-revisitar menciones tras cambios de esquema. **Esto es infraestructura parcial,
-no una cola completa de todas las menciones**: el renderizador emite
-`PendingReference` sin persistir por sí mismo y muchas menciones ordinarias
-quedan como hechos de texto literal sin registro pendiente. Por tanto el nuevo
-proceso debe empezar por pendientes duraderos adecuados **y también** considerar
-hechos literales canónicos como fuentes de candidatos; no limitarse a una cola
-que no cubre todos los casos.
+**Registro editable y versión, especialmente crítico.** Hoy
+`RuntimeComposition` carga el JSON al arrancar y compone las extensiones de
+Apps; `validate_note` exige que `metadata.schema_version ==
+schema['schema_version']`. Un cambio ingenuo a `schema_version:4` invalidaría
+de golpe notas existentes durante un rellenado progresivo. Para ampliaciones
+**compatibles** (nuevo tipo o propiedad opcional), mantener el formato canónico
+v3 y separar una **revisión/generación del registro de usuario** del
+`schema_version` físico: registrar la propuesta aprobada en estado de Odyssey
+versionado, hacer una composición única `base + Apps + usuario` validada sin
+colisiones, y publicar un snapshot consistente para la petición, UI, búsquedas
+y Writer. No editar por chat el JSON de Git ni mutar en caliente un diccionario
+compartido. Validar todas las notas canónicas pertinentes con el esquema
+candidato antes de publicar; publicar atómicamente con historial/rollback y
+reconstruir/invalidate índices/capacidades afectados. Una modificación
+**incompatible** (nuevos campos obligatorios, cambio de tipo de valor,
+renombrado/borrado) queda fuera de v0 hasta tener migración específica segura.
+La estrategia exacta de hot reload y almacenamiento de revisiones se decide
+tras el inventario acotado, **no** se asume que lo actual ya la implementa.
+Los tipos gestionados por Calendar/Tasks/Events no reciben autorización de
+ciclo de vida por el editor genérico.
 
-**Tratamiento de posibles entidades al añadir un tipo.** Con una sola aprobación
-del nuevo esquema, arrancar una inspección asíncrona, reanudable, acotada y
-paralelizable de evidencias; no detener Chat, Notes, Tasks o Calendar. Las
-menciones generan **propuestas verificables** de futuras notas del nuevo tipo,
-no creaciones automáticas. Mostrar nombre tentativo, clase, hechos/citas origen
-y eventuales duplicados/ambigüedad. El usuario podrá confirmar un lote de
-propuestas; Core/E3 validará individualmente identidad, fuente vigente y
-creación. Sólo entonces se podrá enlazar la **ocurrencia exacta** en la fuente
-mediante el contrato determinista de referencias; jamás sustituir cadenas
-arbitrarias en Markdown ni modificar los tipos de las notas fuente. Los casos
-sin evidencia o con varios candidatos quedan pendientes o se descartan.
+**Una confirmación de estructura, dos consecuencias diferenciadas.** El usuario
+aprueba **una sola vez** un cambio compatible de esquema y el trabajo
+retrospectivo pertinente; esa aprobación permite rellenar datos con evidencia
+clara, sin preguntar por cada nota. No implica autorizar automáticamente
+**crear nuevas identidades** halladas después. Esas se presentan juntas con
+sus fuentes y posibles duplicados para una **confirmación por lote** posterior.
+La aprobación de una propuesta queda ligada a su revisión exacta del registro,
+actor y alcance: un clic repetido/replay no puede iniciar otra publicación ni
+duplicar el trabajo.
 
-**Invariantes cruzados de los dos backfills.** Añadir una propiedad habilita
-completar valores de las **notas del tipo existente**; crear un tipo habilita
-explorar **menciones en notas de todos los tipos** y sugerir *nuevas notas*, sin
-reclasificar ninguna. Ambos procesos reutilizan la preparación concurrente,
-estado recuperable e índices derivados, pero no eluden E3 ni la confirmación
-de creación de identidades. No prometer retrospectiva total hasta demostrar
-captura/escaneo de menciones, evidencia de fuente, deduplicación y coste
-acotado en corpus sintéticos.
+**Propiedad nueva (ejemplo: `person.birth_date`).** Escanear todas las notas
+canónicas `person` y sus hechos pertinentes; buscar evidencia exacta de valores
+(parcial o completa), admitir ausencia/conflicto sin inventar información ni
+sobrescribir un valor corregido. Procesar por lotes/paralelo de forma acotada y
+preparar candidatos con procedencia: `note_id`, `revision`/hash de fuente,
+`request_id:ordinal` cuando exista, y texto original verificado. Escritura
+individual E3 con lectura actual de nota, chequeo de colisiones y CAS;
+indexación después. La compatibilidad exige que la propiedad recién añadida
+sea inicialmente **opcional**; «vacío» no se representa con valor inventado.
 
-**Límites de decisión.** La IA detecta posible solapamiento conceptual y propone
-valor/evidencia, pero no crea autónomamente un tipo, ni altera el esquema
-sin confirmación, ni escribe valores que no puedan sustentarse en hechos
-actuales. Core valida ID, tipo, formato, autoridad y compatibilidad.
-Editar/eliminar propiedades o tipos con notas existentes exige fases y garantías
-adicionales; no forma parte del primer corte de creación compatible.
+**Fechas parciales reutilizables, no formatos ficticios.** Valor de fecha con
+componentes conocidos (año, mes, día, con al menos uno presente) y
+combinaciones válidas. `{year: 1985}`, `{year: 1985, month: 3}`,
+`{month: 3, day: 12}`, una fecha completa o `{day: 12}` son **formas
+conceptuales de representar componentes conocidos**, no cinco propiedades ni
+valores Markdown ya definidos; nunca completar a `YYYY-MM-DD` inventando datos. Una consulta sobre marzo encuentra valores con mes 3 acreditado;
+una edad exacta no se afirma cuando faltan componentes indispensables. La
+introducción de este **tipo de valor genérico** exige cambios consistentes en
+validación de metadata y planes, codec Markdown, consultas/índices, representación
+y Temporal donde sea aplicable. `date` completo existente permanece intacto.
+No hace falta implementarlo antes de poder diseñar/crear otras propiedades;
+es una prueba posterior especialmente exigente.
+
+**Tipo nuevo (ejemplo: `book`).** No reclasificar ninguna nota: toda nota ya
+tiene `type`. Tras publicarlo, un trabajo retrospectivo escanea los hechos
+canónicos de **todos** los tipos, filtrando por evidencias del nuevo concepto;
+los hechos Odyssey marcados tienen locatores estables, pero el contenido
+Markdown anterior o editado manualmente puede carecer de ellos: no ignorarlo
+como **evidencia de lectura**, y nunca prometer un relink determinista cuando
+no haya una ocurrencia direccionable. La localización/evidencia debe reflejar
+explícitamente esa diferencia,
+sin categorización especulativa anterior ni dependencia de `PendingReference`.
+Pueden ayudar índices ya existentes, pero si no garantizan cobertura la
+inspección por lotes debe cubrir el corpus canónico. Un modelo propone
+candidatos con identidad, tipo, citas/facts y posibles agrupaciones; Core
+deduplica frente al conjunto de entidades ya existentes. No identificar una
+mención literal como entidad inequívoca, ni crear nota ni modificar enlaces
+hasta confirmar lote y acreditar una identidad segura. Para el relink,
+conservar locatores de hecho/ocurrencia, comprobar bytes o hash/revisión y
+cambiar solo la mención exacta bajo E3; ante ambigüedad, editar manualmente o
+mantener pendiente. **No reemplazos globales de texto.** Las nuevas peticiones
+después de publicar el tipo usan el mismo registro de Core/Planner, no un
+segundo extractor permanente.
+
+**Seguridad del modelo de consulta.** La experiencia no pregunta si una
+propiedad es filtrable, pero **no se registrará una propiedad sin un mecanismo
+de consulta definido y probado**. Para valores numéricos/fechas, filtros
+específicos; para texto, operadores compatibles; para referencias, resolución
+canónica; y para booleanos/u objetos declarados, extender los operadores
+necesarios o dejar ese tipo de propiedad fuera del alcance de v0. El asistente
+no prometerá funcionalidades de búsqueda aún no implementadas.
+
+**Trabajos en segundo plano y consultas.** Estado duradero mínimo por
+`job_id`/revisión del esquema, `actor`, clase de trabajo, cursor/cohorte de
+notas, pendientes, completados, omitidos, contradicciones y recibos. Reanudable
+tras reinicio/crash, revalidando notas que cambiaron; idempotencia por fuente,
+propiedad/tipo y generación. Progreso sencillo en UI, sin bloquear Chat u otros
+dominios por trabajo de IA. *Interpretar* distintas notas en paralelo, con
+límite ajustado a RAM/tokens y cancelación/reintento acotado; *mutar* siempre
+por el gate seguro, evitando carreras de Git/Markdown. El actual
+`DerivedIndexRefreshCoordinator.wait_until_clean` tiene barrera global:
+para satisfacer las búsquedas no afectadas se precisará delimitar la barrera
+por dependencia/generación o mecanismo equivalente, sin prometer que ya está.
+Una consulta sobre la propiedad a medio poblar espera a completitud relevante
+o avisa explícitamente de resultados provisionales. No confundir «no evaluada»,
+«evaluada sin evidencia», «contradicción», «fallo técnico» y «valor escrito».
+Preservar evidencias y correcciones humanas.
+
+**Verificación/criterios de aceptación.** Primero prueba offline con vault
+sintético: 0/1/muchas notas; tipo/propiedad ya existentes; nombres/sinónimos
+solapados; tipos App vetados; referencias repetidas/ambiguas, mención literal
+y fuente obsoleta; notas legacy/fecha parcial; doble clic/replay, cambio de
+revisión y reinicio a mitad de trabajo; consulta simultánea relacionada/no
+relacionada; sin escrituras al quedar sin evidencia; ningún Markdown alterado
+fuera del alcance ni pérdida de hechos. Validar iterativamente el prompt real
+con `odyssey-llm-stage`, límites de abstención y coste antes de habilitarlo;
+revisiones independientes, gate cross-surface completo y Chromium desde la
+**app DEV desplegada** con n8n/IA/Core/E3/Markdown/recarga y actor/vault
+sintéticos. No tocar PROD ni notas personales durante pruebas. Medir latencia,
+RAM y tokens sin optimizar por inercia.
+
+**Orden siguiente (no implementado aún):** (A) arquitectura-challenge e
+inventario de permisos, serialización y composición/compatibilidad v3; (B)
+propuesta/validación determinista del registro y snapshot publicado en DEV
+con contrato de seguridad y tests; (C) conversación/vista previa y confirmación;
+(D) backfill opcional de propiedades, duradero y paralelo con E3;
+(E) descubrimiento bajo demanda tras crear tipos con propuestas y confirmación
+por lote; (F) fecha parcial genérica y prueba `birth_date` si ese sigue siendo
+el primer caso que interesa al usuario. Cada corte se acepta con pruebas
+reales de interfaz y no se solapa con una refactorización general de E6.
 
 ## D. Notes presentation and browsing follow-ups
 

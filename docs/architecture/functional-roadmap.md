@@ -2,7 +2,54 @@
 
 **Normative current-state entry point.** Verify these snapshots against Git and the actual DEV/PROD deployment marker before acting. **Historical checkpoints are NOT active decisions:** the complete previous 1,957-line roadmap is preserved at [October 2026 roadmap archive](functional-roadmap-history-20261023.md).
 
-## Current — 23 October 2026
+## Current — 24 October 2026: next phase agreed, DESIGN ONLY
+
+**User-approved next direction: conversational evolution of note types and
+properties**. Full agreement, reuse inventory, implementation order and
+acceptance contract: [Post-UI2 conversational schema evolution, section C](post-ui2-note-creation-and-schema-evolution.md#contrato-de-implementación-acordado-para-la-siguiente-fase-24-10-2026).
+This is the *canonical next-step owner*; historic C4 latency/worktree/audit
+notes below are NOT current blockers or an instruction to restart old work.
+No functional implementation, migration, note mutation or deployment has been
+made for this new phase.
+
+- **UI:** one AI-assisted «Modelo de notas» surface in Notes, deep-link from
+  Chat; card preview, human-readable reasons, no technical «filterable» toggle;
+  all newly offered properties must actually support appropriate queries.
+- **One approval** for additive optional property/type plus its background
+  discovery; values on existing notes can be completed automatically where
+  grounded. Creating **new entities found by a type scan** requires a later
+  explicit batch confirmation; **never reclassify notes**.
+- **Properties:** scan existing notes of the affected type and backfill only
+  evidenced values using E3; dates may have known year/month/day components
+  without invented precision; age is derived, not a duplicate property.
+- **Types:** scan *canonical existing facts from all note types* on demand for
+  potential new entities. Do NOT precompute latent types or build speculative
+  `PendingReference` classification. Keep actual pending references when Core
+  really could not resolve an identity. No fuzzy create/relink or broad string
+  replacement.
+- **Technical priority:** base schema v3 and App extensions are composed at
+  startup; validation currently requires exact physical `schema_version`.
+  For compatible optional additions, do not increment all note format versions:
+  establish separately versioned user registry + atomic composed snapshots,
+  rollback and backward compatibility first. Use bounded parallel *analysis*,
+  durable resumable job progress and Core/E3 guarded *writes*; fix global index
+  wait behavior before promising nonblocking unrelated queries.
+- **Start next turn:** architecture challenge + narrow reuse inventory, then
+  implement the minimal compatible schema registry and typed deterministic
+  proposal/validation in DEV with tests; next add AI/chat + UI preview,
+  background property filling, on-demand type discovery, and partial-date
+  end-to-end example. Prompt tests must use real selected models only with
+  bounded authorized provider gate; actual acceptance is deployed Chromium
+  with synthetic data and physical Markdown readback. **No PROD or private
+  vault changes without specific authorization.**
+
+**Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
+DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
+trusting these static values. Two merged clean C4 audit-only branches/worktrees
+were removed; other historical worktrees intentionally retained, no need to
+re-scan them (see `odyssey-start-work`).
+
+## Historical baseline — 23 October 2026 (not current authority)
 
 **Latest verified before the documentation refactor** (from Git/runtime checks; not a new deployment):
 - GitHub `dev`, local source branch `dev`: `802d219`, clean at audit start. Zero open PRs; E1 #153 merged, E2 #154 closed because already incorporated, and E6 included in later `dev` ancestry. The working branch may advance independently; always inspect current HEAD.
@@ -11,7 +58,7 @@
 - Latest complete accumulated offline evidence at that UI checkpoint: **1857 Python + 184 JavaScript PASS**; separate real Event/Task/Work Session synthetic DEV evidence and E6 audits recorded in [E6 weekend regression](e6-weekend-regression-20261022.md), [E6 UI acceptance](ui-notes-unified-timeline-20261022.md) and [E6 checkpoint](e6-incremental-composition-checkpoint-20261022.md). Do not infer universal language or browser coverage.
 - Historical E4 plural/collective `ambos` cases have documented uncertainty/abstention limits and focused tests. Do **not** reopen the same loop based only on a historic failing example; require a genuinely new reproducer and evidence.
 
-## Next — active development
+## Historical work log — formerly active C1–C4 development
 
 **Conversation C4 — interpretación segura de errores (23-10-2026):** integrado y **habilitado exclusivamente en DEV** con interruptor independiente `ODYSSEY_CHAT_C4_ENABLED=1` y límite exclusivo a DEV. Usa el receptor de errores ya probado en C1, enlaza solo recibos verificados de Core/E3 y genera consejos no ejecutables; n8n valida estado/código/escrituras antes de mostrarlos. Nunca presupone cero escrituras ni repite automáticamente operaciones. Regresión local después de reparar auditoría **2.020 Python + 199 JS PASS** y matriz real Luna sintética **6/6** tras corregir un primer prompt **3/6**. **DESPLEGADO EN DEV `a756852`** con C3+C4 activos y backup SHA256+rollback `ae281d1`. Chromium con n8n/Core y actor sintético dio PASS en error de tarea inexistente (`WORK_SESSION_TASK_UNRESOLVED` → `SPECIFY_IDENTITY`, escritura UNKNOWN), sin cambios Markdown (166 antes/después), persistencia tras recarga; dos casos adicionales hicieron aclaración Core normal sin C4. Aún **APP E2E NOT VERIFIED** como aceptación global: falta caso parcial real, replay de mismo ID desde UI, autenticación externa Cloudflare y latencias/recursos bajo carga real. Próximo: completar esas evidencias y nueva auditoría del commit corregido. [Contrato y evidencias C4](conversation-chat-c4.md). Auditoría independiente del SHA `5765587`: Generalidad FAIL, Calidad FAIL, Pruebas BLOCKED (incluye E2E), Rendimiento BLOCKED. Hallazgos de código reparados en el diff posterior (mensaje de identidad genérico, >64 notas, tabla código→consejo y replay real E3); prueba de recursos sintética sobre Pi ~37 MiB RSS, swap proceso 0, 46–48 °C, 3 peticiones concurrentes serializadas. **No hay aún auditoría aprobada del SHA `a756852`; la adopción DEV sí está realizada y comprobada en los casos indicados.** Replay real por n8n DEV con el mismo ID (910 ms) y recibo SHA256 estable, cero nuevas notas; Cloudflare anónimo 403. Exploración visual de parcial no lo reprodujo: tres hechos se guardaron como tres **actualizaciones de días DEV** (166 archivos sin variar), y cuatro hechos distintos pidieron CLARIFY sin escritura. **No usar recuento de archivos para negar mutaciones**. Rendimiento: ~41,6 s navegador para error real, ~27,6 s en Core, de ellos 12,2 s resolviendo WorkSession. Falta parcial C4 desde UI, replay a través del propio botón y sesión pública autenticada; se detienen intentos exploratorios de escritura. Ahora hay **regresión aislada reproducible** con fallo post-escritura controlado: Core Writer físico + E3 protegido + C4 `partial/SOME` + JS auténtico de n8n + validador web y replay inmutable, usando únicamente respuestas históricas y vault temporal. No equivale a un parcial natural desde Chromium ni está desplegado. **Gate 2.021 Python + 199 JavaScript PASS**, 12 grupos, sobre la fuente modificada. Ver [evidencia C4](conversation-chat-c4.md).
 
