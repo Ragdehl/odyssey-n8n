@@ -739,7 +739,10 @@ no genera otra publicación ni falsea qué se aprobó. La confirmación calcula
 **antes del ACK** el estado publicado exacto y comprueba el límite físico de
 tamaño: no acepta una propuesta que dejaría el reinicio inservible.
 Ambos requisitos proceden de defectos P1/P2 hallados en la primera revisión
-independiente del PR #156 y reparados con regresiones específicas.
+independiente del PR #156 y reparados con regresiones específicas. La
+segunda revisión focalizada del commit reparado no señaló regresiones; su
+entorno no disponía de pytest, por lo que la evidencia ejecutable es el
+gate oficial independiente de esa revisión (**2.123 Python + 204 JS PASS**).
 
 Tras entregar la respuesta HTTP, el runtime inicia **apagado ordenado** por
 un hilo distinto: termina nuevas esperas, drena los handlers HTTP activos
