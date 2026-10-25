@@ -664,3 +664,33 @@ def test_v5_holdout_cannot_call_paid_provider_without_new_authorization(
     monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
     with pytest.raises(ValueError, match="approval missing"):
         run(max_cases=1, first_index=0, output=tmp_path / "none.json", matrix_name="v5_holdout")
+
+
+def test_v5_evaluator_alternative_scoring_only_accepts_safe_readonly_choices() -> None:
+    from scripts.evaluate_schema_suggestion_live import accepted_case_decisions, decision_score_only
+
+    cases = json.loads(
+        (ROOT / "tests/fixtures/schema_suggestion/evaluation_v5_holdout.json").read_text()
+    )["cases"]
+    alternatives = [c for c in cases if "also_safe_decision" in c]
+    assert {c["id"] for c in alternatives} == {"en_hypothetical_future", "es_hypothetical_future"}
+    for c in cases:
+        choices = accepted_case_decisions(c)
+        assert c["expected"] in choices
+        if c in alternatives:
+            assert choices == ("CLARIFY", "ABSTAIN")
+            assert decision_score_only(c["expected"], "CLARIFY", accepted=choices)[0]
+            assert decision_score_only(c["expected"], "ABSTAIN", accepted=choices)[0]
+            assert not decision_score_only(c["expected"], "ADD_TYPE", accepted=choices)[0]
+            assert not decision_score_only(c["expected"], "ADD_PROPERTY", accepted=choices)[0]
+            assert not decision_score_only(c["expected"], "REUSE", accepted=choices)[0]
+        else:
+            assert choices == (c["expected"],)
+    for invalid in (
+        {"expected": "ADD_TYPE", "also_safe_decision": "ABSTAIN"},
+        {"expected": "CLARIFY", "also_safe_decision": "ADD_TYPE"},
+        {"expected": "REUSE", "also_safe_decision": "CLARIFY"},
+    ):
+        with pytest.raises(ValueError, match="Unsupported alternative"):
+            accepted_case_decisions(invalid)
+    assert not decision_score_only("CLARIFY", "ABSTAIN")[0]  # legacy strict cases unchanged

@@ -29,9 +29,30 @@ MAX_OUTPUT_TOKENS_PER_CALL = 1200
 MAX_INPUT_CHARS = 1200
 
 
-def decision_score_only(expected: str, actual: str) -> tuple[bool, str]:
+def accepted_case_decisions(case: dict[str, Any]) -> tuple[str, ...]:
+    """Freeze known safe alternatives BEFORE model calls, never after scoring.
+
+    Only a hypothetical CLARIFY vs ABSTAIN can have multiple accepted labels.
+    ADD_TYPE/ADD_PROPERTY and REUSE cannot be silently added as alternatives.
+    Other matrices remain strict exact-label baselines.
+    """
+    expected = case["expected"]
+    alternative = case.get("also_safe_decision")
+    if alternative is None:
+        return (expected,)
+    if expected != "CLARIFY" or alternative != "ABSTAIN":
+        raise ValueError("Unsupported alternative evaluation outcome")
+    return (expected, alternative)
+
+
+def decision_score_only(
+    expected: str, actual: str, *, accepted: tuple[str, ...] | None = None
+) -> tuple[bool, str]:
     """Operation matching is NOT semantic approval of a target or property."""
-    return expected == actual, (
+    choices = accepted if accepted is not None else (expected,)
+    if expected not in choices:
+        raise ValueError("Frozen expected outcome missing from accepted choices")
+    return actual in choices, (
         "rejected_before_semantic_review" if actual == "INVALID" else "awaiting_independent_review"
     )
 
@@ -113,6 +134,10 @@ def run(*, max_cases: int, first_index: int, output: Path, matrix_name: str = "v
     assert len(cases) == matrix_count
     selected = cases[first_index : first_index + max_cases]
     assert all(0 < len(case["source"]) <= MAX_INPUT_CHARS for case in selected)
+    # Preflight the complete frozen matrix: refuse to run any paid calls if an
+    # alternative outcome is invalid or would accidentally permit mutation.
+    for case in cases:
+        accepted_case_decisions(case)
 
     # Same provider and schema as production composition, without installing it
     # in either DEV or PROD. No private user context ever enters the prompt.
@@ -140,10 +165,14 @@ def run(*, max_cases: int, first_index: int, output: Path, matrix_name: str = "v
                 actual = (
                     result["change"]["operation"].upper() if decision == "PROPOSE" else decision
                 )
-                decision_match, semantic_status = decision_score_only(case["expected"], actual)
+                accepted = accepted_case_decisions(case)
+                decision_match, semantic_status = decision_score_only(
+                    case["expected"], actual, accepted=accepted
+                )
                 record.update(
                     actual=actual,
                     decision_match=decision_match,
+                    accepted_decisions=list(accepted),
                     semantic_status=semantic_status,
                     validated=True,
                 )
