@@ -69,10 +69,10 @@ Sin backfill ni despliegue; confirmación histórica revisada, no E2E.
 tipo/propiedad, reutilización o aclaración; se conecta a Notas y a n8n con
 identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 `ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` solo DEV, apagado por defecto.
-Matriz real V1: **17/24 coincidencias de decisión, NO éxito semántico**
-(24 llamadas/36.224 tokens, 5 rechazos + 2 `REUSE` erróneos); [informe](schema-conversation-live-eval-20261025.md).
-V2 real: **20/24 decisiones, NO éxito semántico**; [4 fallos](schema-conversation-v2-eval-20261025.md).
-V3 sin prueba real; no activar. Pendientes holdout, Chromium, backfill y discovery.
+Matriz V1: **17/24 decisiones**; [informe](schema-conversation-live-eval-20261025.md).
+V2 real: **20/24 decisiones**; [fallos](schema-conversation-v2-eval-20261025.md).
+V3 real: **33/40 decisiones, NO éxito semántico**; [2 bloqueos](schema-conversation-v3-live-eval-20261025.md).
+No activar. Pendientes V4, Chromium, backfill y discovery.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than

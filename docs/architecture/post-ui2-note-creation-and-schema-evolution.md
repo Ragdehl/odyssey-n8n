@@ -845,7 +845,7 @@ al mensaje anterior; `REUSE`, `CLARIFY` y `ABSTAIN` son de solo lectura.
 antes de cualquier acceso al almacenamiento PROD. Una respuesta de modelo
 no puede habilitar esas banderas. Los tipos App-owned siguen protegidos.
 
-**Validación V1 y V2 reales NO aprobadas; V3 sin evaluación, BLOQUEANTE.**
+**Validación V1, V2 y V3 reales NO aprobadas; habilitación BLOQUEADA.**
 El informe reproducible está en
 [schema-conversation-live-eval-20261025.md](schema-conversation-live-eval-20261025.md):
 24 llamadas reales a `gpt-6-luna` low, 17 decisiones esperadas, 5 rechazos
@@ -861,10 +861,14 @@ La V2 se evaluó con el proveedor real y logró **20/24 coincidencias de
 operación, no éxitos semánticos certificados**. Quedan cuatro discrepancias,
 una de ellas incompatible con el contrato de fechas parciales: detalle en
 [schema-conversation-v2-eval-20261025.md](schema-conversation-v2-eval-20261025.md).
-La V3 añade protecciones al prompt y distingue citas de propuestas frente
-a aclaraciones; aún no ha tenido llamadas reales ni prueba holdout. Solo se
-habilitará tras evaluación semántica satisfactoria y aceptación de app con
-vault sintético. La puerta transversal de fuente V2 ahora
+La V3 fue evaluada con **40 llamadas reales sintéticas**: 22/24 etiquetas
+de regresión, 9/12 holdout, 2/4 repeticiones; **33/40 etiquetas, NO
+33 éxitos semánticos**. Persisten dos bloqueos: ISBN inferido sobre el
+tipo genérico `document` y exclusión de plantas laborales que no puede
+hacerse cumplir con una mera descripción. Informe íntegro en
+[schema-conversation-v3-live-eval-20261025.md](schema-conversation-v3-live-eval-20261025.md).
+Queda prohibido activar el asistente hasta revisar un nuevo contrato V4
+con semántica satisfactoria y probarlo desde la app usando vault sintético. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
 **2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.

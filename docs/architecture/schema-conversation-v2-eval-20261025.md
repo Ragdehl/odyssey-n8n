@@ -43,9 +43,11 @@
 - **`es_same_word_twice` — CLARIFY esperado / INVALID recibido:** la respuesta real hacía una pregunta útil para precisar qué libros prestados excluir, pero acompañada de una cita `libros` que aparece dos veces. El parser la rechazó por unicidad. En V3 se ignora esa cita auxiliar solo en CLARIFY/ABSTAIN; para propuestas y reutilización la cita única continúa siendo obligatoria.
 - **`es_too_broad` — CLARIFY esperado / ABSTAIN recibido:** «Organízame todo mejor» es una solicitud vaga en el editor de esquemas, así que conviene preguntar qué quiere organizar en vez de no ofrecer continuidad.
 
-## Próximo prompt V3 — SIN EVALUAR CON PROVEEDOR
+## Prompt V3 posterior (histórico): evaluado, NO aprobado
 
 - **Hash V3 actual no probado:** `18daa35c99fb72764a88cc2325c3049348eec811dad705052aad720a1a08e92e`.
 - V3 explicita reutilización de tipos equivalentes incluso cuando se pide otra copia, prohibición de sustituir fechas parciales por enteros/texto y aclaración ante peticiones genéricas. El validador ignora citas no decisorias de CLARIFY/ABSTAIN sin permitir referencias sin evidencia en una propuesta mutadora.
-- Pruebas SDK simuladas y del validador **no son evaluación semántica real de V3**. El *holdout* de 12 casos existe pero **no ha sido ejecutado con modelos reales**. No se consumirán más llamadas dentro del presupuesto de 24 de esta ronda.
-- **Condiciones pendientes:** revisión humana independiente de contenido y tipo de propiedades, campaña real con el hash V3 y *holdout* bajo nuevo presupuesto autorizado, repetición de los casos inestables, acceptance Chromium→n8n→Core/Notas en un vault de prueba. Flags DEV y confirmación continúan desactivados; PROD intacto.
+- Nota histórica previa a la campaña V3: las pruebas SDK simuladas y del validador no acreditaban comportamiento real. **Actualización:** V3 ya fue evaluada con 24 regresiones, 12 holdout y 4 repeticiones dentro de un presupuesto posterior autorizado, y sigue NO aprobada; véase el informe V3.
+- **Condiciones pendientes actuales:** reparar bloqueos semánticos del contrato, autorizar y evaluar V4, revisar los cambios completos, después aceptación Chromium→n8n→Core/Notas en un vault de prueba. Flags DEV y confirmación continúan desactivados; PROD intacto.
+
+**Actualización posterior:** V3 fue evaluado sobre esta regresión y 12 casos holdout, con cuatro repeticiones; [informe V3 real](schema-conversation-v3-live-eval-20261025.md). No extrapolar ninguna puntuación a la semántica ni activar la funcionalidad.
