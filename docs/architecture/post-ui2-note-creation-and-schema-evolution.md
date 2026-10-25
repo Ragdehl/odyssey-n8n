@@ -1133,3 +1133,20 @@ only then decide implementation slices and resume broader application roadmap
 ```
 
 This document records the intended immediate follow-up only. It does not authorize schema mutation, production changes, provider/model changes, planner fast paths, relation inference, unrestricted boolean filtering, or generated-readable-note persistence as personal knowledge by itself.
+
+**Smoke adicional autorizado, V6 real (25-10-2026; sin desplegar):**
+Se confirmó que el cambio de ruta Cloudflare DEV y la prueba Chromium manual
+ya se habían completado previamente; no se repitieron. Se ejecutaron
+**2 llamadas reales** sintéticas a `gpt-6-luna` (`low`, strict JSON,
+`store=False`, sin herramientas/reintentos) con el hash V6 de fuente,
+mediante unidad efímera y entorno de credenciales protegido. Resultado:
+`en_devices_and_batteries` → `ADD_TYPE` «Flashlight», propiedad
+«Battery type» `string`; `fr_cameras_and_manufacturer` → `ADD_TYPE`
+«Appareil photo», propiedad «Fabricant» `string`. Ambos casos validados por
+el contrato y correctos en idioma/granularidad. Coste observado: 2 llamadas,
+4.910 tokens entrada + 416 salida. Evidencia privada 0600 en
+`/tmp/schema-v6-two-synthetic-smoke-20261025.json` del Pi.
+Sin escritura de notas, cambio de esquemas, despliegue o confirmación.
+**No equivale** a evaluación integral de V6, sesión real autenticada por
+Cloudflare Access, ni revisión final de esquema con GPT real. La app DEV
+sigue sana y PROD intacto. No se ha activado el assistant ni su flag.
