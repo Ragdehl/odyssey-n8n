@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -93,6 +93,28 @@ export function validateSchemaOperationResponse(operation, value) {
           properties: type.properties.map((property) => ({id: property.id,
             description: property.description, value_type: property.value_type,
             required: property.required}))}};
+    }
+  }
+  if (operation === "schema_suggest" && value.kind === "schema_suggestion" &&
+      typeof value.message === "string" && value.message.trim() && value.message.length <= 500) {
+    if (value.decision === "PROPOSE" && expected(["kind", "decision", "message", "change", "preview"]) &&
+        value.change && typeof value.change === "object" && !Array.isArray(value.change)) {
+      const preview = validateSchemaOperationResponse("schema_preview", value.preview);
+      const change = value.change;
+      if (["add_type", "add_property"].includes(change.operation) &&
+          change.operation === preview.operation &&
+          (change.operation !== "add_type" || change.type?.id === preview.affected_type_id) &&
+          (change.operation !== "add_property" || change.type_id === preview.affected_type_id)) {
+        return {kind: "schema_suggestion", decision: "PROPOSE", message: value.message,
+          change, preview};
+      }
+    }
+    if (["REUSE", "CLARIFY", "ABSTAIN"].includes(value.decision) &&
+        expected(["kind", "decision", "message", "reuse_type_id"]) &&
+        (value.decision === "REUSE" ? /^[a-z][a-z0-9_]{0,63}$/.test(value.reuse_type_id ?? "") :
+          value.reuse_type_id === null)) {
+      return {kind: "schema_suggestion", decision: value.decision, message: value.message,
+        reuse_type_id: value.reuse_type_id};
     }
   }
   if (operation === "schema_confirm" && expected(

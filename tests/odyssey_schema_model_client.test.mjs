@@ -66,3 +66,26 @@ test("activation client accepts one exact queued/active status and rejects write
     next_revision: 1, physical_write: true,
   }), NotesRequestError);
 });
+
+test("untrusted schema suggestion must match a validated canonical preview", () => {
+  const suggested = {kind: "schema_suggestion", decision: "PROPOSE", message: "Crea un tipo Libro",
+    change: {operation: "add_type", type: {id: "libro"}}, preview};
+  assert.equal(validateSchemaOperationResponse("schema_suggest", suggested).decision, "PROPOSE");
+  const wrong = [
+    {...suggested, actor_id: "forged"},
+    {...suggested, decision: "CONFIRM"},
+    {...suggested, change: {operation: "add_type", type: {id: "another"}}},
+    {...suggested, preview: {...preview, proposal_hash: "bad"}},
+    {...suggested, message: "a".repeat(501)},
+    {...suggested, change: {operation: "delete_type", type_id: "person"}},
+    {...suggested, approved: true},
+  ];
+  for (const item of wrong) assert.throws(
+    () => validateSchemaOperationResponse("schema_suggest", item), NotesRequestError);
+  assert.equal(validateSchemaOperationResponse("schema_suggest", {
+    kind: "schema_suggestion", decision: "CLARIFY", message: "¿Qué datos?", reuse_type_id: null,
+  }).decision, "CLARIFY");
+  assert.throws(() => validateSchemaOperationResponse("schema_suggest", {
+    kind: "schema_suggestion", decision: "REUSE", message: "Reutiliza", reuse_type_id: "../notes",
+  }), NotesRequestError);
+});

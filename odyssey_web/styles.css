@@ -658,3 +658,8 @@ textarea.schema-model-input { resize: vertical; min-height: 4.1rem; }
 .schema-model-preview-summary ul { margin: .35rem 0; padding-left: 1.15rem; font-size: .8rem; }
 .schema-model-controls { display: flex; flex-wrap: wrap; gap: .45rem; }
 .schema-model-retry { margin-top: .65rem; }
+
+.schema-model-assistant { display: grid; gap: .55rem; margin: .6rem 0 1rem; padding: .7rem; border: 1px solid #d5dcee; border-radius: .7rem; background: #f1f3fc; }
+.schema-model-assistant h3 { margin: 0; font-size: .88rem; }
+.schema-model-assistant-reply { color: #405272; font-size: .8rem; line-height: 1.45; white-space: pre-wrap; }
+.schema-model-ask { justify-self: start; background: #e3e1fa; }

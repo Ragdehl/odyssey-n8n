@@ -510,6 +510,8 @@ class RuntimeComposition:
     user_schema_registry: object | None = None
     user_schema_revision: int | None = None
     schema_activation_enabled: bool = False
+    # Strictly read-only LLM design hints; activation still needs user click.
+    schema_suggestion_service: object | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1766,6 +1768,29 @@ class RuntimeComposition:
                     proposal_hash=payload["proposal_hash"],
                 ),
             )
+        if operation == "schema_suggest":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.user_schema_registry is None
+                or self.schema_suggestion_service is None
+            ):
+                raise ValueError("Conversational schema assistant is unavailable")
+            if set(payload) != {"message", "expected_revision"}:
+                raise ValueError("Schema conversation payload is invalid")
+            from .schema_suggestion import SchemaSuggestionService
+            from .user_schema_registry import UserSchemaRegistry
+
+            if (
+                not isinstance(self.schema_suggestion_service, SchemaSuggestionService)
+                or not isinstance(self.user_schema_registry, UserSchemaRegistry)
+                or not isinstance(payload["message"], str)
+            ):
+                raise ValueError("Schema conversation service is invalid")
+            return self.schema_suggestion_service.suggest(
+                payload["message"],
+                self.user_schema_registry,
+                expected_revision=payload["expected_revision"],
+            )
         if operation == "schema_preview":
             # The runtime's ordinary fallback `odyssey-runtime` is not an
             # authenticated user. Previewing schema changes requires one
@@ -2868,6 +2893,14 @@ def build_runtime_from_environment() -> RuntimeComposition:
     schema_enabled = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
     if schema_enabled not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
+    # Reject an accidental PROD assistant request *before* touching roots.
+    suggestion_enabled = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
+    if suggestion_enabled not in {"0", "1"}:
+        raise ValueError("Schema assistant flag is invalid")
+    if suggestion_enabled == "1" and (
+        schema_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Schema assistant requires isolated DEV user registry")
     if schema_enabled == "0":
         return _build_runtime_from_environment_unlocked()
     if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
@@ -2937,7 +2970,15 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     user_schema_registry = None
     user_schema_revision = None
     schema_activation_enabled = False
+    schema_suggestion_service = None
+    suggestion_flag = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
+    if suggestion_flag not in {"0", "1"}:
+        raise ValueError("Schema assistant feature flag is invalid")
     user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
+    if suggestion_flag == "1" and (
+        user_schema_flag != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Schema assistant requires isolated DEV user registry")
     if user_schema_flag not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
     if user_schema_flag == "1":
@@ -2957,6 +2998,12 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         if confirmation_flag not in {"0", "1"}:
             raise ValueError("Schema confirmation flag is invalid")
         schema_activation_enabled = confirmation_flag == "1"
+        if suggestion_flag == "1":
+            from .schema_suggestion import SchemaSuggestionService
+
+            schema_suggestion_service = SchemaSuggestionService(
+                OpenAIConversationGateway.from_environment()
+            )
     # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
     # UI publication/hot-reload boundary is deliberately NOT available yet.
 
@@ -5416,6 +5463,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         user_schema_registry=user_schema_registry,
         user_schema_revision=user_schema_revision,
         schema_activation_enabled=schema_activation_enabled,
+        schema_suggestion_service=schema_suggestion_service,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

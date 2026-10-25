@@ -71,6 +71,16 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     "Organiza personas, libros, plantas o cualquier tipo de cosa con los datos que te interesen. Odyssey comprobará si tu propuesta encaja con el modelo actual.");
   const availability = control("p", "schema-model-message");
   availability.setAttribute("role", "status");
+  const assistant = control("section", "schema-model-assistant");
+  assistant.append(control("h3", "", "Explícaselo a Odyssey"));
+  const request = entry("¿Cómo quieres organizar tus notas?",
+    "Ej.: Quiero organizar los libros que leo y guardar su autor y número de páginas", {multiline: true});
+  request.input.maxLength = 1200;
+  const assistantReply = control("p", "schema-model-assistant-reply");
+  assistantReply.setAttribute("role", "status");
+  const ask = button("Pedir propuesta a la IA", () => void suggest(), "schema-model-ask");
+  assistant.append(request.wrapper, ask, assistantReply,
+    control("p", "schema-model-hint", "La IA propone, pero no puede cambiar tus notas ni aprobar cambios. También puedes usar las preguntas guiadas de abajo."));
   const form = control("form", "schema-model-form");
   const preview = control("section", "schema-model-preview");
   preview.hidden = true;
@@ -78,8 +88,23 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   const confirmation = control("p", "schema-model-confirmation");
   const confirm = button("Confirmar este cambio", () => void submit(), "schema-model-confirm");
   const review = button("Modificar propuesta", () => {
+    const draft = proposed?.draft;
     invalidate();
     preview.hidden = true;
+    if (draft?.operation === "add_type") {
+      mode = "new";
+      fields = build();
+      fields.name.value = draft.type.name;
+      fields.description.value = draft.type.description;
+      fields.properties.value = draft.type.properties.map((p) => p.id).join(", ");
+    } else if (draft?.operation === "add_property") {
+      mode = "add-property";
+      activeType = {id: draft.type_id};
+      fields = build();
+      fields.name.value = draft.property.id;
+      fields.description.value = draft.property.description;
+      fields.typeSelector.value = draft.property.value_type;
+    }
     form.hidden = false;
     availability.textContent = "Puedes corregir la información y comprobarla otra vez.";
   }, "schema-model-review");
@@ -96,7 +121,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   const newDraft = button("Preparar otra propuesta", () => void open({kind: mode, type: activeType}),
     "schema-model-new-draft");
   newDraft.hidden = true;
-  sheet.append(top, intro, availability, form, preview, retry, recover, newDraft);
+  sheet.append(top, intro, availability, assistant, form, preview, retry, recover, newDraft);
   root.append(sheet);
 
   let generation = 0;
@@ -107,6 +132,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   let activeType = null;
   let canConfirm = false;
   let busy = false;
+  let priorClarification = null;
 
   function invalidate() {
     generation += 1;
@@ -119,6 +145,8 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     busy = value;
     confirm.disabled = value || !canConfirm || !proposed;
     retry.disabled = value;
+    ask.disabled = value;
+    request.input.disabled = value;
     for (const field of form.querySelectorAll("input")) field.disabled = value;
     for (const field of form.querySelectorAll("textarea")) field.disabled = value;
     for (const field of form.querySelectorAll("select")) field.disabled = value;
@@ -191,6 +219,10 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     retry.hidden = true;
     recover.hidden = true;
     newDraft.hidden = true;
+    assistant.hidden = false;
+    assistantReply.textContent = "";
+    request.input.value = "";
+    priorClarification = null;
     form.hidden = true;
     current = null;
     canConfirm = false;
@@ -226,6 +258,69 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     }
   }
 
+  function showPreview(draft, result, explanation = "") {
+    proposed = {draft, result};
+    summary.replaceChildren();
+    summary.append(control("h3", "", result.type_preview.name),
+      control("p", "", result.type_preview.description));
+    const list = control("ul", "");
+    for (const property of result.type_preview.properties) {
+      list.append(control("li", "", `${property.description} (${property.value_type})`));
+    }
+    if (result.type_preview.properties.length) summary.append(list);
+    confirmation.textContent = canConfirm
+      ? "Confirma solo si esta propuesta refleja lo que quieres. Odyssey la activará al reiniciar; las notas anteriores no se modificarán con esta operación."
+      : "Es una vista previa. La aprobación y el análisis de las notas anteriores aún no están habilitados.";
+    form.hidden = true;
+    preview.hidden = false;
+    availability.textContent = explanation || "Propuesta validada: ningún cambio ha sido aplicado.";
+  }
+
+  async function suggest() {
+    if (busy || !current || current.status !== "ready" || pendingId) return;
+    const message = request.input.value.trim();
+    if (!message || message.length > 1200) {
+      assistantReply.textContent = "Explica brevemente qué quieres organizar.";
+      return;
+    }
+    const source = priorClarification
+      ? `${priorClarification.source}\nPregunta: ${priorClarification.question}\nRespuesta: ${message}`
+      : message;
+    if (source.length > 1200) {
+      assistantReply.textContent = "La explicación es demasiado larga. Resúmela en un solo mensaje.";
+      return;
+    }
+    invalidate();
+    const seq = generation;
+    setBusy(true);
+    assistantReply.textContent = "Odyssey está revisando qué modelo de nota necesitas…";
+    try {
+      const result = await client({endpoint, operation: "schema_suggest", payload: {
+        message: source, expected_revision: current.revision,
+      }});
+      if (seq !== generation || sheet.hidden) return;
+      if (result.decision === "PROPOSE") {
+        priorClarification = null;
+        assistantReply.textContent = result.message;
+        showPreview(result.change, result.preview,
+          "Propuesta de la IA comprobada por Core. Todavía no se ha aplicado ningún cambio.");
+      } else if (result.decision === "CLARIFY") {
+        priorClarification = {source, question: result.message};
+        assistantReply.textContent = result.message;
+        request.input.value = "";
+        request.input.focus();
+      } else {
+        priorClarification = null;
+        assistantReply.textContent = result.message;
+      }
+    } catch {
+      if (seq === generation) assistantReply.textContent =
+        "El asistente de IA no está habilitado o no ha podido preparar la propuesta. Puedes usar las preguntas guiadas sin activar ningún cambio.";
+    } finally {
+      if (seq === generation) setBusy(false);
+    }
+  }
+
   async function propose() {
     if (busy || !current || current.status !== "ready") return;
     let draft;
@@ -242,21 +337,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         change: draft, expected_revision: current.revision,
       }});
       if (seq !== generation || sheet.hidden) return;
-      proposed = {draft, result};
-      summary.replaceChildren();
-      summary.append(control("h3", "", result.type_preview.name),
-        control("p", "", result.type_preview.description));
-      const list = control("ul", "");
-      for (const property of result.type_preview.properties) {
-        list.append(control("li", "", `${property.description} (${property.value_type})`));
-      }
-      if (result.type_preview.properties.length) summary.append(list);
-      confirmation.textContent = canConfirm
-        ? "Confirma solo si esta propuesta refleja lo que quieres. Odyssey la activará al reiniciar; las notas anteriores no se modificarán con esta operación."
-        : "Es una vista previa. La aprobación y el análisis de las notas anteriores aún no están habilitados.";
-      form.hidden = true;
-      preview.hidden = false;
-      availability.textContent = "Propuesta validada: ningún cambio ha sido aplicado.";
+      showPreview(draft, result);
     } catch (error) {
       if (seq === generation) availability.textContent = error?.code === "SCHEMA_REVISION_STALE"
         ? "Los tipos han cambiado. Cierra y vuelve a abrir para preparar una propuesta actualizada."

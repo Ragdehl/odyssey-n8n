@@ -103,3 +103,19 @@ test("n8n confirmation rejects malformed digests, authority overrides and extra 
     assert.equal(run(invalid).invalid, true);
   }
 });
+
+test("n8n allows only authenticated bounded conversational schema hints", () => {
+  const valid = {operation: "schema_suggest", message: "Quiero fichas de mis libros", expected_revision: 0};
+  assert.deepEqual(run(valid), {...valid,
+    authenticated_actor: {stable_user_id: "00000000-0000-4000-8000-000000000001"},
+  });
+  for (const extra of [
+    {message: ""}, {message: " ".repeat(20)}, {message: "a".repeat(1201)},
+    {message: 1}, {expected_revision: -1}, {expected_revision: true},
+    {approved: true}, {request_id: "forged"}, {proposal_hash: "a".repeat(64)},
+    {authenticated_actor: {stable_user_id: "attacker"}},
+    {change: {operation: "add_type"}},
+  ]) {
+    assert.equal(run({...valid, ...extra}).invalid, true, JSON.stringify(extra).slice(0, 80));
+  }
+});

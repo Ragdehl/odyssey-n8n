@@ -80,7 +80,7 @@ test("new type asks human questions, previews through Notes, and never auto-conf
   const panel = createSchemaModel({root: new Element("section"), client});
   await panel.open({kind: "new"});
   assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
-  const inputs = panel.element.querySelectorAll(".schema-model-input");
+  const inputs = panel.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
   inputs[0].value = "Libro";
   inputs[1].value = "Libros que leo";
   inputs[2].value = "autor";
@@ -117,7 +117,7 @@ test("typed existing type property previews before one click, then only polls or
   const panel = createSchemaModel({root: new Element("section"), client,
     onActive: () => {activeCount += 1;}});
   await panel.open({kind: "add-property", type: {id: "person", name: "Persona"}});
-  const inputs = panel.element.querySelectorAll(".schema-model-input");
+  const inputs = panel.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
   inputs[0].value = "Oficio";
   inputs[1].value = "Profesión actual";
   inputs[2].value = "string";
@@ -155,7 +155,7 @@ test("a failed ACK never automatically resubmits the approval", async () => {
   });
   const panel = createSchemaModel({root: new Element("section"), client});
   await panel.open({kind: "new"});
-  const inputs = panel.element.querySelectorAll(".schema-model-input");
+  const inputs = panel.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
   inputs[0].value = "Libro"; inputs[1].value = "Libros que leo";
   panel.element.querySelector(".schema-model-propose").click(); await flush();
   const action = panel.element.querySelector(".schema-model-confirm");
@@ -173,7 +173,7 @@ test("closing the panel invalidates a late untrusted preview response", async ()
     new Promise((resolve) => {release = resolve;}));
   const panel = createSchemaModel({root: new Element("section"), client});
   await panel.open({kind: "new"});
-  const inputs = panel.element.querySelectorAll(".schema-model-input");
+  const inputs = panel.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
   inputs[0].value = "Libro"; inputs[1].value = "Libros que leo";
   panel.element.querySelector(".schema-model-propose").click(); await flush();
   panel.close();
@@ -202,7 +202,7 @@ test("pending approval survives Notes reload and uses actor-scoped status instea
   });
   const first = createSchemaModel({root: new Element("section"), client, storage});
   await first.open({kind: "new"});
-  const inputs = first.element.querySelectorAll(".schema-model-input");
+  const inputs = first.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
   inputs[0].value = "Libro"; inputs[1].value = "Libros que leo";
   first.element.querySelector(".schema-model-propose").click(); await flush();
   first.element.querySelector(".schema-model-confirm").click(); await flush();
@@ -277,4 +277,71 @@ test("after pending approval is active on first load user can start a new propos
   assert.equal(action.hidden, false);
   action.click(); await flush();
   assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
+});
+
+test("assistant returns a Core-previewed typed proposal but never invokes confirmation", async () => {
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(false);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Un tipo diferente te permite organizar cada libro.",
+      change: {operation: "add_type", type: {id: "libro", name: "Libro", description: "Libros que leo", examples: [],
+        properties: [{id: "autor", description: "Autor", value_type: "string"}]}},
+      preview: makeType()};
+    throw new Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value =
+    "Quiero fichas para mis libros con autor";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  assert.equal(calls.at(-1).operation, "schema_suggest");
+  assert.equal(calls.at(-1).payload.expected_revision, 0);
+  assert.equal(panel.element.querySelector(".schema-model-preview").hidden, false);
+  assert.equal(panel.element.querySelector(".schema-model-confirm").disabled, true);
+  assert.equal(calls.some((entry) => entry.operation === "schema_confirm"), false);
+  panel.element.querySelector(".schema-model-review").click(); await flush();
+  assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
+  assert.equal(panel.element.querySelector(".schema-model-form").querySelectorAll("input")[0].value, "Libro");
+});
+
+test("assistant clarification uses the user's follow-up as data and cannot auto-confirm", async () => {
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(true);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "CLARIFY",
+      message: "¿Qué datos quieres guardar?", reuse_type_id: null};
+    throw new Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  const assistant = panel.element.querySelector(".schema-model-assistant");
+  assistant.querySelector("textarea").value = "Quiero guardar más detalles";
+  assistant.querySelector(".schema-model-ask").click(); await flush();
+  assert.match(assistant.textContent, /¿Qué datos quieres guardar/);
+  assistant.querySelector("textarea").value = "Quiero la profesión de mis personas";
+  assistant.querySelector(".schema-model-ask").click(); await flush();
+  assert.equal(calls.filter((call) => call.operation === "schema_suggest").length, 2);
+  assert.match(calls.at(-1).payload.message, /Pregunta:/);
+  assert.match(calls.at(-1).payload.message, /profesión de mis personas/);
+  assert.equal(calls.some((call) => call.operation === "schema_confirm"), false);
+});
+
+test("assistant refusal or outage leaves safe manual entry and no activation", async () => {
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(true);
+    throw new Error("Provider unavailable");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value =
+    "Quiero organizar plantas";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  assert.match(panel.element.textContent, /no está habilitado/);
+  assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
+  assert.equal(calls.some((item) => item.operation === "schema_confirm"), false);
 });

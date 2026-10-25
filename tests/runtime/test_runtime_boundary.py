@@ -2811,3 +2811,96 @@ def test_http_schema_missing_activation_has_one_indistinguishable_not_found_code
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_authenticated_http_schema_assistant_readonly_and_separate_activation_gate(
+    tmp_path: Path,
+) -> None:
+    """Real local HTTP: model advice -> Core preview, no mutation or implicit click."""
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime.schema_suggestion import SchemaSuggestionService
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    reg = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    provider_calls = []
+
+    class FakeGateway:
+        def _complete(self, **arguments):
+            provider_calls.append(arguments)
+            return {
+                "decision": "ADD_TYPE",
+                "subject_quote": "libros",
+                "type_name": "Libro",
+                "type_id": None,
+                "description": "Libros que conozco",
+                "properties": [],
+                "question": None,
+                "explanation": "Cada libro puede tener datos propios.",
+            }
+
+    service = SchemaSuggestionService(FakeGateway())  # type: ignore[arg-type]
+    user = OdysseyUser.new().stable_user_id
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=reg,
+        schema_suggestion_service=service,
+        schema_activation_enabled=False,
+    )
+    server = _test_server(runtime)
+
+    def send(body: dict) -> tuple[int, dict]:
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=6)
+        connection.request("POST", "/notes", body=json.dumps(body))
+        response = connection.getresponse()
+        data = response.status, json.loads(response.read())
+        connection.close()
+        return data
+
+    try:
+        message = {
+            "operation": "schema_suggest",
+            "message": "Quiero organizar libros",
+            "expected_revision": 0,
+        }
+        assert send(message) == (400, {"error": "invalid notes request"})
+        status, outcome = send({**message, "authenticated_actor": {"stable_user_id": user}})
+        assert status == 200
+        assert outcome["kind"] == "schema_suggestion"
+        assert outcome["decision"] == "PROPOSE"
+        assert outcome["change"]["type"]["id"] == "libro"
+        assert outcome["preview"]["type_preview"]["name"] == "Libro"
+        assert reg.snapshot()[0] == 0
+        assert not (tmp_path / "user-schema/current.json").exists()
+        assert len(provider_calls) == 1
+        for changed in [
+            {**message, "expected_revision": True},
+            {**message, "approved": True},
+            {**message, "message": " " * 15},
+            {**message, "message": "x" * 1201},
+            {**message, "expected_revision": 1},
+        ]:
+            code, _ = send({**changed, "authenticated_actor": {"stable_user_id": user}})
+            assert code == 400
+        assert len(provider_calls) == 1
+        assert (
+            send(
+                {
+                    "operation": "schema_confirm",
+                    "change": outcome["change"],
+                    "expected_revision": 0,
+                    "proposal_hash": outcome["preview"]["proposal_hash"],
+                    "request_id": "must-never-approve-automatically",
+                    "authenticated_actor": {"stable_user_id": user},
+                }
+            )[0]
+            == 400
+        )
+        assert reg.snapshot()[0] == 0
+    finally:
+        server.shutdown()
+        server.server_close()

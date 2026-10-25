@@ -815,6 +815,55 @@ modelo, reajustar la propuesta desde lenguaje natural, completar el backfill
 E3 y descubrir entidades mencionadas solo tras crear un tipo nuevo; después
 hacer pruebas reales desde la app DEV, navegación/recarga y readback físico.
 
+**Sexto corte, conversación de modelo de notas — fuente opt-in (25-10-2026).**
+Se añade `odyssey_runtime/schema_suggestion.py`, una especialización de
+interpretación **sin escritura** que reutiliza la llamada estricta
+`OpenAIConversationGateway._complete` (mismo `gpt-6-luna`, reasoning `low`,
+`store=False`, SDK con retry 0/timeout 30 s). No añade proveedor, agente ni
+servicio propios. Solicita **una sola respuesta JSON cerrada** por mensaje
+(≤1.200 caracteres, catálogo consultable ≤18,5 KB, salida ≤1.200 tokens),
+con decisión `ADD_TYPE`, `ADD_PROPERTY`, `REUSE`, `CLARIFY` o `ABSTAIN`, cita
+exacta de intención original, cita única por atributo deseado, tipo existente
+para añadir/reutilizar y una explicación humana. Todas las citas y tipos
+reales se validan determinísticamente. Los nuevos nombres se transforman a
+identificadores controlados, sin heurísticas de alias ni creación de entidades
+canónicas. Solo si pasa toda la evidencia se ejecuta
+`UserSchemaRegistry.preview()` por CAS contra la revisión actual, y se
+retorna **solo** una propuesta más su hash. Nunca confirmación ni escritura.
+Un resultado inválido falla cerrado, sin «best effort» que invente campos.
+Las fechas incompletas NO se reinterpretan como fechas completas: el
+contrato instruye `CLARIFY` hasta contar con soporte real.
+
+Se añade la ruta autenticada Notes/n8n `schema_suggest(message,
+expected_revision)`, cliente JS validado y área «Explícaselo a Odyssey»
+en el panel existente. La conversación soporta una aclaración corta anclada
+al mensaje anterior; `REUSE`, `CLARIFY` y `ABSTAIN` son de solo lectura.
+`PROPOSE` muestra la misma tarjeta de Core y **no hace clic** en el botón
+«Confirmar». El botón sigue detrás de su bandera independiente. El nuevo
+`ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` es **DEV-only** y requiere
+`ODYSSEY_USER_SCHEMA_ENABLED=1`; por defecto permanece apagado y se rechaza
+antes de cualquier acceso al almacenamiento PROD. Una respuesta de modelo
+no puede habilitar esas banderas. Los tipos App-owned siguen protegidos.
+
+**Validación semántica pendiente, BLOQUEANTE:** el contrato del prompt tiene
+matriz versionada `tests/fixtures/schema_suggestion/evaluation_v1.json`
+con **24 casos ES/FR/EN**, negaciones, correcciones, tipos existentes,
+propiedades, ausencia de intención, fechas parciales y prompt injection.
+Prompt SHA256 `229a3f2e2072bb6c20a198ffc38318406218f7a4057b9d7b833898fc358ce085`,
+esquema estricto SHA256 `19acba3f55c8b73eaf823a94bd1400e8510de83d1507e7a538ef46b5744ccc50`.
+Los tests SDK simulados / HTTP local / navegador DOM son evidencia de
+contrato **NO evidencia de comportamiento de GPT real**. No se ha gastado
+presupuesto ni realizado ninguna llamada a modelos de producción para este
+prompt, que sigue sin un hash/modelo aceptado semánticamente. La puerta transversal del
+corte fuente pasa **2.126 Python + 222 JavaScript** (12 grupos); es prueba
+funcional/contractual local, no evaluación del comportamiento de GPT. Para desbloquear
+el opt-in hay que ejecutar una campaña de validación con modelo real,
+presupuesto finito previamente autorizado, publicar outcomes y errores por
+caso, corregir y reevaluar fallos semánticos, y completar una aceptación
+Chromium→n8n→runtime→estado/aprobación con vault sintético. No desplegar ni
+fusionar como feature operativa ni afirmar «IA validada» todavía. El backfill
+E3 y el descubrimiento retrospectivo siguen en etapas separadas.
+
 **Pequeña corrección de UI:** la pantalla de Notas deja de mostrar al usuario
 el atributo técnico «filtrable» en las descripciones de propiedades y explica
 el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen

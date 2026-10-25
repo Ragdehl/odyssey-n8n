@@ -313,6 +313,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     if operation not in {
                         "capabilities",
                         "schema_preview",
+                        "schema_suggest",
                         "schema_confirm",
                         "schema_status",
                         "query",
