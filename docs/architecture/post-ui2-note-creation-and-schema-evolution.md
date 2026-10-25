@@ -845,7 +845,7 @@ al mensaje anterior; `REUSE`, `CLARIFY` y `ABSTAIN` son de solo lectura.
 antes de cualquier acceso al almacenamiento PROD. Una respuesta de modelo
 no puede habilitar esas banderas. Los tipos App-owned siguen protegidos.
 
-**Validación V1 ya ejecutada y NO aprobada; V2 sin evaluación, BLOQUEANTE.**
+**Validación V1 y V2 reales NO aprobadas; V3 sin evaluación, BLOQUEANTE.**
 El informe reproducible está en
 [schema-conversation-live-eval-20261025.md](schema-conversation-live-eval-20261025.md):
 24 llamadas reales a `gpt-6-luna` low, 17 decisiones esperadas, 5 rechazos
@@ -857,9 +857,14 @@ frente a categorías generales y hace que `ADD_PROPERTY` tenga `description`
 **de tipo** nula, conservando la descripción de la propiedad. La matriz
 original no se retoca; también hay un holdout de 12 casos sin evaluar.
 Prompt V2 SHA256 `c0322c9bbaa6fb234c54ab67cdd97f54532fe61280ec10079bd96a9f11ef06c2`.
-La V2 **no** hereda el 17/24 de V1 y no se habilitará hasta otra campaña
-real controlada y satisfactoria, auditada y seguida de aceptación desde la
-app con datos de DEV sintéticos. La puerta transversal de fuente V2 ahora
+La V2 se evaluó con el proveedor real y logró **20/24 coincidencias de
+operación, no éxitos semánticos certificados**. Quedan cuatro discrepancias,
+una de ellas incompatible con el contrato de fechas parciales: detalle en
+[schema-conversation-v2-eval-20261025.md](schema-conversation-v2-eval-20261025.md).
+La V3 añade protecciones al prompt y distingue citas de propuestas frente
+a aclaraciones; aún no ha tenido llamadas reales ni prueba holdout. Solo se
+habilitará tras evaluación semántica satisfactoria y aceptación de app con
+vault sintético. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
 **2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.
