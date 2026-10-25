@@ -126,7 +126,7 @@ def test_add_property_uses_canonical_type_and_queryable_optional_preview(tmp_pat
             "ADD_PROPERTY",
             "profesión",
             type_id="person",
-            description="Profesión conocida.",
+            description=None,
             properties=[
                 {
                     "quote": "profesión",
@@ -346,3 +346,107 @@ def test_schema_model_cannot_take_a_hidden_nonstring_type_id_from_provider(tmp_p
     )
     with pytest.raises(SchemaSuggestionError):
         validate_model_suggestion(source, invalid_property, catalogue)
+
+
+def test_add_property_no_type_description_frozen_real_model_response_is_valid_shape_but_not_semantic_proof(
+    tmp_path: Path,
+) -> None:
+    """Real v1 model produced null type description. Reject semantic inference separately."""
+    source = "Quiero apuntar el ISBN de mis libros ya existentes."
+    raw_v1 = {
+        "decision": "ADD_PROPERTY",
+        "subject_quote": "ISBN",
+        "type_name": None,
+        "type_id": "document",
+        "description": None,
+        "properties": [
+            {
+                "quote": "ISBN",
+                "name": "ISBN",
+                "description": "ISBN de un libro.",
+                "value_type": "string",
+            }
+        ],
+        "explanation": "El ISBN es un dato para tus libros existentes.",
+        "question": None,
+    }
+    proposed = validate_model_suggestion(
+        source, raw_v1, catalog_for_model(registry(tmp_path).snapshot()[1])
+    )
+    assert proposed.change is not None
+    assert proposed.change["type_id"] == "document"
+    # Critically: syntactically well-formed is NOT semantically safe. The
+    # user asked about books, not the broader document class. The evaluation
+    # matrix keeps this case a failed semantic decision, not a false PASS.
+    matrix = json.loads((ROOT / "tests/fixtures/schema_suggestion/evaluation_v1.json").read_text())
+    case = next(item for item in matrix["cases"] if item["id"] == "es_unique_attribute")
+    assert case["expected"] == "CLARIFY"
+
+
+def test_property_proposals_cannot_mutate_type_description(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    source = "Añade profesión a las personas"
+    base = raw(
+        "ADD_PROPERTY",
+        "profesión",
+        type_id="person",
+        properties=[
+            {
+                "quote": "profesión",
+                "name": "profesion",
+                "description": "Profesión cuando se conozca",
+                "value_type": "string",
+            }
+        ],
+    )
+    assert validate_model_suggestion(source, base, catalog_for_model(user.snapshot()[1])).change
+    with pytest.raises(SchemaSuggestionError, match="cannot edit type description"):
+        validate_model_suggestion(
+            source,
+            {**base, "description": "Mutar tipo Persona"},
+            catalog_for_model(user.snapshot()[1]),
+        )
+
+
+def test_real_provider_evaluator_requires_separate_dev_only_bounded_opt_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neither running tests nor an accidental CLI launch can consume tokens."""
+    from scripts.evaluate_schema_suggestion_live import run
+
+    output = tmp_path / "results.json"
+    monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV_EVAL")
+    with pytest.raises(ValueError, match="approval missing"):
+        run(max_cases=1, first_index=0, output=output)
+    monkeypatch.setenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "PROD")
+    with pytest.raises(ValueError, match="DEV_EVAL"):
+        run(max_cases=1, first_index=0, output=output)
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV_EVAL")
+    for count, index in ((25, 0), (1, 24), (6, 19), (0, 0)):
+        with pytest.raises(ValueError, match="bound|budget"):
+            run(max_cases=count, first_index=index, output=output)
+    assert not output.exists()
+
+
+def test_v2_holdout_is_a_distinct_frozen_semantic_matrix_not_synthetic_pass_evidence() -> None:
+    matrix = json.loads(
+        (ROOT / "tests/fixtures/schema_suggestion/evaluation_v2_holdout.json").read_text()
+    )
+    original = json.loads(
+        (ROOT / "tests/fixtures/schema_suggestion/evaluation_v1.json").read_text()
+    )
+    assert matrix["suite_version"] == "v2_holdout"
+    assert "not yet evaluated with a real model" in matrix["note"]
+    assert len(matrix["cases"]) >= 12
+    assert {x["id"] for x in matrix["cases"]}.isdisjoint({x["id"] for x in original["cases"]})
+    assert {x["source"] for x in matrix["cases"]}.isdisjoint(
+        {x["source"] for x in original["cases"]}
+    )
+    assert {x["expected"] for x in matrix["cases"]} == {
+        "ADD_TYPE",
+        "ADD_PROPERTY",
+        "CLARIFY",
+        "ABSTAIN",
+    }

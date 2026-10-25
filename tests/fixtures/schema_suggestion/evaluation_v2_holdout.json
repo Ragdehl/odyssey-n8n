@@ -1,0 +1,20 @@
+{
+  "suite_version": "v2_holdout",
+  "note": "Independent, not yet evaluated with a real model. Frozen expected decisions must not be changed just to silence a regression.",
+  "model": "gpt-6-luna",
+  "reasoning_effort": "low",
+  "cases": [
+    {"id":"es_new_specific","source":"Quiero crear un tipo Receta para cada plato que cocino y guardar sus ingredientes.","expected":"ADD_TYPE","reason":"Independently identifiable recipes, not a generic document"},
+    {"id":"fr_new_specific","source":"Je veux une fiche pour chaque film que je regarde, avec sa durée.","expected":"ADD_TYPE","reason":"Films are distinct identifiable entities"},
+    {"id":"en_new_specific","source":"I would like a separate note type for my bicycles with their frame numbers.","expected":"ADD_TYPE","reason":"Bicycles are not a generic concept or document"},
+    {"id":"fr_person_property","source":"Ajoute la couleur préférée aux fiches des personnes.","expected":"ADD_PROPERTY","reason":"Single property on a canonical editable type"},
+    {"id":"es_unknown_existing","source":"Quiero añadir el peso a los perros que ya tengo guardados.","expected":"CLARIFY","reason":"Mention of existing dogs does not prove a specific note type exists"},
+    {"id":"en_future_conditional","source":"If I ever grow orchids I might create a new note type someday.","expected":"CLARIFY","reason":"Conditional future thought is not an immediate proposal"},
+    {"id":"fr_negation","source":"Je ne veux pas créer de nouveau type de note.","expected":"ABSTAIN","reason":"Explicit negation"},
+    {"id":"es_both_changes","source":"Quiero crear notas de películas y añadir la profesión a las personas.","expected":"CLARIFY","reason":"One schema change per explicit preview; don't silently discard either"},
+    {"id":"en_fact_only","source":"My favorite bicycle has a red frame.","expected":"ABSTAIN","reason":"Fact capture, not an instruction to change schema"},
+    {"id":"es_exclusion","source":"Quiero un tipo de notas para plantas, pero no para las plantas del trabajo.","expected":"CLARIFY","reason":"Exclusion needs an explicit representation, not a dropped restriction"},
+    {"id":"es_date_complete","source":"Añade una fecha completa de nacimiento a Persona.","expected":"ADD_PROPERTY","reason":"Unambiguous canonical target, full date"},
+    {"id":"fr_partial_birth","source":"Pour les personnes, je veux seulement l'année de naissance.","expected":"CLARIFY","reason":"Partial date not yet supported by the current schema"}
+  ]
+}

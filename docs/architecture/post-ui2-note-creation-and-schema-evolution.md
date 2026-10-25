@@ -845,7 +845,26 @@ al mensaje anterior; `REUSE`, `CLARIFY` y `ABSTAIN` son de solo lectura.
 antes de cualquier acceso al almacenamiento PROD. Una respuesta de modelo
 no puede habilitar esas banderas. Los tipos App-owned siguen protegidos.
 
-**Validación semántica pendiente, BLOQUEANTE:** el contrato del prompt tiene
+**Validación V1 ya ejecutada y NO aprobada; V2 sin evaluación, BLOQUEANTE.**
+El informe reproducible está en
+[schema-conversation-live-eval-20261025.md](schema-conversation-live-eval-20261025.md):
+24 llamadas reales a `gpt-6-luna` low, 17 decisiones esperadas, 5 rechazos
+de validador, 2 elecciones semánticas incorrectas, 36.224 tokens. Ninguna
+nota fue modificada: hubo registros de esquema temporales y acceso al
+proveedor mediante transient systemd con EnvironmentFile protegido.
+El antiguo prompt V1 no está aprobado. La V2 revisa la granularidad de tipos
+frente a categorías generales y hace que `ADD_PROPERTY` tenga `description`
+**de tipo** nula, conservando la descripción de la propiedad. La matriz
+original no se retoca; también hay un holdout de 12 casos sin evaluar.
+Prompt V2 SHA256 `c0322c9bbaa6fb234c54ab67cdd97f54532fe61280ec10079bd96a9f11ef06c2`.
+La V2 **no** hereda el 17/24 de V1 y no se habilitará hasta otra campaña
+real controlada y satisfactoria, auditada y seguida de aceptación desde la
+app con datos de DEV sintéticos. La puerta transversal de fuente V2 ahora
+incluye también `tests/runtime/test_schema_suggestion.py` y pasa
+**2.142 Python + 226 JS**; se verificó que antes de añadirlo ese grupo no
+estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.
+
+**Estado histórico antes de la evaluación real:** el contrato del prompt tiene
 matriz versionada `tests/fixtures/schema_suggestion/evaluation_v1.json`
 con **24 casos ES/FR/EN**, negaciones, correcciones, tipos existentes,
 propiedades, ausencia de intención, fechas parciales y prompt injection.
@@ -875,8 +894,10 @@ el atributo técnico «filtrable» en las descripciones de propiedades y explica
 el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen
 informativos («Próximamente»), no simulan una operación de IA publicada.
 
-**No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
-previa conectadas, aceptación real con navegador en DEV, migración de
+**Nota histórica (previa al sexto corte):** aún no había IA/contrato,
+interfaz ni vista previa conectadas. Actualmente sí están en fuente pero
+siguen apagadas y semánticamente no aceptadas. Sigue pendiente aceptación
+real desde Chromium en DEV, migración de
 esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,
 confirmación por lotes, fecha parcial o aceptación E2E del navegador en DEV.
 No debe presentarse esta entrega de infraestructura como una función utilizable
