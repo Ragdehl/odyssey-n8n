@@ -1006,6 +1006,19 @@ never confirms automatically. The feature remains opt-in/off and this is a
 No new background backfill or retrospective discovery is implemented by
 this UI change: those post-activation stages remain separate.
 
+**Interacción Chromium local (25-10-2026, fuente `38445eb`):**
+`scripts/odyssey_schema_editor_chromium_synthetic.cjs` carga los módulos
+reales `schema-model.js` y `notes-client.js` en Chromium arm64, interactúa
+mediante clicks/tecleo en 1280×920 y 390×844: propone, entra en edición,
+conserva y corrige tipo numérico, elimina/agrega atributos, pide revisión
+final y confirma **solo tras la revisión** con el hash actual, una vez por
+usuario, sin errores JS ni scroll horizontal en ambos perfiles. Resultado
+**PASS/PASS**. Servidor/modelo/recibos **simulados** exclusivamente en
+`127.0.0.1`: NO es el DEV desplegado, autenticación n8n, proveedor GPT real,
+mutación física ni E2E aceptado. Reutiliza las bibliotecas Chromium ya
+cacheadas, sin instalar dependencias del sistema; `odyssey-dev-e2e` sigue
+requiriendo app real y vault sintético para la aceptación posterior.
+
 Operational learning: added `.codex/skills/odyssey-skill-steward` and its
 minimal always-on routing in `AGENTS.md`, built against the already installed
 first-party Codex `skill-creator`. It notices recurrent agent mistakes or
