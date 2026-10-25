@@ -699,3 +699,59 @@ def test_v5_evaluator_alternative_scoring_only_accepts_safe_readonly_choices() -
         with pytest.raises(ValueError, match="Unsupported alternative"):
             accepted_case_decisions(invalid)
     assert not decision_score_only("CLARIFY", "ABSTAIN")[0]  # legacy strict cases unchanged
+
+
+def test_v6_instructions_cover_possessive_fields_integer_counts_temporal_precision_and_locale() -> (
+    None
+):
+    prompt = SCHEMA_SUGGESTION_INSTRUCTIONS
+    for part in (
+        "Before returning the JSON",
+        "review every USER-FACING string",
+        "as ONE note type and Y as a property of X",
+        "Only propose a separate type for Y when they explicitly",
+        "COUNT/CARDINALITY properties",
+        "not string merely because",
+        "Never offer a whole-number or text workaround for a PARTIAL DATE",
+    ):
+        assert part in prompt
+    assert "guitar" not in prompt.lower()
+    assert "board game" not in prompt.lower()
+    assert "Unknown" not in prompt
+
+
+def test_v6_new_holdout_freezes_semantics_and_alternative_safety() -> None:
+    from scripts.evaluate_schema_suggestion_live import MATRICES, accepted_case_decisions
+
+    base = ROOT / "tests/fixtures/schema_suggestion"
+    cases = json.loads((base / "evaluation_v6_holdout.json").read_text(encoding="utf8"))["cases"]
+    prior = set()
+    for matrix in (
+        "evaluation_v1.json",
+        "evaluation_v2_holdout.json",
+        "evaluation_v4_holdout.json",
+        "evaluation_v5_holdout.json",
+    ):
+        prior.update(x["source"] for x in json.loads((base / matrix).read_text())["cases"])
+    assert MATRICES["v6_holdout"][1] == 12
+    assert len(cases) == 12 and len({c["id"] for c in cases}) == 12
+    assert all(c["source"] not in prior and c["semantic_checks"] for c in cases)
+    assert {c["expected"] for c in cases} == {"ADD_TYPE", "CLARIFY", "REUSE"}
+    for case in cases:
+        opts = accepted_case_decisions(case)
+        if case["id"] == "es_future_later":
+            assert opts == ("CLARIFY", "ABSTAIN")
+            assert set(case["semantic_checks_by_decision"]) == set(opts)
+        else:
+            assert opts == (case["expected"],)
+
+
+def test_v6_new_holdout_protected_from_unauthorized_paid_calls(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from scripts.evaluate_schema_suggestion_live import run
+
+    monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
+    with pytest.raises(ValueError, match="approval missing"):
+        run(max_cases=1, first_index=0, output=tmp_path / "none.json", matrix_name="v6_holdout")

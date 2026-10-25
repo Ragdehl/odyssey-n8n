@@ -886,7 +886,14 @@ reutilización sin atributos nuevos e hipótesis temporales; ver
 [schema-conversation-v5-contract-20261025.md](schema-conversation-v5-contract-20261025.md).
 Su prompt tiene hash `c34023593fb021384013e77c862afee580e8dc04795f4b65b46b8ae423bb3ca4`.
 **0 llamadas reales V5**, contrato semántico todavía sin validar. Ambas
-banderas de activación continúan apagadas. La puerta transversal de fuente V2 ahora
+banderas de activación continúan apagadas. **Actualización posterior:** la
+V5 fue evaluada mediante 24 llamadas reales, 22/24 coincidencias de etiqueta,
+pero no superó semántica de propiedades/idioma; véase
+[schema-conversation-v5-live-eval-20261025.md](schema-conversation-v5-live-eval-20261025.md).
+La V6 se ha preparado sin llamadas reales, con reglas generales de atributo
+posesivo, recuentos enteros, fecha parcial e idioma y 12 casos nuevos;
+[contrato V6](schema-conversation-v6-contract-20261025.md). Continúan las
+banderas desactivadas. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
 **2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.

@@ -22,6 +22,7 @@ MATRICES = {
     "v2_holdout": (ROOT / "tests/fixtures/schema_suggestion/evaluation_v2_holdout.json", 12),
     "v4_holdout": (ROOT / "tests/fixtures/schema_suggestion/evaluation_v4_holdout.json", 16),
     "v5_holdout": (ROOT / "tests/fixtures/schema_suggestion/evaluation_v5_holdout.json", 12),
+    "v6_holdout": (ROOT / "tests/fixtures/schema_suggestion/evaluation_v6_holdout.json", 12),
 }
 CONFIRM_FLAG = "ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED"
 MAX_CALLS = 24

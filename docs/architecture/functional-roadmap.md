@@ -69,10 +69,10 @@ Sin backfill ni despliegue; confirmación histórica revisada, no E2E.
 tipo/propiedad, reutilización o aclaración; se conecta a Notas y a n8n con
 identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 `ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` solo DEV, apagado por defecto.
-Matriz V1: **17/24 decisiones**; [informe](schema-conversation-live-eval-20261025.md).
-V2 **20/24**; [fallos](schema-conversation-v2-eval-20261025.md). V3 **33/40**; [bloqueos](schema-conversation-v3-live-eval-20261025.md).
+V1: **17/24**; [informe](schema-conversation-live-eval-20261025.md).
+V2 **20/24**; [informe](schema-conversation-v2-eval-20261025.md); V3 **33/40**; [informe](schema-conversation-v3-live-eval-20261025.md).
 V4: **39/40 etiquetas**, [idiomas erróneos](schema-conversation-v4-live-eval-20261025.md).
-V5 [fuente](schema-conversation-v5-contract-20261025.md): **0 llamadas reales**, flags OFF; faltan Chromium, backfill y discovery.
+V5 **22/24**, [semántica no aprobada](schema-conversation-v5-live-eval-20261025.md); V6 [fuente](schema-conversation-v6-contract-20261025.md): **0 llamadas**, flags OFF. Faltan Chromium, backfill y discovery.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than

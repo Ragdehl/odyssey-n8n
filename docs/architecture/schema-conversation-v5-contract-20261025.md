@@ -1,6 +1,6 @@
 # Modelo de notas — V5: idioma e intención conversacional (solo fuente)
 
-**Estado: V5 NO EVALUADA con proveedor real; NO habilitar.** La V4 congelada alcanzó 39/40 coincidencias de operación y 0 rechazos en una campaña sintética, pero su [revisión semántica](schema-conversation-v4-live-eval-20261025.md) encontró preguntas y nombres generados en otro idioma: `en_paid_invoices_only` respondió en francés, `fr_reuse` en español y `es_new_simple` generó el tipo `Book` en inglés. Además, `fr_reuse` pidió un campo innecesario y `es_future_conditional` exploró el tipo antes de comprobar que el usuario quería un cambio **ahora**. V4 conserva su hash y resultados históricos: estos cambios crean V5, nunca una retcon de V4.
+**Estado histórico de diseño (antes de la evaluación). V5 fue evaluada posteriormente y NO aprobada.** La V4 congelada alcanzó 39/40 coincidencias de operación y 0 rechazos en una campaña sintética, pero su [revisión semántica](schema-conversation-v4-live-eval-20261025.md) encontró preguntas y nombres generados en otro idioma: `en_paid_invoices_only` respondió en francés, `fr_reuse` en español y `es_new_simple` generó el tipo `Book` en inglés. Además, `fr_reuse` pidió un campo innecesario y `es_future_conditional` exploró el tipo antes de comprobar que el usuario quería un cambio **ahora**. V4 conserva su hash y resultados históricos: estos cambios crean V5, nunca una retcon de V4.
 
 ## Cambio acotado
 
@@ -20,3 +20,5 @@ Estas son instrucciones, **no un verificador de idioma ni una prueba de semánti
 - Se han añadido pruebas sintéticas del prompt y del gating del evaluador que no llama a modelos sin autorización explícita. Esos tests **NO demuestran** que V5 cumpla las instrucciones en llamadas reales.
 - **Llamadas reales V5: 0.** El presupuesto anterior de 40 de V4 se consumió íntegramente; no se ejecutan más llamadas sin un nuevo límite autorizado. DEV no se despliega con V5, PROD no cambia, no se modifican notas, `PendingReference`, backfill ni descubrimiento retrospectivo.
 - Condiciones para adopción: evaluar la V5 congelada con un nuevo presupuesto, revisar idioma y semántica de propuestas **completas**, repetir casos inestables, y probar Chromium→n8n→Core con usuario/vault sintéticos antes de habilitar la feature.
+
+**Actualización posterior:** V5 recibió exactamente 24 llamadas reales autorizadas, 22/24 etiquetas esperadas, 0 rechazos de contrato pero varios fallos de semántica de propiedades/idioma. [Resultados completos V5](schema-conversation-v5-live-eval-20261025.md). La fuente V6 sin evaluar se describe en [contrato V6](schema-conversation-v6-contract-20261025.md).
