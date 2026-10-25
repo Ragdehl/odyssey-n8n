@@ -1,5 +1,8 @@
 "use strict";
-/** Real Chromium user interactions against current UI module; ALL service responses synthetic. */
+/** Real Chromium click/type/select interactions against current UI module; ALL API/model replies synthetic.
+ * On Pi arm64, use the existing locally staged Chromium libs with a process-scoped
+ * LD_LIBRARY_PATH if ldd reports missing libraries. NOT authenticated DEV E2E.
+ */
 const http = require('node:http');
 const fs = require('node:fs');
 const {execFileSync} = require('node:child_process');
@@ -74,16 +77,18 @@ const profiles = [['desktop',1280,920],['mobile',390,844]];
       await page.click('.schema-model-review');
       await page.waitForSelector('.schema-model-property-row');
       const rowsBefore=await page.$$('.schema-model-property-row');
-      await rowsBefore[0].$eval('.schema-model-property-type',el=>{el.value='integer';el.dispatchEvent(new Event('change',{bubbles:true}));});
+      await (await rowsBefore[0].$('.schema-model-property-type')).select('integer');
       const removeButtons = await page.$$('.schema-model-property-remove');
       await removeButtons[1].click();
       await page.click('.schema-model-property-add');
       const rows=await page.$$('.schema-model-property-row');
       const last=rows[rows.length-1];
-      await last.$eval('.schema-model-input',el=>{el.value='edad recomendada';el.dispatchEvent(new Event('input',{bubbles:true}));});
       const inputs=await last.$$('.schema-model-input');
-      await inputs[1].evaluate(el=>{el.value='Edad mínima en años';el.dispatchEvent(new Event('input',{bubbles:true}));});
-      await last.$eval('select',el=>{el.value='integer';el.dispatchEvent(new Event('change',{bubbles:true}));});
+      await inputs[0].click();
+      await inputs[0].type('edad recomendada');
+      await inputs[1].click();
+      await inputs[1].type('Edad mínima en años');
+      await (await last.$('select')).select('integer');
       await page.click('.schema-model-propose');
       await page.waitForFunction(()=>document.querySelector('.schema-model-preview')?.hidden===false);
       const beforeReview=await page.$eval('.schema-model-confirm',el=>el.disabled);

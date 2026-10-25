@@ -1019,6 +1019,29 @@ mutación física ni E2E aceptado. Reutiliza las bibliotecas Chromium ya
 cacheadas, sin instalar dependencias del sistema; `odyssey-dev-e2e` sigue
 requiriendo app real y vault sintético para la aceptación posterior.
 
+**Comprobación posterior antes de desplegar (25-10-2026, fuente `de2b370`):**
+la prueba de Chromium móvil y escritorio se reprodujo **PASS/PASS** con
+interacciones visibles `click/type/select` en lugar de escribir valores
+mediante `evaluate()` en el DOM. Para lanzarla en Pi se necesitó reusar el
+bundle de bibliotecas locales ya auditadas y ajustar `LD_LIBRARY_PATH` **solo
+en el proceso de prueba**; no se modificó el sistema operativo.
+Las pruebas del runtime autenticado real / revisión final (63 Python) y de
+transporte/UI (34 JS) pasaron; la skill `odyssey-skill-steward` superó el
+`quick_validate.py` oficial y el docs guard. El test browser-only sigue
+usando **proveedor y servicio simulados**, aunque sí ejecuta el módulo JS
+real. El navegador sobre el DEV actualmente desplegado en `050f26f` pasó
+una regresión **solo de lectura** (17 detalles/17 SVG, recarga, sin errores)
+pero no contiene esta funcionalidad.
+
+**Bloqueo actual de adopción:** `python scripts/odyssey_dev_public_routes.py
+status --machine` señala `DRIFT`, ya que la configuración pública de
+Cloudflare DEV carece de `/api/schema-model.js` presente en el inventario
+de rutas de la nueva fuente. Su actualización está expresamente protegida
+por `--authorized-dev-change`, una autorización aparte, y **no se ejecutó**
+solo con una orden genérica de probar. No ha habido despliegue, cambio de
+Cloudflare, llamada GPT, aprobación real, escritura física ni prueba
+Chromium→n8n→Core de la nueva funcionalidad. App E2E = **NO VERIFICADO**.
+
 Operational learning: added `.codex/skills/odyssey-skill-steward` and its
 minimal always-on routing in `AGENTS.md`, built against the already installed
 first-party Codex `skill-creator`. It notices recurrent agent mistakes or
