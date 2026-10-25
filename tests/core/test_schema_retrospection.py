@@ -123,6 +123,7 @@ def test_discovery_scans_all_existing_types_in_bounded_resumable_pages(tmp_path:
     assert [x.note_id for x in second.eligible_notes] == ["bea", "legacy"]
     assert second.eligible_notes[-1].facts == ()  # no stable locator for legacy text
     assert second.eligible_notes[-1].legacy_coverage_unverified
+    assert "terminé Matilda" in second.eligible_notes[-1].legacy_text
     assert second.next_cursor is None
     assert second.inventory_hash == first.inventory_hash
     assert repo.read_text("b/project.md").find("Leí Dune") >= 0
@@ -256,14 +257,17 @@ def test_no_user_data_written_by_scans(tmp_path: Path) -> None:
     assert repo.list_markdown_paths() == paths
 
 
-def test_discovery_excludes_already_created_target_entities(tmp_path: Path) -> None:
+def test_discovery_includes_existing_target_type_as_source_evidence(tmp_path: Path) -> None:
     repo, config = populated(tmp_path)
     note(tmp_path / "vault", "e/book.md", "book1", "libro", fact("Leí un libro"))
     page = scan_schema_sources(
         repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=25
     )
     assert page.scanned_paths == 5
-    assert "book1" not in {n.note_id for n in page.eligible_notes}
+    sources = {n.note_id: n for n in page.eligible_notes}
+    assert "book1" in sources
+    assert sources["book1"].note_type == "libro"
+    assert sources["book1"].facts[0].text == "Leí un libro"
 
 
 def test_mixed_atomic_and_unmarked_body_reports_incomplete_coverage(tmp_path: Path) -> None:
@@ -281,3 +285,98 @@ def test_mixed_atomic_and_unmarked_body_reports_incomplete_coverage(tmp_path: Pa
     source = next(n for n in page.eligible_notes if n.note_id == "mixed")
     assert len(source.facts) == 1
     assert source.legacy_coverage_unverified
+    assert "Solaris" in source.legacy_text
+    assert "Mencioné Dune" not in source.legacy_text
+
+
+def test_cursor_cannot_be_reused_for_another_property_or_new_schema(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    first = scan_schema_sources(
+        repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=1
+    )
+    cursor = first.next_cursor
+    assert cursor is not None and len(cursor.context_hash) == 64
+    with pytest.raises(SchemaRetrospectionError, match="cursor"):
+        scan_schema_sources(
+            repository=repo,
+            schema=config,
+            kind="backfill_property",
+            target_type_id="person",
+            property_id="profesion",
+            limit=1,
+            cursor=cursor,
+        )
+    changed = json.loads(json.dumps(config))
+    next(kind for kind in changed["types"] if kind["id"] == "libro")["description"] = "Changed"
+    with pytest.raises(SchemaRetrospectionError, match="cursor"):
+        scan_schema_sources(
+            repository=repo,
+            schema=changed,
+            kind="discover_type",
+            target_type_id="libro",
+            limit=1,
+            cursor=cursor,
+        )
+    assert (
+        scan_schema_sources(
+            repository=repo,
+            schema=config,
+            kind="discover_type",
+            target_type_id="libro",
+            limit=1,
+            cursor=cursor,
+        ).scanned_paths
+        == 1
+    )
+
+
+def test_duplicate_atomic_locator_fails_closed_before_downstream_identity_linking(
+    tmp_path: Path,
+) -> None:
+    repo, config = populated(tmp_path)
+    note(
+        tmp_path / "vault",
+        "e/ambiguous.md",
+        "ambiguous",
+        "concept",
+        fact("Leí un libro", "same", 1) + fact("Mencioné otro", "same", 1),
+    )
+    with pytest.raises(SchemaRetrospectionError, match="Duplicate canonical fact locator"):
+        scan_schema_sources(
+            repository=repo,
+            schema=config,
+            kind="discover_type",
+            target_type_id="libro",
+        )
+
+
+def test_large_canonical_note_is_not_loaded_into_unbounded_analysis(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    note(tmp_path / "vault", "e/huge.md", "huge", "concept", "a" * 2_000_001)
+    with pytest.raises(SchemaRetrospectionError, match="safe note size"):
+        scan_schema_sources(
+            repository=repo,
+            schema=config,
+            kind="discover_type",
+            target_type_id="libro",
+        )
+
+
+def test_unmarked_evidence_never_gets_a_fabricated_locator(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    page = scan_schema_sources(
+        repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=25
+    )
+    legacy = next(item for item in page.eligible_notes if item.note_id == "legacy")
+    assert legacy.facts == ()
+    assert legacy.legacy_text == "Texto antiguo: terminé Matilda"
+    assert legacy.legacy_coverage_unverified
+
+
+def test_large_unmarked_text_is_rejected_instead_of_truncated(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    note(tmp_path / "vault", "e/long.md", "long", "concept", "A" * 13000)
+    with pytest.raises(SchemaRetrospectionError, match="Unmarked Markdown"):
+        scan_schema_sources(
+            repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=20
+        )

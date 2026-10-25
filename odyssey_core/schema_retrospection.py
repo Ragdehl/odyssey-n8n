@@ -20,6 +20,7 @@ ScanKind = Literal["discover_type", "backfill_property"]
 _MAX_PAGE = 25
 _MAX_FACTS_PER_NOTE = 128
 _MAX_FACT_TEXT = 4000
+_MAX_NOTE_BYTES = 2_000_000
 
 
 class SchemaRetrospectionError(ValueError):
@@ -30,6 +31,8 @@ class SchemaRetrospectionError(ValueError):
 class RetrospectionCursor:
     inventory_hash: str
     offset: int
+    # Bind each page to exactly one query+schema, not only the physical vault.
+    context_hash: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +52,8 @@ class SourceNote:
     facts: tuple[SourceFact, ...]
     # Legacy plain Markdown is not silently treated as E3-linkable evidence.
     legacy_coverage_unverified: bool
+    # No E3 locator. Can inform human/AI discovery but never authorize a link.
+    legacy_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,12 +68,16 @@ class RetrospectionPage:
     inventory_hash: str
 
 
-def _contains_unmarked_content(body: str, facts: tuple[Any, ...]) -> bool:
-    """Conservatively flag real text outside Core's addressable atomic facts."""
+def _unmarked_text(body: str, facts: tuple[Any, ...]) -> str:
+    """Expose remaining source text, with NO fabricated fact locator."""
     remaining = body
     for fact in reversed(facts):
         remaining = remaining[: fact.start] + remaining[fact.end :]
-    return any(line.strip() and not line.startswith("# Added ") for line in remaining.splitlines())
+    # Capture-date headings alone are not facts. Other legacy Markdown and
+    # headings remain as source evidence, not a claim of atomic provenance.
+    return "\n".join(
+        line for line in remaining.splitlines() if line.strip() and not line.startswith("# Added ")
+    ).strip()
 
 
 def scan_schema_sources(
@@ -115,11 +124,22 @@ def scan_schema_sources(
     inventory_hash = hashlib.sha256(
         json.dumps([(path, versions[path]) for path in paths], sort_keys=True).encode()
     ).hexdigest()
+    # A single vault can be queried for multiple schema operations. A cursor
+    # from one query must never silently skip files in another query.
+    context_hash = hashlib.sha256(
+        json.dumps(
+            {"kind": kind, "target": target_type_id, "property": property_id, "schema": schema},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
     offset = 0
     if cursor is not None:
         if (
             not isinstance(cursor, RetrospectionCursor)
             or cursor.inventory_hash != inventory_hash
+            or cursor.context_hash != context_hash
             or type(cursor.offset) is not int
             or not 0 <= cursor.offset < len(paths)
         ):
@@ -131,9 +151,15 @@ def scan_schema_sources(
     selected = paths[offset : offset + limit]
     seen_ids: set[str] = set()
     for path in selected:
+        # A physical version snapshot supplies the file size before parsing.
+        # Reject oversized files BEFORE read_text allocates their full body.
+        if int(versions[path][3]) > _MAX_NOTE_BYTES:
+            raise SchemaRetrospectionError("Canonical source exceeds safe note size")
         if repository.file_version(path) != versions[path]:
             raise SchemaRetrospectionError("Canonical source changed during scan")
         raw = repository.read_text(path)
+        if len(raw.encode("utf-8")) > _MAX_NOTE_BYTES:
+            raise SchemaRetrospectionError("Canonical source exceeds safe note size")
         try:
             note = parse_note(raw)
             validate_note(note, schema)
@@ -147,10 +173,6 @@ def scan_schema_sources(
         if not isinstance(note_id, str) or note_id in seen_ids:
             raise SchemaRetrospectionError("Duplicate canonical source identity")
         seen_ids.add(note_id)
-        if kind == "discover_type" and note.metadata["type"] == target_type_id:
-            # An entity already represented by the newly activated type must
-            # not be rediscovered as a new candidate from its own note.
-            continue
         if kind == "backfill_property":
             if note.metadata["type"] != target_type_id:
                 continue
@@ -165,6 +187,13 @@ def scan_schema_sources(
             len(fact.text) > _MAX_FACT_TEXT for fact in parsed_facts
         ):
             raise SchemaRetrospectionError("Fact evidence exceeds safe scan budget")
+        locators = [fact.locator for fact in parsed_facts]
+        if len(locators) != len(set(locators)):
+            # Ambiguous E3 addressing must never produce a linkable candidate.
+            raise SchemaRetrospectionError("Duplicate canonical fact locator")
+        legacy_text = _unmarked_text(note.content, parsed_facts)
+        if len(legacy_text) > 12000:
+            raise SchemaRetrospectionError("Unmarked Markdown exceeds safe scan budget")
         candidates.append(
             SourceNote(
                 note_id=note_id,
@@ -174,7 +203,8 @@ def scan_schema_sources(
                 source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
                 revision=int(note.metadata["revision"]),
                 facts=tuple(SourceFact(fact.locator, fact.text) for fact in parsed_facts),
-                legacy_coverage_unverified=_contains_unmarked_content(note.content, parsed_facts),
+                legacy_coverage_unverified=bool(legacy_text),
+                legacy_text=legacy_text,
             )
         )
     # One page may overlap other writers; never publish mixed-time evidence
@@ -190,7 +220,9 @@ def scan_schema_sources(
         eligible_notes=tuple(candidates),
         skipped_existing_values=existing_count,
         next_cursor=(
-            RetrospectionCursor(inventory_hash, next_offset) if next_offset < len(paths) else None
+            RetrospectionCursor(inventory_hash, next_offset, context_hash)
+            if next_offset < len(paths)
+            else None
         ),
         inventory_hash=inventory_hash,
     )
