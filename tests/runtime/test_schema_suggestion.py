@@ -678,6 +678,11 @@ def test_v5_evaluator_alternative_scoring_only_accepts_safe_readonly_choices() -
         choices = accepted_case_decisions(c)
         assert c["expected"] in choices
         if c in alternatives:
+            checks = c["semantic_checks_by_decision"]
+            assert set(checks) == {"CLARIFY", "ABSTAIN"}
+            assert "Question" in " ".join(checks["CLARIFY"])
+            assert "no question" in " ".join(checks["ABSTAIN"])
+            assert all("Question" not in item for item in c["semantic_checks"])
             assert choices == ("CLARIFY", "ABSTAIN")
             assert decision_score_only(c["expected"], "CLARIFY", accepted=choices)[0]
             assert decision_score_only(c["expected"], "ABSTAIN", accepted=choices)[0]

@@ -87,11 +87,18 @@
       "expected": "CLARIFY",
       "reason": "Conditional not current permission",
       "semantic_checks": [
-        "No proposal now",
-        "English question asks NOW versus hypothetical future; ABSTAIN also safe on semantic review",
-        "For CLARIFY, question must ask whether to create now; ABSTAIN is also safe when the intent remains future-only"
+        "No proposal or schema change now",
+        "Keep user-facing response in English"
       ],
-      "also_safe_decision": "ABSTAIN"
+      "also_safe_decision": "ABSTAIN",
+      "semantic_checks_by_decision": {
+        "CLARIFY": [
+          "Question in English asks if the user wants to define the type NOW or only later"
+        ],
+        "ABSTAIN": [
+          "Brief explanation in English notes lack of a present request; no question"
+        ]
+      }
     },
     {
       "id": "es_hypothetical_future",
@@ -99,12 +106,18 @@
       "expected": "CLARIFY",
       "reason": "No present schema request",
       "semantic_checks": [
-        "No proposal now",
-        "Ask whether to define now or later",
-        "Spanish question",
-        "For CLARIFY, question must ask whether to create now; ABSTAIN is also safe when the intent remains future-only"
+        "No proposal or schema change now",
+        "Keep user-facing response in Spanish"
       ],
-      "also_safe_decision": "ABSTAIN"
+      "also_safe_decision": "ABSTAIN",
+      "semantic_checks_by_decision": {
+        "CLARIFY": [
+          "Question in Spanish asks if the user wants to define the type NOW or only later"
+        ],
+        "ABSTAIN": [
+          "Brief explanation in Spanish notes lack of a present request; no question"
+        ]
+      }
     },
     {
       "id": "fr_exclusions",
