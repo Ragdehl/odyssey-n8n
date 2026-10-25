@@ -861,7 +861,7 @@ La V2 **no** hereda el 17/24 de V1 y no se habilitará hasta otra campaña
 real controlada y satisfactoria, auditada y seguida de aceptación desde la
 app con datos de DEV sintéticos. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
-**2.142 Python + 226 JS**; se verificó que antes de añadirlo ese grupo no
+**2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.
 
 **Estado histórico antes de la evaluación real:** el contrato del prompt tiene

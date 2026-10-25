@@ -450,3 +450,100 @@ def test_v2_holdout_is_a_distinct_frozen_semantic_matrix_not_synthetic_pass_evid
         "CLARIFY",
         "ABSTAIN",
     }
+
+
+def test_live_evaluator_counts_matching_operation_only_not_semantic_correctness() -> None:
+    from scripts.evaluate_schema_suggestion_live import decision_score_only
+
+    for expected, actual, agreement in [
+        ("ADD_PROPERTY", "ADD_PROPERTY", True),  # Could have WRONG target or attribute!
+        ("ADD_TYPE", "ADD_TYPE", True),  # Could propose entirely wrong type!
+        ("REUSE", "REUSE", True),  # Could reuse a generic unrelated type!
+        ("CLARIFY", "CLARIFY", True),
+        ("ADD_TYPE", "REUSE", False),
+    ]:
+        same, review = decision_score_only(expected, actual)
+        assert same is agreement
+        assert review == "awaiting_independent_review"
+    assert decision_score_only("ADD_TYPE", "INVALID") == (False, "rejected_before_semantic_review")
+
+
+def test_live_evaluator_will_not_overwrite_any_existing_file_before_provider_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.evaluate_schema_suggestion_live import run
+
+    monkeypatch.setenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV_EVAL")
+    # Existing path is rejected before the model client can be constructed.
+    existing = tmp_path / "existing.json"
+    existing.write_text("original evidence")
+    with pytest.raises(ValueError, match="overwrite existing"):
+        run(max_cases=1, first_index=0, output=existing)
+    assert existing.read_text() == "original evidence"
+
+
+def test_live_evaluator_can_select_only_known_frozen_holdout_and_checks_budget_without_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts.evaluate_schema_suggestion_live import run
+
+    monkeypatch.setenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", "1")
+    monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV_EVAL")
+    dest = tmp_path / "holdout.json"
+    for matrix, count, index in [
+        ("untrusted_file", 1, 0),
+        ("v2_holdout", 13, 0),
+        ("v2_holdout", 1, 12),
+        ("v2_holdout", 4, 10),
+    ]:
+        with pytest.raises(ValueError, match="Unknown frozen|bound|budget"):
+            run(max_cases=count, first_index=index, output=dest, matrix_name=matrix)
+    assert not dest.exists()
+
+
+def test_readonly_clarification_can_use_ambiguous_quote_without_claiming_evidence(
+    tmp_path: Path,
+) -> None:
+    """A repeated phrase must not suppress a clarification; it cannot authorize a change."""
+    reg = registry(tmp_path)
+    source = "Quiero notas de libros, y no de libros prestados."
+    result = SchemaSuggestionService(
+        FakeGateway(raw("CLARIFY", "libros", question="¿Qué libros quieres excluir?"))
+    ).suggest(source, reg, expected_revision=0)
+    assert result == {
+        "kind": "schema_suggestion",
+        "decision": "CLARIFY",
+        "message": "¿Qué libros quieres excluir?",
+        "reuse_type_id": None,
+    }
+    assert reg.snapshot()[0] == 0
+    assert not (tmp_path / "user-schema/current.json").exists()
+    # The same nonunique source quote is still forbidden for ADD_TYPE.
+    with pytest.raises(SchemaSuggestionError):
+        validate_model_suggestion(
+            source,
+            raw("ADD_TYPE", "libros", type_name="Libro", description="Obra escrita"),
+            catalog_for_model(reg.snapshot()[1]),
+        )
+
+
+def test_v3_prompt_declares_generic_nonduplication_partial_date_and_broad_clarification() -> None:
+    assert "'separate' or 'another'" in SCHEMA_SUGGESTION_INSTRUCTIONS
+    assert "PARTIAL DATE" in SCHEMA_SUGGESTION_INSTRUCTIONS
+    assert "not silently encode it as integer or string" in SCHEMA_SUGGESTION_INSTRUCTIONS
+    assert "underspecified request to organize notes is CLARIFY" in SCHEMA_SUGGESTION_INSTRUCTIONS
+    assert "subject_quote null" in SCHEMA_SUGGESTION_INSTRUCTIONS
+
+
+def test_live_evaluator_does_not_access_provider_without_explicit_isolated_approval(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from scripts.evaluate_schema_suggestion_live import run
+
+    monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
+    with pytest.raises(ValueError, match="approval missing"):
+        run(max_cases=1, first_index=0, output=tmp_path / "never.json", matrix_name="v1")
+    with pytest.raises(ValueError, match="approval missing"):
+        run(max_cases=1, first_index=0, output=tmp_path / "never.json", matrix_name="v2_holdout")

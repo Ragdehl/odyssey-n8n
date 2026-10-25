@@ -69,10 +69,10 @@ Sin backfill ni despliegue; confirmación histórica revisada, no E2E.
 tipo/propiedad, reutilización o aclaración; se conecta a Notas y a n8n con
 identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 `ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` solo DEV, apagado por defecto.
-Matriz real V1 **17/24** (`gpt-6-luna`, 24 llamadas/36.224 tokens,
-5 rechazos + 2 errores semánticos); informe [aquí](schema-conversation-live-eval-20261025.md).
+Matriz real V1: **17/24 coincidencias de decisión, NO éxito semántico**
+(24 llamadas/36.224 tokens, 5 rechazos + 2 `REUSE` erróneos); [informe](schema-conversation-live-eval-20261025.md).
 V2 corregida pero **SIN prueba real**; no activar. Faltan evaluación V2,
-Chromium, backfill y discovery. Gate V2: **2.142 Python + 226 JS PASS**.
+Chromium, backfill y discovery. Gate V2 corregido: **2.148 Python + 226 JS PASS**.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
