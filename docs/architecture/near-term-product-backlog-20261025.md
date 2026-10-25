@@ -1,0 +1,51 @@
+# Odyssey — próximas capacidades propuestas (25-10-2026)
+
+**Estado:** ideas de producto expresamente solicitadas por el usuario, recogidas para las **siguientes fases próximas**, no funcionalidades ya desarrolladas ni permiso para modificar datos reales. Preservar los acuerdos aunque se cambie de chat. Propietario de prioridad: este documento, enlazado desde `functional-roadmap.md`. Las implementaciones deben completar primero su contrato y pruebas de extremo a extremo desde la app, no solo un prompt en pruebas.
+
+## Orden acordado
+
+**1. Recordatorios (primera nueva funcionalidad) → 2. Ubicación como tipo de propiedad transversal → 3. Proyectos con vista Gantt.** La UX es una línea transversal inmediata para todas esas fases. Concluir el editor/revisión final de esquemas ya en marcha sin convertir perfecciones menores del prompt en un bloqueo indefinido.
+
+## 1. Recordatorios — primera prioridad
+
+**Intención.** Los recordatorios deben ser una **función integrada de Odyssey**, no un plugin o servicio externo. Funcionan como conocimiento estructurado del sistema, próximo a una Note tipada, pero con ciclo de activación/aviso. Pueden estar relacionados con **cero, una o varias** notas/entidades, del **mismo o de distintos tipos**: `Task`, `Person`, `Project`, `Event`, `Document` u otros. No exigir tener una tarea: «Recuérdame preguntarle a Ana por su viaje» es un recordatorio relacionado con una persona; «Recuérdame revisar el contrato del proyecto Atlas» puede enlazar documento + proyecto + tarea.
+
+**Propuesta técnica inicial (validar antes de implementar):** una App nativa `Reminders`, con identidad/representación de recordatorio aprovechando el contrato aditivo de tipos de nota y las relaciones Core/E3 existentes. Programación explícita de cuándo avisar, zona horaria y, más adelante, recurrencia. Estados mínimos pendientes/avisado/pospuesto/cerrado/cancelado, con eventuales nombres finales definidos por el contrato, sin duplicar el ciclo de vida de Task. Tareas con fecha límite y recordatorios son conceptos distintos, aunque pueden vincularse. Las notificaciones o avisos deben ser **reales**, no solamente un campo de fecha almacenado: primero definir mecanismo fiable de entrega en la aplicación y reintentos/idempotencia (también tras reinicios), y decidir posteriormente canal externo/push con consentimiento, no presuponerlo.
+
+**MVP sugerido:** crear por Chat y desde Note, editar/cancelar/posponer, listado «Próximos» y «Pendientes», vincular varias entidades con sus backlinks, disparo único por ocurrencia, vista/acción al abrir el aviso. Historias de prueba: (a) «recuérdame llamar a mi padre el martes» vinculable a Person; (b) «avísame de revisar la tarea y el documento del proyecto» con 3 entidades; (c) al posponer no crear otro recordatorio ni perder relaciones; (d) reinicio/reintento no dispara avisos duplicados; (e) lenguaje ambiguo o fecha sin zona horaria no inventa precisión ni causa alertas inesperadas.
+
+**Límites aún por decidir:** el canal de aviso fuera de la aplicación, permisos del dispositivo y política de repetición; no introducir silenciosamente un servicio cloud. Reutilizar el contrato temporal, Task, Events y Core; evitar nuevo scheduler/infra si ya existe mecanismo fiable reutilizable.
+
+## 2. `location` — tipo de propiedad semántica, **no** tipo de nota obligatorio
+
+**Intención.** Un valor de propiedad reutilizable `location` / `place_ref`, tan genérico como `string`, `date` o `integer`, para personas, viviendas, empresas, eventos y cualquier tipo de nota que tenga propiedades espaciales. No requerir coordenadas GPS: «Barcelona», «Sant Andreu» o «España» son referencias semánticas válidas.
+
+**Propuesta de representación:**
+
+- Un `LocationValue` de Core conserva el **texto original**, una referencia opcional a un **lugar identificado de manera estable**, su granularidad (país, región, provincia, ciudad, distrito/barrio, dirección o lugar concreto), la fuente/evidencia y el estado resuelto/ambiguo/literal. Separar la definición del **tipo de dato** del eventual catálogo de lugares; no obligar a crear una Note por cada ubicación geográfica.
+- Relación espacial verificable `part_of` / `within` como **grafo acíclico dirigido** de lugares con **ancestros** consultables: p. ej. `Sant Andreu (distrito de Barcelona) → Barcelona (ciudad) → Cataluña → España`. No inventar ese árbol solo porque coincida una cadena; podrá nutrirse de fuentes geográficas verificadas, datos explícitos del usuario o catálogos curados, con procedencia. Coordenadas/geocodificación optativas para mapas/distancia, no requisito para consultas semánticas.
+- El rol de una ubicación es otra dimensión: `residence`, `work_location`, `birthplace`, `located_at`, `event_location`, etc. No interpretar cualquier lugar mencionado como «vive allí». Mantener el sujeto de cada afirmación: «mis padres viven en Barcelona» se refiere a **mis padres**, mientras que «yo vivo en Sant Andreu» se refiere a **mí**; no transferir la segunda localización a mis padres.
+- Cuando la ubicación de **la misma persona/casa** se precisa de «Barcelona» a «Sant Andreu (Barcelona)», enlazar/refinar la ubicación **sin perder su inclusión en Barcelona/España**. Guardar historial temporal si se trata de una **mudanza** real, en lugar de borrar una residencia anterior; fechas desconocidas permanecen desconocidas.
+- Filtros de consultas espaciales (`vive en España`, `vive en Barcelona`) expanden a **descendientes de lugares canónicos** para el rol pertinente; no aplican automáticamente a lugares ambiguos o literales, no hacen inferencias globales sin evidencia. Múltiples regiones/hierarquías administrativas posibles requieren modelado no forzado de árbol único; resolver ambigüedades como Barcelona ciudad/provincia, Sant Andreu varios lugares, país y homónimos.
+
+**Ejemplo de consulta esperado:** una persona con residencia validada `Sant Andreu (Barcelona)` satisface búsquedas de residentes en `Barcelona` y en `España`. Una persona con residencia confirmada solo en `Barcelona` también satisface `España`. «Está de vacaciones en Barcelona» **no** la convierte en residente. Opcionalmente la UI podrá mostrar el camino «Sant Andreu › Barcelona › Cataluña › España» y la procedencia de la relación.
+
+**Compatibilidad:** hoy el esquema solo soporta tipos de propiedad registrados y `Project` ya es un tipo Note existente; `location` requerirá **extender la validación, filtros y consultas de Core** con compatibilidad retroactiva, persistencia/versionado y tests generales. No crear ahora un plugin de mapas ni una Note `Place` automática como prerrequisito. Si más adelante se desea guardar datos propios sobre una ciudad, podrá existir una Note referenciada, pero el valor `location` no depende de ella.
+
+## 3. Proyectos — función nativa y vista de planificación
+
+**Estado de partida verificado:** `config/note-schema.json` ya incluye el tipo de nota canónico **`project` (`Project`)**. No duplicar `Project` al construir la UI: convertir la entidad existente en una capacidad nativa con su propia vista, como Task y Event.
+
+**Funcionalidad buscada:** página de proyecto con descripción/progreso, tareas y subtareas relacionadas, responsables enlazados a notas Person, duraciones estimadas (si las hay), fechas planificadas/reales, dependencias entre tareas, hitos y enlaces a documentos/Eventos/Work Sessions. **Vista Gantt** usable, donde se distingan tareas sin estimación o sin fecha de tareas programadas, conexiones de dependencias y responsables; lista/tabla accesible como alternativa cuando el gráfico no sea apropiado.
+
+**Criterios de robustez:** dependencias explícitas con identidad verificada y **detección de ciclos**; ausencia de estimación **no** inventa horas/duración; un responsable desconocido no se asigna por suposición; duraciones de Work Sessions reales no sustituyen silenciosamente las estimaciones; cálculo de ruta crítica o reprogramación automática queda para fases posteriores. Reutilizar Core/E3, relaciones y Task/WorkSession/Calendar existentes, sin crear otro sistema paralelo de tareas.
+
+**Ejemplo:** «Proyecto reformar la cocina; pintar antes de montar los armarios; Juan se ocupa del montaje, calculo dos días» debe mostrar ambas tareas ordenadas por su dependencia, el responsable de la segunda y la estimación de dos días **solo** para montaje, nunca para pintura.
+
+## UX transversal — mejora visual y facilidad de uso
+
+Usar primero las skills oficiales existentes **Anthropic `frontend-design`** (composición, tipografía, paleta y dirección visual) y **Vercel `web-design-guidelines`** (accesibilidad, controles, estados, interacción). La skill local `odyssey-ux` coordina ambas adaptadas al código actual, sin instalar un framework ni rediseñar pantallas a ciegas. Ver [UX skills](../../.codex/skills/odyssey-ux/SKILL.md). En cada feature, probar mediante Chromium real en escritorio y móvil, contraste, teclado/foco, textos, estados vacíos, errores y finalización desde la perspectiva de un usuario sin conocimientos técnicos.
+
+**Primeros hallazgos de auditoría de código (no aceptación visual):** siguiendo las reglas públicas actuales de Vercel, `odyssey_web/schema-model.js:242-247` cierra el diálogo por Escape pero no evidencia una trampa/restauración de foco; verificar Tab y retorno al botón que lo abrió en Chromium real, no declararlo resuelto por ver `aria-modal`. `odyssey_web/styles.css:650-651` usa instrucciones de 0,75 rem y botones de 2,4 rem: probar legibilidad y objetivos táctiles en pantalla estrecha antes de modificar estilos. No son cambios ya aplicados ni bloqueos para desarrollar Recordatorios.
+
+**Prioridad de ejecución:** UX disponible inmediatamente como norma de trabajo; desarrollo funcional **primero recordatorios**, **después location**, **después Projects/Gantt** salvo que nuevas dependencias verificadas justifiquen ajustar la secuencia con conocimiento del usuario. Estas son propuestas guardadas, **no implementaciones entregadas**.

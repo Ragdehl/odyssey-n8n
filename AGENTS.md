@@ -31,7 +31,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 3. **Implement generally:** minimal coherent diff, useful Python docstrings, typed contracts, no unrelated changes or permanent per-example exceptions. Ruff and pytest are authoritative for Python.
 4. **Verify:** focused unit/contract **and vertical E2E regressions** for functional changes; before readiness use `odyssey-verify-change` and the full `scripts/odyssey_cross_surface_gate.py`. Model-facing changes need the live gate above. DEV adoption needs actual browser→n8n→GPT→Core/E3→Markdown→browser proof, synthetic data and matching deployed SHA. See `odyssey-dev-e2e`.
 5. **Review/PR:** default to **one active PR**, inspect existing PR feedback with `odyssey-pr-feedback`; keep CI/independent review separate from author. Human merges. `odyssey-post-merge` operates on the PR's **actual base branch**; never automatically assume `main`.
-6. **Close:** record evidence, commit/PR, exact deployment state, limitations and next step in **one** canonical status owner. Record a reusable operational failure as symptom→cause→fix→verification→prevention in the appropriate runbook, not here. Do not claim completion or re-run all auditors when evidence is missing or stale; classify the blocker and close the narrow gap.
+6. **Close:** record evidence, commit/PR, exact deployment state, limitations and next step in **one** canonical status owner. Capture user-requested future capabilities in the [near-term backlog](docs/architecture/near-term-product-backlog-20261025.md) with priority, clear examples and non-goals; do not treat an idea as an implemented feature or deployment permission. Record a reusable operational failure as symptom→cause→fix→verification→prevention in the appropriate runbook, not here. Do not claim completion or re-run all auditors when evidence is missing or stale; classify the blocker and close the narrow gap.
 
 ## Skill directory and canonical references
 
@@ -41,6 +41,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 - `odyssey-live-provider`: OpenAI EnvironmentFile, authorized real-model cost.
 - `odyssey-dev-e2e`: DEV deployment, browser regressions and safe recovery.
 - `odyssey-skill-steward`: notice repeated workflow mistakes or reusable corrections and improve existing skills before proposing a new one. Use the installed official Codex `skill-creator` for skill design and validation; do not add skills for isolated bugs.
+- `odyssey-ux`: modern UI design and review against Anthropic `frontend-design` and Vercel `web-design-guidelines`, then actual Chromium mobile/desktop acceptance.
 - Existing: `odyssey-architecture-challenge`, `odyssey-verify-change`, `odyssey-pr-feedback`, `odyssey-post-merge`.
 
 Skills are stored in `.codex/skills/<name>/SKILL.md`. A ChatGPT/Remote Desktop worker may **not auto-load** them: explicitly read the relevant skill. Detailed ownership: `docs/architecture/instruction-map.md`; current architecture `docs/architecture/overview.md`; schema `config/note-schema.json`; full process `docs/architecture/development-pipeline.md`; deployment/secret runbook `docs/infrastructure/raspberry-runtime.md`. Historical model and phase claims are not standing permission.

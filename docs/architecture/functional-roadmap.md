@@ -7,9 +7,9 @@
 **User-approved next direction: conversational evolution of note types and
 properties**. Full agreement, reuse inventory, implementation order and
 acceptance contract: [Post-UI2 conversational schema evolution, section C](post-ui2-note-creation-and-schema-evolution.md#contrato-de-implementación-acordado-para-la-siguiente-fase-24-10-2026).
+Upcoming first-party capabilities (recordatorios → location → Projects/Gantt) and UX standards: [near-term product backlog](near-term-product-backlog-20261025.md).
 This is the *canonical next-step owner*; historic C4 latency/worktree/audit
 notes below are NOT current blockers or an instruction to restart old work.
-Source-only isolated work is underway; no note mutation or deployment has been made for this phase.
 
 - **UI:** one AI-assisted «Modelo de notas» surface in Notes, deep-link from
   Chat; card preview, human-readable reasons, no technical «filterable» toggle;
