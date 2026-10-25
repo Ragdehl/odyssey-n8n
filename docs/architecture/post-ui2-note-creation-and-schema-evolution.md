@@ -1042,6 +1042,48 @@ solo con una orden genérica de probar. No ha habido despliegue, cambio de
 Cloudflare, llamada GPT, aprobación real, escritura física ni prueba
 Chromium→n8n→Core de la nueva funcionalidad. App E2E = **NO VERIFICADO**.
 
+**Aceptación posterior desde DEV auténtico, con usuario sintético (25-10-2026; SHA `5e340da`):**
+El usuario autorizó la **actualización de Cloudflare DEV** que había quedado
+bloqueada. Se hizo copia verificable de la configuración compartida y se
+reconcilió **exclusivamente** `/api/schema-model.js` (versión de túnel
+13 → 14): inspección antes/después confirmó **regla PROD idéntica**, misma
+política de Access y `status --machine = MATCH`. Los datos DEV y el volumen
+n8n se respaldaron y verificaron con SHA256 antes de publicar un único SHA
+`5e340dad8a0495c8b84e66da56845ca2d0891f15` mediante el comando oficial
+`odyssey-dev deploy`; runtime, n8n y assets entraron en servicio y el marker
+corresponde a ese commit. PROD no fue desplegado.
+
+Una regresión Chromium de **solo lectura** contra n8n DEV nuevo pasó en
+móvil y escritorio (42 turnos, 17 paneles/17 SVG, recarga, cero errores JS).
+Para la prueba de editor se activaron **temporalmente solo en DEV** el
+registro y la confirmación de esquema; el asistente de IA permaneció OFF.
+Desde Chromium real se navegó a Notas, se creó **manual** la propuesta
+sintética `Ficha tarjetas E2E 251025`, se revisaron dos previews, se cambió
+`cantidad` de texto a entero, se quitó `categoría`, se añadió `nivel` (texto)
+y se hizo **un** clic de confirmación. La petición llegó a **n8n DEV real →
+Core**, devolvió `queued`, produjo reinicio gestionado y se leyó revisión 1
+con `cantidad: integer` y `nivel: string` tras reabrir Notas. **PASS** de
+navegador→n8n→Core→persistencia del esquema→recarga, con modelo/proveedor
+**NO ejecutados**. La verificación independiente de los **1.275 archivos**
+del vault DEV contra el backup, byte a byte, dio **0 cambios y 0 altas**.
+
+**Incidencia y corrección de procedimiento:** abrir la app por HTTP interno
+`172.18.0.1` permite edición/preview pero desactiva `crypto.randomUUID()`
+en Chromium por origen no seguro: se rechazó la confirmación sin emitir ninguna
+petición. Se repitió con un **proxy loopback local y restringido** que
+reenvía operaciones sin sustituir al servidor n8n; Chromium considera
+`127.0.0.1` un contexto seguro, y la confirmación completó. No se alteró
+la generación segura de IDs, la API ni el código de producto. No se ha
+probado una sesión externa autenticada de Cloudflare Access.
+
+Al finalizar se eliminaron las flags temporales, el runtime quedó otra vez
+sano y el esquema **solo sintético** de revisión 1 se archivó fuera del
+estado activo DEV, conservando evidencias y backups bajo permisos privados.
+El assistant conversacional + revisión final con **GPT real** siguen sin
+aceptación E2E ni nuevas llamadas autorizadas; tampoco están implementados
+el backfill de propiedades y el descubrimiento retrospectivo. La skill
+`odyssey-dev-e2e` se actualizó para no repetir el error de origen/seguridad.
+
 Operational learning: added `.codex/skills/odyssey-skill-steward` and its
 minimal always-on routing in `AGENTS.md`, built against the already installed
 first-party Codex `skill-creator`. It notices recurrent agent mistakes or
