@@ -1,4 +1,4 @@
-# Conversación de modelo de notas — contrato V4 (solo fuente; NO validado con IA real)
+# Conversación de modelo de notas — contrato V4 (histórico de diseño y preparación)
 
 **Problema observado:** en la campaña V3, 33 de 40 respuestas tuvieron la etiqueta de operación prevista, pero eso no acredita la corrección de sus tipos ni el cumplimiento de las restricciones. En la regresión V3 se propuso ISBN sobre el tipo general `document` en lugar de aclarar cómo estaban representados los libros. En el holdout, una propuesta afirmó que una simple descripción del tipo `Planta` haría cumplir una exclusión por origen. Ambos son fallos de semántica y autoridad, no de JSON. Evidencias congeladas: [informe V3](schema-conversation-v3-live-eval-20261025.md).
 
@@ -23,7 +23,7 @@ La V4 aquí implementada **no demuestra** que la IA comprenda correctamente esas
 - **Schema JSON SHA256** `19acba3f55c8b73eaf823a94bd1400e8510de83d1507e7a538ef46b5744ccc50` (sin cambios).
 - `tests/fixtures/schema_suggestion/evaluation_v4_holdout.json`: **16 escenarios nuevos sintéticos**, creados antes de cualquier llamada real V4: identidades inciertas, términos explícitos, exclusiones, medidas, negaciones, correcciones y cambios múltiples en ES/FR/EN. Incluye *semantic_checks*, que necesitan revisión de propuesta completa por una persona y no pueden puntuarse por simple coincidencia de etiqueta.
 - V1 de 24 casos y el anterior holdout de 12 ahora **son regresión conocida**, NO un nuevo holdout independiente. No cambiar expectativas a posteriori para subir porcentajes. El evaluador reconoce la nueva matriz pero exige aprobación explícita, entorno aislado, presupuesto y evidencias en archivos locales 0600.
-- **Cero llamadas reales V4**. La autorización anterior de 40 se utilizó íntegramente en V3 y **no** autoriza nuevas llamadas. Necesaria autorización de un nuevo límite, evaluación con el hash exacto, revisión humana de cada propuesta, repetición de casos de riesgo, rendimiento/tokens y validación E2E Chromium→n8n→Core con vault sintético **solo tras superar el gate semántico**.
+- **Actualización posterior (misma V4, hash inalterado):** el usuario autorizó otras 40 llamadas que se ejecutaron totalmente sobre este hash. La evaluación real nueva logró 39/40 coincidencias de operación, pero **tres fallos de idioma** y algún matiz de intención; detalles en [informe V4](schema-conversation-v4-live-eval-20261025.md). No confundir la preparación de este contrato con aceptación semántica; la autorización ya se agotó y sigue faltando Chromium→n8n→Core con vault sintético.
 
 ## Estado de habilitación
 

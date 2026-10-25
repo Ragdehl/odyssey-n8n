@@ -874,7 +874,13 @@ El nuevo prompt exige comprobar granularidad/identidad del tipo destino y
 aclarar filtros que no pueden ejecutarse por una mera descripción. La vista
 previa deja visible el alcance real de `add_property` y la falta de filtros
 automáticos en `add_type`. Estas advertencias y pruebas de contrato no
-certifican una garantía semántica que el validador estructural no posee. La puerta transversal de fuente V2 ahora
+certifican uncertifican una garantía semántica que el validador estructural no posee.
+**V4 fue evaluada posteriormente** con otras 40 llamadas reales (16 holdout,
+24 regresión): **39/40 etiquetas** con **0 rechazos**, pero tres desajustes
+de idioma y preguntas mejorables. Informe detallado en
+[schema-conversation-v4-live-eval-20261025.md](schema-conversation-v4-live-eval-20261025.md).
+Su hash es `b52def8fca2037d1260aac595b8b10d9fd8db756b254c3c0a7369e26dad5bd2a`.
+No activar aún ni convertir un acierto de etiqueta en certificación semántica. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
 **2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.
