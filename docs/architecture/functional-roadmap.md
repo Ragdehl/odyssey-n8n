@@ -70,8 +70,9 @@ Activación previa: **2.123 Python + 204 JS PASS**, CI/auditoría aprobados tras
 tipo/propiedad, reutilización o aclaración; se conecta a Notas y a n8n con
 identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 `ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` solo DEV, apagado por defecto.
-Matriz ES/FR/EN **24 casos diseñados, 0 llamadas reales**; gate **2.126 Python + 225 JS PASS**.
-Dos defectos P2 reparados; faltan pruebas reales, Chromium, backfill y discovery.
+Matriz ES/FR/EN **24 casos diseñados, 0 llamadas reales**; gate **2.126 Python + 226 JS PASS**.
+Tres defectos P2 de edición/evidencia reparados; faltan pruebas reales,
+Chromium, backfill y discovery.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than

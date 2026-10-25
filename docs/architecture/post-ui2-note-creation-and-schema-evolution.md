@@ -855,10 +855,11 @@ Los tests SDK simulados / HTTP local / navegador DOM son evidencia de
 contrato **NO evidencia de comportamiento de GPT real**. No se ha gastado
 presupuesto ni realizado ninguna llamada a modelos de producción para este
 prompt, que sigue sin un hash/modelo aceptado semánticamente. La puerta transversal del
-corte fuente pasa **2.126 Python + 225 JavaScript** (12 grupos), tras corregir dos
+corte fuente pasa **2.126 Python + 226 JavaScript** (12 grupos), tras corregir tres
 hallazgos P2 de auditoría: la vista «Modificar» conserva tipos
 `integer`/`date`/`array[string]` existentes y bloquea cambios de nombre
-que degradarían esos tipos; la aclaración envía únicamente texto escrito por
+que degradarían esos tipos, pero sí deja quitar explícitamente propiedades
+no deseadas sin alterar las restantes; la aclaración envía texto escrito por
 el usuario como evidencia, **nunca la pregunta de la IA**. Tres regresiones
 JS nuevas demuestran las fronteras; es prueba
 funcional/contractual local, no evaluación del comportamiento de GPT. Para desbloquear

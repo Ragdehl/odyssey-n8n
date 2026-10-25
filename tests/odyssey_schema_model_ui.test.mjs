@@ -428,3 +428,36 @@ test("assistant question cannot become user quote evidence in follow-up source",
   assert.equal(seen.at(-1).payload.message.includes("Pregunta:"), false);
   assert.equal(seen.some((x) => x.operation === "schema_confirm"), false);
 });
+
+test("removing an unwanted typed property from AI draft is allowed without silently rewriting survivors", async () => {
+  const proposed = {operation: "add_type", type: {id: "libro", name: "Libro",
+    description: "Libros", examples: [], properties: [
+      {id: "paginas", value_type: "integer", description: "Número de páginas"},
+      {id: "titulo", value_type: "string", description: "Título original"},
+      {id: "autores", value_type: "array[string]", description: "Lista de autores"},
+    ]}};
+  const preview = {kind: "schema_preview", operation: "add_type", revision: 0,
+    next_revision: 1, proposal_hash: "d".repeat(64), affected_type_id: "libro",
+    type_preview: {id: "libro", name: "Libro", description: "Libros",
+      properties: proposed.type.properties.map((property) => ({...property, required: false}))}};
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(false);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Organiza libros", change: proposed, preview};
+    if (input.operation === "schema_preview") return preview;
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value = "Libros";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  panel.element.querySelector(".schema-model-review").click(); await flush();
+  const form = panel.element.querySelector(".schema-model-form");
+  form.querySelectorAll(".schema-model-input")[2].value = "titulo, autores";
+  form.querySelector(".schema-model-propose").click(); await flush();
+  const updated = calls.find((item) => item.operation === "schema_preview").payload.change;
+  assert.deepEqual(updated.type.properties, [proposed.type.properties[1], proposed.type.properties[2]]);
+  assert.equal(calls.some((item) => item.operation === "schema_confirm"), false);
+});

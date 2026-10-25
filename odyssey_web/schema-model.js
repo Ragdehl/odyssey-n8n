@@ -109,7 +109,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     }
     form.hidden = false;
     availability.textContent = preservedProperties
-      ? "Puedes corregir la propuesta. Los datos mantienen su tipo mientras conserves su nombre; para cambiar un dato numérico o de fecha, vuelve a pedir una propuesta a la IA."
+      ? "Puedes quitar los datos que no quieras. Los restantes conservan su tipo mientras mantengas su nombre; para renombrar números, fechas o listas, pide otra propuesta a la IA."
       : "Puedes corregir la información y comprobarla otra vez.";
   }, "schema-model-review");
   const controls = control("div", "schema-model-controls");
@@ -208,9 +208,12 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       if (ids.some((item) => !/^[a-z][a-z0-9_]{0,63}$/.test(item)) || new Set(ids).size !== ids.length) {
         throw new Error("Revisa los nombres de los datos: algunos están repetidos o no son identificables.");
       }
-      if (preservedProperties && [...preservedProperties].some(([previousId, property]) =>
-        property.value_type !== "string" && !ids.includes(previousId))) {
-        throw new Error("Para cambiar el nombre de un dato numérico o de fecha sin perder su tipo, pide a Odyssey otra propuesta.");
+      const removedTyped = preservedProperties && [...preservedProperties].some(([previousId, property]) =>
+        property.value_type !== "string" && !ids.includes(previousId));
+      // Removing an unwanted property is safe. A simultaneous replacement by
+      // an unfamiliar ID could be a rename that silently loses its value_type.
+      if (removedTyped && ids.some((candidate) => !preservedProperties.has(candidate))) {
+        throw new Error("Puedes quitar datos de la propuesta. Para cambiar el nombre de uno numérico o de fecha sin perder su tipo, pide otra propuesta a Odyssey.");
       }
       return {operation: "add_type", type: {id, name, description, examples: [],
         properties: labels.map((label, index) => {
