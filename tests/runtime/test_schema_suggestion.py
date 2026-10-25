@@ -536,6 +536,18 @@ def test_v3_prompt_declares_generic_nonduplication_partial_date_and_broad_clarif
     assert "subject_quote null" in SCHEMA_SUGGESTION_INSTRUCTIONS
 
 
+def test_v4_unseen_matrix_is_authorization_gated_before_any_provider_access(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from scripts.evaluate_schema_suggestion_live import MATRICES, run
+
+    assert MATRICES["v4_holdout"][1] == 16
+    monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
+    with pytest.raises(ValueError, match="approval missing"):
+        run(max_cases=1, first_index=0, output=tmp_path / "never.json", matrix_name="v4_holdout")
+
+
 def test_live_evaluator_does_not_access_provider_without_explicit_isolated_approval(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -547,3 +559,50 @@ def test_live_evaluator_does_not_access_provider_without_explicit_isolated_appro
         run(max_cases=1, first_index=0, output=tmp_path / "never.json", matrix_name="v1")
     with pytest.raises(ValueError, match="approval missing"):
         run(max_cases=1, first_index=0, output=tmp_path / "never.json", matrix_name="v2_holdout")
+
+
+def test_v4_prompt_guards_identity_scope_and_granularity_without_granting_authority() -> None:
+    """Prompt is only a risk reducer. These assertions do not prove model behaviour."""
+    instructions = SCHEMA_SUGGESTION_INSTRUCTIONS
+    for requirement in (
+        "WHOLE registered type",
+        "already saved does NOT establish their actual registered note type",
+        "CLARIFY which registered note type",
+        "not a transient lifecycle state",
+        "not an executable inclusion/exclusion",
+        "A description is NOT an executable inclusion/exclusion policy",
+        "manual selection",
+        "constraint cannot be supported",
+        "do not invent a unit",
+    ):
+        assert requirement.lower() in instructions.lower()
+    assert "Never drop explicit exclusions" not in instructions  # replaced with stronger scope rule
+    assert "confirmation" in instructions
+    assert "schema fields" in instructions.lower()
+
+
+def test_v4_holdout_is_unseen_and_contains_semantic_targets_beyond_decision_labels() -> None:
+    path = ROOT / "tests/fixtures/schema_suggestion/evaluation_v4_holdout.json"
+    matrix = json.loads(path.read_text(encoding="utf-8"))
+    original = json.loads(
+        (ROOT / "tests/fixtures/schema_suggestion/evaluation_v1.json").read_text()
+    )
+    prior = json.loads(
+        (ROOT / "tests/fixtures/schema_suggestion/evaluation_v2_holdout.json").read_text()
+    )
+    cases = matrix["cases"]
+    assert matrix["suite_version"] == "v4_holdout"
+    assert matrix["model"] == "gpt-6-luna" and matrix["reasoning_effort"] == "low"
+    assert len(cases) == 16
+    assert len({case["id"] for case in cases}) == len(cases)
+    frozen_sources = {case["source"] for data in (original, prior) for case in data["cases"]}
+    assert all(case["source"] not in frozen_sources for case in cases)
+    assert set(case["expected"] for case in cases) == {
+        "ADD_TYPE",
+        "ADD_PROPERTY",
+        "REUSE",
+        "CLARIFY",
+        "ABSTAIN",
+    }
+    assert all(case["semantic_checks"] and case["reason"] for case in cases)
+    assert all(len(case["source"]) <= 1200 for case in cases)

@@ -663,3 +663,6 @@ textarea.schema-model-input { resize: vertical; min-height: 4.1rem; }
 .schema-model-assistant h3 { margin: 0; font-size: .88rem; }
 .schema-model-assistant-reply { color: #405272; font-size: .8rem; line-height: 1.45; white-space: pre-wrap; }
 .schema-model-ask { justify-self: start; background: #e3e1fa; }
+
+/* A read-only semantic scope reminder, not a policy-enforcement control. */
+.schema-model-impact { font-size: .8rem; line-height: 1.45; font-weight: 600; color: #44546d; padding: .6rem .7rem; border-left: 3px solid #747ea0; background: #eff2f8; }

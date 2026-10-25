@@ -284,6 +284,15 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       list.append(control("li", "", `${property.description} (${property.value_type})`));
     }
     if (result.type_preview.properties.length) summary.append(list);
+    // Schema descriptions are metadata, not executable row-level constraints.
+    // Make the actual blast radius visible even when a model explanation sounds confident.
+    if (draft.operation === "add_property") {
+      summary.append(control("p", "schema-model-impact",
+        `Esta propiedad se añadirá al modelo de todas las notas de tipo «${result.type_preview.name}», no solo a los ejemplos mencionados. Comprueba que ese tipo es exactamente el adecuado.`));
+    } else if (draft.operation === "add_type") {
+      summary.append(control("p", "schema-model-impact",
+        "La descripción de un tipo no aplica exclusiones automáticas: no impide crear notas de cierto origen ni filtra menciones antiguas. Esas reglas necesitan otro mecanismo y confirmación específica."));
+    }
     confirmation.textContent = canConfirm
       ? "Confirma solo si esta propuesta refleja lo que quieres. Odyssey la activará al reiniciar; las notas anteriores no se modificarán con esta operación."
       : "Es una vista previa. La aprobación y el análisis de las notas anteriores aún no están habilitados.";

@@ -71,8 +71,8 @@ identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 `ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` solo DEV, apagado por defecto.
 Matriz V1: **17/24 decisiones**; [informe](schema-conversation-live-eval-20261025.md).
 V2 real: **20/24 decisiones**; [fallos](schema-conversation-v2-eval-20261025.md).
-V3 real: **33/40 decisiones, NO éxito semántico**; [2 bloqueos](schema-conversation-v3-live-eval-20261025.md).
-No activar. Pendientes V4, Chromium, backfill y discovery.
+V3 real: **33/40 etiquetas**, 2 bloqueos; [informe](schema-conversation-v3-live-eval-20261025.md).
+V4 fuente: [contrato](schema-conversation-v4-contract-20261025.md), **0 llamadas**; flags OFF. Faltan evaluación, Chromium, backfill y discovery.
 
 **Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
 DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than

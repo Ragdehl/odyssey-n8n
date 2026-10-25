@@ -867,8 +867,14 @@ de regresión, 9/12 holdout, 2/4 repeticiones; **33/40 etiquetas, NO
 tipo genérico `document` y exclusión de plantas laborales que no puede
 hacerse cumplir con una mera descripción. Informe íntegro en
 [schema-conversation-v3-live-eval-20261025.md](schema-conversation-v3-live-eval-20261025.md).
-Queda prohibido activar el asistente hasta revisar un nuevo contrato V4
-con semántica satisfactoria y probarlo desde la app usando vault sintético. La puerta transversal de fuente V2 ahora
+Queda prohibido activar el asistente hasta validar la semántica y probarlo
+desde la app usando vault sintético. **La fuente V4 está preparada, pero NO
+evaluada con modelo real**: [contrato y matriz nueva](schema-conversation-v4-contract-20261025.md).
+El nuevo prompt exige comprobar granularidad/identidad del tipo destino y
+aclarar filtros que no pueden ejecutarse por una mera descripción. La vista
+previa deja visible el alcance real de `add_property` y la falta de filtros
+automáticos en `add_type`. Estas advertencias y pruebas de contrato no
+certifican una garantía semántica que el validador estructural no posee. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
 **2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.

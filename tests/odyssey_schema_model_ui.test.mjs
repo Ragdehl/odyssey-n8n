@@ -461,3 +461,54 @@ test("removing an unwanted typed property from AI draft is allowed without silen
   assert.deepEqual(updated.type.properties, [proposed.type.properties[1], proposed.type.properties[2]]);
   assert.equal(calls.some((item) => item.operation === "schema_confirm"), false);
 });
+
+test("type preview explicitly discloses that description cannot enforce exclusions", async () => {
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(false);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "La descripción excluirá todas las notas de oficina automáticamente.",
+      change: {operation: "add_type", type: {id: "planta", name: "Planta",
+        description: "Solo las plantas personales", examples: [], properties: []}},
+      preview: {kind: "schema_preview", operation: "add_type", revision: 0,
+        next_revision: 1, proposal_hash: "e".repeat(64), affected_type_id: "planta",
+        type_preview: {id: "planta", name: "Planta", description: "Solo las plantas personales",
+          properties: []}}};
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value =
+    "Solo plantas personales";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  assert.match(panel.element.querySelector(".schema-model-impact").textContent, /no aplica exclusiones automáticas/);
+  assert.match(panel.element.querySelector(".schema-model-impact").textContent, /ni filtra menciones antiguas/);
+  assert.equal(panel.element.querySelector(".schema-model-confirm").disabled, true);
+  assert.equal(calls.some((item) => item.operation === "schema_confirm"), false);
+});
+
+test("property preview discloses whole-type impact, never a selective subset", async () => {
+  const client = async (input) => {
+    if (input.operation === "schema_status") return ready(false);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Añade ISBN al tipo Documento.",
+      change: {operation: "add_property", type_id: "document", property: {
+        id: "isbn", value_type: "string", description: "ISBN"}},
+      preview: {kind: "schema_preview", operation: "add_property", revision: 0,
+        next_revision: 1, proposal_hash: "a".repeat(64), affected_type_id: "document",
+        type_preview: {id: "document", name: "Documento", description: "Un documento",
+          properties: [{id: "isbn", value_type: "string", description: "ISBN", required: false}]}}};
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value =
+    "Quiero ISBN de mis libros guardados";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  const note = panel.element.querySelector(".schema-model-impact").textContent;
+  assert.match(note, /todas las notas de tipo «Documento»/);
+  assert.match(note, /no solo a los ejemplos mencionados/);
+  assert.match(note, /exactamente el adecuado/);
+  assert.equal(panel.element.querySelector(".schema-model-confirm").disabled, true);
+});
