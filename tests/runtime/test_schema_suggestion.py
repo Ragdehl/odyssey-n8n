@@ -18,7 +18,7 @@ from odyssey_runtime.schema_suggestion import (
     catalog_for_model,
     validate_model_suggestion,
 )
-from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+from odyssey_runtime.user_schema_registry import UserSchemaError, UserSchemaRegistry
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -755,3 +755,106 @@ def test_v6_new_holdout_protected_from_unauthorized_paid_calls(
     monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
     with pytest.raises(ValueError, match="approval missing"):
         run(max_cases=1, first_index=0, output=tmp_path / "none.json", matrix_name="v6_holdout")
+
+
+def test_final_review_uses_human_edited_core_preview_and_never_writes(tmp_path: Path) -> None:
+    from odyssey_runtime.schema_suggestion import review_schema_change
+
+    reg = registry(tmp_path)
+    edited = {
+        "operation": "add_type",
+        "type": {
+            "id": "libro",
+            "name": "Libro",
+            "description": "Libros que leo",
+            "examples": [],
+            "properties": [
+                {"id": "paginas", "description": "Número de páginas", "value_type": "integer"},
+            ],
+        },
+    }
+    preview = reg.preview(edited, expected_revision=0)
+    fake = FakeGateway(
+        {
+            "verdict": "CHECK",
+            "message": "Revisa el alcance.",
+            "issues": ["Una descripción no aplica filtros automáticos."],
+        }
+    )
+    result = review_schema_change(
+        SchemaSuggestionService(fake),
+        source="Quiero libros, pero excluir los del trabajo",
+        change=edited,
+        expected_revision=0,
+        proposal_hash=preview.proposal_hash,
+        registry=reg,
+    )
+    assert result == {
+        "kind": "schema_review",
+        "proposal_hash": preview.proposal_hash,
+        "verdict": "CHECK",
+        "message": "Revisa el alcance.",
+        "issues": ["Una descripción no aplica filtros automáticos."],
+    }
+    assert fake.calls[0]["name"] == "odyssey_schema_review_v1"
+    assert fake.calls[0]["max_tokens"] == 700
+    assert fake.calls[0]["data"]["edited_change"] == edited
+    assert "actor_id" not in result and "change" not in result
+    assert reg.snapshot()[0] == 0
+    assert not (tmp_path / "user-schema/current.json").exists()
+
+
+def test_final_review_refuses_mismatched_hash_or_stale_revision_without_model_call(
+    tmp_path: Path,
+) -> None:
+    from odyssey_runtime.schema_suggestion import review_schema_change
+
+    reg = registry(tmp_path)
+    change = {
+        "operation": "add_type",
+        "type": {
+            "id": "plant",
+            "name": "Plant",
+            "description": "Plants",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    proposal = reg.preview(change, expected_revision=0)
+    gateway = FakeGateway({"verdict": "READY", "message": "Correcto", "issues": []})
+    service = SchemaSuggestionService(gateway)
+    for hash_value, revision in [
+        ("0" * 64, 0),
+        (proposal.proposal_hash, 1),
+        (proposal.proposal_hash, True),
+    ]:
+        with pytest.raises((ValueError, UserSchemaError)):
+            review_schema_change(
+                service,
+                source="Plants",
+                change=change,
+                expected_revision=revision,
+                proposal_hash=hash_value,
+                registry=reg,
+            )
+    assert gateway.calls == []
+
+
+def test_final_review_rejects_forged_actions_and_inconsistent_warnings() -> None:
+    from odyssey_runtime.schema_suggestion import validate_schema_review
+
+    assert (
+        validate_schema_review({"verdict": "READY", "message": "Está bien", "issues": []})[
+            "verdict"
+        ]
+        == "READY"
+    )
+    for bad in (
+        {"verdict": "READY", "message": "Perfecto", "issues": ["Problema"]},
+        {"verdict": "CHECK", "message": "Revisa", "issues": []},
+        {"verdict": "APPROVE", "message": "Guardado", "issues": []},
+        {"verdict": "READY", "message": "Correcto", "issues": [], "approved": True},
+        {"verdict": "CHECK", "message": "Revisa", "issues": ["x"] * 4},
+    ):
+        with pytest.raises(SchemaSuggestionError):
+            validate_schema_review(bad)

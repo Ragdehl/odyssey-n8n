@@ -90,15 +90,15 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   const review = button("Modificar propuesta", () => {
     const draft = proposed?.draft;
     invalidate();
-    preservedProperties = null;
+    structuredProperties = null;
     preview.hidden = true;
     if (draft?.operation === "add_type") {
-      preservedProperties = new Map(draft.type.properties.map((property) => [property.id, property]));
       mode = "new";
       fields = build();
       fields.name.value = draft.type.name;
       fields.description.value = draft.type.description;
-      fields.properties.value = draft.type.properties.map((p) => p.id).join(", ");
+      fields.properties.value = "";
+      buildPropertyRows(draft.type.properties);
     } else if (draft?.operation === "add_property") {
       mode = "add-property";
       activeType = {id: draft.type_id};
@@ -108,13 +108,14 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       fields.typeSelector.value = draft.property.value_type;
     }
     form.hidden = false;
-    availability.textContent = preservedProperties
-      ? "Puedes quitar los datos que no quieras. Los restantes conservan su tipo mientras mantengas su nombre; para renombrar números, fechas o listas, pide otra propuesta a la IA."
-      : "Puedes corregir la información y comprobarla otra vez.";
+    availability.textContent = "Edita libremente nombre, descripción y propiedades. Después comprueba el resultado con Core y realiza la revisión final con IA.";
   }, "schema-model-review");
   const controls = control("div", "schema-model-controls");
-  controls.append(review, confirm);
-  preview.append(summary, confirmation, controls);
+  const finalReview = control("div", "schema-model-final-review");
+  finalReview.setAttribute("role", "status");
+  const checkWithAi = button("Revisión final con IA", () => void reviewWithAi(), "schema-model-ai-review");
+  controls.append(review, checkWithAi, confirm);
+  preview.append(summary, finalReview, confirmation, controls);
   const retry = button("Comprobar activación", () => void checkActivation(), "schema-model-retry");
   retry.hidden = true;
   const recover = button("Descartar seguimiento y empezar otra propuesta", () => {
@@ -137,7 +138,9 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   let canConfirm = false;
   let busy = false;
   let priorClarification = null;
-  let preservedProperties = null;
+  let structuredProperties = null;
+  let originalRequest = null;
+  let reviewedProposalHash = null;
 
   function invalidate() {
     generation += 1;
@@ -148,7 +151,10 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
 
   function setBusy(value) {
     busy = value;
-    confirm.disabled = value || !canConfirm || !proposed;
+    confirm.disabled = value || !canConfirm || !proposed ||
+      (originalRequest !== null && reviewedProposalHash !== proposed?.result?.proposal_hash);
+    checkWithAi.disabled = value || !proposed ||
+      reviewedProposalHash === proposed?.result?.proposal_hash;
     retry.disabled = value;
     ask.disabled = value;
     request.input.disabled = value;
@@ -182,7 +188,54 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     const hint = control("p", "schema-model-hint", "Vista guiada provisional: la interpretación libre con IA está aún en preparación. Las propiedades nuevas serán consultables por defecto.");
     const go = button("Ver propuesta", () => void propose(), "schema-model-propose");
     form.append(hint, go);
-    return {name: name.input, description: description.input, properties: properties?.input, typeSelector};
+    return {name: name.input, description: description.input,
+      properties: properties?.input, propertiesWrapper: properties?.wrapper, typeSelector};
+  }
+
+  // The editable rows are human-owned; no LLM round trip is required for corrections.
+  // All values are normalized and validated again by Core's canonical preview.
+  function buildPropertyRows(properties = []) {
+    if (mode !== "new") return;
+    const group = control("section", "schema-model-property-editor");
+    group.append(control("h3", "", "Propiedades del nuevo tipo"));
+    const rows = control("div", "schema-model-property-rows");
+    const items = [];
+    const add = (property = {}) => {
+      if (items.length >= 6) return;
+      const row = control("div", "schema-model-property-row");
+      const name = entry("Nombre", "Ej.: Número de jugadores");
+      const description = entry("Descripción", "Ej.: Cuántas personas pueden jugar");
+      const type = control("select", "schema-model-property-type");
+      for (const [value, label] of [["string", "Texto"], ["integer", "Número entero"],
+        ["date", "Fecha completa"], ["array[string]", "Lista de textos"]]) {
+        const opt = control("option", "", label);
+        opt.value = value;
+        type.append(opt);
+      }
+      const wrapper = control("label", "schema-model-field");
+      wrapper.append(control("span", "schema-model-label", "Tipo de dato"), type);
+      const item = {row, name: name.input, description: description.input, type};
+      const remove = button("Eliminar propiedad", () => {
+        const index = items.indexOf(item);
+        if (index >= 0) items.splice(index, 1);
+        // `replaceChildren` also works in the deterministic DOM harness.
+        rows.replaceChildren(...items.map((p) => p.row));
+      }, "schema-model-property-remove");
+      row.append(name.wrapper, description.wrapper, wrapper, remove);
+      item.name.value = property.name || property.id || "";
+      item.description.value = property.description || property.name || property.id || "";
+      item.type.value = property.value_type || "string";
+      items.push(item);
+      rows.append(row);
+    };
+    for (const property of properties) add(property);
+    const addButton = button("Añadir propiedad", () => add(), "schema-model-property-add");
+    group.append(rows, addButton);
+    fields.propertiesWrapper.hidden = true;
+    const previewButton = form.querySelector(".schema-model-propose");
+    form.replaceChildren(...Array.from(form.children).filter((child) => child !== previewButton),
+      group, previewButton);
+    structuredProperties = items;
   }
 
   form.addEventListener("submit", (event) => { event.preventDefault(); void propose(); });
@@ -202,25 +255,19 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       throw new Error("Indica un nombre y una explicación. El nombre debe empezar por una letra y ser identificable.");
     }
     if (mode === "new") {
-      const labels = (fields.properties.value || "").split(",").map((x) => x.trim()).filter(Boolean);
-      if (labels.length > 6) throw new Error("Añade como máximo seis datos por propuesta.");
-      const ids = labels.map(stableId);
-      if (ids.some((item) => !/^[a-z][a-z0-9_]{0,63}$/.test(item)) || new Set(ids).size !== ids.length) {
-        throw new Error("Revisa los nombres de los datos: algunos están repetidos o no son identificables.");
+      const properties = structuredProperties !== null
+        ? structuredProperties.map((item) => ({id: stableId(item.name.value),
+          value_type: item.type.value, description: item.description.value.trim()}))
+        : (fields.properties.value || "").split(",").map((value) => value.trim())
+          .filter(Boolean).map((label) => ({id: stableId(label), value_type: "string", description: label}));
+      if (properties.length > 6) throw new Error("Añade como máximo seis datos por propuesta.");
+      const ids = properties.map((item) => item.id);
+      if (ids.some((item) => !/^[a-z][a-z0-9_]{0,63}$/.test(item)) || new Set(ids).size !== ids.length ||
+        properties.some((item) => !item.description || item.description.length > 1000 ||
+          !["string", "integer", "date", "array[string]"].includes(item.value_type))) {
+        throw new Error("Revisa nombres, descripciones y tipos de datos de las propiedades.");
       }
-      const removedTyped = preservedProperties && [...preservedProperties].some(([previousId, property]) =>
-        property.value_type !== "string" && !ids.includes(previousId));
-      // Removing an unwanted property is safe. A simultaneous replacement by
-      // an unfamiliar ID could be a rename that silently loses its value_type.
-      if (removedTyped && ids.some((candidate) => !preservedProperties.has(candidate))) {
-        throw new Error("Puedes quitar datos de la propuesta. Para cambiar el nombre de uno numérico o de fecha sin perder su tipo, pide otra propuesta a Odyssey.");
-      }
-      return {operation: "add_type", type: {id, name, description, examples: [],
-        properties: labels.map((label, index) => {
-          const previous = preservedProperties?.get(ids[index]);
-          return {id: ids[index], value_type: previous?.value_type ?? "string",
-            description: previous?.description ?? label};
-        })}};
+      return {operation: "add_type", type: {id, name, description, examples: [], properties}};
     }
     if (!activeType?.id) throw new Error("Este tipo no está disponible.");
     return {operation: "add_property", type_id: activeType.id,
@@ -238,7 +285,9 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     assistantReply.textContent = "";
     request.input.value = "";
     priorClarification = null;
-    preservedProperties = null;
+    structuredProperties = null;
+    originalRequest = null;
+    reviewedProposalHash = null;
     form.hidden = true;
     current = null;
     canConfirm = false;
@@ -276,6 +325,10 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
 
   function showPreview(draft, result, explanation = "") {
     proposed = {draft, result};
+    reviewedProposalHash = null;
+    finalReview.textContent = originalRequest !== null
+      ? "Revisa y edita lo necesario. Antes de confirmar, realiza una revisión final con IA."
+      : "Puedes solicitar una revisión adicional con IA antes de confirmar.";
     summary.replaceChildren();
     summary.append(control("h3", "", result.type_preview.name),
       control("p", "", result.type_preview.description));
@@ -298,6 +351,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       : "Es una vista previa. La aprobación y el análisis de las notas anteriores aún no están habilitados.";
     form.hidden = true;
     preview.hidden = false;
+    setBusy(false);
     availability.textContent = explanation || "Propuesta validada: ningún cambio ha sido aplicado.";
   }
 
@@ -328,6 +382,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       if (seq !== generation || sheet.hidden) return;
       if (result.decision === "PROPOSE") {
         priorClarification = null;
+        originalRequest = source;
         assistantReply.textContent = result.message;
         showPreview(result.change, result.preview,
           "Propuesta de la IA comprobada por Core. Todavía no se ha aplicado ningún cambio.");
@@ -374,8 +429,39 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     }
   }
 
+  async function reviewWithAi() {
+    if (busy || !proposed || !current || current.status !== "ready" ||
+        reviewedProposalHash === proposed.result.proposal_hash) return;
+    const {draft, result} = proposed;
+    const expectedHash = result.proposal_hash;
+    const seq = generation;
+    setBusy(true);
+    finalReview.textContent = "Odyssey está revisando la versión editada…";
+    try {
+      const feedback = await client({endpoint, operation: "schema_review", payload: {
+        message: originalRequest || "", change: draft,
+        expected_revision: current.revision, proposal_hash: expectedHash,
+      }});
+      if (seq !== generation || sheet.hidden || proposed?.result?.proposal_hash !== expectedHash ||
+          feedback.proposal_hash !== expectedHash) return;
+      // This is advisory, NOT an approval. Core preview and explicit user click
+      // remain the only route to persistence; issues are never auto-applied.
+      reviewedProposalHash = expectedHash;
+      finalReview.replaceChildren(control("p", "", feedback.message));
+      for (const issue of feedback.issues) finalReview.append(control("p", "schema-model-review-issue", issue));
+      if (feedback.verdict === "CHECK") finalReview.append(control("p", "",
+        "Puedes corregir la propuesta y revisarla de nuevo, o decidir continuar. La última decisión es tuya."));
+    } catch {
+      if (seq === generation) finalReview.textContent =
+        "No se ha podido realizar la revisión final con IA. Ningún cambio se ha confirmado.";
+    } finally {
+      if (seq === generation) setBusy(false);
+    }
+  }
+
   async function submit() {
-    if (busy || !proposed || !canConfirm) return;
+    if (busy || !proposed || !canConfirm ||
+        (originalRequest !== null && reviewedProposalHash !== proposed.result.proposal_hash)) return;
     const seq = generation;
     const proposal = proposed;
     let requestId;

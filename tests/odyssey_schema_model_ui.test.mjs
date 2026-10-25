@@ -379,7 +379,7 @@ test("reviewing AI proposal retains numeric, full date and list property types e
   assert.equal(calls.some((entry) => entry.operation === "schema_confirm"), false);
 });
 
-test("editing a typed AI property cannot silently downgrade number to text", async () => {
+test("renaming a typed AI property preserves its explicitly selected numeric type", async () => {
   const change = {operation: "add_type", type: {id: "libro", name: "Libro",
     description: "Libros", examples: [], properties: [
       {id: "paginas", value_type: "integer", description: "Total de páginas"},
@@ -394,6 +394,7 @@ test("editing a typed AI property cannot silently downgrade number to text", asy
     if (input.operation === "schema_status") return ready(false);
     if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
       message: "Añade páginas", change, preview};
+    if (input.operation === "schema_preview") return preview;
     throw Error("Unexpected operation");
   };
   const panel = createSchemaModel({root: new Element("section"), client});
@@ -402,10 +403,11 @@ test("editing a typed AI property cannot silently downgrade number to text", asy
   panel.element.querySelector(".schema-model-ask").click(); await flush();
   panel.element.querySelector(".schema-model-review").click(); await flush();
   const form = panel.element.querySelector(".schema-model-form");
-  form.querySelectorAll(".schema-model-input")[2].value = "longitud";
+  form.querySelector(".schema-model-property-row").querySelector(".schema-model-input").value = "longitud";
   form.querySelector(".schema-model-propose").click(); await flush();
-  assert.match(panel.element.textContent, /sin perder su tipo/);
-  assert.equal(calls.filter((entry) => entry.operation === "schema_preview").length, 0);
+  const edited = calls.find((entry) => entry.operation === "schema_preview").payload.change;
+  assert.deepEqual(edited.type.properties, [{id: "longitud", value_type: "integer",
+    description: "Total de páginas"}]);
   assert.equal(calls.some((entry) => entry.operation === "schema_confirm"), false);
 });
 
@@ -455,7 +457,7 @@ test("removing an unwanted typed property from AI draft is allowed without silen
   panel.element.querySelector(".schema-model-ask").click(); await flush();
   panel.element.querySelector(".schema-model-review").click(); await flush();
   const form = panel.element.querySelector(".schema-model-form");
-  form.querySelectorAll(".schema-model-input")[2].value = "titulo, autores";
+  form.querySelectorAll(".schema-model-property-remove")[0].click();
   form.querySelector(".schema-model-propose").click(); await flush();
   const updated = calls.find((item) => item.operation === "schema_preview").payload.change;
   assert.deepEqual(updated.type.properties, [proposed.type.properties[1], proposed.type.properties[2]]);
@@ -511,4 +513,119 @@ test("property preview discloses whole-type impact, never a selective subset", a
   assert.match(note, /no solo a los ejemplos mencionados/);
   assert.match(note, /exactamente el adecuado/);
   assert.equal(panel.element.querySelector(".schema-model-confirm").disabled, true);
+});
+
+test("human can edit every proposed property, add and remove rows, then Core reviews edited structure", async () => {
+  const draft = {operation: "add_type", type: {id: "juego", name: "Juego", description: "Mis juegos",
+    examples: [], properties: [
+      {id: "jugadores", description: "Número de jugadores", value_type: "string"},
+      {id: "autor", description: "Autor", value_type: "string"},
+    ]}};
+  const original = {kind: "schema_preview", operation: "add_type", revision: 0, next_revision: 1,
+    affected_type_id: "juego", proposal_hash: "a".repeat(64), type_preview: {
+      id: "juego", name: "Juego", description: "Mis juegos", properties: draft.type.properties.map(
+        (property) => ({...property, required: false}))}};
+  const calls = [];
+  const client = async (req) => {
+    calls.push(req);
+    if (req.operation === "schema_status") return ready(false);
+    if (req.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Propongo Juego", change: draft, preview: original};
+    if (req.operation === "schema_preview") return {...original, proposal_hash: "b".repeat(64)};
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value =
+    "Quiero juegos con número de jugadores";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  panel.element.querySelector(".schema-model-review").click(); await flush();
+  const form = panel.element.querySelector(".schema-model-form");
+  form.querySelectorAll(".schema-model-input")[0].value = "Juego de mesa";
+  form.querySelectorAll(".schema-model-input")[1].value = "Juegos que tengo";
+  const rows = form.querySelectorAll(".schema-model-property-row");
+  rows[0].querySelectorAll(".schema-model-input")[0].value = "Número de jugadores";
+  rows[0].querySelectorAll(".schema-model-input")[1].value = "Cantidad de jugadores";
+  rows[0].querySelector(".schema-model-property-type").value = "integer";
+  rows[1].querySelector(".schema-model-property-remove").click();
+  form.querySelector(".schema-model-property-add").click();
+  const added = form.querySelectorAll(".schema-model-property-row").at(-1);
+  added.querySelectorAll(".schema-model-input")[0].value = "Edad recomendada";
+  added.querySelectorAll(".schema-model-input")[1].value = "Edad mínima en años";
+  added.querySelector(".schema-model-property-type").value = "integer";
+  form.querySelector(".schema-model-propose").click(); await flush();
+  const edited = calls.find((req) => req.operation === "schema_preview").payload.change;
+  assert.equal(edited.type.name, "Juego de mesa");
+  assert.equal(edited.type.description, "Juegos que tengo");
+  assert.deepEqual(edited.type.properties, [
+    {id: "numero_de_jugadores", description: "Cantidad de jugadores", value_type: "integer"},
+    {id: "edad_recomendada", description: "Edad mínima en años", value_type: "integer"},
+  ]);
+  assert.equal(calls.filter((req) => req.operation === "schema_suggest").length, 1);
+  assert.equal(calls.some((req) => req.operation === "schema_confirm"), false);
+});
+
+test("final AI review is advisory but required for an AI-origin proposal, and bound to exact hash", async () => {
+  const draft = {operation: "add_type", type: {id: "libro", name: "Libro", description: "Mis libros",
+    examples: [], properties: []}};
+  const preview = {kind: "schema_preview", operation: "add_type", revision: 0, next_revision: 1,
+    affected_type_id: "libro", proposal_hash: "c".repeat(64),
+    type_preview: {id: "libro", name: "Libro", description: "Mis libros", properties: []}};
+  const calls = [];
+  const client = async (req) => {
+    calls.push(req);
+    if (req.operation === "schema_status") return ready(true);
+    if (req.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Fichas de libros", change: draft, preview};
+    if (req.operation === "schema_review") return {kind: "schema_review",
+      proposal_hash: req.payload.proposal_hash, verdict: "CHECK",
+      message: "Revisa antes de aprobar.", issues: ["No hay filtro automático de libros laborales."]};
+    if (req.operation === "schema_confirm") return {kind: "schema_confirm", status: "queued",
+      request_id: req.payload.request_id, revision: 0, next_revision: 1};
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value =
+    "Quiero organizar mis libros";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  const confirm = panel.element.querySelector(".schema-model-confirm");
+  assert.equal(confirm.disabled, true);
+  confirm.click(); await flush();
+  assert.equal(calls.filter((r) => r.operation === "schema_confirm").length, 0);
+  panel.element.querySelector(".schema-model-ai-review").click(); await flush();
+  const review = calls.find((r) => r.operation === "schema_review");
+  assert.equal(review.payload.message, "Quiero organizar mis libros");
+  assert.equal(review.payload.proposal_hash, preview.proposal_hash);
+  assert.deepEqual(review.payload.change, draft);
+  assert.match(panel.element.textContent, /No hay filtro automático/);
+  assert.equal(confirm.disabled, false);
+  confirm.click(); await flush();
+  assert.equal(calls.filter((r) => r.operation === "schema_confirm").length, 1);
+});
+
+test("a stale or mismatched final review cannot enable human confirmation", async () => {
+  const draft = {operation: "add_type", type: {id: "libro", name: "Libro", description: "Mis libros",
+    examples: [], properties: []}};
+  const preview = {kind: "schema_preview", operation: "add_type", revision: 0, next_revision: 1,
+    affected_type_id: "libro", proposal_hash: "d".repeat(64),
+    type_preview: {id: "libro", name: "Libro", description: "Mis libros", properties: []}};
+  let release;
+  const client = async (req) => {
+    if (req.operation === "schema_status") return ready(true);
+    if (req.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Fichas", change: draft, preview};
+    if (req.operation === "schema_review") return new Promise((resolve) => {release = resolve;});
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value = "Libros";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  panel.element.querySelector(".schema-model-ai-review").click(); await flush();
+  assert.equal(panel.element.querySelector(".schema-model-confirm").disabled, true);
+  release({kind: "schema_review", proposal_hash: "f".repeat(64), verdict: "READY",
+    message: "Todo correcto", issues: []}); await flush();
+  assert.equal(panel.element.querySelector(".schema-model-confirm").disabled, true);
+  assert.equal(panel.element.querySelector(".schema-model-final-review").textContent.includes("Todo correcto"), false);
 });

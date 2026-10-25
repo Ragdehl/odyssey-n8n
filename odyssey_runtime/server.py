@@ -314,6 +314,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "capabilities",
                         "schema_preview",
                         "schema_suggest",
+                        "schema_review",
                         "schema_confirm",
                         "schema_status",
                         "query",

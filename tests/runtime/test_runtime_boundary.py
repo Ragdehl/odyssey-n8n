@@ -2904,3 +2904,108 @@ def test_authenticated_http_schema_assistant_readonly_and_separate_activation_ga
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_authenticated_http_final_schema_review_is_readonly_and_cas_bound(
+    tmp_path: Path,
+) -> None:
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime.schema_suggestion import SchemaSuggestionService
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
+    registry = UserSchemaRegistry(
+        tmp_path,
+        json.loads(schema_path.read_text()),
+        (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION),
+    )
+    calls = []
+
+    class ReviewerGateway:
+        def _complete(self, **kw):
+            calls.append(kw)
+            return {
+                "verdict": "CHECK",
+                "message": "Revisa la restricción.",
+                "issues": ["La descripción no ejecuta filtros."],
+            }
+
+    user_id = OdysseyUser.new().stable_user_id
+    service = SchemaSuggestionService(ReviewerGateway())  # type: ignore[arg-type]
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+        schema_suggestion_service=service,
+        schema_activation_enabled=False,
+    )
+    app = _test_server(runtime)
+    draft = {
+        "operation": "add_type",
+        "type": {
+            "id": "planta",
+            "name": "Planta",
+            "description": "Plantas personales",
+            "examples": [],
+            "properties": [
+                {"id": "altura", "description": "Altura conocida", "value_type": "string"},
+            ],
+        },
+    }
+    preview = registry.preview(draft, expected_revision=0)
+    base = {
+        "operation": "schema_review",
+        "message": "Mis plantas, no las del trabajo",
+        "change": draft,
+        "expected_revision": 0,
+        "proposal_hash": preview.proposal_hash,
+    }
+
+    def send(payload: dict) -> tuple[int, dict]:
+        conn = HTTPConnection("127.0.0.1", app.server_port, timeout=6)
+        conn.request("POST", "/notes", body=json.dumps(payload))
+        response = conn.getresponse()
+        result = (response.status, json.loads(response.read()))
+        conn.close()
+        return result
+
+    try:
+        assert send(base)[0] == 400
+        assert calls == []
+        sent = {**base, "authenticated_actor": {"stable_user_id": user_id}}
+        code, outcome = send(sent)
+        assert code == 200 and outcome["kind"] == "schema_review"
+        assert outcome["verdict"] == "CHECK"
+        assert outcome["proposal_hash"] == preview.proposal_hash
+        assert "change" not in outcome and "approved" not in outcome
+        assert len(calls) == 1 and calls[0]["name"] == "odyssey_schema_review_v1"
+        for forged in [
+            {"proposal_hash": "f" * 64},
+            {"approved": True},
+            {"expected_revision": 1},
+            {"message": "a" * 1201},
+            {"change": {"operation": "delete_type"}},
+        ]:
+            assert send({**sent, **forged})[0] == 400
+        assert len(calls) == 1
+        assert registry.snapshot()[0] == 0
+        assert not (tmp_path / "user-schema/current.json").exists()
+        assert (
+            send(
+                {
+                    "operation": "schema_confirm",
+                    "change": draft,
+                    "expected_revision": 0,
+                    "proposal_hash": preview.proposal_hash,
+                    "request_id": "schema-test-review-only",
+                    "authenticated_actor": {"stable_user_id": user_id},
+                }
+            )[0]
+            == 400
+        )
+    finally:
+        app.shutdown()
+        app.server_close()

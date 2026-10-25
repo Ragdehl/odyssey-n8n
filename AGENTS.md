@@ -40,6 +40,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 - `odyssey-llm-stage`: creating/editing prompts, models, validators/reviewers.
 - `odyssey-live-provider`: OpenAI EnvironmentFile, authorized real-model cost.
 - `odyssey-dev-e2e`: DEV deployment, browser regressions and safe recovery.
+- `odyssey-skill-steward`: notice repeated workflow mistakes or reusable corrections and improve existing skills before proposing a new one. Use the installed official Codex `skill-creator` for skill design and validation; do not add skills for isolated bugs.
 - Existing: `odyssey-architecture-challenge`, `odyssey-verify-change`, `odyssey-pr-feedback`, `odyssey-post-merge`.
 
 Skills are stored in `.codex/skills/<name>/SKILL.md`. A ChatGPT/Remote Desktop worker may **not auto-load** them: explicitly read the relevant skill. Detailed ownership: `docs/architecture/instruction-map.md`; current architecture `docs/architecture/overview.md`; schema `config/note-schema.json`; full process `docs/architecture/development-pipeline.md`; deployment/secret runbook `docs/infrastructure/raspberry-runtime.md`. Historical model and phase claims are not standing permission.

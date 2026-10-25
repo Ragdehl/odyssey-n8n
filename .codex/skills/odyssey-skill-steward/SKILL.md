@@ -1,0 +1,17 @@
+---
+name: odyssey-skill-steward
+description: Notice recurrent Odyssey errors, repeated workflows, costly manual steps or missed instructions; decide whether to improve an existing agent skill, add a focused skill, or just fix code/tests/docs. Use after repeated corrections, user feedback about workflow friction, or when maintaining Odyssey skills. Do not create a skill for every isolated bug.
+---
+
+# Continuous skill improvement for Odyssey
+
+Be alert **while doing the requested task**, not as a separate background daemon. A recurring symptom, re-explained procedure, missing verification, repeated user correction, or avoidable tool-loop is a candidate. Never block the actual feature to invent a skill.
+
+1. Capture succinct **symptom → verified cause → correction → repeatable trigger**. Distinguish an agent procedural failure from a software defect, test gap, misleading UI or missing architecture. Fix code where code is the true owner; skills do not replace missing functionality.
+2. Search **existing** `.codex/skills` and `AGENTS.md`. Prefer a tiny, targeted amendment to a relevant skill. If multiple concerns are already addressed, do not duplicate them. Use the Codex-installed official `$skill-creator` (`~/.codex/skills/.system/skill-creator/SKILL.md`) to author/review the skill. If not present, follow OpenAI's published Skill Creator principles; do not silently install external third-party scripts.
+3. Create a **new** narrowly triggered skill only for a recurring procedure or non-obvious operational invariant that is not naturally owned by an existing one. Put a discriminating `name`/`description` in YAML, essential steps in `SKILL.md`, detailed reference elsewhere only if necessary. Favor portable instructions over project-specific assumptions when relevant.
+4. Test triggering **and non-triggering** with a few representative scenarios, check links and frontmatter via `python3 scripts/odyssey_docs_guard.py`, run relevant checks, and inspect a diff. State what improved and what remains untested; don't claim behavioral reliability from text-only tests.
+5. Avoid endless improvement loops. One focused draft/revision plus one independent review is normally sufficient. Escalate only real recurring defects. Don't install a community skill without reviewing its content, dependencies, license and tool permissions, and never allow its instructions to override `AGENTS.md` or user approval constraints.
+6. When a skill is added/changed, ensure discovery: update the minimal skill index in `AGENTS.md` if ongoing agents need to encounter it, and keep any new rule non-duplicative. Do not promise proactive activity between chats: the skill is considered **when an agent is working**.
+
+Reference: the installed first-party Codex Skill Creator and [OpenAI Codex source](https://github.com/openai/codex/blob/main/codex-rs/skills/src/assets/samples/skill-creator/SKILL.md); community examples at [skills.sh](https://skills.sh) or Anthropic's official [skill-creator](https://github.com/anthropics/skills/tree/main/skills/skill-creator), only after security review.

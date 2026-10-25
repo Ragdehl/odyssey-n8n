@@ -972,6 +972,47 @@ Desired contract:
 
 This should remain a presentation/cache capability, not a second personal-knowledge authority.
 
+## D. Human-edited proposals and one final AI review — source-only, after V6
+
+**Product correction from user feedback:** Stop tuning the initial model until
+it gets every cosmetic name/property right. The assistant proposes a schema
+change; **the user owns the draft**. The Notes editor can now edit the type
+name/description and individual property name, description and value type
+(`string`, `integer`, `date`, `array[string]`), add or remove properties and
+rerun the trusted Core `schema_preview` without another suggestion call. The
+editor enforces bounded rows, unique canonical property IDs and supported
+value types, and Core validates the full effective schema. There is no hidden
+property renaming/type coercion or reclassification of historical notes.
+
+A separate authenticated operation `schema_review` accepts the original user
+request (or empty when no assistant was used), **the exact human-edited
+change**, expected revision and `proposal_hash`. The service re-runs the
+Core preview/CAS and refuses a stale or mismatched hash *before* a bounded
+**single read-only** strict-JSON review via the existing conversation gateway.
+The reviewer returns only `READY`/`CHECK`, a short explanation and at most
+three issues. It cannot return changes, approval, writes, migration plans or
+assert that a non-executable description enforces a filter. Material concerns
+are advice the user can review/correct or explicitly choose to proceed with;
+Core still controls hard schema invariants.
+
+For assistant-generated drafts the **UI requires the final review** of the
+current proposal hash before its `Confirmar` button is enabled; editing or
+re-preview invalidates the earlier review, and a late/mismatched response
+cannot enable confirmation. For manual proposals Core's canonical preview
+remains sufficient, with an optional AI review. Confirmation always requires
+a separate explicit user click and existing activation flag/receipts; AI
+never confirms automatically. The feature remains opt-in/off and this is a
+**source-only** implementation, not a claim of deployed app/real-model E2E.
+No new background backfill or retrospective discovery is implemented by
+this UI change: those post-activation stages remain separate.
+
+Operational learning: added `.codex/skills/odyssey-skill-steward` and its
+minimal always-on routing in `AGENTS.md`, built against the already installed
+first-party Codex `skill-creator`. It notices recurrent agent mistakes or
+manual patterns **during work**; it first improves an existing skill rather
+than creating another for every bug. Skills do not work autonomously between
+chats or substitute for code/tests.
+
 ## E. Product questions to observe rather than decide now
 
 Do not decide during UI-2 whether Chat or Notes should become Odyssey's primary landing surface.

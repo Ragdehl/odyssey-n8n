@@ -22,6 +22,7 @@ REQUIRED_SKILLS = {
     "odyssey-verify-change",
     "odyssey-pr-feedback",
     "odyssey-post-merge",
+    "odyssey-skill-steward",
 }
 CHECK_LINKS = (
     "AGENTS.md",

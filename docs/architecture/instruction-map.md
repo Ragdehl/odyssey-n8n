@@ -14,6 +14,7 @@ Use [AGENTS.md](../../AGENTS.md) as the **small, always-on safety contract** and
 | Challenge a significant new project phase | [odyssey-architecture-challenge](../../.codex/skills/odyssey-architecture-challenge/SKILL.md) | [Development pipeline](development-pipeline.md) |
 | Check readiness of code / tests / release | [odyssey-verify-change](../../.codex/skills/odyssey-verify-change/SKILL.md) | [Testing](testing.md), `scripts/odyssey_cross_surface_gate.py` |
 | Existing PR comments, existing branch | [odyssey-pr-feedback](../../.codex/skills/odyssey-pr-feedback/SKILL.md) | GitHub's **actual PR**, not a guessed one |
+| Repeated agent error, repeated instruction or skill improvement candidate | [odyssey-skill-steward](../../.codex/skills/odyssey-skill-steward/SKILL.md) | First-party Codex skill-creator, reuse existing skill before adding a new one |
 | Confirmed PR merge then synchronize and prune only its branch | [odyssey-post-merge](../../.codex/skills/odyssey-post-merge/SKILL.md) | Actual PR base branch (often `dev`), never always `main` |
 
 New LLM work should normally load **start-work + llm-stage**, and **generality** if Router/Core/app contracts change; **live-provider** only if a billable real provider gate is authorized; **dev-e2e** only if deployment/browser validation is in scope. Do not eagerly dump all skills into every prompt.

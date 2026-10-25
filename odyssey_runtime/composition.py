@@ -1768,6 +1768,30 @@ class RuntimeComposition:
                     proposal_hash=payload["proposal_hash"],
                 ),
             )
+        if operation == "schema_review":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.user_schema_registry is None
+                or self.schema_suggestion_service is None
+            ):
+                raise ValueError("Final schema review is unavailable")
+            if set(payload) != {"message", "change", "expected_revision", "proposal_hash"}:
+                raise ValueError("Final schema review payload is invalid")
+            from .schema_suggestion import SchemaSuggestionService, review_schema_change
+            from .user_schema_registry import UserSchemaRegistry
+
+            if not isinstance(
+                self.schema_suggestion_service, SchemaSuggestionService
+            ) or not isinstance(self.user_schema_registry, UserSchemaRegistry):
+                raise ValueError("Final schema review service is invalid")
+            return review_schema_change(
+                self.schema_suggestion_service,
+                source=payload["message"],
+                change=payload["change"],
+                expected_revision=payload["expected_revision"],
+                proposal_hash=payload["proposal_hash"],
+                registry=self.user_schema_registry,
+            )
         if operation == "schema_suggest":
             if (
                 (authenticated_actor is None and external_principal is None)

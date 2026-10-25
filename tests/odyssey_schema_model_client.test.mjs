@@ -89,3 +89,24 @@ test("untrusted schema suggestion must match a validated canonical preview", () 
     kind: "schema_suggestion", decision: "REUSE", message: "Reutiliza", reuse_type_id: "../notes",
   }), NotesRequestError);
 });
+
+test("final schema review response is advisory, hash-bound, and never carries approval", () => {
+  const result = {kind: "schema_review", proposal_hash: "a".repeat(64),
+    verdict: "CHECK", message: "Comprueba el tipo de dato.", issues: ["Recuento expresado como texto."]};
+  assert.deepEqual(validateSchemaOperationResponse("schema_review", result), result);
+  const wrong = [
+    {...result, approved: true},
+    {...result, change: {operation: "add_type"}},
+    {...result, proposal_hash: "stale"},
+    {...result, verdict: "PUBLISH"},
+    {...result, issues: []},
+    {...result, issues: Array(4).fill("demasiados")},
+    {...result, message: ""},
+    {...result, issues: ["a".repeat(301)]},
+    {...result, verdict: "READY", issues: ["Incoherente"]},
+  ];
+  for (const item of wrong) assert.throws(
+    () => validateSchemaOperationResponse("schema_review", item), NotesRequestError);
+  assert.equal(validateSchemaOperationResponse("schema_review", {...result,
+    verdict: "READY", issues: []}).verdict, "READY");
+});

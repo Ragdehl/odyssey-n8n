@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest", "schema_review"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -116,6 +116,16 @@ export function validateSchemaOperationResponse(operation, value) {
       return {kind: "schema_suggestion", decision: value.decision, message: value.message,
         reuse_type_id: value.reuse_type_id};
     }
+  }
+  if (operation === "schema_review" && expected(["kind", "proposal_hash", "verdict", "message", "issues"]) &&
+      value.kind === "schema_review" && /^[a-f0-9]{64}$/.test(value.proposal_hash ?? "") &&
+      ["READY", "CHECK"].includes(value.verdict) && typeof value.message === "string" &&
+      value.message.trim() && value.message.length <= 500 && Array.isArray(value.issues) &&
+      value.issues.length <= 3 && value.issues.every((item) => typeof item === "string" &&
+        item.trim() && item.length <= 300) &&
+      (value.verdict === "READY" ? value.issues.length === 0 : value.issues.length > 0)) {
+    return {kind: "schema_review", proposal_hash: value.proposal_hash,
+      verdict: value.verdict, message: value.message, issues: [...value.issues]};
   }
   if (operation === "schema_confirm" && expected(
     value.status === "queued" ? ["status", "request_id", "revision", "next_revision"] :

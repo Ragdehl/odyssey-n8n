@@ -119,3 +119,16 @@ test("n8n allows only authenticated bounded conversational schema hints", () => 
     assert.equal(run({...valid, ...extra}).invalid, true, JSON.stringify(extra).slice(0, 80));
   }
 });
+
+test("n8n admits one bounded read-only schema review without allowing extra authority", () => {
+  const body = {operation: "schema_review", message: "Mis libros", change,
+    expected_revision: 0, proposal_hash: "a".repeat(64)};
+  assert.deepEqual(run(body), {...body, authenticated_actor: {
+    stable_user_id: "00000000-0000-4000-8000-000000000001"}});
+  for (const extra of [
+    {message: "a".repeat(1201)}, {message: 45}, {expected_revision: true},
+    {expected_revision: 101}, {change: []}, {change: null},
+    {proposal_hash: "invalid"}, {approved: true}, {request_id: "forged"},
+    {authenticated_actor: {stable_user_id: "forged"}},
+  ]) assert.equal(run({...body, ...extra}).invalid, true);
+});

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Skill Steward"
+  short_description: "Capture recurring lessons and improve Odyssey agent skills"
+  default_prompt: "Use $odyssey-skill-steward to assess this recurring Odyssey workflow issue."
