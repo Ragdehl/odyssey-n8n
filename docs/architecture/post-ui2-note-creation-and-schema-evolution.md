@@ -855,7 +855,12 @@ Los tests SDK simulados / HTTP local / navegador DOM son evidencia de
 contrato **NO evidencia de comportamiento de GPT real**. No se ha gastado
 presupuesto ni realizado ninguna llamada a modelos de producción para este
 prompt, que sigue sin un hash/modelo aceptado semánticamente. La puerta transversal del
-corte fuente pasa **2.126 Python + 222 JavaScript** (12 grupos); es prueba
+corte fuente pasa **2.126 Python + 225 JavaScript** (12 grupos), tras corregir dos
+hallazgos P2 de auditoría: la vista «Modificar» conserva tipos
+`integer`/`date`/`array[string]` existentes y bloquea cambios de nombre
+que degradarían esos tipos; la aclaración envía únicamente texto escrito por
+el usuario como evidencia, **nunca la pregunta de la IA**. Tres regresiones
+JS nuevas demuestran las fronteras; es prueba
 funcional/contractual local, no evaluación del comportamiento de GPT. Para desbloquear
 el opt-in hay que ejecutar una campaña de validación con modelo real,
 presupuesto finito previamente autorizado, publicar outcomes y errores por

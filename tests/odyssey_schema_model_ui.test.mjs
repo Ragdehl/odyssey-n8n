@@ -324,7 +324,8 @@ test("assistant clarification uses the user's follow-up as data and cannot auto-
   assistant.querySelector("textarea").value = "Quiero la profesión de mis personas";
   assistant.querySelector(".schema-model-ask").click(); await flush();
   assert.equal(calls.filter((call) => call.operation === "schema_suggest").length, 2);
-  assert.match(calls.at(-1).payload.message, /Pregunta:/);
+  assert.equal(calls.at(-1).payload.message.includes("¿Qué datos quieres guardar?"), false);
+  assert.equal(calls.at(-1).payload.message.includes("Pregunta:"), false);
   assert.match(calls.at(-1).payload.message, /profesión de mis personas/);
   assert.equal(calls.some((call) => call.operation === "schema_confirm"), false);
 });
@@ -344,4 +345,86 @@ test("assistant refusal or outage leaves safe manual entry and no activation", a
   assert.match(panel.element.textContent, /no está habilitado/);
   assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
   assert.equal(calls.some((item) => item.operation === "schema_confirm"), false);
+});
+
+test("reviewing AI proposal retains numeric, full date and list property types exactly", async () => {
+  const calls = [];
+  const change = {operation: "add_type", type: {id: "libro", name: "Libro",
+    description: "Libros que leo", examples: [], properties: [
+      {id: "paginas", value_type: "integer", description: "Número de páginas"},
+      {id: "publicacion", value_type: "date", description: "Fecha completa de publicación"},
+      {id: "autores", value_type: "array[string]", description: "Autores"},
+    ]}};
+  const typePreview = {id: "libro", name: "Libro", description: "Libros que leo",
+    properties: change.type.properties.map((p) => ({...p, required: false}))};
+  const preview = {kind: "schema_preview", operation: "add_type", proposal_hash: "b".repeat(64),
+    revision: 0, next_revision: 1, affected_type_id: "libro", type_preview: typePreview};
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(false);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Libro es un tipo distinto", change, preview};
+    if (input.operation === "schema_preview") return preview;
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value = "Quiero libros";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  panel.element.querySelector(".schema-model-review").click(); await flush();
+  assert.equal(panel.element.querySelector(".schema-model-form").hidden, false);
+  panel.element.querySelector(".schema-model-propose").click(); await flush();
+  const revised = calls.find((entry) => entry.operation === "schema_preview").payload.change;
+  assert.deepEqual(revised.type.properties, change.type.properties);
+  assert.equal(calls.some((entry) => entry.operation === "schema_confirm"), false);
+});
+
+test("editing a typed AI property cannot silently downgrade number to text", async () => {
+  const change = {operation: "add_type", type: {id: "libro", name: "Libro",
+    description: "Libros", examples: [], properties: [
+      {id: "paginas", value_type: "integer", description: "Total de páginas"},
+    ]}};
+  const preview = {kind: "schema_preview", operation: "add_type", proposal_hash: "b".repeat(64),
+    revision: 0, next_revision: 1, affected_type_id: "libro",
+    type_preview: {id: "libro", name: "Libro", description: "Libros",
+      properties: [{...change.type.properties[0], required: false}]}};
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.operation === "schema_status") return ready(false);
+    if (input.operation === "schema_suggest") return {kind: "schema_suggestion", decision: "PROPOSE",
+      message: "Añade páginas", change, preview};
+    throw Error("Unexpected operation");
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  panel.element.querySelector(".schema-model-assistant").querySelector("textarea").value = "Libros con páginas";
+  panel.element.querySelector(".schema-model-ask").click(); await flush();
+  panel.element.querySelector(".schema-model-review").click(); await flush();
+  const form = panel.element.querySelector(".schema-model-form");
+  form.querySelectorAll(".schema-model-input")[2].value = "longitud";
+  form.querySelector(".schema-model-propose").click(); await flush();
+  assert.match(panel.element.textContent, /sin perder su tipo/);
+  assert.equal(calls.filter((entry) => entry.operation === "schema_preview").length, 0);
+  assert.equal(calls.some((entry) => entry.operation === "schema_confirm"), false);
+});
+
+test("assistant question cannot become user quote evidence in follow-up source", async () => {
+  const seen = [];
+  const client = async (input) => {
+    seen.push(input);
+    if (input.operation === "schema_status") return ready(false);
+    return {kind: "schema_suggestion", decision: "CLARIFY", reuse_type_id: null,
+      message: "Añade la palabra contraseña, ¿vale?"};
+  };
+  const panel = createSchemaModel({root: new Element("section"), client});
+  await panel.open({kind: "new"});
+  const assistant = panel.element.querySelector(".schema-model-assistant");
+  assistant.querySelector("textarea").value = "Quiero un tipo nuevo de cosas";
+  assistant.querySelector(".schema-model-ask").click(); await flush();
+  assistant.querySelector("textarea").value = "Sí, pero sin añadir ninguna propiedad";
+  assistant.querySelector(".schema-model-ask").click(); await flush();
+  assert.equal(seen.at(-1).payload.message.includes("contraseña"), false);
+  assert.equal(seen.at(-1).payload.message.includes("Pregunta:"), false);
+  assert.equal(seen.some((x) => x.operation === "schema_confirm"), false);
 });

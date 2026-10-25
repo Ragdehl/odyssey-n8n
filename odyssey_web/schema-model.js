@@ -90,8 +90,10 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   const review = button("Modificar propuesta", () => {
     const draft = proposed?.draft;
     invalidate();
+    preservedProperties = null;
     preview.hidden = true;
     if (draft?.operation === "add_type") {
+      preservedProperties = new Map(draft.type.properties.map((property) => [property.id, property]));
       mode = "new";
       fields = build();
       fields.name.value = draft.type.name;
@@ -106,7 +108,9 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       fields.typeSelector.value = draft.property.value_type;
     }
     form.hidden = false;
-    availability.textContent = "Puedes corregir la información y comprobarla otra vez.";
+    availability.textContent = preservedProperties
+      ? "Puedes corregir la propuesta. Los datos mantienen su tipo mientras conserves su nombre; para cambiar un dato numérico o de fecha, vuelve a pedir una propuesta a la IA."
+      : "Puedes corregir la información y comprobarla otra vez.";
   }, "schema-model-review");
   const controls = control("div", "schema-model-controls");
   controls.append(review, confirm);
@@ -133,6 +137,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   let canConfirm = false;
   let busy = false;
   let priorClarification = null;
+  let preservedProperties = null;
 
   function invalidate() {
     generation += 1;
@@ -163,7 +168,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       "Ej.: autor, número de páginas, estado de lectura") : null;
     const typeSelector = !isNew ? control("select", "schema-model-input") : null;
     if (typeSelector) {
-      for (const [value, text] of [["string", "Texto"], ["integer", "Número entero"], ["date", "Fecha completa"]]) {
+      for (const [value, text] of [["string", "Texto"], ["integer", "Número entero"], ["date", "Fecha completa"], ["array[string]", "Lista de textos"]]) {
         const option = control("option", "", text);
         option.value = value;
         typeSelector.append(option);
@@ -203,9 +208,16 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       if (ids.some((item) => !/^[a-z][a-z0-9_]{0,63}$/.test(item)) || new Set(ids).size !== ids.length) {
         throw new Error("Revisa los nombres de los datos: algunos están repetidos o no son identificables.");
       }
+      if (preservedProperties && [...preservedProperties].some(([previousId, property]) =>
+        property.value_type !== "string" && !ids.includes(previousId))) {
+        throw new Error("Para cambiar el nombre de un dato numérico o de fecha sin perder su tipo, pide a Odyssey otra propuesta.");
+      }
       return {operation: "add_type", type: {id, name, description, examples: [],
-        properties: labels.map((label, index) => ({id: ids[index], value_type: "string",
-          description: label}))}};
+        properties: labels.map((label, index) => {
+          const previous = preservedProperties?.get(ids[index]);
+          return {id: ids[index], value_type: previous?.value_type ?? "string",
+            description: previous?.description ?? label};
+        })}};
     }
     if (!activeType?.id) throw new Error("Este tipo no está disponible.");
     return {operation: "add_property", type_id: activeType.id,
@@ -223,6 +235,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     assistantReply.textContent = "";
     request.input.value = "";
     priorClarification = null;
+    preservedProperties = null;
     form.hidden = true;
     current = null;
     canConfirm = false;
@@ -283,8 +296,10 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       assistantReply.textContent = "Explica brevemente qué quieres organizar.";
       return;
     }
+    // The model's prior question is NOT user evidence. Source-grounding
+    // must inspect only literal user utterances, never assistant-generated text.
     const source = priorClarification
-      ? `${priorClarification.source}\nPregunta: ${priorClarification.question}\nRespuesta: ${message}`
+      ? `${priorClarification.source}\n${message}`
       : message;
     if (source.length > 1200) {
       assistantReply.textContent = "La explicación es demasiado larga. Resúmela en un solo mensaje.";
@@ -306,7 +321,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
           "Propuesta de la IA comprobada por Core. Todavía no se ha aplicado ningún cambio.");
       } else if (result.decision === "CLARIFY") {
         priorClarification = {source, question: result.message};
-        assistantReply.textContent = result.message;
+        assistantReply.textContent = `${result.message} Responde con una frase completa para que Odyssey pueda comprobar tus propias palabras.`;
         request.input.value = "";
         request.input.focus();
       } else {
