@@ -880,7 +880,13 @@ certifican uncertifican una garantía semántica que el validador estructural no
 de idioma y preguntas mejorables. Informe detallado en
 [schema-conversation-v4-live-eval-20261025.md](schema-conversation-v4-live-eval-20261025.md).
 Su hash es `b52def8fca2037d1260aac595b8b10d9fd8db756b254c3c0a7369e26dad5bd2a`.
-No activar aún ni convertir un acierto de etiqueta en certificación semántica. La puerta transversal de fuente V2 ahora
+No activar aún ni convertir un acierto de etiqueta en certificación semántica.
+Se ha preparado V5 **solo en fuente** para corregir fidelidad de idioma,
+reutilización sin atributos nuevos e hipótesis temporales; ver
+[schema-conversation-v5-contract-20261025.md](schema-conversation-v5-contract-20261025.md).
+Su prompt tiene hash `c34023593fb021384013e77c862afee580e8dc04795f4b65b46b8ae423bb3ca4`.
+**0 llamadas reales V5**, contrato semántico todavía sin validar. Ambas
+banderas de activación continúan apagadas. La puerta transversal de fuente V2 ahora
 incluye también `tests/runtime/test_schema_suggestion.py` y pasa
 **2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
 estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.

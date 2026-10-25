@@ -606,3 +606,61 @@ def test_v4_holdout_is_unseen_and_contains_semantic_targets_beyond_decision_labe
     }
     assert all(case["semantic_checks"] and case["reason"] for case in cases)
     assert all(len(case["source"]) <= 1200 for case in cases)
+
+
+def test_v5_prompt_multilingual_response_scope_and_temporal_intent_are_explicit() -> None:
+    prompt = SCHEMA_SUGGESTION_INSTRUCTIONS
+    assert "dominant language of the user's LATEST message" in prompt
+    for part in (
+        "explanation",
+        "question",
+        "new type_name",
+        "new type description",
+        "new property name",
+        "property description",
+    ):
+        assert part in prompt
+    assert "Preserve canonical registered type_id" in prompt
+    assert "REUSE that type without demanding" in prompt
+    assert "explicitly ask to add a NEW schema" in prompt
+    assert "FIRST question must ask whether" in prompt
+    assert "only considering doing so later" in prompt
+    assert "ABSTAIN is also safe" in prompt
+
+
+def test_v5_holdout_is_frozen_new_synthetic_data_and_has_language_checks() -> None:
+    source = ROOT / "tests/fixtures/schema_suggestion/evaluation_v5_holdout.json"
+    matrix = json.loads(source.read_text(encoding="utf-8"))
+    old_sources = set()
+    for old_name in (
+        "evaluation_v1.json",
+        "evaluation_v2_holdout.json",
+        "evaluation_v4_holdout.json",
+    ):
+        old = json.loads((source.parent / old_name).read_text(encoding="utf-8"))
+        old_sources.update(item["source"] for item in old["cases"])
+    assert matrix["suite_version"] == "v5_holdout"
+    assert (matrix["model"], matrix["reasoning_effort"]) == ("gpt-6-luna", "low")
+    cases = matrix["cases"]
+    assert len(cases) == 12
+    assert len({c["id"] for c in cases}) == len(cases)
+    assert not ({c["source"] for c in cases} & old_sources)
+    assert all(
+        c["semantic_checks"] and c["reason"] and 1 <= len(c["source"]) <= 1200 for c in cases
+    )
+    assert set(c["expected"] for c in cases) == {"ADD_TYPE", "REUSE", "CLARIFY", "ABSTAIN"}
+    assert any("French" in repr(c["semantic_checks"]) for c in cases)
+    assert any("Spanish" in repr(c["semantic_checks"]) for c in cases)
+    assert any("English" in repr(c["semantic_checks"]) for c in cases)
+
+
+def test_v5_holdout_cannot_call_paid_provider_without_new_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from scripts.evaluate_schema_suggestion_live import MATRICES, run
+
+    assert MATRICES["v5_holdout"][1] == 12
+    monkeypatch.delenv("ODYSSEY_SCHEMA_LIVE_EVAL_APPROVED", raising=False)
+    with pytest.raises(ValueError, match="approval missing"):
+        run(max_cases=1, first_index=0, output=tmp_path / "none.json", matrix_name="v5_holdout")

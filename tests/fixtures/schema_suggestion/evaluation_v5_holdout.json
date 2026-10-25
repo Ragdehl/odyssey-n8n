@@ -1,0 +1,20 @@
+{
+  "suite_version": "v5_holdout",
+  "note": "Frozen synthetic-only V5 evaluation expectations drafted BEFORE any paid model call. No real V5 results. Full outputs, language and semantics require independent review, not just decision equality.",
+  "model": "gpt-6-luna",
+  "reasoning_effort": "low",
+  "cases": [
+    {"id":"es_new_board_games","source":"Quiero un tipo para mis juegos de mesa, con número de jugadores.","expected":"ADD_TYPE","reason":"New identifiable type in Spanish","semantic_checks":["type_name and description in Spanish, not English Board Game","number of players integer","no spurious ownership/read-state qualifier"]},
+    {"id":"fr_new_paintings","source":"Je voudrais une fiche pour chaque tableau de ma collection, avec son artiste.","expected":"ADD_TYPE","reason":"French new type","semantic_checks":["French user-facing type name, property and descriptions","each painting independent","artist as string"]},
+    {"id":"en_new_guitars","source":"I'd like separate notes for my guitars and their brands.","expected":"ADD_TYPE","reason":"English new type","semantic_checks":["English type_name, description, fields and explanation","guitar entity type, not broad Product","brand string"]},
+    {"id":"fr_people_reuse_details","source":"Je voudrais garder des renseignements sur les personnes que je rencontre.","expected":"REUSE","reason":"Known Person type supports ordinary details without new property request","semantic_checks":["type_id person","French explanation","no demand for new field"]},
+    {"id":"es_people_reuse_details","source":"Me gustaría anotar cosas sobre mis conocidos.","expected":"REUSE","reason":"Known Person identity; user did not request a new field","semantic_checks":["type_id person","Spanish explanation","no new property"]},
+    {"id":"en_people_reuse_details","source":"I want to keep information about people I meet.","expected":"REUSE","reason":"Known Person identity","semantic_checks":["type_id person","English explanation","no invented field"]},
+    {"id":"fr_missing_property","source":"Je veux ajouter un nouveau champ aux fiches Personne, mais je ne sais pas encore lequel.","expected":"CLARIFY","reason":"Explicit property request with no named field","semantic_checks":["French clarification question","must ask which property","no mutation"]},
+    {"id":"en_hypothetical_future","source":"If I ever start collecting fossils, I might want a note type for them someday.","expected":"CLARIFY","reason":"Conditional not current permission","semantic_checks":["No proposal now","English question asks NOW versus hypothetical future; ABSTAIN also safe on semantic review"]},
+    {"id":"es_hypothetical_future","source":"Quizá el año próximo empiece a coleccionar mapas y entonces quiera fichas para ellos.","expected":"CLARIFY","reason":"No present schema request","semantic_checks":["No proposal now","Ask whether to define now or later","Spanish question"]},
+    {"id":"fr_exclusions","source":"Crée des fiches pour mes outils, mais n'enregistre jamais automatiquement ceux du bureau.","expected":"CLARIFY","reason":"Enforceable exclusion isn't part of schema","semantic_checks":["French question and explanation","No promise an executable filter exists","no proposal before clarification"]},
+    {"id":"en_broad_documents","source":"I have existing notes about cameras. Add aperture to them.","expected":"CLARIFY","reason":"Unknown registered target type","semantic_checks":["English response","Ask which canonical note type holds cameras","no broad Document mutation"]},
+    {"id":"es_non_schema_fact","source":"Ayer limpié la bicicleta de mi padre.","expected":"ABSTAIN","reason":"Fact, not schema change","semantic_checks":["Spanish explanation","No type proposal"]}
+  ]
+}
