@@ -848,3 +848,60 @@ test("corrupt stored scan target cannot turn a legitimate status into arbitrary 
   assert.equal(calls.filter(x=>x.operation==="schema_backfill").length,0);
   assert.equal(storageData.size,0);
 });
+
+test("cold DEV boot beyond 24 status checks still auto-activates without duplicate approval", async()=>{
+  const timers=[];
+  const calls=[];
+  let checks=0;
+  const client=async ({operation,payload})=>{
+    calls.push({operation,payload});
+    if(operation==="schema_status"&&!payload)return ready(true);
+    if(operation==="schema_preview")return {
+      ...makeType("Persona"),operation:"add_property",affected_type_id:"person",
+      type_preview:{id:"person",name:"Persona",description:"Persona",
+        properties:[{id:"profesion",description:"Profesión",value_type:"string",required:false}]},
+    };
+    if(operation==="schema_confirm")return {kind:"schema_confirm",status:"queued",
+      request_id:payload.request_id,revision:0,next_revision:1};
+    if(operation==="schema_status"){
+      checks++;
+      // 45 polls take > 2 minutes at one poll per 3 seconds. Some failures
+      // represent the runtime restart; others are legitimate queued receipts.
+      if(checks>=11&&checks<=30)throw Error("DEV runtime booting");
+      return checks<46
+        ? {kind:"schema_status",status:"queued",request_id:payload.request_id,
+          revision:0,next_revision:1}
+        : {kind:"schema_status",status:"active",request_id:payload.request_id,revision:1};
+    }
+    if(operation==="schema_scan")return payload.action==="status"
+      ? {kind:"schema_scan",status:"not_started"}
+      : {kind:"schema_scan",status:"complete",scanned_paths:1,
+        eligible_notes:1,skipped_existing_values:0,legacy_sources:0};
+    if(operation==="schema_backfill")return {
+      kind:"schema_backfill",status:"awaiting_ai",total:1,pending:0,
+      interpreting:0,writing:0,updated:0,no_evidence:0,
+      ambiguous:0,stale:0,already_present:0,deferred:1,
+    };
+    throw Error("Unexpected operation "+operation);
+  };
+  const model=createSchemaModel({root:new Element("section"),client,
+    schedule:(fn,ms)=>{assert.equal(ms,3000);timers.push(fn);}});
+  await model.open({kind:"add-property",type:{id:"person",name:"Persona"}});
+  const inputs=model.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
+  inputs[0].value="Profesión";inputs[1].value="Profesión actual";
+  inputs[2].value="string";
+  model.element.querySelector(".schema-model-propose").click();await flush();
+  model.element.querySelector(".schema-model-confirm").click();await flush();
+  for(let n=0;n<46;n++){
+    assert.equal(timers.length,1,"Polling remains scheduled while visible");
+    timers.shift()();
+    for(let j=0;j<16;j++)await Promise.resolve();
+  }
+  for(let i=0;i<40;i++)await Promise.resolve();
+  assert.equal(checks,46);
+  assert.equal(calls.filter(x=>x.operation==="schema_confirm").length,1);
+  assert.ok(calls.some(x=>x.operation==="schema_scan"&&x.payload.action==="advance"));
+  assert.ok(calls.some(x=>x.operation==="schema_backfill"));
+  assert.equal(model.element.querySelector(".schema-model-retry").hidden,true);
+  assert.equal(timers.length,0);
+});

@@ -180,7 +180,11 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   let reviewedProposalHash = null;
   let scanTarget = null;
   let automaticChecks = 0;
-  const MAX_ACTIVATION_CHECKS = 24;
+  // A published schema can restart the full Pi runtime. On the deployed DEV
+  // a cold boot exceeded the old 24 x 3 s window while Core eventually
+  // returned the same actor-bound request as active. Keep this foreground
+  // read-only recovery bounded, but allow up to six minutes for cold boot.
+  const MAX_ACTIVATION_CHECKS = 120;
   const ACTIVATION_CHECK_MS = 3000;
 
   function invalidate() {
