@@ -51,6 +51,16 @@ Dos pruebas opt-in sobre el contenedor instalado de **n8n real**, con red descon
 
 No se trata de n8n del DEV desplegado, ni se ha ensayado una sesión Cloudflare Access, ni Chromium→n8n como **un único** recorrido, ni GPT real. Chromium→Core y n8n→Core son evidencias complementarias, **no aceptación de producto E2E**. Contratos Python offline de los dos bancos verifican las restricciones de origen.
 
+## Prueba única Chromium → n8n real → Core/E3/Git en entorno aislado (26-10)
+
+Comando: python scripts/odyssey_schema_chromium_n8n_isolated.py --run.
+
+Por primera vez se ejecuta el recorrido **continuo**, sin unir resultados de pruebas separadas: Chromium ARM64 con clic real en escritorio (1280×920) y móvil (390×844) → proxy local limitado a las operaciones Notes autorizadas → socket Unix de entrada → n8n real en contenedor sin red externa → código exacto del validador Notes del workflow → IF y HTTP Request → otro socket Unix → RuntimeComposition.notes → Core/E3 → Git y Markdown temporal. El actor es un identificador fijo sintético vinculado por el n8n de prueba y la propiedad opcional ya se confirmó en el registro del fixture. El contenedor no tiene acceso al vault temporal del host y solo puede escribir su propio socket de entrada dentro del directorio de puente desechable.
+
+**Resultados PASS en ambos tamaños:** una propiedad actualizada desde una declaración explícita, una fuente diferida para IA que permanece byte idéntica, exactamente un commit nuevo (dos contando el inicial), recuperación del panel al recargar, cero reescrituras al repetir, y nueve solicitudes autorizadas al Core sintético por tamaño incluyendo la comprobación inicial solo lectura. Al terminar se detienen y retiran los contenedores, sockets y vaults sintéticos. La prueba anterior de Chromium→Core directo sigue pasando después de este cambio.
+
+**Límite:** n8n real en contenedor aislado no es el n8n actualmente desplegado en DEV; la sesión de autenticación y Cloudflare Access tampoco se han ensayado, ni existe una llamada GPT de proveedor real. **No declarar DEV E2E aceptado ni fusionar/desplegar por este test**. La aceptación completa requiere autorización separada para cualquier modificación de la ruta pública Cloudflare o despliegue DEV; esta prueba no requiere ni solicita esas operaciones.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.

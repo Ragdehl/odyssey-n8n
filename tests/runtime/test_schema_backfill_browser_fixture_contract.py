@@ -36,7 +36,10 @@ def test_fixture_is_credential_free_ephemeral_and_never_targets_prod():
 def test_browser_labels_real_and_unverified_boundaries_separately():
     browser = NODE.read_text()
     driver = PYTHON.read_text()
-    assert 'n8n:"NOT_TESTED",deployedDev:false' in browser
+    assert 'n8n:n8nSocket ? "REAL_OFFLINE" : "NOT_TESTED"' in browser
+    assert "deployedDev:false" in browser
+    assert "ODYSSEY_SYNTH_N8N_SOCKET" in browser
+    assert "socketPath:n8nSocket" in browser
     assert '"n8n": "NOT_TESTED"' in driver
     assert '"DEV": "NOT_TESTED"' in driver
     assert "page.click(" in browser

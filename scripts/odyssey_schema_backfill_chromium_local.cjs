@@ -13,6 +13,11 @@ const upstream=new URL(process.env.ODYSSEY_SYNTH_LOCAL_HTTP||"");
 assert.equal(upstream.hostname,"127.0.0.1");
 assert.equal(upstream.pathname,"/");
 const actor="00000000-0000-4000-8000-000000000001";
+const n8nSocket=process.env.ODYSSEY_SYNTH_N8N_SOCKET||"";
+if(n8nSocket) {
+  assert.match(n8nSocket,/^\/tmp\/odyssey-schema-socket-[^/]+\/ingress\.sock$/);
+  assert.ok(fs.statSync(n8nSocket).isSocket(),"Must connect to a temporary Unix socket");
+}
 const viewport=process.argv[2]==="mobile"?[390,844]:[1280,920];
 const calls=[];
 const html='<!doctype html><html lang="es"><head><meta charset="utf-8">'+
@@ -57,19 +62,29 @@ const server=http.createServer(async(req,res)=>{
       res.end(JSON.stringify({error:"invalid notes request"}));return;
     }
     calls.push(body.operation+":"+body.action);
-    const next=http.request({hostname:"127.0.0.1",port:Number(upstream.port),
-      method:"POST",path:"/notes",headers:{"content-type":"application/json"},timeout:15000},
-      response=>{res.writeHead(response.statusCode,{"content-type":"application/json"});response.pipe(res);});
+    const next=http.request(n8nSocket ? {
+      socketPath:n8nSocket,method:"POST",path:"/execute",
+      headers:{"content-type":"application/json"},timeout:20000
+    }:{
+      hostname:"127.0.0.1",port:Number(upstream.port),
+      method:"POST",path:"/notes",headers:{"content-type":"application/json"},timeout:15000
+    }, response=>{
+      res.writeHead(response.statusCode,{"content-type":"application/json"});
+      response.pipe(res);
+    });
     next.on("error",()=>{if(!res.headersSent)res.writeHead(502);res.end();});
-    next.end(JSON.stringify(Object.assign({},body,{authenticated_actor:{stable_user_id:actor}})));
+    next.end(JSON.stringify(n8nSocket ? body :
+      Object.assign({},body,{authenticated_actor:{stable_user_id:actor}})));
     return;
   }
   res.writeHead(404);res.end();
 });
 (async()=>{
   let browser;
-  const output={kind:"real_chromium_local_core_no_n8n",
-    viewport:process.argv[2]||"desktop",n8n:"NOT_TESTED",deployedDev:false,pass:false};
+  const output={kind:n8nSocket ? "real_chromium_offline_n8n_core" :
+      "real_chromium_local_core_no_n8n",
+    viewport:process.argv[2]||"desktop",
+    n8n:n8nSocket ? "REAL_OFFLINE" : "NOT_TESTED",deployedDev:false,pass:false};
   try{
     await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
     browser=await puppeteer.launch({executablePath:chrome,headless:true,
