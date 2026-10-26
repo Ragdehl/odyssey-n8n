@@ -40,6 +40,10 @@ const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
       if(req.operation==='schema_review') return {kind:'schema_review',proposal_hash:req.payload.proposal_hash,
         verdict:'CHECK',message:'Revisión final: comprueba la intención.',issues:['El número de jugadores debe ser entero.']};
       if(req.operation==='schema_confirm') return {status:'active',request_id:req.payload.request_id};
+      if(req.operation==='schema_scan') return req.payload.action==='status'
+        ? {kind:'schema_scan',status:'not_started'}
+        : {kind:'schema_scan',status:'complete',scanned_paths:3,
+           eligible_notes:2,skipped_existing_values:0,legacy_sources:1};
       throw new Error('Unexpected operation '+req.operation);
     };
     const panel = createSchemaModel({root:document.querySelector('#schema-root'),client,onActive:()=>{window.__active = true;}});
@@ -49,7 +53,7 @@ const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
 const server = http.createServer((req, res) => {
   const pathname = new URL(req.url,'http://localhost').pathname;
   if (pathname === '/') {res.writeHead(200, {'content-type':'text/html; charset=utf-8'});res.end(html);return;}
-  const files = new Set(['/odyssey_web/schema-model.js','/odyssey_web/notes-client.js','/odyssey_web/client.js','/odyssey_web/styles.css']);
+  const files = new Set(['/odyssey_web/schema-model.js','/odyssey_web/schema-scan.js','/odyssey_web/notes-client.js','/odyssey_web/client.js','/odyssey_web/styles.css']);
   if (!files.has(pathname)) {res.writeHead(404);res.end();return;}
   const file = path.join(base, pathname.slice(1));
   res.writeHead(200,{'content-type':file.endsWith('.css')?'text/css':'text/javascript'});
@@ -97,6 +101,11 @@ const profiles = [['desktop',1280,920],['mobile',390,844]];
       const afterReview=await page.$eval('.schema-model-confirm',el=>el.disabled);
       await page.click('.schema-model-confirm');
       await page.waitForFunction(()=>window.__active===true);
+      await page.waitForFunction(()=>document.querySelector('.schema-model-scan-status')?.textContent.includes('No se ha iniciado'));
+      const autoScanCount=await page.evaluate(()=>window.__calls.filter(c=>c.operation==='schema_scan' && c.payload.action==='advance').length);
+      await page.click('.schema-model-scan-advance');
+      await page.waitForFunction(()=>document.querySelector('.schema-model-scan-status')?.textContent.includes('Lectura finalizada'));
+
       const evidence=await page.evaluate(()=>({
         calls:window.__calls.map(c=>c.operation),
         changed:window.__calls.find(c=>c.operation==='schema_preview')?.payload.change,
@@ -104,15 +113,23 @@ const profiles = [['desktop',1280,920],['mobile',390,844]];
         confirmedHash:window.__calls.find(c=>c.operation==='schema_confirm')?.payload.proposal_hash,
         confirmedActorIntent:window.__calls.filter(c=>c.operation==='schema_confirm').length,
         finalMessage:document.querySelector('.schema-model-message')?.textContent,
+        scanCalls:window.__calls.filter(c=>c.operation==='schema_scan'),
+        scanText:document.querySelector('.schema-model-scan-status')?.textContent,
         overflow:document.documentElement.scrollWidth>innerWidth+3
       }));
       const properties=evidence.changed?.type?.properties||[];
       const pass=initiallyBlocked && beforeReview && !afterReview &&
-        evidence.calls.join(',')==='schema_status,schema_suggest,schema_preview,schema_review,schema_confirm' &&
+        evidence.calls.filter(c=>c!=='schema_scan').join(',')==='schema_status,schema_suggest,schema_preview,schema_review,schema_confirm' &&
+        autoScanCount===0 && evidence.scanCalls.length===2 &&
+        evidence.scanCalls[0].payload.action==='status' &&
+        evidence.scanCalls[1].payload.action==='advance' &&
+        evidence.scanCalls[1].payload.scan_kind==='discover_type' &&
+        evidence.scanCalls[1].payload.target_type_id==='juego_de_mesa' &&
+        evidence.scanText.includes('3 notas examinadas') && evidence.scanText.includes('1 con texto antiguo') &&
         properties.length===2 && properties.every(p=>p.value_type==='integer') &&
         evidence.reviewedHash===evidence.confirmedHash && evidence.confirmedActorIntent===1 &&
         !evidence.overflow && errors.length===0;
-      result.profiles[label]={...evidence,initiallyBlocked,beforeReview,afterReview,errors,pass};
+      result.profiles[label]={...evidence,initiallyBlocked,beforeReview,afterReview,autoScanCount,errors,pass};
       await page.close();
     }
     result.pass=Object.values(result.profiles).every(v=>v.pass);

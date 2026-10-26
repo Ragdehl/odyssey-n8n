@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest", "schema_review"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest", "schema_review", "schema_scan"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -58,6 +58,24 @@ export function validateSchemaOperationResponse(operation, value) {
   const expected = (names) => keys.length === names.length && keys.every((key) => names.includes(key));
   const validRevision = (revision) => Number.isSafeInteger(revision) && revision >= 0 && revision <= 100;
   const validId = (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id);
+  if (operation === "schema_scan") {
+    if (value.kind === "schema_scan" && value.status === "not_started" &&
+        expected(["kind", "status"])) {
+      return {kind: "schema_scan", status: "not_started"};
+    }
+    if (value.kind === "schema_scan" && ["scanning", "complete"].includes(value.status) &&
+        expected(["kind", "status", "scanned_paths", "eligible_notes",
+          "skipped_existing_values", "legacy_sources"]) &&
+        ["scanned_paths", "eligible_notes", "skipped_existing_values", "legacy_sources"]
+          .every((field) => Number.isSafeInteger(value[field]) && value[field] >= 0) &&
+        value.scanned_paths >= value.eligible_notes + value.skipped_existing_values &&
+        value.legacy_sources <= value.eligible_notes) {
+      return {kind: "schema_scan", status: value.status,
+        scanned_paths: value.scanned_paths, eligible_notes: value.eligible_notes,
+        skipped_existing_values: value.skipped_existing_values,
+        legacy_sources: value.legacy_sources};
+    }
+  }
   if (operation === "schema_status") {
     if (value.status === "ready" && expected(["revision", "status", "can_confirm"]) &&
         validRevision(value.revision) && typeof value.can_confirm === "boolean") {

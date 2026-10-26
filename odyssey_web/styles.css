@@ -673,3 +673,13 @@ textarea.schema-model-input { resize: vertical; min-height: 4.1rem; }
 .schema-model-property-row .schema-model-property-remove { align-self: end; }
 .schema-model-final-review { white-space: pre-wrap; padding: .55rem 0; }
 .schema-model-review-issue { font-size: .85rem; line-height: 1.4; padding: .25rem 0; }
+
+/* Scan receipts are device-local operational evidence, never a modification preview. */
+.schema-model-scan { display: grid; gap: .65rem; padding: .8rem;
+  margin-top: .65rem; border: 1px solid #cfd9e3; border-radius: .75rem; background: #f7f9fc; }
+.schema-model-scan[hidden] { display: none; }
+.schema-model-scan h3 { margin: 0; font-size: .95rem; }
+.schema-model-scan p { margin: 0; font-size: .84rem; line-height: 1.5; }
+.schema-model-scan-status { white-space: pre-wrap; color: #334967; }
+.schema-model-scan .schema-model-button { min-height: 44px; justify-self: start; }
+.schema-model-scan .schema-model-button[hidden] { display: none; }

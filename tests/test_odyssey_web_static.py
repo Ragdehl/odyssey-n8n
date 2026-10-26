@@ -345,6 +345,7 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
         "notes.js",
         "notes-client.js",
         "schema-model.js",
+        "schema-scan.js",
         "calendar.js",
         "calendar-client.js",
         "progress.js",

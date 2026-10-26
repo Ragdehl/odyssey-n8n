@@ -26,6 +26,7 @@ from odyssey_core.identity_boundary import (
     IdentityBoundaryError,
 )
 from odyssey_core.note_queries import NotesQueryError, StaleCursorError
+from odyssey_core.schema_retrospection_jobs import LocalSchemaScanError
 
 from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
@@ -317,6 +318,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "schema_review",
                         "schema_confirm",
                         "schema_status",
+                        "schema_scan",
                         "query",
                         "intelligent",
                         "detail",
@@ -357,6 +359,8 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         trigger = getattr(self.server, "schema_activation_trigger", None)
                         if trigger is not None:
                             trigger.set()
+                except LocalSchemaScanError:
+                    self._write_json(HTTPStatus.CONFLICT, {"error": "SCHEMA_SCAN_STALE_OR_INVALID"})
                 except StaleCursorError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
                 except (

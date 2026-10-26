@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -512,6 +513,9 @@ class RuntimeComposition:
     schema_activation_enabled: bool = False
     # Strictly read-only LLM design hints; activation still needs user click.
     schema_suggestion_service: object | None = None
+    # Optional local, read-only retrospective scan. Trusted host selects one
+    # profile/vault root and passes authenticated/local-profile identity.
+    schema_scan_factory: Callable[[str], object] | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1726,6 +1730,83 @@ class RuntimeComposition:
             and self.await_index_refresh is not None
         ):
             self.await_index_refresh()
+        if operation == "schema_scan":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.schema_scan_factory is None
+                or self.user_schema_registry is None
+                or self.user_schema_revision is None
+                or self.canonical_schema is None
+            ):
+                raise ValueError("Local schema scan is unavailable")
+            if set(payload) != {
+                "scan_kind",
+                "target_type_id",
+                "property_id",
+                "expected_revision",
+                "action",
+            }:
+                raise ValueError("Invalid local schema scan request")
+            if (
+                payload["action"] not in {"advance", "status"}
+                or payload["scan_kind"] not in {"discover_type", "backfill_property"}
+                or not isinstance(payload["target_type_id"], str)
+                or type(payload["expected_revision"]) is not int
+                or payload["expected_revision"] != self.user_schema_revision
+                or (
+                    payload["property_id"] is not None
+                    and not isinstance(payload["property_id"], str)
+                )
+            ):
+                raise ValueError("Invalid local schema scan arguments")
+            from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs
+
+            jobs = self.schema_scan_factory(resolved_actor)
+            if not isinstance(jobs, LocalSchemaScanJobs):
+                raise ValueError("Local schema scan store is unavailable")
+            # Stable per-actor/profile target key; no browser storage, global
+            # queue or server-generated arbitrary task ID to remember.
+            job_id = hashlib.sha256(
+                json.dumps(
+                    {
+                        "revision": payload["expected_revision"],
+                        "kind": payload["scan_kind"],
+                        "target": payload["target_type_id"],
+                        "property": payload["property_id"],
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()[:48]
+            if payload["action"] == "status":
+                progress = jobs.read(job_id)
+                if progress is None:
+                    return {"kind": "schema_scan", "status": "not_started"}
+                if (
+                    progress.kind != payload["scan_kind"]
+                    or progress.target_type_id != payload["target_type_id"]
+                    or progress.property_id != payload["property_id"]
+                ):
+                    raise ValueError("Local schema scan target mismatch")
+            else:
+                progress = jobs.advance(
+                    job_id=job_id,
+                    schema=self.canonical_schema,
+                    kind=payload["scan_kind"],
+                    target_type_id=payload["target_type_id"],
+                    property_id=payload["property_id"],
+                    limit=20,
+                )
+            # A progress receipt contains no source text/names, candidate
+            # identities or authorization to change canonical Notes.
+            return {
+                "kind": "schema_scan",
+                "status": "complete" if progress.complete else "scanning",
+                "scanned_paths": progress.scanned_paths,
+                "eligible_notes": progress.eligible_notes,
+                "skipped_existing_values": progress.skipped_existing_values,
+                "legacy_sources": progress.legacy_sources,
+            }
         if operation in {"schema_confirm", "schema_status"}:
             if (
                 authenticated_actor is None
@@ -2917,6 +2998,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
     schema_enabled = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
     if schema_enabled not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
+    # A feature rejected for PROD or disabled user schemas must fail BEFORE
+    # the legacy pending-root mkdir, registry lease or any filesystem touch.
+    scan_enabled = os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED", "0")
+    if scan_enabled not in {"0", "1"}:
+        raise ValueError("Local schema scan flag is invalid")
+    if scan_enabled == "1" and (
+        schema_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Local schema scan requires isolated DEV user registry")
     # Reject an accidental PROD assistant request *before* touching roots.
     suggestion_enabled = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
     if suggestion_enabled not in {"0", "1"}:
@@ -2995,6 +3085,15 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     user_schema_revision = None
     schema_activation_enabled = False
     schema_suggestion_service = None
+    schema_scan_factory = None
+    scan_flag = os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED", "0")
+    if scan_flag not in {"0", "1"}:
+        raise ValueError("Local schema scan flag is invalid")
+    if scan_flag == "1" and (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED") != "1"
+    ):
+        raise ValueError("Local schema scan requires isolated DEV user registry")
     suggestion_flag = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
     if suggestion_flag not in {"0", "1"}:
         raise ValueError("Schema assistant feature flag is invalid")
@@ -3032,6 +3131,14 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     # UI publication/hot-reload boundary is deliberately NOT available yet.
 
     repository = VaultRepository(vault_root)
+    if scan_flag == "1":
+        from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs
+
+        def schema_scan_factory(actor_id: str) -> LocalSchemaScanJobs:
+            return LocalSchemaScanJobs(
+                state_root=state_root, repository=repository, actor_id=actor_id
+            )
+
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
         if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or not light_source_enabled:
             raise ValueError("Isolated embedding experiment requires DEV light source")
@@ -5488,6 +5595,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         user_schema_revision=user_schema_revision,
         schema_activation_enabled=schema_activation_enabled,
         schema_suggestion_service=schema_suggestion_service,
+        schema_scan_factory=schema_scan_factory,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

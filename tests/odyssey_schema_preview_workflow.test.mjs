@@ -132,3 +132,26 @@ test("n8n admits one bounded read-only schema review without allowing extra auth
     {authenticated_actor: {stable_user_id: "forged"}},
   ]) assert.equal(run({...body, ...extra}).invalid, true);
 });
+
+test("n8n permits only the bounded, actor-bound read-only schema scan envelope", () => {
+  const input = {operation: "schema_scan", scan_kind:"backfill_property",
+    target_type_id:"person", property_id:"profesion", expected_revision:1,
+    action:"advance"};
+  assert.deepEqual(run(input), {...input,
+    authenticated_actor:{stable_user_id:"00000000-0000-4000-8000-000000000001"}});
+  for (const wrong of [
+    {...input, note_id:"target-to-mutate"},
+    {...input, confirmed:true},
+    {...input, actor_id:"other"},
+    {...input, target_type_id:"../secret"},
+    {...input, scan_kind:"reset"},
+    {...input, action:"delete"},
+    {...input, expected_revision:true},
+    {...input, property_id:null},
+    {...input, source_text:"private"},
+    {...input, job_id:"client-controlled"},
+  ]) assert.equal(run(wrong).invalid,true);
+  const discovery = {...input, scan_kind:"discover_type", target_type_id:"libro",property_id:null,
+    action:"status"};
+  assert.equal(run(discovery).operation,"schema_scan");
+});

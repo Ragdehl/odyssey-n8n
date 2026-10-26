@@ -75,6 +75,8 @@ def test_inventory_is_the_complete_explicit_ui2_product_surface() -> None:
         ("GET", "/api/client.js", "static"),
         ("GET", "/api/notes.js", "static"),
         ("GET", "/api/notes-client.js", "static"),
+        ("GET", "/api/schema-model.js", "static"),
+        ("GET", "/api/schema-scan.js", "static"),
         ("GET", "/api/calendar.js", "static"),
         ("GET", "/api/calendar-client.js", "static"),
         ("GET", "/api/progress.js", "static"),

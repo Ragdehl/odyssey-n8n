@@ -1,5 +1,6 @@
 /** Isolated user-note model review sheet. No model output or browser state writes schemas. */
 import {requestNotes} from "./notes-client.js";
+import {createSchemaScanPanel} from "./schema-scan.js";
 
 function stableId(label) {
   return label.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -127,6 +128,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     "schema-model-new-draft");
   newDraft.hidden = true;
   sheet.append(top, intro, availability, assistant, form, preview, retry, recover, newDraft);
+  const scanPanel = createSchemaScanPanel({root: sheet, endpoint, client});
   root.append(sheet);
 
   let generation = 0;
@@ -141,6 +143,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   let structuredProperties = null;
   let originalRequest = null;
   let reviewedProposalHash = null;
+  let scanTarget = null;
 
   function invalidate() {
     generation += 1;
@@ -277,6 +280,8 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   async function open({kind = "new", type = null} = {}) {
     invalidate();
     sheet.hidden = false;
+    scanPanel.hide();
+    scanTarget = null;
     preview.hidden = true;
     retry.hidden = true;
     recover.hidden = true;
@@ -313,6 +318,9 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       if (kind !== "new" && !activeType?.id) throw new Error("No se encuentra el tipo de nota.");
       fields = build();
       form.hidden = false;
+      if (activeType?.id && /^[a-z][a-z0-9_]{0,63}$/.test(activeType.id)) {
+        scanPanel.show({scanKind: "discover_type", typeId: activeType.id, revision: current.revision});
+      }
       availability.textContent = canConfirm
         ? "Describe el cambio y revisa la propuesta antes de aprobarla."
         : "Puedes preparar y revisar propuestas. Su confirmación todavía no está habilitada.";
@@ -464,6 +472,12 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         (originalRequest !== null && reviewedProposalHash !== proposed.result.proposal_hash)) return;
     const seq = generation;
     const proposal = proposed;
+    scanTarget = {
+      scanKind: proposal.draft.operation === "add_property" ? "backfill_property" : "discover_type",
+      typeId: proposal.result.affected_type_id,
+      propertyId: proposal.draft.operation === "add_property" ? proposal.draft.property.id : null,
+      revision: proposal.result.next_revision,
+    };
     let requestId;
     try { requestId = newRequestId(); } catch (error) {
       availability.textContent = error.message;
@@ -492,6 +506,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         clearPending();
         retry.hidden = true;
         newDraft.hidden = false;
+        if (scanTarget) scanPanel.show(scanTarget);
         onActive();
       }
     } catch {
@@ -522,6 +537,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         newDraft.hidden = false;
         clearPending();
         pendingId = null;
+        if (scanTarget) scanPanel.show(scanTarget);
         onActive();
       }
     } catch (error) {
@@ -541,5 +557,5 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     }
   }
 
-  return {open, close: () => { sheet.hidden = true; invalidate(); }, element: sheet};
+  return {open, close: () => { sheet.hidden = true; scanPanel.hide(); invalidate(); }, element: sheet};
 }
