@@ -432,18 +432,34 @@ class LocalBackfillJob:
 
     def _load_integrity_key(self) -> bytes:
         path = self.root / ".integrity-key"
+        # Never expose an empty, half-written key at its final path. A
+        # power loss during initial creation must not permanently disable
+        # restart/reconciliation. Hard-link publishes the fsynced regular
+        # 0600 file atomically and never replaces an existing key.
+        temporary: str | None = None
         try:
-            handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        except FileExistsError:
-            pass
-        else:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=self.root, prefix=".integrity-pending-", delete=False
+            ) as stream:
+                temporary = stream.name
+                os.fchmod(stream.fileno(), 0o600)
+                stream.write(os.urandom(32))
+                stream.flush()
+                os.fsync(stream.fileno())
             try:
-                with os.fdopen(handle, "wb") as stream:
-                    stream.write(os.urandom(32))
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except OSError as error:
-                raise LocalBackfillJobError("Cannot initialize local journal integrity") from error
+                os.link(temporary, path, follow_symlinks=False)
+            except FileExistsError:
+                pass
+            parent_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
+        except OSError as error:
+            raise LocalBackfillJobError("Cannot initialize local journal integrity") from error
+        finally:
+            if temporary is not None:
+                Path(temporary).unlink(missing_ok=True)
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
             with os.fdopen(fd, "rb") as stream:

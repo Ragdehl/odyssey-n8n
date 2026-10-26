@@ -246,3 +246,98 @@ def test_real_local_http_adapter_accepts_confirmed_backfill_and_writes_markdown(
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_user_created_type_property_enriches_without_person_specific_routing(tmp_path):
+    """Generic workflow: new Book type, later custom attribute, then Core Git write."""
+    app, repo, _ = fixture(tmp_path)
+    reg = app.user_schema_registry
+    book_change = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Libro",
+            "description": "An identifiable written work.",
+            "examples": ["A novel"],
+            "properties": [],
+        },
+    }
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    proposal = reg.preview(book_change, expected_revision=1)
+    reg.publish(
+        book_change,
+        SchemaConfirmation(ALICE.stable_user_id, "create-book", 1, proposal.proposal_hash),
+    )
+    genre_change = {
+        "operation": "add_property",
+        "type_id": "book",
+        "property": {
+            "id": "genre",
+            "value_type": "string",
+            "description": "Genre of the book, when explicitly known.",
+        },
+    }
+    proposal = reg.preview(genre_change, expected_revision=2)
+    reg.publish(
+        genre_change,
+        SchemaConfirmation(ALICE.stable_user_id, "approve-genre", 2, proposal.proposal_hash),
+    )
+    revision, schema = reg.snapshot()
+    assert revision == 3
+    from odyssey_core.notes import validate_note
+
+    book = Note(
+        {
+            **parse_note(before["0.md"]).metadata,
+            "id": "libro-sintetico",
+            "name": "Libro sintético",
+            "type": "book",
+        },
+        "# Added 26-10-2026\n- genre: novela\n<!-- odyssey:fact request=book-one ordinal=0 -->\n",
+    )
+    validate_note(book, schema)
+    (repo.root / "book.md").write_text(serialize_note(book))
+    subprocess.run(["git", "add", "book.md"], cwd=repo.root, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-q",
+            "-m",
+            "synthetic-book-baseline",
+        ],
+        cwd=repo.root,
+        check=True,
+        capture_output=True,
+    )
+    writer = AutomaticPropertyBackfill(
+        repository=repo,
+        schema=schema,
+        history=GitHistoryRecorder(repo.root),
+    )
+    app.user_schema_revision = revision
+    app.canonical_schema = schema
+    app.schema_backfill_factory = lambda actor: LocalBackfillJob(
+        state_root=tmp_path / "state", repository=repo, writer=writer, actor_id=actor
+    )
+    payload = {
+        "target_type_id": "book",
+        "property_id": "genre",
+        "expected_revision": revision,
+        "action": "stage",
+    }
+    staged = app.notes("schema_backfill", payload, ALICE)
+    assert staged["total"] == staged["pending"] == 1
+    result = app.notes("schema_backfill", {**payload, "action": "advance"}, ALICE)
+    assert result["updated"] == 1 and result["status"] == "complete"
+    updated = parse_note(repo.read_text("book.md"))
+    assert updated.metadata["genre"] == "novela" and updated.metadata["revision"] == 2
+    assert all(repo.read_text(path) == text for path, text in before.items())
+    with pytest.raises(ValueError, match="not approved"):
+        app.notes("schema_backfill", payload, BOB)
+    with pytest.raises(ValueError, match="not approved"):
+        app.notes("schema_backfill", {**payload, "target_type_id": "task"}, ALICE)

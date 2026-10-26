@@ -440,16 +440,25 @@ class UserSchemaRegistry:
             state = self._read()
             if state["revision"] != expected_revision:
                 return False
-            return any(
-                confirmation["actor_id"] == actor_id
-                and change.get("operation") == "add_property"
-                and change.get("type_id") == type_id
-                and isinstance(change.get("property"), dict)
-                and change["property"].get("id") == property_id
-                for change, confirmation in zip(
-                    state["changes"], state["confirmations"], strict=True
-                )
-            )
+            # A prior add_property approval does NOT authorize autonomous
+            # extraction after another actor changes what that field means.
+            # An explicitly confirmed edit of its description renews the
+            # consent only for the actor who approved that new definition.
+            # Unrelated schema revisions preserve that last property's owner.
+            owner: str | None = None
+            for change, confirmation in zip(state["changes"], state["confirmations"], strict=True):
+                if change.get("type_id") != type_id:
+                    continue
+                if (
+                    change.get("operation") == "add_property"
+                    and isinstance(change.get("property"), dict)
+                    and change["property"].get("id") == property_id
+                ) or (
+                    change.get("operation") == "edit_property_description"
+                    and change.get("property_id") == property_id
+                ):
+                    owner = confirmation["actor_id"]
+            return owner == actor_id
 
     def activation_status(self, actor_id: str, request_id: str) -> dict[str, object]:
         """Read only one's own queued/completed request without exposing proposal data."""

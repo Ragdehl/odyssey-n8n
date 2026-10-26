@@ -119,6 +119,16 @@ Con autorización expresa del usuario, DEV se actualizó al SHA 4e721a07e4463bbc
 
 **Estado seguro posterior:** ODYSSEY_SCHEMA_BACKFILL_ENABLED volvió a 0 y DEV se reinició; el asistente semántico permanece apagado. Código, web y workflows desplegados en 4e721a0, runtime/n8n healthy y Cloudflare MATCH, copias verificadas y PROD intacto. La ficha sintética de prueba sigue identificada en DEV. Próxima fase: validación semántica real bajo autorización de coste independiente, identidad/deduplicación/UX y cuatro auditores finales antes de merge.
 
+## Auditoría Codex sobre la integración y reparación (26-10-2026)
+
+Una primera planificación completa desde 07dd13b hasta 1273ea7 se bloqueó por límite seguro de evidencia: el diff de 796 KB supera el paquete autorizado de 256 KB; **ningún auditor consumió modelo en ese intento**. La siguiente revisión delimitó honestamente la integración (35 archivos, diff de unos 249 KB desde 6c5a197, conservando acceso read-only al código anterior) con los cuatro roles planificados. Su supervisor pasó el gate Python/JS, aceptación y Ruff. Los recibos independientes obtenidos fueron:
+
+- **Generalidad: PASS con advertencia:** faltaba una regresión para un tipo nuevo arbitrario y el rechazo de tipos administrados por Apps.
+- **Calidad: FAIL, dos defectos bloqueantes reparables:** la autorización original para añadir una propiedad sobrevivía a un cambio posterior de su descripción por otro actor; y un corte antes de escribir la clave de integridad podía dejar una clave vacía permanente. Se corrigió la autorización para seguir al actor que confirmó la última definición de esa propiedad y se publica la clave completa, fsynced, por hardlink atómico. Se añadieron tests de sucesión de actores, cortes antes de publicación, tipo Libro + atributo genre y rechazo de tipo Task ajeno al esquema ordinario.
+- **Pruebas y Rendimiento: NO EJECUTADOS** en esa ronda. Las sesiones Generalidad+Calidad consumieron 282214 tokens reportados; el supervisor bloqueó preventivamente el resto por su reserva obligatoria de 105000 tokens, con solo 17786 disponibles. No hay cuatro PASS ni permiso para merge. Recibos conservados en el job privado schema-backfill-integ-4role-20261026.
+
+Estos cambios posteriores son **solo código fuente y regresiones sintéticas**; DEV sigue desplegado en 4e721a0, con escritura automática e IA pagada desactivadas y PROD fuera de alcance. Tras el gate completo y CI habrá que revisar el nuevo SHA con los especialistas restantes y comprobar las correcciones con independencia; no reutilizar el PASS del SHA antiguo como aprobación de la reparación. El alcance anterior del asistente semántico sigue requiriendo un examen independiente separado.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.

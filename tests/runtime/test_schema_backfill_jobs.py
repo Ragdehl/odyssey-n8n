@@ -468,3 +468,39 @@ def test_history_receipt_is_discoverable_past_100_path_commits(tmp_path, monkeyp
     result = advance(resumed)
     assert result["updated"] == 1 and result["status"] == "complete"
     assert repo.read_text("0.md") == original_modified
+
+
+def test_first_integrity_key_creation_survives_crash_before_publication(tmp_path, monkeypatch):
+    """An interrupted initialize must not leave a published zero-byte key."""
+    import os
+
+    from odyssey_runtime import schema_backfill_jobs as module
+
+    state, repo, writer = setup(tmp_path, ["profesion: médica"])
+    original_link = os.link
+    calls = []
+
+    def interrupt_after_key_fsync(source, destination, **kwargs):
+        if str(destination).endswith("/.integrity-key") and not calls:
+            calls.append(destination)
+            raise SystemExit("simulated crash before atomic key publication")
+        return original_link(source, destination, **kwargs)
+
+    monkeypatch.setattr(module.os, "link", interrupt_after_key_fsync)
+    with pytest.raises(SystemExit, match="simulated crash"):
+        job(state, repo, writer)
+    journal = state / "schema-backfill-jobs"
+    assert len(calls) == 1
+    assert not (journal / ".integrity-key").exists()
+    assert not list(journal.glob(".integrity-pending-*"))
+
+    # Restart regenerates a FULL key, and the new signed journal resumes.
+    monkeypatch.setattr(module.os, "link", original_link)
+    resumed = job(state, repo, writer)
+    assert len((journal / ".integrity-key").read_bytes()) == 32
+    assert (journal / ".integrity-key").stat().st_mode & 0o777 == 0o600
+    assert (
+        resumed.stage(job_id="historial", type_id="person", property_id="profesion")["pending"] == 1
+    )
+    assert advance(resumed)["updated"] == 1
+    assert job(state, repo, writer).status("historial")["updated"] == 1

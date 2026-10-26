@@ -973,3 +973,81 @@ def test_notes_type_schema_editability_uses_core_ownership_not_ui_name_lists(
         for item in NotesQueryService(object(), schema, object()).capabilities().types
     }
     assert types["book"]["schema_editable"] is True
+
+
+def test_backfill_approval_follows_last_explicit_property_definition_author(tmp_path):
+    """An old consent must not authorize a field whose meaning someone changed."""
+    user = registry(tmp_path)
+    added = property_change()
+    proposal = user.preview(added, expected_revision=0)
+    user.publish(
+        added,
+        SchemaConfirmation("alice", "approved-original", 0, proposal.proposal_hash),
+    )
+    target = dict(expected_revision=1, type_id="person", property_id="occupation")
+    assert user.confirmed_backfill_property("alice", **target)
+    assert not user.confirmed_backfill_property("bob", **target)
+
+    changed = {
+        "operation": "edit_property_description",
+        "type_id": "person",
+        "property_id": "occupation",
+        "description": "Last professional position, not current occupation.",
+    }
+    preview = user.preview(changed, expected_revision=1)
+    user.publish(
+        changed, SchemaConfirmation("bob", "approved-new-meaning", 1, preview.proposal_hash)
+    )
+    target["expected_revision"] = 2
+    assert not user.confirmed_backfill_property("alice", **target)
+    assert user.confirmed_backfill_property("bob", **target)
+
+    unrelated = {
+        "operation": "edit_type_text",
+        "type_id": "person",
+        "name": "Persona",
+        "description": "A person with durable, local knowledge.",
+    }
+    preview = user.preview(unrelated, expected_revision=2)
+    user.publish(unrelated, SchemaConfirmation("charlie", "rename-type", 2, preview.proposal_hash))
+    target["expected_revision"] = 3
+    assert not user.confirmed_backfill_property("alice", **target)
+    assert user.confirmed_backfill_property("bob", **target)
+    assert not user.confirmed_backfill_property("charlie", **target)
+
+    # A confirmed second semantic edit renews exactly the editor's consent.
+    latest = {**changed, "description": "Only active and currently held positions."}
+    preview = user.preview(latest, expected_revision=3)
+    user.publish(
+        latest, SchemaConfirmation("alice", "new-confirmed-meaning", 3, preview.proposal_hash)
+    )
+    target["expected_revision"] = 4
+    assert user.confirmed_backfill_property("alice", **target)
+    assert not user.confirmed_backfill_property("bob", **target)
+
+
+def test_application_managed_type_never_gains_backfill_authority(tmp_path):
+    """App-owned Task/Event properties are not an ordinary user-schema write target."""
+    user = registry(tmp_path)  # includes real Task and Event application extensions
+    revision, effective = user.snapshot()
+    assert revision == 0
+    for kind in ("task", "event"):
+        assert any(t["id"] == kind and "managed_by" in t for t in effective["types"])
+        attempt = {
+            "operation": "add_property",
+            "type_id": kind,
+            "property": {
+                "id": "manual_test_field",
+                "value_type": "string",
+                "description": "Synthetic field not owned by the user.",
+            },
+        }
+        with pytest.raises(UserSchemaError, match="unavailable"):
+            user.preview(attempt, expected_revision=0)
+        assert not user.confirmed_backfill_property(
+            "synthetic-actor",
+            expected_revision=0,
+            type_id=kind,
+            property_id="manual_test_field",
+        )
+    assert user.snapshot()[0] == 0
