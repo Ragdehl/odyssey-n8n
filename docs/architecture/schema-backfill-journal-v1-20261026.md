@@ -71,6 +71,21 @@ Un agente Codex independiente en solo lectura del SHA 9f86b45 informó de tres p
 
 Los cambios usan Core y Git existentes, sin nuevas entidades, modelos, servicio o esquema. Validado en vaults Git sintéticos; la aceptación DEV y los cuatro especialistas Codex quedan por realizar sobre SHA corregido.
 
+## Aceptación parcial en DEV desplegado (26-10-2026)
+
+**Autorización:** exclusivamente Cloudflare DEV, despliegue fijo 5df4772, copia/rollback, datos sintéticos y autocompletado determinista temporal. No IA de pago ni PROD.
+
+1. Backup privado verificado: /data/odyssey-dev/runtime/schema-backfill-deploy-backup-20261026-1814, con anterior 5e340da, vault/estado DEV (2,4 MB comprimidos) y n8n DEV parado para obtener backup consistente (115 MB). PROD no se detuvo.
+2. Cloudflare actualizó solo /api/schema-scan.js; comprobación final 17/17 MATCH, configuración PROD y Cloudflare Access inalteradas.
+3. El deploy oficial finalizó con commit, assets web y n8n en SHA 5df4772 y HTTP 200. Flags exclusivos de DEV para esquema, confirmación y escaneo habilitados. Asistente IA 0. Autocompletado determinista 1 solo durante la aceptación.
+4. Core/E3 creó una ficha persona sintética con un único hecho canónico de profesión, con commit Git solo de esa ficha. No cambió ninguno de los 166 Markdown anteriores (verificación hash).
+5. Chromium real en la interfaz Notes móvil confirmó manualmente la propiedad de prueba profesion_e2e_20261026, revisión 1. Se observó el reinicio y publicación del esquema, pero el ensayo **no registró ninguna petición de escaneo admitida en el proxy del navegador**; terminó por tiempo de espera. La causa puede ser el filtro del banco o un fallo del frontend: no atribuirla sin aislamiento. E2E UI automático NO APROBADO.
+6. El diagnóstico sin respuestas simuladas y a través del n8n DEV real efectuó el escaneo y procesamiento de 56 candidatas. Resultado: 1 nota sintética actualizada, 55 diferidas para IA, 0 pendientes, 0 ambiguas, diario awaiting_ai; git y readback correcto. La nota alcanzó revisión 2 con el valor médica; las 166 notas anteriores y las 50 rutas preexistentes con cambios no se alteraron/confirmaron.
+7. Chromium móvil y escritorio, mostrando frontend del DEV desplegado y peticiones de lectura al n8n DEV auténtico, comprobó propiedad nueva, nota visible, recarga sin errores ni desbordamiento. PASS. Se usó origen local seguro: NO equivale a una sesión exterior autenticada de Cloudflare Access.
+8. Tras la prueba se puso ODYSSEY_SCHEMA_BACKFILL_ENABLED=0 en el drop-in exclusivo DEV y se reinició el servicio; los datos de esquema de prueba permanecen válidos. Sin GPT de pago, sin merge y sin cambios PROD.
+
+**Siguiente puerta:** depurar recuperación/autoarranque del escaneo desde la UI y repetir en DEV, más aceptación Cloudflare autenticada y modelo real con autorización de coste independiente. Los cuatro auditores Codex finales siguen pendientes.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.
