@@ -109,11 +109,21 @@ El ensayo autorizado de DEV del 26-10 confirmó una propiedad mediante Chromium,
 
 **Pendiente:** gate y CI del nuevo SHA, nueva aceptación de un solo clic desplegado con datos sintéticos, sesión externa Cloudflare Access y evaluación semántica GPT autorizada. La publicación y deployment funcionan, pero **NO está aprobada la escritura automática iniciada desde la interfaz**. Cuatro auditorías especialistas todavía pendientes.
 
+## Aceptación DEV de un solo clic en 4e721a0 — PASS (26-10-2026)
+
+Con autorización expresa del usuario, DEV se actualizó al SHA 4e721a07e4463bbc111053a3c5ddd8fed4cf99f0, con CI GitHub aprobado. Ruta Cloudflare DEV en MATCH 17/17; sin modificaciones PROD. Respaldo nuevo verificado en schema-activation-acceptance-4e721a0-20261026: vault/estado DEV, volumen n8n, HEAD PROD, marker y flags; archivos anteriores indexados por SHA-256.
+
+**Prueba funcional sin atajo de diagnóstico:** Chromium real cargó frontend desplegado sobre localhost seguro, interactuó por clic con editor de Notes, obtuvo una única confirmación de la propiedad Persona profesion_e2e_20261026_v3, esperó sin pulsar el botón manual, observó esquema activo revisión 3, inició automáticamente scan y backfill mediante n8n DEV real y recibió 1 propiedades completadas en la UI. Traza: **9 avances del scan**, **42 avances del backfill**, una sola operación schema_confirm, navegador PASS. Core/E3/Git escribió exactamente una nueva ficha sintética con profesion_e2e_20261026_v3=médica y revisión 2. SHA-256 confirmó **0 cambios en 168 notas anteriores**, una nueva nota. Git PROD HEAD siguió igual.
+
+**Límites:** al cerrar la pantalla tras la primera escritura verificada, la UI contabilizaba **40 pendientes de IA y 17 aún pendientes de procesar**. Esto NO demuestra trabajo completado en segundo plano ni autoriza al modelo a escribir. La aceptación prueba activación automática y primera actualización real, no agotar todo el corpus. Chromium usó proxy localhost con operaciones tipadas hacia n8n DEV; **NO** autenticación externa Cloudflare Access. Sin GPT de pago ni auditoría final Codex.
+
+**Estado seguro posterior:** ODYSSEY_SCHEMA_BACKFILL_ENABLED volvió a 0 y DEV se reinició; el asistente semántico permanece apagado. Código, web y workflows desplegados en 4e721a0, runtime/n8n healthy y Cloudflare MATCH, copias verificadas y PROD intacto. La ficha sintética de prueba sigue identificada en DEV. Próxima fase: validación semántica real bajo autorización de coste independiente, identidad/deduplicación/UX y cuatro auditores finales antes de merge.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.
 - No hay campaña nueva de modelo real: los 18 casos ES/FR/EN del intérprete están congelados pero no evaluados en proveedor. No habilitar escritura semántica antes de comprobar falsos positivos, abstenciones y coste autorizado.
 - El mecanismo actual guarda un commit por nota; para corpus enormes necesita optimización sin perder la recuperación. El plan de un máximo de 10.000 candidatas no sustituye los ensayos de rendimiento en hardware móvil.
-- Pendientes identidad/deduplicación de entidades nuevas, UX de excepciones y deshacer, prueba real navegador→n8n/Core→Markdown en DEV sintético y auditoría Codex de los cuatro roles sobre commit aprobado.
+- Pendientes identidad/deduplicación de entidades nuevas, UX de excepciones y deshacer, sesión externa Cloudflare Access y auditoría Codex de cuatro roles sobre commit aprobado.
 
 Véanse la arquitectura de almacenamiento y el contrato de interpretación semántica V1.
