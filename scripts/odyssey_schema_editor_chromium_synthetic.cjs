@@ -15,11 +15,13 @@ const chrome = process.env.ODYSSEY_CHROMIUM_BINARY ||
 const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/odyssey_web/styles.css"></head>
-  <body><main id="app"><h1>Odyssey · notas (banco sintético)</h1><button id="start">Modelo de notas</button><section id="schema-root"></section></main>
+  <body><main id="app"><h1>Odyssey · notas (banco sintético)</h1><button id="start">Modelo de notas</button><section id="schema-root"></section>
+  <button id="start-property">Personalizar Persona</button><section id="schema-property-root"></section></main>
   <script type="module">
     import {createSchemaModel} from '/odyssey_web/schema-model.js';
     const calls = [];
     window.__calls = calls;
+    let activationChecks = 0;
     const makePreview = (change, proposal_hash) => ({
       kind: 'schema_preview', revision: 0, next_revision: 1, proposal_hash,
       affected_type_id: change.operation === 'add_type' ? change.type.id : change.type_id,
@@ -34,20 +36,45 @@ const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
     const proposed = makePreview(candidate, 'a'.repeat(64));
     const client = async (req) => {
       calls.push(structuredClone(req));
+      if(req.operation==='schema_status' && req.payload?.request_id) {
+        activationChecks++;
+        return activationChecks === 1
+          ? {status:'queued',request_id:req.payload.request_id,revision:0,next_revision:1}
+          : {status:'active',request_id:req.payload.request_id,revision:1};
+      }
       if(req.operation==='schema_status') return {status:'ready',revision:0,can_confirm:true};
       if(req.operation==='schema_suggest') return {kind:'schema_suggestion',decision:'PROPOSE',message:'Propuesta inicial',change:candidate,preview:proposed};
       if(req.operation==='schema_preview') return makePreview(req.payload.change,'b'.repeat(64));
       if(req.operation==='schema_review') return {kind:'schema_review',proposal_hash:req.payload.proposal_hash,
         verdict:'CHECK',message:'Revisión final: comprueba la intención.',issues:['El número de jugadores debe ser entero.']};
-      if(req.operation==='schema_confirm') return {status:'active',request_id:req.payload.request_id};
+      if(req.operation==='schema_confirm') return req.payload.change.operation==='add_property'
+        ? {status:'queued',request_id:req.payload.request_id,revision:0,next_revision:1}
+        : {status:'active',request_id:req.payload.request_id,revision:1};
       if(req.operation==='schema_scan') return req.payload.action==='status'
         ? {kind:'schema_scan',status:'not_started'}
         : {kind:'schema_scan',status:'complete',scanned_paths:3,
            eligible_notes:2,skipped_existing_values:0,legacy_sources:1};
+      if(req.operation==='schema_backfill') {
+        const basic={kind:'schema_backfill',total:1,interpreting:0,writing:0,updated:0,
+          no_evidence:0,ambiguous:0,stale:0,already_present:0};
+        return req.payload.action==='status'
+          ? {kind:'schema_backfill',status:'not_started'}
+          : req.payload.action==='stage'
+            ? {...basic,status:'in_progress',pending:1,deferred:0}
+            : {...basic,status:'awaiting_ai',pending:0,deferred:1};
+      }
       throw new Error('Unexpected operation '+req.operation);
     };
     const panel = createSchemaModel({root:document.querySelector('#schema-root'),client,onActive:()=>{window.__active = true;}});
     document.querySelector('#start').addEventListener('click',()=>panel.open({kind:'new'}));
+    const property = createSchemaModel({
+      root:document.querySelector('#schema-property-root'),client,
+      storage:sessionStorage,
+      schedule:(callback)=>setTimeout(callback,800),
+      onActive:()=>{window.__propertyActive=true;}
+    });
+    document.querySelector('#start-property').addEventListener('click',()=>
+      property.open({kind:'add-property',type:{id:'person',name:'Persona'}}));
     window.__ready = true;
   </script></body></html>`;
 const server = http.createServer((req, res) => {
@@ -127,7 +154,45 @@ const profiles = [['desktop',1280,920],['mobile',390,844]];
         properties.length===2 && properties.every(p=>p.value_type==='integer') &&
         evidence.reviewedHash===evidence.confirmedHash && evidence.confirmedActorIntent===1 &&
         !evidence.overflow && errors.length===0;
-      result.profiles[label]={...evidence,initiallyBlocked,beforeReview,afterReview,autoScanCount,errors,pass};
+      await page.click('#schema-root .schema-model-close');
+      await page.click('#start-property');
+      await page.waitForFunction(()=>document.querySelectorAll(
+        '#schema-property-root .schema-model-form .schema-model-input').length === 3);
+      const propFields=await page.$$('#schema-property-root .schema-model-form .schema-model-input');
+      await propFields[0].type('profesion');
+      await propFields[1].type('Profesión explícita');
+      await (propFields[2]).select('string');
+      await page.click('#schema-property-root .schema-model-propose');
+      await page.waitForSelector('#schema-property-root .schema-model-preview:not([hidden])');
+      await page.click('#schema-property-root .schema-model-confirm');
+      await page.waitForFunction(()=>
+        document.querySelector('#schema-property-root .schema-model-message')?.textContent.includes('Cambio aprobado'));
+      const queuedOldScanHidden=await page.$eval('#schema-property-root .schema-model-scan',el=>el.hidden);
+      if (!queuedOldScanHidden) throw new Error('Stale old-revision scan panel remains visible while queued');
+      await page.waitForFunction(()=>window.__propertyActive===true,{timeout:16000});
+      await page.waitForFunction(()=>document.querySelector('#schema-property-root .schema-model-enrichment-status')
+        ?.textContent.includes('1 pendientes de IA'),{timeout:16000});
+      const propertyEvidence=await page.evaluate(()=>({
+        scan:document.querySelector('#schema-property-root .schema-model-scan-status')?.textContent,
+        result:document.querySelector('#schema-property-root .schema-model-enrichment-status')?.textContent,
+        active:window.__propertyActive===true,
+        statusCalls:window.__calls.filter(c=>c.operation==='schema_status'&&c.payload?.request_id).length,
+        propertyScans:window.__calls.filter(c=>c.operation==='schema_scan'&&
+          c.payload?.scan_kind==='backfill_property').map(c=>c.payload.action),
+        backfill:window.__calls.filter(c=>c.operation==='schema_backfill').map(c=>c.payload.action),
+        propertyApprovals:window.__calls.filter(c=>c.operation==='schema_confirm'&&
+          c.payload.change.operation==='add_property').length,
+        horizontalOverflow:document.documentElement.scrollWidth>innerWidth+3
+      }));
+      const propertyPass=queuedOldScanHidden&&propertyEvidence.active&&
+        propertyEvidence.statusCalls===2&&
+        propertyEvidence.propertyApprovals===1&&
+        propertyEvidence.propertyScans.join(',')==='status,advance'&&
+        propertyEvidence.backfill.join(',')==='status,stage,advance'&&
+        propertyEvidence.result.includes('1 pendientes de IA')&&
+        !propertyEvidence.horizontalOverflow;
+      result.profiles[label]={...evidence,initiallyBlocked,beforeReview,afterReview,autoScanCount,
+        errors,queuedOldScanHidden,propertyEvidence,pass:pass&&propertyPass&&errors.length===0};
       await page.close();
     }
     result.pass=Object.values(result.profiles).every(v=>v.pass);

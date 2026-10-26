@@ -42,8 +42,40 @@ function newRequestId() {
 
 /** Mount once; only visible when explicitly opened from Notes. */
 export function createSchemaModel({root, endpoint = "/api/notes", client = requestNotes,
-  onActive = () => {}, storage = null} = {}) {
+  onActive = () => {}, storage = null,
+  schedule = (fn, ms) => {
+    const timer = setTimeout(fn, ms);
+    timer?.unref?.(); // Node deterministic tests; browsers use ordinary timeouts.
+  }} = {}) {
   const storageKey = "odyssey.schema.model.pending.v1";
+  const targetKey = "odyssey.schema.model.pending-scan.v1";
+  const isTarget = (value) =>
+    value && typeof value === "object" && !Array.isArray(value) &&
+    ["scanKind", "typeId", "propertyId", "revision", "requestId"].every(
+      (field) => Object.hasOwn(value, field)) &&
+    Object.keys(value).length === 5 &&
+    ["discover_type", "backfill_property"].includes(value.scanKind) &&
+    /^[a-z][a-z0-9_]{0,63}$/.test(value.typeId) &&
+    (value.scanKind === "discover_type" ? value.propertyId === null :
+      /^[a-z][a-z0-9_]{0,63}$/.test(value.propertyId)) &&
+    Number.isSafeInteger(value.revision) && value.revision >= 1 && value.revision <= 100 &&
+    /^schema_[a-f0-9]{32}$/.test(value.requestId);
+  const readScanTarget = (id) => {
+    try {
+      const value = JSON.parse(storage?.getItem?.(targetKey) ?? "null");
+      if (isTarget(value) && value.requestId === id) {
+        const {scanKind, typeId, propertyId, revision} = value;
+        return {scanKind, typeId, propertyId, revision};
+      }
+    } catch { /* Never allow an untrusted browser value to approve an action. */ }
+    return null;
+  };
+  const saveScanTarget = (id, target) => {
+    try {
+      const value = {...target, requestId: id};
+      if (isTarget(value)) storage?.setItem?.(targetKey, JSON.stringify(value));
+    } catch { /* Approval and status remain functional without local storage. */ }
+  };
   const readPending = () => {
     try {
       const value = storage?.getItem?.(storageKey);
@@ -54,7 +86,10 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     try { storage?.setItem?.(storageKey, id); } catch { /* UI still supports manual status */ }
   };
   const clearPending = () => {
-    try { storage?.removeItem?.(storageKey); } catch { /* best effort */ }
+    try {
+      storage?.removeItem?.(storageKey);
+      storage?.removeItem?.(targetKey);
+    } catch { /* best effort */ }
   };
   const sheet = control("section", "schema-model-sheet");
   sheet.hidden = true;
@@ -144,9 +179,13 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
   let originalRequest = null;
   let reviewedProposalHash = null;
   let scanTarget = null;
+  let automaticChecks = 0;
+  const MAX_ACTIVATION_CHECKS = 24;
+  const ACTIVATION_CHECK_MS = 3000;
 
   function invalidate() {
     generation += 1;
+    automaticChecks = 0;
     proposed = null;
     pendingId = null;
     busy = false;
@@ -309,6 +348,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       const previousId = readPending();
       if (previousId) {
         pendingId = previousId;
+        scanTarget = readScanTarget(previousId);
         retry.hidden = false;
         availability.textContent = "Hay una confirmación anterior. Comprobando si Odyssey ya la ha activado…";
         await checkActivation();
@@ -486,6 +526,11 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
     // The deliberate button click is the one approval. No model, network
     // response, or status poll can call this action on its own.
     savePending(requestId); // survive browser refresh before the HTTP acknowledgement
+    saveScanTarget(requestId, scanTarget);
+    // The old discover_type panel is for the PREVIOUS revision. It is not
+    // evidence that the new proposal is active and must never remain visible
+    // while waiting for the server's actor-bound status receipt.
+    scanPanel.hide();
     setBusy(true);
     confirm.disabled = true;
     availability.textContent = "Registrando tu confirmación…";
@@ -504,10 +549,15 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         : "Cambio activo. Ya puedes consultar este tipo desde Notas.";
       if (result.status === "active") {
         clearPending();
+        pendingId = null;
         retry.hidden = true;
         newDraft.hidden = false;
-        if (scanTarget) scanPanel.show({...scanTarget, autoStart: true});
+        if (scanTarget && result.revision === scanTarget.revision) {
+          scanPanel.show({...scanTarget, autoStart: true});
+        }
         onActive();
+      } else {
+        scheduleActivationCheck(seq);
       }
     } catch {
       if (seq === generation) availability.textContent =
@@ -516,9 +566,24 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
       pendingId = requestId;
       proposed = null; // Ambiguous HTTP ACK: never resubmit with a fresh ID.
       retry.hidden = false;
+      // A lost confirmation ACK does not imply failure: poll the ORIGINAL
+      // request ID only, never repeat the one human-approved mutation.
+      if (seq === generation) scheduleActivationCheck(seq);
     } finally {
       if (seq === generation) setBusy(false);
     }
+  }
+
+  function scheduleActivationCheck(seq) {
+    if (!pendingId || sheet.hidden || seq !== generation ||
+        automaticChecks >= MAX_ACTIVATION_CHECKS) return;
+    automaticChecks += 1;
+    schedule(() => {
+      if (seq === generation && !sheet.hidden && pendingId) {
+        if (!busy) void checkActivation();
+        else scheduleActivationCheck(seq);
+      }
+    }, ACTIVATION_CHECK_MS);
   }
 
   async function checkActivation() {
@@ -537,8 +602,12 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         newDraft.hidden = false;
         clearPending();
         pendingId = null;
-        if (scanTarget) scanPanel.show({...scanTarget, autoStart: true});
+        if (scanTarget && result.revision === scanTarget.revision) {
+          scanPanel.show({...scanTarget, autoStart: true});
+        }
         onActive();
+      } else {
+        scheduleActivationCheck(seq);
       }
     } catch (error) {
       if (seq === generation) {
@@ -549,7 +618,8 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
           recover.hidden = false;
           retry.hidden = true;
         } else {
-          availability.textContent = "El servidor puede estar reiniciándose. Vuelve a comprobar el estado; no confirmes otra vez.";
+          availability.textContent = "El servidor puede estar reiniciándose. Odyssey comprobará la activación de nuevo; no confirmes otra vez.";
+          scheduleActivationCheck(seq);
         }
       }
     } finally {

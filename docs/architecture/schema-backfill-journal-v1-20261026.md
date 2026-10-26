@@ -86,6 +86,19 @@ Los cambios usan Core y Git existentes, sin nuevas entidades, modelos, servicio 
 
 **Siguiente puerta:** depurar recuperación/autoarranque del escaneo desde la UI y repetir en DEV, más aceptación Cloudflare autenticada y modelo real con autorización de coste independiente. Los cuatro auditores Codex finales siguen pendientes.
 
+## Corrección de autoarranque desde la confirmación — fuente posterior al DEV 5df4772
+
+El ensayo autorizado de DEV del 26-10 confirmó una propiedad mediante Chromium, pero no observó las solicitudes de escaneo en el proxy de aceptación. Al reproducir el estado queued identificamos **un falso criterio de aceptación del banco**: al abrir un tipo existente, el panel preliminar discover_type ya estaba visible para la revisión anterior. El banco interpretaba esa visibilidad como activación del nuevo modelo y dejaba de consultar el estado. El registro de la prueba anterior registra schema_confirm, pero ni una solicitud posterior schema_status de activación.
+
+**Corrección de producto en fuente (odyssey_web/schema-model.js):**
+
+- Tras la única confirmación humana, ocultar el panel de lectura de la revisión anterior mientras la activación está pendiente; nunca comunicar su visibilidad como prueba de activación.
+- Consultar el estado del ID original cada 3 segundos, máximo 24 veces; no reenviar confirmaciones ni habilitar llamadas a proveedores o escrituras fuera del flag. Los errores temporales permiten recuperar la misma solicitud; el cierre invalida los callbacks.
+- Guardar en sessionStorage de Notes el objetivo de escaneo ligado al ID original para recuperar la propiedad tras reabrir. Validar de manera estricta forma, tipo y revisión y exigir la revisión activa publicada. El navegador no otorga permisos: cada operación sigue siendo verificada por actor y esquema en Runtime/Core.
+- Una vez active, iniciar escaneo y diario en lotes. Sin modelo evaluado, la interpretación libre se deja deferred.
+
+**Regresión:** tests Node cubren queued → queued → active, una sola confirmación, ocultación del panel antiguo, reabrir conservando el objetivo, almacenamiento adulterado y cancelación al cerrar. Chromium ARM64 real en escritorio y móvil con backend simulado recorrió clic → activación → escaneo → progreso awaiting_ai. **Fuente verificada, no DEV desplegado.** DEV sigue en 5df4772 con ODYSSEY_SCHEMA_BACKFILL_ENABLED=0 hasta siguiente despliegue autorizado.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.

@@ -206,7 +206,7 @@ test("pending approval survives Notes reload and uses actor-scoped status instea
   inputs[0].value = "Libro"; inputs[1].value = "Libros que leo";
   first.element.querySelector(".schema-model-propose").click(); await flush();
   first.element.querySelector(".schema-model-confirm").click(); await flush();
-  assert.equal(store.size, 1);
+  assert.equal(store.size, 2); // pending request + actor-checked scan target
   const second = createSchemaModel({root: new Element("section"), client, storage});
   await second.open({kind: "new"});
   assert.match(second.element.textContent, /sigue activando/);
@@ -667,4 +667,184 @@ test("activated user property starts read-only scan without another click", asyn
   assert.equal(latest.at(-1).payload.expected_revision,1);
   assert.deepEqual(latest.map(x=>x.payload.action).slice(-2),["status","advance"]);
   assert.equal(model.element.querySelector(".schema-model-scan-advance").hidden,true);
+});
+
+test("queued approval hides the previous-type scan and polls original request to auto-enrich", async () => {
+  const timers = [];
+  let polls = 0;
+  const backfill = (status, updated = 0, pending = 0, deferred = 0) => ({
+    kind:"schema_backfill", status, total:updated+pending+deferred,
+    pending, interpreting:0, writing:0, updated, no_evidence:0,
+    ambiguous:0, stale:0, already_present:0, deferred,
+  });
+  const {client, calls} = makeClient(({operation,payload}) => {
+    if (operation==="schema_status" && !payload) return ready(true);
+    if (operation==="schema_preview") return {
+      ...makeType("Persona"),operation:"add_property",affected_type_id:"person",
+      type_preview:{id:"person",name:"Persona",description:"Persona",
+        properties:[{id:"profesion",description:"Profesión",value_type:"string",required:false}]},
+    };
+    if (operation==="schema_confirm") return {kind:"schema_confirm",status:"queued",
+      request_id:payload.request_id,revision:0,next_revision:1};
+    if (operation==="schema_status") {
+      polls++;
+      return polls===1
+        ? {kind:"schema_status",status:"queued",request_id:payload.request_id,revision:0,next_revision:1}
+        : {kind:"schema_status",status:"active",request_id:payload.request_id,revision:1};
+    }
+    if (operation==="schema_scan") return payload.action==="status"
+      ? {kind:"schema_scan",status:"not_started"}
+      : {kind:"schema_scan",status:"complete",scanned_paths:3,eligible_notes:1,
+        skipped_existing_values:0,legacy_sources:0};
+    if (operation==="schema_backfill") {
+      if (payload.action==="status") return {kind:"schema_backfill",status:"not_started"};
+      if (payload.action==="stage") return backfill("in_progress",0,1);
+      return backfill("awaiting_ai",0,0,1);
+    }
+    throw new Error("unexpected operation "+operation);
+  });
+  const store = new Map();
+  const storage = {getItem:key=>store.get(key)??null,
+    setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)};
+  const panel=createSchemaModel({root:new Element("section"),client,storage,
+    schedule:(fn,ms)=>{assert.equal(ms,3000);timers.push(fn);}});
+  await panel.open({kind:"add-property",type:{id:"person",name:"Persona"}});
+  await flush();
+  assert.equal(panel.element.querySelector(".schema-model-scan").hidden,false);
+  const inputs=panel.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
+  inputs[0].value="Profesión";inputs[1].value="Profesión";inputs[2].value="string";
+  panel.element.querySelector(".schema-model-propose").click();await flush();
+  panel.element.querySelector(".schema-model-confirm").click();await flush();
+  assert.equal(panel.element.querySelector(".schema-model-scan").hidden,true,
+    "Old discover-type panel must not impersonate new-model activation");
+  assert.equal(calls.some(c=>c.operation==="schema_scan" &&
+    c.payload?.scan_kind==="backfill_property"),false);
+  assert.equal(timers.length,1,"First status poll is scheduled without a second approval");
+  timers.shift()();await flush();
+  assert.equal(timers.length,1,"Queued activation must retry status, not schema_confirm");
+  assert.equal(calls.filter(c=>c.operation==="schema_confirm").length,1);
+  assert.equal(panel.element.querySelector(".schema-model-scan").hidden,true);
+  timers.shift()();
+  for(let i=0;i<40;i++) await Promise.resolve();
+  const scanCalls=calls.filter(c=>c.operation==="schema_scan"&&
+    c.payload.scan_kind==="backfill_property");
+  assert.deepEqual(scanCalls.map(c=>c.payload.action),["status","advance"]);
+  assert.equal(scanCalls[0].payload.property_id,"profesion");
+  assert.deepEqual(calls.filter(c=>c.operation==="schema_backfill").map(c=>c.payload.action),
+    ["status","stage","advance"]);
+  assert.match(panel.element.querySelector(".schema-model-enrichment-status").textContent,
+    /1 pendientes de IA/);
+  assert.equal(panel.element.querySelector(".schema-model-scan").hidden,false);
+  assert.equal(calls.filter(c=>c.operation==="schema_confirm").length,1);
+  assert.equal(store.size,0,"A confirmed, actor-scoped activation clears local pending state");
+});
+
+test("recovering a pending approval after reload retains its bounded backfill target", async()=>{
+  const store=new Map();
+  const storage={getItem:key=>store.get(key)??null,
+    setItem:(key,value)=>store.set(key,value),removeItem:key=>store.delete(key)};
+  const calls=[];
+  let phase="queued";
+  const client=async ({operation,payload})=>{
+    calls.push({operation,payload});
+    if(operation==="schema_status"&&!payload)return ready(true);
+    if(operation==="schema_preview")return {
+      ...makeType("Persona"),operation:"add_property",affected_type_id:"person",
+      type_preview:{id:"person",name:"Persona",description:"Persona",
+        properties:[{id:"idioma",description:"Idioma",value_type:"string",required:false}]},
+    };
+    if(operation==="schema_confirm")return {
+      kind:"schema_confirm",status:"queued",request_id:payload.request_id,revision:0,next_revision:1};
+    if(operation==="schema_status")return phase==="queued"
+      ? {kind:"schema_status",status:"queued",request_id:payload.request_id,revision:0,next_revision:1}
+      : {kind:"schema_status",status:"active",request_id:payload.request_id,revision:1};
+    if(operation==="schema_scan")return {kind:"schema_scan",status:"complete",
+      scanned_paths:1,eligible_notes:1,skipped_existing_values:0,legacy_sources:0};
+    if(operation==="schema_backfill")return {
+      kind:"schema_backfill",status:"awaiting_ai",total:1,pending:0,interpreting:0,
+      writing:0,updated:0,no_evidence:0,ambiguous:0,stale:0,already_present:0,deferred:1};
+    throw Error("Unexpected "+operation);
+  };
+  const inert=()=>{};
+  const before=createSchemaModel({root:new Element("section"),client,storage,schedule:inert});
+  await before.open({kind:"add-property",type:{id:"person",name:"Persona"}});
+  const inputs=before.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
+  inputs[0].value="Idioma";inputs[1].value="Idioma";inputs[2].value="string";
+  before.element.querySelector(".schema-model-propose").click();await flush();
+  before.element.querySelector(".schema-model-confirm").click();await flush();
+  assert.equal(store.size,2);
+  before.close();
+  phase="active";
+  const reopened=createSchemaModel({root:new Element("section"),client,storage,schedule:inert});
+  await reopened.open({kind:"add-property",type:{id:"person",name:"Persona"}});
+  for(let i=0;i<30;i++)await Promise.resolve();
+  assert.equal(store.size,0);
+  assert.equal(calls.filter(c=>c.operation==="schema_confirm").length,1);
+  const scan=calls.findLast(c=>c.operation==="schema_scan"&&
+    c.payload.scan_kind==="backfill_property");
+  assert.deepEqual(scan.payload,{scan_kind:"backfill_property",target_type_id:"person",
+    property_id:"idioma",expected_revision:1,action:"status"});
+  assert.ok(calls.some(c=>c.operation==="schema_backfill"),"Resume pending property processing");
+});
+
+test("automatic activation checks stop on close and never repeat confirmation", async()=>{
+  const queue=[];
+  const calls=[];
+  const client=async({operation,payload})=>{
+    calls.push({operation,payload});
+    if(operation==="schema_status"&&!payload)return ready(true);
+    if(operation==="schema_preview")return makeType();
+    if(operation==="schema_confirm")return {
+      kind:"schema_confirm",status:"queued",request_id:payload.request_id,
+      revision:0,next_revision:1,
+    };
+    if(operation==="schema_status")return {
+      kind:"schema_status",status:"queued",request_id:payload.request_id,
+      revision:0,next_revision:1,
+    };
+    throw new Error("unexpected "+operation);
+  };
+  const model=createSchemaModel({root:new Element("section"),client,
+    schedule:(fn)=>queue.push(fn)});
+  await model.open({kind:"new"});
+  const inputs=model.element.querySelector(".schema-model-form").querySelectorAll(".schema-model-input");
+  inputs[0].value="Libro";inputs[1].value="Libros";
+  model.element.querySelector(".schema-model-propose").click();await flush();
+  model.element.querySelector(".schema-model-confirm").click();await flush();
+  assert.equal(queue.length,1);
+  for(let index=0;index<3;index++){
+    queue.shift()();await flush();
+    assert.equal(queue.length,1);
+  }
+  model.close();
+  queue.shift()();await flush();
+  assert.equal(queue.length,0);
+  assert.equal(calls.filter(x=>x.operation==="schema_confirm").length,1);
+  assert.equal(calls.filter(x=>x.operation==="schema_status"&&x.payload).length,3);
+});
+
+test("corrupt stored scan target cannot turn a legitimate status into arbitrary enrichment", async()=>{
+  const id="schema_"+"a".repeat(32);
+  const storageData=new Map([
+    ["odyssey.schema.model.pending.v1",id],
+    ["odyssey.schema.model.pending-scan.v1",JSON.stringify({
+      scanKind:"backfill_property",typeId:"person",propertyId:"../../other",
+      revision:1,requestId:id,
+    })],
+  ]);
+  const storage={getItem:k=>storageData.get(k)??null,
+    removeItem:k=>storageData.delete(k),setItem:(k,v)=>storageData.set(k,v)};
+  const calls=[];
+  const client=async ({operation,payload})=>{
+    calls.push({operation,payload});
+    if(operation==="schema_status"&&!payload)return ready(true);
+    if(operation==="schema_status")return {
+      kind:"schema_status",status:"active",request_id:payload.request_id,revision:1};
+    throw new Error("Forbidden scan");
+  };
+  const model=createSchemaModel({root:new Element("section"),client,storage});
+  await model.open({kind:"new"});await flush();
+  assert.equal(calls.filter(x=>x.operation==="schema_scan").length,0);
+  assert.equal(calls.filter(x=>x.operation==="schema_backfill").length,0);
+  assert.equal(storageData.size,0);
 });
