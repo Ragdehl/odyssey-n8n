@@ -151,7 +151,12 @@ class VaultRepository:
             raise InvalidNotePath("Invalid note path")
 
         normalized = PurePosixPath(path)
-        if not normalized.parts or ".." in normalized.parts or normalized.suffix != ".md":
+        if (
+            not normalized.parts
+            or ".." in normalized.parts
+            or ".git" in normalized.parts
+            or normalized.suffix != ".md"
+        ):
             raise InvalidNotePath("Invalid note path")
         return normalized
 
@@ -192,7 +197,11 @@ class VaultRepository:
                 before_directories.append((folder, self._fingerprint(folder)))
                 with os.scandir(folder) as entries:
                     for entry in entries:
-                        if entry.is_symlink():
+                        # Local Git history is operational metadata, never
+                        # a canonical Note. Git can update it while a scan
+                        # runs; do not treat those internal changes as a
+                        # changing Markdown inventory.
+                        if entry.is_symlink() or entry.name == ".git":
                             continue
                         entry_status = entry.stat(follow_symlinks=False)
                         if stat.S_ISDIR(entry_status.st_mode):
@@ -472,7 +481,7 @@ class VaultRepository:
                     for entry in entries:
                         # Symlinks are excluded entirely: even an in-vault target could be
                         # replaced between discovery and later access by a caller.
-                        if entry.is_symlink():
+                        if entry.is_symlink() or entry.name == ".git":
                             continue
                         if entry.is_dir(follow_symlinks=False):
                             directories.append(Path(entry.path))

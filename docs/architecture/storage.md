@@ -66,6 +66,8 @@ Phase 17B established `state/pending/` for durable incomplete work. Pending reco
 
 Future durable workflow state should use this boundary only when it cannot be rebuilt and when the semantics are clearly non-canonical.
 
+Los diarios de enriquecimiento local en state/schema-backfill-jobs/ conservan solo IDs, rutas, hashes, revisiones y progreso, no el contenido de hechos. Se generan antes de cambiar Markdown y se reanudan mediante Core/E3 y evidencia Git. Son específicos del dispositivo y no se sincronizan. Véase [contrato de diario reanudable](schema-backfill-journal-v1-20261026.md).
+
 UI-0 conversation state is durable presentation/operational state, not factual memory. Each user
 conceptually owns a local vault/state root. In hosted deployments, authenticated identity selects
 that isolated root at the outer boundary; the inner conversation store is root-bound so the same

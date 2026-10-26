@@ -377,3 +377,28 @@ class BulkPhysicalVersionProofTests(unittest.TestCase):
         (self.repo.root / "linked-dir").symlink_to(external.parent, target_is_directory=True)
         assert list(self.repo.note_version_snapshot()) == ["a.md"]
         assert list(self.repo.list_markdown_paths()) == ["a.md"]
+
+
+def test_local_git_history_is_not_scanned_as_canonical_markdown(tmp_path):
+    import pytest
+
+    from odyssey_core.storage import InvalidNotePath, VaultRepository
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "note.md").write_text("canonical\n", encoding="utf-8")
+    git = vault / ".git"
+    git.mkdir()
+    (git / "README.md").write_text("not a canonical note\n", encoding="utf-8")
+    (git / "objects").mkdir()
+    (git / "objects" / "internal.md").write_text("still Git metadata\n")
+    repo = VaultRepository(vault)
+    assert repo.list_markdown_paths() == ["note.md"]
+    first = repo.note_version_snapshot()
+    assert set(first) == {"note.md"}
+    # Changing .git internals cannot make the user Note inventory stale.
+    for index in range(10):
+        (git / "objects" / f"temporary-{index}").write_text(str(index))
+        assert repo.note_version_snapshot() == first
+    with pytest.raises(InvalidNotePath):
+        repo.read_text(".git/README.md")

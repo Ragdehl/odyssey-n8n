@@ -188,6 +188,86 @@ def _unmarked_text(body: str, facts: tuple[Any, ...]) -> str:
     ).strip()
 
 
+def _validated_source_note(*, path: str, raw: str, note: Any) -> SourceNote:
+    """Reconstruct the same bounded canonical E3 evidence for scans and restarts."""
+    try:
+        parsed_facts = parse_atomic_facts(note.content)
+    except AtomicFactError as error:
+        raise SchemaRetrospectionError("Malformed fact evidence during scan") from error
+    if len(parsed_facts) > _MAX_FACTS_PER_NOTE or any(
+        len(fact.text) > _MAX_FACT_TEXT for fact in parsed_facts
+    ):
+        raise SchemaRetrospectionError("Fact evidence exceeds safe scan budget")
+    locators = [fact.locator for fact in parsed_facts]
+    if len(locators) != len(set(locators)):
+        raise SchemaRetrospectionError("Duplicate canonical fact locator")
+    legacy_text = _unmarked_text(note.content, parsed_facts)
+    if len(legacy_text) > 12000:
+        raise SchemaRetrospectionError("Unmarked Markdown exceeds safe scan budget")
+    return SourceNote(
+        note_id=note.metadata["id"],
+        note_name=str(note.metadata["name"]),
+        note_type=str(note.metadata["type"]),
+        path=path,
+        source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        revision=int(note.metadata["revision"]),
+        facts=tuple(SourceFact(fact.locator, fact.text) for fact in parsed_facts),
+        legacy_coverage_unverified=bool(legacy_text),
+        legacy_text=legacy_text,
+    )
+
+
+def reload_staged_backfill_source(
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    path: str,
+    note_id: str,
+    source_hash: str,
+    revision: int,
+    type_id: str,
+    property_id: str,
+) -> SourceNote:
+    """Reconstruct a staged source without trusting saved Markdown snippets.
+
+    The durable plan holds only physical path, canonical ID, revision and SHA.
+    This recheck happens per note after other staged notes have been changed.
+    It must NOT reuse a whole-inventory scan cursor after canonical writes.
+    """
+    if (
+        not isinstance(repository, VaultRepository)
+        or not isinstance(path, str)
+        or not isinstance(note_id, str)
+        or not isinstance(source_hash, str)
+        or not isinstance(revision, int)
+        or type(revision) is not int
+    ):
+        raise SchemaRetrospectionError("Invalid saved source reference")
+    try:
+        before = repository.file_version(path)
+        if int(before[3]) > _MAX_NOTE_BYTES:
+            raise SchemaRetrospectionError("Staged source too large")
+        raw = repository.read_text(path)
+        if len(raw.encode("utf-8")) > _MAX_NOTE_BYTES:
+            raise SchemaRetrospectionError("Staged source too large")
+        note = parse_note(raw)
+        validate_note(note, schema)
+        after = repository.file_version(path)
+    except (OSError, ValueError, NoteFormatError, NoteValidationError) as error:
+        raise SchemaRetrospectionError("Staged canonical source unavailable") from error
+    if (
+        before != after
+        or note.metadata.get("deleted") is True
+        or note.metadata.get("id") != note_id
+        or note.metadata.get("type") != type_id
+        or property_id in note.metadata
+        or note.metadata.get("revision") != revision
+        or hashlib.sha256(raw.encode("utf-8")).hexdigest() != source_hash
+    ):
+        raise SchemaRetrospectionError("Staged canonical source changed")
+    return _validated_source_note(path=path, raw=raw, note=note)
+
+
 def scan_schema_sources(
     *,
     repository: VaultRepository,
@@ -289,34 +369,7 @@ def scan_schema_sources(
             if property_id in note.metadata:  # an explicit empty/null value is still user-owned
                 existing_count += 1
                 continue
-        try:
-            parsed_facts = parse_atomic_facts(note.content)
-        except AtomicFactError as error:
-            raise SchemaRetrospectionError("Malformed fact evidence during scan") from error
-        if len(parsed_facts) > _MAX_FACTS_PER_NOTE or any(
-            len(fact.text) > _MAX_FACT_TEXT for fact in parsed_facts
-        ):
-            raise SchemaRetrospectionError("Fact evidence exceeds safe scan budget")
-        locators = [fact.locator for fact in parsed_facts]
-        if len(locators) != len(set(locators)):
-            # Ambiguous E3 addressing must never produce a linkable candidate.
-            raise SchemaRetrospectionError("Duplicate canonical fact locator")
-        legacy_text = _unmarked_text(note.content, parsed_facts)
-        if len(legacy_text) > 12000:
-            raise SchemaRetrospectionError("Unmarked Markdown exceeds safe scan budget")
-        candidates.append(
-            SourceNote(
-                note_id=note_id,
-                note_name=str(note.metadata["name"]),
-                note_type=str(note.metadata["type"]),
-                path=path,
-                source_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
-                revision=int(note.metadata["revision"]),
-                facts=tuple(SourceFact(fact.locator, fact.text) for fact in parsed_facts),
-                legacy_coverage_unverified=bool(legacy_text),
-                legacy_text=legacy_text,
-            )
-        )
+        candidates.append(_validated_source_note(path=path, raw=raw, note=note))
     # One page may overlap other writers; never publish mixed-time evidence
     # even if the selected notes themselves didn't change.
     if repository.note_version_snapshot() != versions:
