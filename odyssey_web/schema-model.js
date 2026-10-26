@@ -506,7 +506,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         clearPending();
         retry.hidden = true;
         newDraft.hidden = false;
-        if (scanTarget) scanPanel.show(scanTarget);
+        if (scanTarget) scanPanel.show({...scanTarget, autoStart: true});
         onActive();
       }
     } catch {
@@ -537,7 +537,7 @@ export function createSchemaModel({root, endpoint = "/api/notes", client = reque
         newDraft.hidden = false;
         clearPending();
         pendingId = null;
-        if (scanTarget) scanPanel.show(scanTarget);
+        if (scanTarget) scanPanel.show({...scanTarget, autoStart: true});
         onActive();
       }
     } catch (error) {

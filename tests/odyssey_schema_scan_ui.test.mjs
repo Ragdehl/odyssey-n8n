@@ -28,7 +28,7 @@ const target = {scanKind: "discover_type", typeId: "libro", revision: 1};
 
 async function drain() {for (let i=0;i<8;i++) await Promise.resolve();}
 
-test("read-only scan shows actual counts and requires a human click per bounded page", async () => {
+test("read-only scan completes several bounded pages from a single click", async () => {
   const calls = [];
   const client = async (x) => {
     calls.push(x);
@@ -44,16 +44,14 @@ test("read-only scan shows actual counts and requires a human click per bounded 
   assert.equal(calls.some(x=>x.operation === "schema_confirm"), false);
   panel.panel.children[3].click();
   await drain();
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.deepEqual(calls[1].payload, {
     scan_kind: "discover_type", target_type_id: "libro", property_id: null,
     expected_revision: 1, action: "advance",
   });
-  assert.match(panel.panel.children[2].textContent, /20 notas examinadas/);
-  assert.match(panel.panel.children[2].textContent, /2 con texto antiguo/);
-  panel.panel.children[3].click();
-  await drain();
-  assert.equal(calls.length, 3);
+  assert.equal(calls[2].payload.action, "advance");
+  assert.match(panel.panel.children[2].textContent, /40 notas examinadas/);
+  assert.match(panel.panel.children[2].textContent, /5 con texto antiguo/);
   assert.match(panel.panel.children[2].textContent, /Lectura finalizada/);
   assert.equal(panel.panel.children[3].hidden, true);
   panel.hide();
@@ -111,4 +109,48 @@ test("schema scan response union rejects fake progress, source bodies and write 
     {...ready, status:"published"},
     {kind:"schema_scan", status:"not_started", actor_id:"other"},
   ]) assert.throws(()=>validateSchemaOperationResponse("schema_scan",payload),NotesRequestError);
+});
+
+test("one action scans up to 1,000 notes, pauses fairly and resumes without redoing work", async () => {
+  const calls = [];
+  const client = async (input) => {
+    calls.push(input);
+    if (input.payload.action === "status") return {kind:"schema_scan",status:"not_started"};
+    const page = calls.filter(x=>x.payload.action==="advance").length;
+    return page <= 50 ? {...ready,scanned_paths:20*page,eligible_notes:15*page,
+      legacy_sources:0} : {...complete,scanned_paths:1010,eligible_notes:750,legacy_sources:0};
+  };
+  const panel = createSchemaScanPanel({root:new Node("section"),client});
+  panel.show(target);
+  await drain();
+  await panel.advance();
+  assert.equal(calls.filter(x=>x.payload.action==="advance").length,50);
+  assert.match(panel.panel.children[2].textContent,/Pausa de rendimiento tras 1.000 archivos/);
+  assert.equal(panel.panel.children[3].hidden,false);
+  await panel.advance();
+  assert.equal(calls.filter(x=>x.payload.action==="advance").length,51);
+  assert.match(panel.panel.children[2].textContent,/Lectura finalizada/);
+  assert.equal(panel.panel.children[3].hidden,true);
+});
+
+test("pausing during one in-flight request prevents the next automatic request", async () => {
+  let finish;
+  const calls = [];
+  const client = (call) => {
+    calls.push(call);
+    if (call.payload.action === "status") return Promise.resolve({kind:"schema_scan",status:"not_started"});
+    return new Promise(resolve=>{finish=resolve;});
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show(target);
+  await drain();
+  panel.panel.children[3].click();
+  await drain();
+  assert.equal(calls.length,2);
+  panel.panel.children[5].click();
+  finish(ready);
+  await drain();
+  assert.equal(calls.length,2);
+  assert.match(panel.panel.children[2].textContent,/Análisis pausado/);
+  assert.equal(panel.panel.children[3].hidden,false);
 });

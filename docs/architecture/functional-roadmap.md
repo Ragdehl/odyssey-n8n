@@ -16,10 +16,12 @@ notes below are NOT current blockers or an instruction to restart old work.
 - **UI:** one AI-assisted «Modelo de notas» surface in Notes, deep-link from
   Chat; card preview, human-readable reasons, no technical «filterable» toggle;
   all newly offered properties must actually support appropriate queries.
-- **One approval** for additive optional property/type plus its background
-  discovery; values on existing notes can be completed automatically where
-  grounded. Creating **new entities found by a type scan** requires a later
-  explicit batch confirmation; **never reclassify notes**.
+- **One approval, autonomy after that:** confirmed schema scope authorizes
+  unattended, grounded and reversible per-note enrichment. **No one-click-per-note,
+  no repeated page approvals.** If entity identity can be independently proven,
+  automatic creation/reuse is allowed after dedup; group only unresolved identities
+  and contradictory sources for optional user review. Do not overwrite user-owned
+  values or reclassify existing notes. See the [autonomy policy](post-ui2-note-creation-and-schema-evolution.md#decisión-de-producto-autonomía-por-defecto-y-excepciones-agrupadas-26-10-2026).
 - **Properties:** scan existing notes of the affected type and backfill only
   evidenced values using E3; dates may have known year/month/day components
   without invented precision; age is derived, not a duplicate property.
@@ -35,7 +37,7 @@ notes below are NOT current blockers or an instruction to restart old work.
   rollback and backward compatibility first. Use bounded parallel *analysis*,
   durable resumable job progress and Core/E3 guarded *writes*; fix global index
   wait behavior before promising nonblocking unrelated queries.
-- **Current next:** partir del lector/acumulador retrospectivo y su checkpoint local reanudable (fuente posterior a `b1b7cd5`) con el progreso ya conectado en fuente a la UI por perfil; pendiente interpretar la evidencia, deduplicación, confirmación de nuevas entidades en lote y backfill únicamente mediante Core/E3 CAS con readback; no inventar valores o fechas. Luego probar revisión final de IA con modelo real, cerrar recorrido completo Chromium→n8n→Core/Writer→Notas con datos sintéticos y ejecutar los **cuatro auditores Codex** sobre un mismo SHA candidato con CI válido antes de declarar la PR lista. Véanse `odyssey-verify-change` y `odyssey-results`. PROD/vault personal fuera de alcance.
+- **Current next:** el lector retrospectivo ya tiene checkpoint local y la UI inicia/continúa lotes automáticamente tras activar el modelo (fuente). El primer autopoblado determinista de propiedades explícitas (`schema_auto_backfill.py`) prueba escrituras Core/E3/undo Git con notas sintéticas, **todavía separado de la cola duradera de ejecución**. Siguiente: pipeline de interpretación IA, identidad/dedup y orquestación sin aprobaciones por nota, con excepciones agrupadas; no inventar valores o fechas. Luego probar revisión final de IA con modelo real, cerrar recorrido completo Chromium→n8n→Core/Writer→Notas con datos sintéticos y ejecutar los **cuatro auditores Codex** sobre un mismo SHA candidato con CI válido antes de declarar la PR lista. Véanse `odyssey-verify-change` y `odyssey-results`. PROD/vault personal fuera de alcance.
 
 **Base integrada en `dev`: PR #155 (`07dd13b`, 24-10-2026).**
 Registro versionado aditivo, propuesta autenticada de solo lectura, composición

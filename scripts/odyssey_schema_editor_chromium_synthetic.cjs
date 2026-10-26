@@ -101,10 +101,8 @@ const profiles = [['desktop',1280,920],['mobile',390,844]];
       const afterReview=await page.$eval('.schema-model-confirm',el=>el.disabled);
       await page.click('.schema-model-confirm');
       await page.waitForFunction(()=>window.__active===true);
-      await page.waitForFunction(()=>document.querySelector('.schema-model-scan-status')?.textContent.includes('No se ha iniciado'));
-      const autoScanCount=await page.evaluate(()=>window.__calls.filter(c=>c.operation==='schema_scan' && c.payload.action==='advance').length);
-      await page.click('.schema-model-scan-advance');
       await page.waitForFunction(()=>document.querySelector('.schema-model-scan-status')?.textContent.includes('Lectura finalizada'));
+      const autoScanCount=await page.evaluate(()=>window.__calls.filter(c=>c.operation==='schema_scan' && c.payload.action==='advance').length);
 
       const evidence=await page.evaluate(()=>({
         calls:window.__calls.map(c=>c.operation),
@@ -120,7 +118,7 @@ const profiles = [['desktop',1280,920],['mobile',390,844]];
       const properties=evidence.changed?.type?.properties||[];
       const pass=initiallyBlocked && beforeReview && !afterReview &&
         evidence.calls.filter(c=>c!=='schema_scan').join(',')==='schema_status,schema_suggest,schema_preview,schema_review,schema_confirm' &&
-        autoScanCount===0 && evidence.scanCalls.length===2 &&
+        autoScanCount===1 && evidence.scanCalls.length===2 &&
         evidence.scanCalls[0].payload.action==='status' &&
         evidence.scanCalls[1].payload.action==='advance' &&
         evidence.scanCalls[1].payload.scan_kind==='discover_type' &&

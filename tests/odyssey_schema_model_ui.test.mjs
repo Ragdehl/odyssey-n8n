@@ -630,7 +630,7 @@ test("a stale or mismatched final review cannot enable human confirmation", asyn
   assert.equal(panel.element.querySelector(".schema-model-final-review").textContent.includes("Todo correcto"), false);
 });
 
-test("activated user property reveals a read-only scan panel, no automatic scan", async () => {
+test("activated user property starts read-only scan without another click", async () => {
   const {client,calls} = makeClient(({operation, payload}) => {
     if (operation === "schema_status" && !payload) return ready(true);
     if (operation === "schema_status") return {kind:"schema_status",status:"active",
@@ -642,7 +642,10 @@ test("activated user property reveals a read-only scan panel, no automatic scan"
     };
     if (operation === "schema_confirm") return {kind:"schema_confirm",status:"queued",
       request_id:payload.request_id,revision:0,next_revision:1};
-    if (operation === "schema_scan") return {kind:"schema_scan",status:"not_started"};
+    if (operation === "schema_scan") return payload.action === "status"
+      ? {kind:"schema_scan", status:"not_started"}
+      : {kind:"schema_scan", status:"complete",scanned_paths:3,
+        eligible_notes:2,skipped_existing_values:0,legacy_sources:0};
     throw Error("unexpected action "+operation);
   });
   const model = createSchemaModel({root:new Element("section"),client});
@@ -662,9 +665,6 @@ test("activated user property reveals a read-only scan panel, no automatic scan"
   assert.equal(latest.at(-1).payload.scan_kind,"backfill_property");
   assert.equal(latest.at(-1).payload.property_id,"oficio");
   assert.equal(latest.at(-1).payload.expected_revision,1);
-  assert.equal(latest.every(x=>x.payload.action==="status"),true);
-  model.element.querySelector(".schema-model-scan-advance").click();
-  await flush();
-  assert.equal(calls.at(-1).operation,"schema_scan");
-  assert.equal(calls.at(-1).payload.action,"advance");
+  assert.deepEqual(latest.map(x=>x.payload.action).slice(-2),["status","advance"]);
+  assert.equal(model.element.querySelector(".schema-model-scan-advance").hidden,true);
 });
