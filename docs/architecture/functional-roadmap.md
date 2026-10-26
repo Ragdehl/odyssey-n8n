@@ -2,7 +2,7 @@
 
 **Normative current-state entry point.** Verify these snapshots against Git and the actual DEV/PROD deployment marker before acting. **Historical checkpoints are NOT active decisions:** the complete previous 1,957-line roadmap is preserved at [October 2026 roadmap archive](functional-roadmap-history-20261023.md).
 
-## Current — 24 October 2026: schema evolution source development
+## Current — 26 October 2026: schema editor DEV proof; retrospective jobs pending
 
 **User-approved next direction: conversational evolution of note types and
 properties**. Full agreement, reuse inventory, implementation order and
@@ -33,10 +33,7 @@ notes below are NOT current blockers or an instruction to restart old work.
   rollback and backward compatibility first. Use bounded parallel *analysis*,
   durable resumable job progress and Core/E3 guarded *writes*; fix global index
   wait behavior before promising nonblocking unrelated queries.
-- **Next:** terminar confirmación duradera y reinicio seguro por generación;
-  después conectar una vista previa guiada por IA en Notas/Chat, el backfill
-  duradero E3 y el descubrimiento bajo demanda para tipos. Real-model gate and deployed synthetic-user UI E2E
-  before adoption. PROD/private vault changes remain out of scope.
+- **Current next:** partir del lector retrospectivo de solo lectura (`3994569` y acumulador posterior de páginas/IDs) para agregar jobs duraderos y reanudables por actor, interpretación con evidencia, deduplicación, confirmación de nuevas entidades en lote y backfill únicamente mediante Core/E3 CAS con readback; no inventar valores o fechas. Luego probar revisión final de IA con modelo real, cerrar recorrido completo Chromium→n8n→Core/Writer→Notas con datos sintéticos y ejecutar los **cuatro auditores Codex** sobre un mismo SHA candidato con CI válido antes de declarar la PR lista. Véanse `odyssey-verify-change` y `odyssey-results`. PROD/vault personal fuera de alcance.
 
 **Base integrada en `dev`: PR #155 (`07dd13b`, 24-10-2026).**
 Registro versionado aditivo, propuesta autenticada de solo lectura, composición
@@ -44,7 +41,7 @@ v3 compatible, campos consultables y protección de generaciones del runtime
 (arranque exclusivo, servicio compartido y drenaje de peticiones), con
 verificaciones de rutas DEV protegidas. Gate final **2.112 Python + 202 JS
 PASS**, GitHub CI PASS y revisiones independientes con defectos corregidos.
-Deshabilitado por defecto; DEV desplegado sigue en `050f26f`.
+Base fusionada en `dev`; DEV actual se verifica en el marcador, no a partir de esta nota histórica.
 
 **Fase actual — PR de confirmación y reactivación (25-10-2026, source-only).**
 El circuito Notes/n8n agrega `schema_confirm` y `schema_status` bajo bandera
@@ -62,7 +59,7 @@ la aprobación nunca llegó, edición ofrecida a un tipo Core-owned y falta de
 acción «Nueva propuesta» tras completar. Corregidos mediante status negativo
 explícito, editabilidad derivada de Core y recuperación controlada, con pruebas
 regresivas. Gate corregido **2.125 Python + 217 JS PASS**, 12 grupos.
-Sin backfill ni despliegue; confirmación histórica revisada, no E2E.
+Este checkpoint es histórico: después se desplegó el editor en DEV y se probó su aprobación manual, sin activar el asistente.
 
 **Sexto corte — conversación de esquema (25-10-2026, fuente opt-in).**
 `schema_suggest` reutiliza el gateway Luna y CAS Core para propuestas de
@@ -72,13 +69,9 @@ identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 V1: **17/24**; [informe](schema-conversation-live-eval-20261025.md).
 V2 **20/24**; [informe](schema-conversation-v2-eval-20261025.md); V3 **33/40**; [informe](schema-conversation-v3-live-eval-20261025.md).
 V4 **39/40**, [idiomas erróneos](schema-conversation-v4-live-eval-20261025.md).
-V5 [no aprobada](schema-conversation-v5-live-eval-20261025.md); V6 [fuente](schema-conversation-v6-contract-20261025.md): 2 llamadas smoke; [editor y revisión final](post-ui2-note-creation-and-schema-evolution.md). [Lector retrospectivo](schema-retrospection-reader-20261025.md) en fuente, sin job ni escritura. Flags OFF; faltan IA E2E y backfill/discovery.
+V5 [no aprobada](schema-conversation-v5-live-eval-20261025.md); V6 [fuente](schema-conversation-v6-contract-20261025.md): 2 llamadas smoke; [editor y revisión final](post-ui2-note-creation-and-schema-evolution.md). [Lector y acumulador retrospectivo](schema-retrospection-reader-20261025.md) en fuente, sin job persistente ni escritura. Flags OFF; faltan IA E2E y backfill/discovery.
 
-**Continuity:** `dev` source latest prior to these docs `c1f28f9`, clean;
-DEV deploy remains `050f26f` from C4. Verify live SHAs/PRs rather than
-trusting these static values. Two merged clean C4 audit-only branches/worktrees
-were removed; other historical worktrees intentionally retained, no need to
-re-scan them (see `odyssey-start-work`).
+**Continuidad verificada 26-10-2026:** PR #156 Draft, rama `feat/schema-confirm-activation` en `3994569` antes de la mejora de informes; último gate de código retrospectivo registrado **2.176 Python + 233 JS PASS** y GitHub CI PASS. DEV checkout/marker `5e340da`, servicios HTTP 200. Chromium real con transporte n8n/Core DEV probó creación y aprobación **manual** con vault sintético, restart y lectura; 1.275 notas originales sin cambio. Asistente/revisor con IA reales aún no E2E; 2 pruebas de humo V6 exitosas, sin evaluación integral. Lector retrospectivo no desplegado ni conectado a jobs; ningún cuatro-roles Codex final aprobado para #156. Historias completas y límites en [PR #156](https://github.com/Ragdehl/odyssey-n8n/pull/156) y [retrospectiva](schema-retrospection-reader-20261025.md). No recalcular ni asumir estado de otros worktrees históricos sin causa.
 
 ## Historical baseline — 23 October 2026 (not current authority)
 

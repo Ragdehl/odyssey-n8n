@@ -66,6 +66,114 @@ class RetrospectionPage:
     skipped_existing_values: int
     next_cursor: RetrospectionCursor | None
     inventory_hash: str
+    # Provenance needed to assemble several pages without accepting a rewind.
+    input_cursor: RetrospectionCursor | None
+    context_hash: str
+    source_note_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RetrospectionProgress:
+    """Bounded read-only scan receipt; not a background/durable job."""
+
+    kind: ScanKind
+    target_type_id: str
+    property_id: str | None
+    inventory_hash: str
+    context_hash: str
+    scanned_paths: int
+    eligible_notes: int
+    skipped_existing_values: int
+    legacy_sources: int
+    seen_note_ids: frozenset[str]
+    next_cursor: RetrospectionCursor | None
+
+    @property
+    def complete(self) -> bool:
+        return self.next_cursor is None
+
+
+_MAX_PROGRESS_IDS = 10000
+
+
+def accumulate_schema_scan(
+    page: RetrospectionPage, previous: RetrospectionProgress | None = None
+) -> RetrospectionProgress:
+    """Validate bounded page order/identity before any future job reports progress.
+
+    The caller must use scan_schema_sources for each page. This neither stores
+    progress nor interprets evidence, but prevents a future job from reporting
+    success when a page was repeated, skipped or contained a cross-page Note ID.
+    """
+    if not isinstance(page, RetrospectionPage) or (
+        page.input_cursor is not None and not isinstance(page.input_cursor, RetrospectionCursor)
+    ):
+        raise SchemaRetrospectionError("Invalid scan progress page")
+    if previous is None:
+        if page.input_cursor is not None:
+            raise SchemaRetrospectionError("Progress must start at first page")
+        seen: frozenset[str] = frozenset()
+        scanned = eligible = skipped = legacy = 0
+    else:
+        if (
+            not isinstance(previous, RetrospectionProgress)
+            or previous.complete
+            or page.input_cursor != previous.next_cursor
+            or page.kind != previous.kind
+            or page.target_type_id != previous.target_type_id
+            or page.property_id != previous.property_id
+            or page.inventory_hash != previous.inventory_hash
+            or page.context_hash != previous.context_hash
+        ):
+            raise SchemaRetrospectionError("Stale or out-of-order scan progress")
+        seen = previous.seen_note_ids
+        scanned = previous.scanned_paths
+        eligible = previous.eligible_notes
+        skipped = previous.skipped_existing_values
+        legacy = previous.legacy_sources
+    current = page.source_note_ids
+    if (
+        not 0 <= page.scanned_paths <= _MAX_PAGE
+        or (
+            page.scanned_paths == 0
+            and (
+                previous is not None
+                or page.next_cursor is not None
+                or page.eligible_notes
+                or page.source_note_ids
+                or page.skipped_existing_values
+            )
+        )
+        or len(current) > page.scanned_paths
+        or len(current) != len(set(current))
+        or any(not isinstance(identifier, str) or not identifier for identifier in current)
+        or seen.intersection(current)
+        or len(seen) + len(current) > _MAX_PROGRESS_IDS
+        or page.skipped_existing_values < 0
+        or page.scanned_paths < len(page.eligible_notes) + page.skipped_existing_values
+        or (
+            page.next_cursor is not None
+            and (
+                page.next_cursor.inventory_hash != page.inventory_hash
+                or page.next_cursor.context_hash != page.context_hash
+                or page.next_cursor.offset != scanned + page.scanned_paths
+            )
+        )
+    ):
+        raise SchemaRetrospectionError("Duplicate or inconsistent scan progress")
+    return RetrospectionProgress(
+        kind=page.kind,
+        target_type_id=page.target_type_id,
+        property_id=page.property_id,
+        inventory_hash=page.inventory_hash,
+        context_hash=page.context_hash,
+        scanned_paths=scanned + page.scanned_paths,
+        eligible_notes=eligible + len(page.eligible_notes),
+        skipped_existing_values=skipped + page.skipped_existing_values,
+        legacy_sources=legacy + sum(n.legacy_coverage_unverified for n in page.eligible_notes),
+        seen_note_ids=seen.union(current),
+        next_cursor=page.next_cursor,
+    )
 
 
 def _unmarked_text(body: str, facts: tuple[Any, ...]) -> str:
@@ -150,6 +258,7 @@ def scan_schema_sources(
     existing_count = 0
     selected = paths[offset : offset + limit]
     seen_ids: set[str] = set()
+    source_ids: list[str] = []
     for path in selected:
         # A physical version snapshot supplies the file size before parsing.
         # Reject oversized files BEFORE read_text allocates their full body.
@@ -173,6 +282,7 @@ def scan_schema_sources(
         if not isinstance(note_id, str) or note_id in seen_ids:
             raise SchemaRetrospectionError("Duplicate canonical source identity")
         seen_ids.add(note_id)
+        source_ids.append(note_id)
         if kind == "backfill_property":
             if note.metadata["type"] != target_type_id:
                 continue
@@ -225,4 +335,7 @@ def scan_schema_sources(
             else None
         ),
         inventory_hash=inventory_hash,
+        input_cursor=cursor,
+        context_hash=context_hash,
+        source_note_ids=tuple(source_ids),
     )

@@ -83,6 +83,8 @@ If a nominally small change becomes difficult to validate safely without local f
 
 During implementation, run focused tests/checks. Before readiness, run `odyssey-verify-change` (or equivalent complete evidence when the local environment is unavailable) and require server-side CI.
 
+**Commit-hook baseline repair (26 Oct 2026):** the historical unrestricted `pytest` hook collected 5,105 cases and failed 29 frozen prompt/snapshot and old operator-route checks on a schema source/skill-only change. The official `scripts/odyssey_cross_surface_gate.py` passed 2,180 Python + 233 JS on the same source. To prevent this recurring irrelevant commit blockade, the `pytest` hook now runs that **established active cross-surface gate** (and retains Ruff/schema hooks), not the entire historical archive. Raw `pytest` remains available for diagnosing old drift and the 29 failures are **not fixed or counted as PASS**. Future product changes must extend the official coverage where needed, and model/DEV browser/independent audits remain separate gates. Do not bypass a real failure of the active gate.
+
 For production model-facing changes, deterministic checks are necessary but not sufficient; use the focused live evidence policy in `AGENTS.md` and [Testing Strategy](testing.md).
 
 A failed gate means the branch is not ready. It does not require discarding coherent work; record a safe checkpoint when useful and continue/fix the blocker.

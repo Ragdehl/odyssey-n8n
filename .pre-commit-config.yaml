@@ -9,11 +9,13 @@ repos:
   - repo: local
     hooks:
       - id: pytest
-        name: pytest
-        entry: bash -c 'unset $(git rev-parse --local-env-vars); exec pytest'
+        name: Odyssey active cross-surface gate
+        entry: bash -c 'unset $(git rev-parse --local-env-vars); exec python scripts/odyssey_cross_surface_gate.py'
         language: python
-        # The full suite imports the provider client in offline payload tests.
-        # Keep this pinned to the repository's production SDK requirement.
+        # The authoritative current regression matrix selects live contracts and
+        # excludes historical frozen-model tests; plain 'pytest' is still
+        # available as an exploratory diagnostic but is not the commit gate.
+        # Provider client is still needed for provider-free contract tests.
         additional_dependencies: [pytest==9.1.1, openai==3.3.1]
         pass_filenames: false
         always_run: true

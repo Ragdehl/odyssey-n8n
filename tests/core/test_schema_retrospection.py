@@ -11,6 +11,7 @@ from odyssey_core.notes import Note, serialize_note
 from odyssey_core.schema_retrospection import (
     RetrospectionCursor,
     SchemaRetrospectionError,
+    accumulate_schema_scan,
     scan_schema_sources,
 )
 from odyssey_core.storage import VaultRepository
@@ -380,3 +381,100 @@ def test_large_unmarked_text_is_rejected_instead_of_truncated(tmp_path: Path) ->
         scan_schema_sources(
             repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=20
         )
+
+
+def test_read_only_accumulator_reports_progress_and_legacy_coverage(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    page1 = scan_schema_sources(
+        repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=2
+    )
+    progress1 = accumulate_schema_scan(page1)
+    assert progress1.scanned_paths == 2
+    assert progress1.eligible_notes == 2
+    assert progress1.legacy_sources == 0
+    assert not progress1.complete
+    page2 = scan_schema_sources(
+        repository=repo,
+        schema=config,
+        kind="discover_type",
+        target_type_id="libro",
+        limit=2,
+        cursor=progress1.next_cursor,
+    )
+    progress2 = accumulate_schema_scan(page2, progress1)
+    assert progress2.complete
+    assert (progress2.scanned_paths, progress2.eligible_notes, progress2.legacy_sources) == (
+        4,
+        4,
+        1,
+    )
+    assert len(progress2.seen_note_ids) == 4
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_accumulator_rejects_cross_page_duplicate_canonical_note_ids(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    note(tmp_path / "vault", "e/copy.md", "ada", "concept", fact("Mismo ID físico"))
+    first = scan_schema_sources(
+        repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=4
+    )
+    progress = accumulate_schema_scan(first)
+    second = scan_schema_sources(
+        repository=repo,
+        schema=config,
+        kind="discover_type",
+        target_type_id="libro",
+        limit=4,
+        cursor=progress.next_cursor,
+    )
+    with pytest.raises(SchemaRetrospectionError, match="Duplicate"):
+        accumulate_schema_scan(second, progress)
+
+
+def test_accumulator_rejects_skipped_or_repeated_or_other_query_page(tmp_path: Path) -> None:
+    repo, config = populated(tmp_path)
+    first = scan_schema_sources(
+        repository=repo, schema=config, kind="discover_type", target_type_id="libro", limit=1
+    )
+    state = accumulate_schema_scan(first)
+    with pytest.raises(SchemaRetrospectionError, match="first page"):
+        accumulate_schema_scan(
+            scan_schema_sources(
+                repository=repo,
+                schema=config,
+                kind="discover_type",
+                target_type_id="libro",
+                limit=1,
+                cursor=state.next_cursor,
+            )
+        )
+    with pytest.raises(SchemaRetrospectionError, match="out-of-order"):
+        accumulate_schema_scan(first, state)
+    unrelated = scan_schema_sources(
+        repository=repo,
+        schema=config,
+        kind="backfill_property",
+        target_type_id="person",
+        property_id="profesion",
+        limit=2,
+    )
+    with pytest.raises(SchemaRetrospectionError, match="out-of-order"):
+        accumulate_schema_scan(unrelated, state)
+
+
+def test_accumulator_handles_truly_empty_canonical_vault(tmp_path: Path) -> None:
+    root = tmp_path / "empty"
+    root.mkdir()
+    page = scan_schema_sources(
+        repository=VaultRepository(root),
+        schema=schema(),
+        kind="discover_type",
+        target_type_id="libro",
+        limit=10,
+    )
+    progress = accumulate_schema_scan(page)
+    assert progress.complete
+    assert progress.scanned_paths == 0
+    assert progress.eligible_notes == 0
+    assert not progress.seen_note_ids
