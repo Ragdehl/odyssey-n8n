@@ -42,6 +42,15 @@ En dos vaults temporales, Chromium ARM64 **real** de escritorio 1280×920 y móv
 
 **Límite esencial:** esta prueba no utiliza el n8n real, Cloudflare Access, autenticación del DEV ni proveedor GPT. El esquema fue aprobado de antemano en el fixture a través del registro canónico; la prueba de navegador empieza con la revisión de notas, no con un clic de confirmación de nuevo modelo. No constituye aceptación real del DEV desplegado y no activa ODYSSEY_SCHEMA_BACKFILL_ENABLED en el servicio. Los dos ficheros del banco de pruebas incluyen comprobaciones automatizadas de aislamiento y procedencia; el browser ARM es opt-in y no forma parte del CI universal.
 
+## Motor n8n auténtico en entorno aislado (26-10, siguiente corte)
+
+Dos pruebas opt-in sobre el contenedor instalado de **n8n real**, con red desconectada, sistema raíz de solo lectura, capacidades eliminadas, montajes sintéticos acotados y sin proveedor ni credenciales de usuario:
+
+1. python scripts/odyssey_schema_n8n_engine_offline.py --run: importa un workflow temporal y ejecuta el código **exacto** del validador Notes de workflows/odyssey-online.ts mediante n8n. Resultado: **2 peticiones válidas admitidas y 4 maliciosas/mal formadas rechazadas**, sin tocar notas.
+2. python scripts/odyssey_schema_n8n_core_isolated.py --run: crea un webhook real que atraviesa **Webhook → Validate Notes (código fuente real) → IF de seguridad → HTTP Request → broker local Unix → RuntimeComposition.notes → Core/E3 → Git Markdown**. En el vault sintético: **1 propiedad completada**, **1 fuente diferida**, **exactamente 1 commit nuevo**, replay sin duplicación y **5 peticiones inválidas rechazadas antes de Core**. Datos sintéticos eliminados al terminar. Reutiliza el mecanismo restringido de broker de las pruebas P4 de Odyssey.
+
+No se trata de n8n del DEV desplegado, ni se ha ensayado una sesión Cloudflare Access, ni Chromium→n8n como **un único** recorrido, ni GPT real. Chromium→Core y n8n→Core son evidencias complementarias, **no aceptación de producto E2E**. Contratos Python offline de los dos bancos verifican las restricciones de origen.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.
