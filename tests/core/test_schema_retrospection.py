@@ -478,3 +478,36 @@ def test_accumulator_handles_truly_empty_canonical_vault(tmp_path: Path) -> None
     assert progress.scanned_paths == 0
     assert progress.eligible_notes == 0
     assert not progress.seen_note_ids
+
+
+def test_public_scanner_never_accepts_stale_private_staging_snapshot(tmp_path):
+    """The autonomous journal's provisional snapshot bypass is not a public API."""
+    repo, config = populated(tmp_path)
+    old_inventory = repo.note_version_snapshot()
+    (repo.root / "e/new.md").parent.mkdir()
+    note(
+        repo.root,
+        "e/new.md",
+        "new",
+        "person",
+        fact("una profesión nueva", "newcase", 0),
+    )
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        scan_schema_sources(
+            repository=repo,
+            schema=config,
+            kind="backfill_property",
+            target_type_id="person",
+            property_id="profesion",
+            _staged_inventory=old_inventory,
+        )
+    result = scan_schema_sources(
+        repository=repo,
+        schema=config,
+        kind="backfill_property",
+        target_type_id="person",
+        property_id="profesion",
+        limit=25,
+    )
+    assert result.scanned_paths == 5
+    assert "new" in result.source_note_ids

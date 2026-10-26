@@ -277,19 +277,41 @@ def scan_schema_sources(
     property_id: str | None = None,
     limit: int = 20,
     cursor: RetrospectionCursor | None = None,
+) -> RetrospectionPage:
+    """Read a bounded page with mandatory live whole-inventory freshness checks.
+
+    In contrast to the journal-only preliminary helper, no caller can pass
+    a saved snapshot to bypass fresh vault enumeration and per-page rechecks.
+    """
+    return _scan_schema_sources_page(
+        repository=repository,
+        schema=schema,
+        kind=kind,
+        target_type_id=target_type_id,
+        property_id=property_id,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+def _scan_schema_sources_page(
+    *,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    kind: ScanKind,
+    target_type_id: str,
+    property_id: str | None = None,
+    limit: int = 20,
+    cursor: RetrospectionCursor | None = None,
     _staged_inventory: dict[str, tuple[object, ...]] | None = None,
 ) -> RetrospectionPage:
-    """Read ≤25 physical notes, preserving source hash and atomic fact locators.
+    """Internal staged-page builder; results are PROVISIONAL with inventory.
 
-    The cursor binds the whole vault file-version inventory. Even if a file
-    changes without changing its name, subsequent pages reject as stale. Each
-    selected file is checked before/after parsing, so a mixed-time batch is
-    never silently considered complete. No network, model or write occurs.
-
-    The private _staged_inventory optimization is ONLY for a trusted caller
-    that verifies a fresh full-vault snapshot matches it after processing all
-    pages and BEFORE publishing a durable plan. Every selected physical file
-    remains checked before/after parsing; later canonical writes recheck CAS.
+    This bypass is strictly for LocalBackfillJob.stage, which MUST check a
+    fresh full vault snapshot after processing every page and BEFORE publishing
+    any plan. The public scan_schema_sources always verifies each page.
+    Every selected source is still checked before/after parsing, and Core
+    revalidates source CAS for each later physical write.
     """
     if (
         not isinstance(repository, VaultRepository)

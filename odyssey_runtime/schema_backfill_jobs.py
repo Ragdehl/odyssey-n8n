@@ -25,9 +25,9 @@ from odyssey_core.notes import parse_note, validate_note
 from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill, choose_explicit_backfill
 from odyssey_core.schema_retrospection import (
     SchemaRetrospectionError,
+    _scan_schema_sources_page,
     accumulate_schema_scan,
     reload_staged_backfill_source,
-    scan_schema_sources,
 )
 from odyssey_core.storage import VaultRepository
 from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
@@ -122,7 +122,7 @@ class LocalBackfillJob:
             progress = None
             rows: list[dict[str, Any]] = []
             while True:
-                page = scan_schema_sources(
+                page = _scan_schema_sources_page(
                     repository=self.repository,
                     schema=self.writer.schema,
                     kind="backfill_property",

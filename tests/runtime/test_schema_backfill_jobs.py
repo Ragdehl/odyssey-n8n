@@ -532,7 +532,7 @@ def test_staged_scan_does_not_publish_after_any_concurrent_vault_change(
     from odyssey_runtime import schema_backfill_jobs
 
     state, repo, writer = setup(tmp_path, [f"profesion: oficio-{i}" for i in range(28)])
-    original = schema_backfill_jobs.scan_schema_sources
+    original = schema_backfill_jobs._scan_schema_sources_page
     counter = 0
 
     def mutate_between_pages(**kwargs):
@@ -548,7 +548,7 @@ def test_staged_scan_does_not_publish_after_any_concurrent_vault_change(
                 target.write_text((repo.root / "0.md").read_text())
         return page
 
-    monkeypatch.setattr(schema_backfill_jobs, "scan_schema_sources", mutate_between_pages)
+    monkeypatch.setattr(schema_backfill_jobs, "_scan_schema_sources_page", mutate_between_pages)
     with pytest.raises(LocalBackfillJobError, match="Vault changed"):
         job(state, repo, writer).stage(
             job_id="historial", type_id="person", property_id="profesion"

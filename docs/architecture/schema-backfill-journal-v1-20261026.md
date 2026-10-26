@@ -148,6 +148,26 @@ Estos cambios posteriores son **solo código fuente y regresiones sintéticas**;
 
 Memoria RSS máxima reportada a 10.000: 60,6 MB; 2.500/5.000 optimizado 46,5/51,4 MB. SwapFree estable durante estas ejecuciones. El ensayo anterior de 50 commits individuales de Git: 1,97 s total, p50 39,4 ms y p95 40,1 ms, **sin refresco asíncrono de índices**. Benchmarks independientes con vault temporal y Git sintético; no son garantía de p95 con notas grandes, consumo térmico, contexto de usuario real, batería móvil, servicio embebido ni todo el backfill de 10.000 escrituras. La optimización y las pruebas están solo en la rama de fuente mientras DEV conserva el SHA desplegado 4e721a0. Los dictámenes Codex para el SHA anterior son evidencia histórica: se requiere revisión de esta modificación antes de aprobación final.
 
+## Medición de escritura + actualización ContextIndex (corte posterior, SHA 5116f9b)
+
+**Banco en Raspberry ARM64 sobre tres vaults Git sintéticos efímeros, sin DEV/PROD ni proveedor:** schema real de Persona + propiedad opcional, LocalBackfillJob + AutomaticPropertyBackfill + GitHistoryRecorder, con ContextIndex SQLite real y embedder determinista sin red. Antes se inicializó el índice, luego cada commit de propiedad notificó y completó inmediatamente el refresco del índice contextual. Al terminar, una consulta Core Notes filtrada por profesion = médica devolvió exactamente todas las notas actualizadas. Son medidas seriales de carga; no incluyen el índice semántico completo de producción.
+
+| Notas | Git + diario + ContextIndex (total) | Mediana por actualización | p95 por actualización | Coste agregado ContextIndex |
+|---|---:|---:|---:|---:|
+| 25 | 0,91 s | 36,1 ms | 36,6 ms | 0,15 s |
+| 100 | 7,41 s | 73,4 ms | 77,4 ms | 1,47 s |
+| 250 | 37,17 s | 148,3 ms | 152,7 ms | 8,03 s |
+
+Máxima RSS de los ensayos: 53,0, 57,6 y 71,5 MB respectivamente, con SwapFree estable (1195 MB). El coste por actualización crece con el tamaño de vault: no extrapolar el staging rápido a un lote de escrituras de 10.000 notas. Un perfil aislado de **cinco** commits en vault de 250 notas, bajo cProfile (incluye la propia sobrecarga del profiler), contó **2520 parseos de notas** (aproximadamente dos recorridos completos del vault por escritura). Un recorrido proviene de CanonicalMutationGate.prepare para resolver ID único, el otro de GitHistoryRecorder.record para atribución y undo seguro. El coste del índice ContextIndex también aumenta al comprobar inventario. Optimizar requiere reutilizar evidencias de identidad/frescura con una prueba de unicidad y CAS equivalente, no retirar arbitrariamente esos recorridos o crear un Git commit agregado sin recuperación granular.
+
+**Evidencia y siguiente puerta:** el código 5116f9b superó CI GitHub y la suite local, y el benchmark muestra materialmente el siguiente trabajo: diseñar un índice local verificable de rutas/IDs con inventario coherente, mantener protección de duplicados, cambios externos y reanudación tras caída, y medir el índice semántico completo. Solo después valorar 10.000 escrituras sin intervención humana y trabajador móvil. No se ha desplegado este SHA ni existe aceptación de Cloudflare Access autenticada o de IA de pago.
+
+## Revisión focalizada de 5116f9b y cierre de contrato de escáner público
+
+Una revisión read-only Codex independiente y **acotada exclusivamente al cambio 7d95125..5116f9b** detectó **un P2 reparable** en la API: aunque el diario privado sí garantizaba la verificación final del inventario, el método público scan_schema_sources aceptaba opcionalmente un _staged_inventory antiguo y podía devolver una página incompleta sin advertir de nuevas fuentes. Recibo en el informe local de Codex; no equivale a cuatro nuevas auditorías especialistas ni a evaluación semántica.
+
+**Corrección posterior en fuente:** scan_schema_sources ha recuperado la firma pública sin posibilidad de aceptar instantáneas previas y exige comprobaciones completas por página. El constructor _scan_schema_sources_page, deliberadamente interno, solo produce evidencias preliminares para el diario, cuya última verificación del inventario es obligatoria antes de crear el checkpoint. Nueva regresión de API: intentar inyectar un inventario anterior provoca TypeError y un escaneo público normal detecta la nota recién añadida. Tras separar API pública y constructor provisional, el banco opt-in de **10.000 notas sintéticas** sobre Raspberry volvió a pasar: 10,98 s de preparación, CPU 10,97 s, memoria RSS máxima 60,3 MB; comparable a los 11,40 s anteriores, no un cambio de escritura o de seguridad. Las regresiones del diario siguen detectando mutación de la primera página o nota nueva y rechazan toda publicación del plan. No se habilitan escrituras nuevas ni se toca el modelo.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.
