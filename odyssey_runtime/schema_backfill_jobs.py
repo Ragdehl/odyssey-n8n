@@ -89,7 +89,7 @@ class LocalBackfillJob:
         ).hexdigest()
 
     def stage(self, *, job_id: str, type_id: str, property_id: str) -> dict[str, Any]:
-        """Finish a consistent source scan before any mutation (max 2000)."""
+        """Finish a consistent source scan before any mutation (max 10,000)."""
         # Do not publish a plan that can never write because the property
         # is not optional. The canonical scanner independently checks IDs.
         definitions = [

@@ -34,6 +34,14 @@ Odyssey elimina trabajo al usuario: una vez aprobado el tipo/propiedad, puede de
 - Cada escritura aceptada programa el refresco incremental de índices usando el mecanismo existente DerivedIndexRefreshCoordinator. Si ese registro falla después de escribir, la fila queda en estado writing y el siguiente avance reconcilia contra Core y Git, programando de nuevo sin repetir el commit. No se construye otra base de conocimiento ni cola remota.
 - Pruebas de vertical real: confirmación publicada → Notes schema_backfill → Core/E3/Git Markdown sintético → recibos agregados; negativa de actor ajeno/revisión errónea/autoridad enviada por navegador; contrato n8n y panel web simulado. Chromium escritorio/móvil confirma compatibilidad visual con transporte simulado. No equivale aún a la ruta **desplegada** desde Chromium por n8n real.
 
+## Prueba de navegador real aislado (26-10, corte siguiente)
+
+Comando reproducible, sin credenciales ni despliegue: PYTHONPATH=. /home/ragdehl/projects/odyssey/.venv/bin/python scripts/odyssey_schema_backfill_chromium_local.py.
+
+En dos vaults temporales, Chromium ARM64 **real** de escritorio 1280×920 y móvil 390×844 navega, pulsa el control de revisión de notas y atraviesa el **componente frontend auténtico de Odyssey**. El origen web es un proxy limitado a dos operaciones de Notes y a una identidad sintética fija. Después llama al servidor HTTP local auténtico y a los contratos reales del registro de aprobación, escaneo, diario, Core/E3 y Git. En ambas pantallas se observa **1 profesión actualizada, 1 descripción libre diferida**; tras recargar, vuelve a verse el mismo total con exactamente **un** commit de modificación (dos contando el inicial). El Markdown que no requiere actualización sigue byte idéntico. El diario no contiene el texto de los hechos. Todo el almacenamiento utilizado es efímero bajo /tmp.
+
+**Límite esencial:** esta prueba no utiliza el n8n real, Cloudflare Access, autenticación del DEV ni proveedor GPT. El esquema fue aprobado de antemano en el fixture a través del registro canónico; la prueba de navegador empieza con la revisión de notas, no con un clic de confirmación de nuevo modelo. No constituye aceptación real del DEV desplegado y no activa ODYSSEY_SCHEMA_BACKFILL_ENABLED en el servicio. Los dos ficheros del banco de pruebas incluyen comprobaciones automatizadas de aislamiento y procedencia; el browser ARM es opt-in y no forma parte del CI universal.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.
