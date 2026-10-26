@@ -3,6 +3,7 @@
 from .repository import (
     InvalidNotePath,
     NoteAlreadyExistsError,
+    NoteContentConflictError,
     NoteUnavailableError,
     VaultAccessError,
     VaultRepository,
@@ -11,6 +12,7 @@ from .repository import (
 __all__ = [
     "InvalidNotePath",
     "NoteAlreadyExistsError",
+    "NoteContentConflictError",
     "NoteUnavailableError",
     "VaultAccessError",
     "VaultRepository",

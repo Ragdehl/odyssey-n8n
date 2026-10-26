@@ -384,3 +384,87 @@ def test_index_refresh_failure_after_commit_is_recovered_without_second_commit(t
         ).strip()
         == "2"
     )
+
+
+def test_tampered_completed_row_is_not_trusted_even_if_shape_is_valid(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"])
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    assert advance(worker)["updated"] == 1
+    journal = next((state / "schema-backfill-jobs").glob("*.json"))
+    saved = json.loads(journal.read_text())
+    assert saved["rows"][0]["status"] == "updated"
+    saved["rows"][0]["undo"] = "f" * 40
+    journal.write_text(json.dumps(saved))
+    with pytest.raises(LocalBackfillJobError, match="integrity"):
+        job(state, repo, writer).status("historial")
+    assert parse_note(repo.read_text("0.md")).metadata["revision"] == 2
+
+
+def test_history_receipt_is_discoverable_past_100_path_commits(tmp_path, monkeypatch):
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"])
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    real = writer.apply
+
+    def fail_after_real_write(**kwargs):
+        assert real(**kwargs).status == "updated"
+        raise RuntimeError("crash after commit")
+
+    monkeypatch.setattr(writer, "apply", fail_after_real_write)
+    with pytest.raises(RuntimeError, match="crash after commit"):
+        advance(worker)
+    original_modified = repo.read_text("0.md")
+    assert parse_note(original_modified).metadata["revision"] == 2
+    # More than 100 later commits touch this path but eventually restore
+    # exactly the accepted bytes. The journal must find its original request
+    # without assuming the 100 newest history entries are sufficient.
+    for index in range(104):
+        (repo.root / "0.md").write_text(
+            original_modified + f"Temporary external history event: {index}\n"
+        )
+        subprocess.run(
+            ["git", "add", "0.md"], cwd=repo.root, check=True, capture_output=True, timeout=10
+        )
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@localhost",
+                "commit",
+                "-q",
+                "-m",
+                f"event-{index}",
+            ],
+            cwd=repo.root,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+    (repo.root / "0.md").write_text(original_modified)
+    subprocess.run(
+        ["git", "add", "0.md"], cwd=repo.root, check=True, capture_output=True, timeout=10
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-q",
+            "-m",
+            "restore-identical-content",
+        ],
+        cwd=repo.root,
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
+    resumed = job(state, repo, writer)
+    result = advance(resumed)
+    assert result["updated"] == 1 and result["status"] == "complete"
+    assert repo.read_text("0.md") == original_modified

@@ -320,6 +320,7 @@ class AutomaticPropertyBackfill:
                     path=preflight.path,
                     expected_id=source.note_id,
                     expected_revision=source.revision,
+                    expected_source_hash=source.source_hash,
                     set_metadata={property_id: decision.value},
                     actor=actor,
                     now=now,

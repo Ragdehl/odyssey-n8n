@@ -61,6 +61,16 @@ Por primera vez se ejecuta el recorrido **continuo**, sin unir resultados de pru
 
 **Límite:** n8n real en contenedor aislado no es el n8n actualmente desplegado en DEV; la sesión de autenticación y Cloudflare Access tampoco se han ensayado, ni existe una llamada GPT de proveedor real. **No declarar DEV E2E aceptado ni fusionar/desplegar por este test**. La aceptación completa requiere autorización separada para cualquier modificación de la ruta pública Cloudflare o despliegue DEV; esta prueba no requiere ni solicita esas operaciones.
 
+## Revisión Codex focalizada y correcciones de persistencia (26-10)
+
+Un agente Codex independiente en solo lectura del SHA 9f86b45 informó de tres problemas concretos. Es **una revisión focalizada, no los cuatro auditores finales**:
+
+- **P1, cambio de contenido con revisión idéntica:** el guardia Core comparaba hash antes de entrar en persistencia, pero update_entity solo exigía la revisión. Ahora VaultRepository.replace_text incluye CAS opcional de bytes SHA-256 junto a la sustitución física, propagado por update_entity y AutomaticPropertyBackfill; escritores cooperantes de la misma carpeta se serializan mediante bloqueo POSIX del directorio, sin añadir archivos al vault. Las pruebas simulan una corrección externa con idéntica revisión y dos repositorios concurrentes: la escritura obsoleta se rechaza sin sobrescribir. Límite: un editor externo que ignore el bloqueo aún puede actuar en la ventana muy breve entre la comparación final y os.replace; el historial y readback siguen siendo necesarios, no es una transacción distribuida.
+- **P2, historial Git largo:** la reconciliación ya no asume que el recibo está entre los últimos 100 commits. Usa una búsqueda Git con --fixed-strings --grep del ID de operación y ruta, y valida el trailer exacto, la revisión y el contenido físico. Prueba: más de cien commits posteriores en la misma nota con restauración idéntica y recuperación sin repetir escritura.
+- **P2, diario alterado de forma aparentemente válida:** el checkpoint serializado tiene HMAC-SHA256 sobre el estado completo, con clave local aleatoria en el perfil privado 0600. Una fila actualizada cuya evidencia cambió, aunque sea JSON estructuralmente válido, se rechaza antes de dar el trabajo por terminado. Protege de corrupción y actores sin acceso al perfil; no puede impedir que una app maliciosa que controla íntegramente el perfil también lea la clave.
+
+Los cambios usan Core y Git existentes, sin nuevas entidades, modelos, servicio o esquema. Validado en vaults Git sintéticos; la aceptación DEV y los cuatro especialistas Codex quedan por realizar sobre SHA corregido.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.

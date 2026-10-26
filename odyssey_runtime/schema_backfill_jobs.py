@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -76,6 +77,11 @@ class LocalBackfillJob:
             raise LocalBackfillJobError("Unsafe job directory")
         self.root.mkdir(mode=0o700, exist_ok=True)
         self.root.chmod(0o700)
+        # Durable journals are private OS-local state. An integrity key
+        # prevents a structurally valid but corrupted/replaced receipt from
+        # silently suppressing work. This is NOT a sync credential.
+        with self._lock():
+            self._journal_key = self._load_integrity_key()
         if on_updated is not None and not callable(on_updated):
             raise LocalBackfillJobError("Invalid incremental index refresher")
         self.on_updated = on_updated
@@ -331,7 +337,15 @@ class LocalBackfillJob:
         if not isinstance(request, str) or _REQ.fullmatch(request) is None:
             raise LocalBackfillJobError("Invalid request receipt")
         result = subprocess.run(
-            ["git", "log", "-n", "100", "--format=%H%x00%B%x00", "--", path],
+            [
+                "git",
+                "log",
+                "--format=%H%x00%B%x00",
+                "--fixed-strings",
+                f"--grep=Odyssey-Request: {request}",
+                "--",
+                path,
+            ],
             cwd=self.repository.root,
             capture_output=True,
             text=True,
@@ -416,6 +430,44 @@ class LocalBackfillJob:
         finally:
             os.close(fd)
 
+    def _load_integrity_key(self) -> bytes:
+        path = self.root / ".integrity-key"
+        try:
+            handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            try:
+                with os.fdopen(handle, "wb") as stream:
+                    stream.write(os.urandom(32))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            except OSError as error:
+                raise LocalBackfillJobError("Cannot initialize local journal integrity") from error
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as stream:
+                attributes = os.fstat(stream.fileno())
+                if (
+                    not stat.S_ISREG(attributes.st_mode)
+                    or attributes.st_uid != os.getuid()
+                    or stat.S_IMODE(attributes.st_mode) != 0o600
+                ):
+                    raise LocalBackfillJobError("Unsafe integrity key permissions")
+                value = stream.read(33)
+        except OSError as error:
+            raise LocalBackfillJobError("Local journal integrity key unavailable") from error
+        if len(value) != 32:
+            raise LocalBackfillJobError("Invalid local journal integrity key")
+        return value
+
+    def _integrity(self, record: dict[str, Any]) -> str:
+        # Bind exact entire record, actor/vault scope and ordered outcomes.
+        contents = json.dumps(
+            record, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return hmac.new(self._journal_key, contents, hashlib.sha256).hexdigest()
+
     def _required(self, path: Path, job_id: str) -> dict[str, Any]:
         record = self._read(path, job_id)
         if record is None:
@@ -438,6 +490,15 @@ class LocalBackfillJob:
                 os.close(fd)
         except (OSError, ValueError, RecursionError, UnicodeError) as error:
             raise LocalBackfillJobError("Unreadable journal") from error
+        if not isinstance(data, dict):
+            raise LocalBackfillJobError("Invalid local journal")
+        checksum = data.pop("_integrity", None)
+        if (
+            not isinstance(checksum, str)
+            or _SHA.fullmatch(checksum) is None
+            or not hmac.compare_digest(checksum, self._integrity(data))
+        ):
+            raise LocalBackfillJobError("Local journal integrity mismatch")
         if (
             not isinstance(data, dict)
             or set(data)
@@ -537,8 +598,9 @@ class LocalBackfillJob:
             raise LocalBackfillJobError("Unsafe journal destination")
         temporary = None
         try:
+            document = {**record, "_integrity": self._integrity(record)}
             payload = json.dumps(
-                record, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
             ).encode("utf-8")
             if len(payload) > _BYTES:
                 raise LocalBackfillJobError("Checkpoint capacity exceeded")

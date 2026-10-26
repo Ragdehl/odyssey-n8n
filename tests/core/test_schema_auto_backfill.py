@@ -333,3 +333,35 @@ def test_explicit_fast_path_never_overrides_a_later_free_prose_correction(tmp_pa
         == "ambiguous"
     )
     assert repo.read_text("0.md") == before
+
+
+def test_backfill_fails_closed_on_same_revision_edit_inside_persistence_boundary(
+    tmp_path, monkeypatch
+):
+    from odyssey_core.notes import parse_note
+
+    repo, schema, sources = _vault(tmp_path, ["Profesión: médica"])
+    original = repo.read_text("0.md")
+    manual = original.replace("Profesión: médica", "La profesión está en disputa")
+    assert parse_note(manual).metadata["revision"] == sources[0].revision
+    writer = AutomaticPropertyBackfill(
+        repository=repo, schema=schema, history=GitHistoryRecorder(repo.root)
+    )
+    original_replace = repo.replace_text
+
+    def concurrent_edit(path, text, **kwargs):
+        (repo.root / path).write_text(manual)
+        return original_replace(path, text, **kwargs)
+
+    monkeypatch.setattr(repo, "replace_text", concurrent_edit)
+    receipt = writer.apply(
+        source=sources[0],
+        type_id="person",
+        property_id="profesion",
+        actor=ACTOR,
+        now=NOW,
+        request_id="race-same-revision",
+    )
+    assert receipt.status == "stale"
+    assert repo.read_text("0.md") == manual
+    assert "profesion" not in parse_note(repo.read_text("0.md")).metadata
