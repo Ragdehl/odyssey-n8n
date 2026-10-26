@@ -1,5 +1,6 @@
-/** Read-only schema retrospective preview. Scans are local to the trusted profile.
- * No candidate identities or note mutations are accepted over this UI boundary.
+/** Bounded read-only retrospective scan and opt-in deterministic local enrichment.
+ * The trusted server verifies the actor's actual schema approval before
+ * any writes; the browser never supplies values, IDs or approval flags.
  */
 import {requestNotes} from "./notes-client.js";
 
@@ -15,7 +16,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   const panel = item("section", "schema-model-scan");
   panel.hidden = true;
   panel.append(item("h3", "", "Revisar notas existentes"));
-  const explanation = item("p", "", "Odyssey revisa tus notas existentes automáticamente y guarda el progreso localmente. Esta etapa muestra las fuentes encontradas; el enriquecimiento de las notas se incorporará después.");
+  const explanation = item("p", "", "Odyssey revisa las notas existentes y guarda el avance en este dispositivo. Cuando la función esté habilitada, puede completar automáticamente propiedades explícitas; las frases que requieran IA quedarán pendientes.");
   const status = item("p", "schema-model-scan-status", "");
   status.setAttribute("role", "status");
   const advanceButton = item("button", "schema-model-button schema-model-scan-advance", "Analizar notas existentes");
@@ -25,7 +26,14 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   const pauseButton = item("button", "schema-model-button schema-model-scan-pause", "Pausar análisis");
   pauseButton.type = "button";
   pauseButton.hidden = true;
-  panel.append(explanation, status, advanceButton, statusButton, pauseButton);
+  const enrichStatus = item("p", "schema-model-enrichment-status", "");
+  enrichStatus.setAttribute("role", "status");
+  enrichStatus.hidden = true;
+  const enrichButton = item("button", "schema-model-button schema-model-enrichment-resume", "Continuar autocompletado");
+  enrichButton.type = "button";
+  enrichButton.hidden = true;
+  panel.append(explanation, status, advanceButton, statusButton, pauseButton,
+    enrichStatus, enrichButton);
   root.append(panel);
 
   let target = null;
@@ -36,6 +44,9 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   // Avoid an unbounded request loop in a foreground/mobile page. The next
   // click resumes the same durable checkpoint without restarting the vault.
   const MAX_PAGES_PER_RUN = 50;
+  const MAX_UPDATES_PER_RUN = 50;
+  let enrichmentRunning = false;
+  let enrichmentReady = false;
 
   function render(data, isHistorical = false) {
     if (data.status === "not_started") {
@@ -50,7 +61,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
       data.legacy_sources + " con texto antiguo sin trazabilidad completa. " +
       (data.status === "complete" ? "Lectura finalizada, sin modificar notas." :
         "El análisis puede continuar automáticamente.");
-    advanceButton.hidden = data.status === "complete" && !isHistorical;
+    advanceButton.hidden = data.status === "complete";
     advanceButton.textContent = "Continuar análisis";
   }
 
@@ -65,6 +76,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
       const result = await client({endpoint, operation: "schema_scan", payload: {...target, action}});
       if (seq !== generation || panel.hidden) return;
       render(result, action === "status");
+      return result;
     } catch (error) {
       if (seq === generation) {
         status.textContent = error?.code === "SCHEMA_SCAN_STALE_OR_INVALID"
@@ -122,17 +134,95 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
         }
       }
     }
+    if (complete && seq === generation && target?.scan_kind === "backfill_property" &&
+        !panel.hidden && !pauseRequested && !interrupted) void runEnrichment(seq);
+  }
+
+  function renderEnrichment(result) {
+    enrichStatus.hidden = false;
+    enrichStatus.textContent = result.updated + " propiedades completadas; " +
+      result.deferred + " pendientes de IA; " + result.ambiguous +
+      " ambiguas; " + result.stale + " notas modificadas desde el análisis; " +
+      result.pending + " pendientes de procesar. " +
+      (result.status === "complete" ? "Autocompletado finalizado." :
+        result.status === "awaiting_ai" ? "El resto requiere interpretación mediante IA." :
+        result.status === "attention" ? "Una escritura necesita una revisión de seguridad." :
+        "Odyssey continúa con el siguiente lote.");
+    enrichButton.hidden = !["in_progress", "attention"].includes(result.status);
+  }
+
+  async function runEnrichment(seq = generation) {
+    if (!target || target.scan_kind !== "backfill_property" ||
+        panel.hidden || enrichmentRunning || seq !== generation) return;
+    enrichmentRunning = true;
+    pauseRequested = false;
+    pauseButton.hidden = false;
+    enrichButton.disabled = true;
+    let halted = false;
+    try {
+      // Status is read-only. Stage only after an authoritative read scan
+      // completed. The host checks an actor-owned schema publication for
+      // every request; no client value or model can authorize a write.
+      let progress = await client({endpoint, operation: "schema_backfill",
+        payload: {target_type_id: target.target_type_id,
+          property_id: target.property_id, expected_revision: target.expected_revision,
+          action: "status"}});
+      if (seq !== generation || panel.hidden) return;
+      if (progress.status === "not_started") {
+        progress = await client({endpoint, operation: "schema_backfill",
+          payload: {target_type_id: target.target_type_id,
+            property_id: target.property_id, expected_revision: target.expected_revision,
+            action: "stage"}});
+      }
+      if (seq !== generation || panel.hidden) return;
+      enrichmentReady = true;
+      renderEnrichment(progress);
+      for (let i = 0; i < MAX_UPDATES_PER_RUN && !pauseRequested &&
+           ["in_progress", "attention"].includes(progress.status); i += 1) {
+        progress = await client({endpoint, operation: "schema_backfill",
+          payload: {target_type_id: target.target_type_id,
+            property_id: target.property_id, expected_revision: target.expected_revision,
+            action: "advance"}});
+        if (seq !== generation || panel.hidden) return;
+        renderEnrichment(progress);
+      }
+      if (progress.status === "in_progress" && !pauseRequested) {
+        enrichStatus.textContent += " Pausa de rendimiento tras 50 notas: puedes reanudar.";
+      } else if (pauseRequested && progress.status === "in_progress") {
+        enrichStatus.textContent += " Pausado; el progreso queda guardado.";
+      }
+    } catch (error) {
+      halted = true;
+      if (seq === generation && !panel.hidden) {
+        enrichStatus.hidden = false;
+        enrichStatus.textContent = enrichmentReady
+          ? "No se ha podido reconciliar este cambio de forma segura. Odyssey conserva el estado y no repetirá la escritura hasta verificarlo."
+          : "El autocompletado todavía no está habilitado en esta instalación. La lectura no ha modificado notas.";
+      }
+    } finally {
+      if (seq === generation) {
+        enrichmentRunning = false;
+        pauseButton.hidden = true;
+        enrichButton.disabled = false;
+        if (halted) enrichButton.hidden = true;
+      }
+    }
   }
 
   advanceButton.addEventListener("click", () => void scanAll());
   statusButton.addEventListener("click", () => void request("status"));
   pauseButton.addEventListener("click", () => {pauseRequested = true;});
+  enrichButton.addEventListener("click", () => void runEnrichment());
 
   function show({scanKind, typeId, propertyId = null, revision, autoStart = false}) {
     generation += 1;
     running = false;
     pauseRequested = false;
     pauseButton.hidden = true;
+    enrichmentRunning = false;
+    enrichmentReady = false;
+    enrichStatus.hidden = true;
+    enrichButton.hidden = true;
     if (!["discover_type", "backfill_property"].includes(scanKind) ||
         !/^[a-z][a-z0-9_]{0,63}$/.test(typeId ?? "") ||
         (scanKind === "discover_type" ? propertyId !== null :
@@ -147,9 +237,13 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
     advanceButton.textContent = "Analizar notas existentes";
     status.textContent = "Puedes empezar o recuperar el avance anterior de este tipo.";
     const seq = generation;
-    void request("status").then(() => {
-      if (autoStart && seq === generation && !panel.hidden && !busy &&
-          !advanceButton.hidden) void scanAll();
+    void request("status").then((result) => {
+      if (!autoStart || seq !== generation || panel.hidden || busy || !result) return;
+      if (result.status === "complete" && target?.scan_kind === "backfill_property") {
+        void runEnrichment(seq);
+      } else if (result.status !== "complete" && !advanceButton.hidden) {
+        void scanAll();
+      }
     });
   }
 
@@ -158,6 +252,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
     running = false;
     pauseRequested = true;
     pauseButton.hidden = true;
+    enrichmentRunning = false;
     panel.hidden = true;
     target = null;
   }

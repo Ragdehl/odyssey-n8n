@@ -155,3 +155,23 @@ test("n8n permits only the bounded, actor-bound read-only schema scan envelope",
     action:"status"};
   assert.equal(run(discovery).operation,"schema_scan");
 });
+
+test("n8n forwards only actor-bound deterministic property backfill actions", () => {
+  const input={operation:"schema_backfill",target_type_id:"person",
+    property_id:"profesion",expected_revision:1,action:"stage"};
+  assert.deepEqual(run(input), {...input,
+    authenticated_actor:{stable_user_id:"00000000-0000-4000-8000-000000000001"}});
+  for (const bad of [
+    {...input, property_id:null},
+    {...input, expected_revision:0},
+    {...input, expected_revision:true},
+    {...input, action:"approve"},
+    {...input, action:"delete"},
+    {...input, reviewed_semantic:true},
+    {...input, notes:["private"]},
+    {...input, value:"arbitrary"},
+    {...input, actor_id:"other"},
+    {...input, authenticated_actor:{stable_user_id:"forged"}},
+    {...input, request_id:"some"},
+  ]) assert.equal(run(bad).invalid, true, JSON.stringify(bad));
+});

@@ -154,3 +154,90 @@ test("pausing during one in-flight request prevents the next automatic request",
   assert.match(panel.panel.children[2].textContent,/Análisis pausado/);
   assert.equal(panel.panel.children[3].hidden,false);
 });
+
+const backfill = (status, updates = 0, pending = 0, deferred = 0) => ({
+  kind:"schema_backfill",status,total:updates+pending+deferred,
+  pending,interpreting:0,writing:0,updated:updates,no_evidence:0,
+  ambiguous:0,stale:0,already_present:0,deferred,
+});
+
+test("one confirmed property starts scan and deterministic enrichment automatically", async () => {
+  const calls=[];
+  const client=async (r)=>{
+    calls.push(r);
+    if (r.operation==="schema_scan") return r.payload.action==="status"
+      ? {kind:"schema_scan",status:"not_started"} : complete;
+    const steps=calls.filter(x=>x.operation==="schema_backfill");
+    if (r.payload.action==="status") return {kind:"schema_backfill",status:"not_started"};
+    if (r.payload.action==="stage") return backfill("in_progress",0,3);
+    if (steps.filter(x=>x.payload.action==="advance").length===1) return backfill("in_progress",1,2);
+    if (steps.filter(x=>x.payload.action==="advance").length===2) return backfill("in_progress",2,1);
+    return backfill("awaiting_ai",2,0,1);
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",
+    propertyId:"profesion",revision:1,autoStart:true});
+  for(let i=0;i<60;i++) await Promise.resolve();
+  assert.deepEqual(calls.map(x=>[x.operation,x.payload.action]),[
+    ["schema_scan","status"],["schema_scan","advance"],["schema_backfill","status"],
+    ["schema_backfill","stage"],["schema_backfill","advance"],
+    ["schema_backfill","advance"],["schema_backfill","advance"],
+  ]);
+  for(const r of calls.filter(x=>x.operation==="schema_backfill")) {
+    assert.deepEqual(Object.keys(r.payload).sort(),
+      ["action","expected_revision","property_id","target_type_id"].sort());
+    assert.equal(r.payload.expected_revision,1);
+  }
+  assert.match(panel.panel.children[6].textContent,/2 propiedades completadas/);
+  assert.match(panel.panel.children[6].textContent,/1 pendientes de IA/);
+  assert.equal(panel.panel.children[7].hidden,true);
+  assert.equal(panel.panel.children[3].hidden,true);
+});
+
+test("reopening a completed scan resumes local write journal without rescanning", async () => {
+  const calls=[];
+  const client=async r=>{
+    calls.push(r);
+    if(r.operation==="schema_scan") return complete;
+    if(r.payload.action==="status") return backfill("in_progress",1,1);
+    return backfill("complete",2);
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",
+    propertyId:"profesion",revision:1,autoStart:true});
+  for(let i=0;i<40;i++) await Promise.resolve();
+  assert.deepEqual(calls.map(x=>[x.operation,x.payload.action]),[
+    ["schema_scan","status"],["schema_backfill","status"],["schema_backfill","advance"],
+  ]);
+  assert.match(panel.panel.children[6].textContent,/Autocompletado finalizado/);
+});
+
+test("disabled backfill never presents a source read as a physical write", async () => {
+  const calls=[];
+  const client=async r=>{
+    calls.push(r);
+    if(r.operation==="schema_scan") return complete;
+    throw Object.assign(Error("disabled"),{code:"invalid notes request"});
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",
+    propertyId:"profesion",revision:1,autoStart:true});
+  for(let i=0;i<30;i++) await Promise.resolve();
+  assert.equal(calls.filter(x=>x.operation==="schema_backfill").length,1);
+  assert.match(panel.panel.children[6].textContent,/todavía no está habilitado/i);
+  assert.doesNotMatch(panel.panel.children[6].textContent,/propiedades completadas/);
+});
+
+test("strict deterministic enrichment receipts reject forged IDs, counts and writes", () => {
+  const accepted=backfill("awaiting_ai",2,0,1);
+  assert.equal(validateSchemaOperationResponse("schema_backfill",accepted).deferred,1);
+  assert.deepEqual(validateSchemaOperationResponse("schema_backfill",{
+    kind:"schema_backfill",status:"not_started",
+  }),{kind:"schema_backfill",status:"not_started"});
+  for(const bad of [
+    {...accepted, actor_id:"other"}, {...accepted,undo:"git-sha"},
+    {...accepted, total:9999}, {...accepted, updated:-1},
+    {...accepted, deferred:0}, {...accepted,status:"all_done"},
+    {...accepted,status:"attention"}, {...accepted,status:"complete"},
+  ]) assert.throws(()=>validateSchemaOperationResponse("schema_backfill",bad),NotesRequestError);
+});

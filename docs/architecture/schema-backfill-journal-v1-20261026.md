@@ -1,6 +1,6 @@
 # Diario local de enriquecimiento y recuperación — V1 (26-10-2026)
 
-**Estado:** implementado y probado en código con vault Git sintético. Todavía no está conectado al despliegue DEV, a un worker móvil, ni autorizado para modificar datos reales o PROD.
+**Estado:** circuito de aplicación implementado en fuente y probado con vault Git sintético. No desplegado todavía en DEV, sin worker móvil continuo ni autorizado para datos reales o PROD.
 
 ## Por qué
 
@@ -25,9 +25,18 @@ Odyssey elimina trabajo al usuario: una vez aprobado el tipo/propiedad, puede de
 6. Aislamiento de perfiles y esquemas, symlinks inválidos, vault vacío, 28 fuentes en varias páginas y hash obsoleto.
 7. Reparación de CI: el guardia de versiones de VaultRepository ya no recorre .git, que es historial técnico, no notas canónicas. Una prueba altera repetidamente esos metadatos y comprueba que el inventario de Markdown no cambia. Las modificaciones reales de Markdown mantienen su protección.
 
+## Conexión Notes y autorización (corte posterior 26-10)
+
+- Nuevo contrato schema_backfill (acciones status, stage, advance), disponible en la composición de Notes y en el validador de n8n. El navegador **no puede suministrar** valores, IDs de notas, solicitudes de confirmación ni instrucciones a la IA.
+- UserSchemaRegistry.confirmed_backfill_property verifica contra el histórico de confirmaciones **publicado e inmutable** que el actor autenticado aprobó la propiedad exacta en el tipo exacto y que la revisión está activa. Conocer el ID o manipular una bandera HTML no aporta autoridad.
+- ODYSSEY_SCHEMA_BACKFILL_ENABLED=1 es una puerta **independiente y apagada por defecto**, que solo puede abrirse en DEV cuando están activas las puertas de registro, confirmación y escaneo. Configurarla sobre /data/odyssey (PROD) se rechaza **antes** de crear directorios o índices. No habilita llamadas a proveedores externos: el endpoint inyecta interpreter=None deliberadamente.
+- Tras aprobar una propiedad, el panel de Notas enlaza automáticamente lectura retrospectiva con un diario local. Inicia o recupera estado, hace hasta 50 avances por ejecución en primer plano, permite pausa/reanudación y muestra actualizadas, pendientes de IA, ambiguas, obsoletas y pendientes. Si la vía no está activada, informa que no hay autocompletado y **no inventa escrituras**. Crear un nuevo tipo sigue siendo **solo descubrimiento**, sin crear entidades arbitrarias.
+- Cada escritura aceptada programa el refresco incremental de índices usando el mecanismo existente DerivedIndexRefreshCoordinator. Si ese registro falla después de escribir, la fila queda en estado writing y el siguiente avance reconcilia contra Core y Git, programando de nuevo sin repetir el commit. No se construye otra base de conocimiento ni cola remota.
+- Pruebas de vertical real: confirmación publicada → Notes schema_backfill → Core/E3/Git Markdown sintético → recibos agregados; negativa de actor ajeno/revisión errónea/autoridad enviada por navegador; contrato n8n y panel web simulado. Chromium escritorio/móvil confirma compatibilidad visual con transporte simulado. No equivale aún a la ruta **desplegada** desde Chromium por n8n real.
+
 ## No implementado / siguiente puerta
 
-- No hay vínculo del diario de escritura con la pantalla de Notas ni scheduler/background móvil. Esta clase interna no publica un endpoint ni se ejecuta automáticamente en DEV/PROD.
+- El contrato y la pantalla están integrados **en fuente** bajo una puerta DEV separada, pero no desplegados; sigue faltando un scheduler/background real para Android/iOS. No se ejecuta automáticamente en DEV/PROD actuales.
 - No hay campaña nueva de modelo real: los 18 casos ES/FR/EN del intérprete están congelados pero no evaluados en proveedor. No habilitar escritura semántica antes de comprobar falsos positivos, abstenciones y coste autorizado.
 - El mecanismo actual guarda un commit por nota; para corpus enormes necesita optimización sin perder la recuperación. El plan de un máximo de 10.000 candidatas no sustituye los ensayos de rendimiento en hardware móvil.
 - Pendientes identidad/deduplicación de entidades nuevas, UX de excepciones y deshacer, prueba real navegador→n8n/Core→Markdown en DEV sintético y auditoría Codex de los cuatro roles sobre commit aprobado.

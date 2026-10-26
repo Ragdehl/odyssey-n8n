@@ -15,7 +15,7 @@ import re
 import stat
 import subprocess
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -54,6 +54,7 @@ class LocalBackfillJob:
         repository: VaultRepository,
         writer: AutomaticPropertyBackfill,
         actor_id: str,
+        on_updated: Callable[[str], object] | None = None,
     ) -> None:
         if (
             not isinstance(state_root, Path)
@@ -75,6 +76,9 @@ class LocalBackfillJob:
             raise LocalBackfillJobError("Unsafe job directory")
         self.root.mkdir(mode=0o700, exist_ok=True)
         self.root.chmod(0o700)
+        if on_updated is not None and not callable(on_updated):
+            raise LocalBackfillJobError("Invalid incremental index refresher")
+        self.on_updated = on_updated
         self.repository = repository
         self.writer = writer
         self.scope = hashlib.sha256(
@@ -247,6 +251,10 @@ class LocalBackfillJob:
                     raise LocalBackfillJobError("Unexpected write receipt")
                 if receipt.status == "updated" and not receipt.undo_commit:
                     raise LocalBackfillJobError("Write lacks recovery evidence")
+                if receipt.status == "updated" and self.on_updated is not None:
+                    # Register index invalidation while the durable row is
+                    # writing. Recovery repeats scheduling if interrupted.
+                    self.on_updated(source.note_id)
                 row["status"] = receipt.status
                 row["undo"] = receipt.undo_commit
                 if receipt.status != "updated":
@@ -312,6 +320,8 @@ class LocalBackfillJob:
             and self._digest(note.metadata[property_id]) == row["digest"]
             and self._git_content(commit, row["path"]) == raw
         ):
+            if self.on_updated is not None:
+                self.on_updated(row["id"])
             row.update(status="updated", undo=commit)
             self._write(path, record)
             return self._summary(record)

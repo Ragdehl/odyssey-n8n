@@ -331,3 +331,56 @@ def test_multi_page_plan_collects_all_candidates_before_writing(tmp_path):
     assert all(
         "profesion" not in parse_note(repo.read_text(f"{i}.md")).metadata for i in range(1, 28)
     )
+
+
+def test_incremental_index_refresh_is_scheduled_once_on_known_commit(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"])
+    changes: list[str] = []
+    worker = LocalBackfillJob(
+        state_root=state,
+        repository=repo,
+        writer=writer,
+        actor_id="profile-a",
+        on_updated=lambda note_id: changes.append(note_id),
+    )
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    assert advance(worker)["updated"] == 1
+    assert changes == ["persona-0"]
+    assert advance(worker)["updated"] == 1
+    assert changes == ["persona-0"]
+
+
+def test_index_refresh_failure_after_commit_is_recovered_without_second_commit(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"])
+    calls = []
+
+    def broken(note_id):
+        calls.append(("failed", note_id))
+        raise RuntimeError("index queue unavailable")
+
+    worker = LocalBackfillJob(
+        state_root=state,
+        repository=repo,
+        writer=writer,
+        actor_id="profile-a",
+        on_updated=broken,
+    )
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    with pytest.raises(RuntimeError, match="index queue"):
+        advance(worker)
+    assert worker.status("historial")["status"] == "attention"
+    recovered = LocalBackfillJob(
+        state_root=state,
+        repository=repo,
+        writer=writer,
+        actor_id="profile-a",
+        on_updated=lambda note_id: calls.append(("ok", note_id)),
+    )
+    assert advance(recovered)["updated"] == 1
+    assert calls == [("failed", "persona-0"), ("ok", "persona-0")]
+    assert (
+        subprocess.check_output(
+            ["git", "rev-list", "--count", "HEAD"], cwd=repo.root, text=True
+        ).strip()
+        == "2"
+    )

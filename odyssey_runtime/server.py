@@ -30,6 +30,7 @@ from odyssey_core.schema_retrospection_jobs import LocalSchemaScanError
 
 from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
+from .schema_backfill_jobs import LocalBackfillJobError
 from .serialization import operational_to_response
 from .user_schema_registry import UserSchemaError, UserSchemaRegistry
 
@@ -319,6 +320,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         "schema_confirm",
                         "schema_status",
                         "schema_scan",
+                        "schema_backfill",
                         "query",
                         "intelligent",
                         "detail",
@@ -361,6 +363,10 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                             trigger.set()
                 except LocalSchemaScanError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "SCHEMA_SCAN_STALE_OR_INVALID"})
+                except LocalBackfillJobError:
+                    self._write_json(
+                        HTTPStatus.CONFLICT, {"error": "SCHEMA_BACKFILL_ATTENTION_REQUIRED"}
+                    )
                 except StaleCursorError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
                 except (

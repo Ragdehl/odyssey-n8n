@@ -516,6 +516,9 @@ class RuntimeComposition:
     # Optional local, read-only retrospective scan. Trusted host selects one
     # profile/vault root and passes authenticated/local-profile identity.
     schema_scan_factory: Callable[[str], object] | None = None
+    # Private DEV-only deterministic property enrichment, after the SAME
+    # actor approved the specific property. No provider/LLM authorization.
+    schema_backfill_factory: Callable[[str], object] | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1807,6 +1810,72 @@ class RuntimeComposition:
                 "skipped_existing_values": progress.skipped_existing_values,
                 "legacy_sources": progress.legacy_sources,
             }
+        if operation == "schema_backfill":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.user_schema_registry is None
+                or self.user_schema_revision is None
+                or self.schema_backfill_factory is None
+            ):
+                raise ValueError("Local schema backfill is unavailable")
+            if set(payload) != {"target_type_id", "property_id", "expected_revision", "action"} or (
+                payload["action"] not in {"stage", "status", "advance"}
+                or not isinstance(payload["target_type_id"], str)
+                or not isinstance(payload["property_id"], str)
+                or type(payload["expected_revision"]) is not int
+                or payload["expected_revision"] != self.user_schema_revision
+            ):
+                raise ValueError("Invalid schema backfill arguments")
+            from .schema_backfill_jobs import LocalBackfillJob
+            from .user_schema_registry import UserSchemaRegistry
+
+            registry = self.user_schema_registry
+            if not isinstance(
+                registry, UserSchemaRegistry
+            ) or not registry.confirmed_backfill_property(
+                resolved_actor,
+                expected_revision=payload["expected_revision"],
+                type_id=payload["target_type_id"],
+                property_id=payload["property_id"],
+            ):
+                raise ValueError("Schema property enrichment was not approved by actor")
+            worker = self.schema_backfill_factory(resolved_actor)
+            if not isinstance(worker, LocalBackfillJob):
+                raise ValueError("Local backfill worker is unavailable")
+            job_id = hashlib.sha256(
+                json.dumps(
+                    {
+                        "revision": payload["expected_revision"],
+                        "type": payload["target_type_id"],
+                        "property": payload["property_id"],
+                        "operation": "local_property_backfill",
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()[:48]
+            if payload["action"] == "stage":
+                result = worker.stage(
+                    job_id=job_id,
+                    type_id=payload["target_type_id"],
+                    property_id=payload["property_id"],
+                )
+            elif payload["action"] == "status":
+                result = worker.status(job_id)
+                if result is None:
+                    return {"kind": "schema_backfill", "status": "not_started"}
+            else:
+                # Source-only rollout: explicit deterministic facts can write.
+                # NO provider is injected here before live-model acceptance.
+                result = worker.advance(
+                    job_id=job_id,
+                    type_id=payload["target_type_id"],
+                    property_id=payload["property_id"],
+                    actor={"human": resolved_actor, "app": "odyssey-schema-backfill"},
+                    now=_current_time()["timestamp"],
+                    interpreter=None,
+                )
+            return {"kind": "schema_backfill", **result}
         if operation in {"schema_confirm", "schema_status"}:
             if (
                 authenticated_actor is None
@@ -3007,6 +3076,22 @@ def build_runtime_from_environment() -> RuntimeComposition:
         schema_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
     ):
         raise ValueError("Local schema scan requires isolated DEV user registry")
+    # Private writes are independent of scan previews; never enable through
+    # a read-only scan flag or a user-supplied browser field.
+    backfill_enabled = os.environ.get("ODYSSEY_SCHEMA_BACKFILL_ENABLED", "0")
+    if backfill_enabled not in {"0", "1"}:
+        raise ValueError("Local schema backfill flag is invalid")
+    if backfill_enabled == "1" and (
+        schema_enabled != "1"
+        or scan_enabled != "1"
+        or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_SCHEMA_CONFIRM_ENABLED") != "1"
+    ):
+        raise ValueError("Local schema backfill requires explicitly confirmed isolated DEV")
+    if backfill_enabled == "1" and _path_env(
+        "ODYSSEY_VAULT_ROOT", "/data/odyssey/vault"
+    ).resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
+        raise ValueError("Local schema backfill cannot target protected PROD storage")
     # Reject an accidental PROD assistant request *before* touching roots.
     suggestion_enabled = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
     if suggestion_enabled not in {"0", "1"}:
@@ -3086,6 +3171,19 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     schema_activation_enabled = False
     schema_suggestion_service = None
     schema_scan_factory = None
+    schema_backfill_factory = None
+    backfill_flag = os.environ.get("ODYSSEY_SCHEMA_BACKFILL_ENABLED", "0")
+    if backfill_flag not in {"0", "1"}:
+        raise ValueError("Local schema backfill flag is invalid")
+    if backfill_flag == "1" and (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED") != "1"
+        or os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED") != "1"
+        or os.environ.get("ODYSSEY_SCHEMA_CONFIRM_ENABLED") != "1"
+    ):
+        raise ValueError("Local schema backfill requires explicitly confirmed isolated DEV")
+    if backfill_flag == "1" and vault_root.resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
+        raise ValueError("Local schema backfill cannot target protected PROD storage")
     scan_flag = os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED", "0")
     if scan_flag not in {"0", "1"}:
         raise ValueError("Local schema scan flag is invalid")
@@ -3137,6 +3235,26 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         def schema_scan_factory(actor_id: str) -> LocalSchemaScanJobs:
             return LocalSchemaScanJobs(
                 state_root=state_root, repository=repository, actor_id=actor_id
+            )
+
+    if backfill_flag == "1":
+        if vault_root.resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
+            raise ValueError("Local schema backfill cannot touch PROD storage")
+        from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill
+
+        from .schema_backfill_jobs import LocalBackfillJob
+
+        deterministic_writer = AutomaticPropertyBackfill(
+            repository=repository, schema=schema, history=GitHistoryRecorder(vault_root)
+        )
+
+        def schema_backfill_factory(actor_id: str) -> LocalBackfillJob:
+            return LocalBackfillJob(
+                state_root=state_root,
+                repository=repository,
+                writer=deterministic_writer,
+                actor_id=actor_id,
+                on_updated=lambda note_id: index_refresh_coordinator.schedule((note_id,)),
             )
 
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
@@ -5596,6 +5714,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         schema_activation_enabled=schema_activation_enabled,
         schema_suggestion_service=schema_suggestion_service,
         schema_scan_factory=schema_scan_factory,
+        schema_backfill_factory=schema_backfill_factory,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

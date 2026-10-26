@@ -413,6 +413,44 @@ class UserSchemaRegistry:
                 "next_revision": state["revision"] + 1,
             }
 
+    def confirmed_backfill_property(
+        self,
+        actor_id: str,
+        *,
+        expected_revision: int,
+        type_id: str,
+        property_id: str,
+    ) -> bool:
+        """Bind an autonomous property job to an ACTUAL actor-approved addition.
+
+        Read only the validated immutable publication pointer. The approval
+        must be for the exact property on the exact type, not a nearby textual
+        edit, a proposal, or a different person's confirmation. The published
+        schema revision must equal the currently booted runtime generation.
+        """
+        if (
+            not isinstance(actor_id, str)
+            or not actor_id
+            or type(expected_revision) is not int
+            or not isinstance(type_id, str)
+            or not isinstance(property_id, str)
+        ):
+            return False
+        with self._locked():
+            state = self._read()
+            if state["revision"] != expected_revision:
+                return False
+            return any(
+                confirmation["actor_id"] == actor_id
+                and change.get("operation") == "add_property"
+                and change.get("type_id") == type_id
+                and isinstance(change.get("property"), dict)
+                and change["property"].get("id") == property_id
+                for change, confirmation in zip(
+                    state["changes"], state["confirmations"], strict=True
+                )
+            )
+
     def activation_status(self, actor_id: str, request_id: str) -> dict[str, object]:
         """Read only one's own queued/completed request without exposing proposal data."""
         if (

@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest", "schema_review", "schema_scan"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest", "schema_review", "schema_scan", "schema_backfill"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -58,6 +58,28 @@ export function validateSchemaOperationResponse(operation, value) {
   const expected = (names) => keys.length === names.length && keys.every((key) => names.includes(key));
   const validRevision = (revision) => Number.isSafeInteger(revision) && revision >= 0 && revision <= 100;
   const validId = (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id);
+  if (operation === "schema_backfill") {
+    if (value.kind === "schema_backfill" && value.status === "not_started" &&
+        expected(["kind", "status"])) {
+      return {kind: "schema_backfill", status: "not_started"};
+    }
+    const fields = ["pending", "interpreting", "writing", "updated",
+      "no_evidence", "ambiguous", "stale", "already_present", "deferred"];
+    if (value.kind === "schema_backfill" &&
+        ["in_progress", "complete", "awaiting_ai", "attention"].includes(value.status) &&
+        expected(["kind", "status", "total", ...fields]) &&
+        Number.isSafeInteger(value.total) && value.total >= 0 && value.total <= 10000 &&
+        fields.every((name) => Number.isSafeInteger(value[name]) && value[name] >= 0 &&
+          value[name] <= value.total) &&
+        fields.reduce((count, name) => count + value[name], 0) === value.total &&
+        (value.status !== "attention" || value.writing === 1) &&
+        (value.status !== "complete" || value.pending + value.interpreting +
+          value.writing + value.deferred === 0) &&
+        (value.status !== "awaiting_ai" || value.deferred > 0)) {
+      return {kind: "schema_backfill", status: value.status, total: value.total,
+        ...Object.fromEntries(fields.map((field) => [field, value[field]]))};
+    }
+  }
   if (operation === "schema_scan") {
     if (value.kind === "schema_scan" && value.status === "not_started" &&
         expected(["kind", "status"])) {
