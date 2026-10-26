@@ -504,3 +504,53 @@ def test_first_integrity_key_creation_survives_crash_before_publication(tmp_path
     )
     assert advance(resumed)["updated"] == 1
     assert job(state, repo, writer).status("historial")["updated"] == 1
+
+
+def test_staged_inventory_uses_two_full_scans_not_two_scans_per_page(tmp_path, monkeypatch):
+    """A large journal plan uses one initial and one final inventory proof."""
+    state, repo, writer = setup(tmp_path, [f"profesion: oficio-{i}" for i in range(54)])
+    original = repo.note_version_snapshot
+    visits = []
+
+    def counted_snapshot():
+        visits.append(True)
+        return original()
+
+    monkeypatch.setattr(repo, "note_version_snapshot", counted_snapshot)
+    staged = job(state, repo, writer).stage(
+        job_id="historial", type_id="person", property_id="profesion"
+    )
+    assert staged["pending"] == 54
+    assert len(visits) == 2
+
+
+@pytest.mark.parametrize("change", ["first_page", "new_file"])
+def test_staged_scan_does_not_publish_after_any_concurrent_vault_change(
+    tmp_path, monkeypatch, change
+):
+    """The final inventory guard catches edits behind the page cursor."""
+    from odyssey_runtime import schema_backfill_jobs
+
+    state, repo, writer = setup(tmp_path, [f"profesion: oficio-{i}" for i in range(28)])
+    original = schema_backfill_jobs.scan_schema_sources
+    counter = 0
+
+    def mutate_between_pages(**kwargs):
+        nonlocal counter
+        page = original(**kwargs)
+        counter += 1
+        if counter == 1:
+            if change == "first_page":
+                target = repo.root / "0.md"
+                target.write_text(target.read_text() + "External edit\n")
+            else:
+                target = repo.root / "new.md"
+                target.write_text((repo.root / "0.md").read_text())
+        return page
+
+    monkeypatch.setattr(schema_backfill_jobs, "scan_schema_sources", mutate_between_pages)
+    with pytest.raises(LocalBackfillJobError, match="Vault changed"):
+        job(state, repo, writer).stage(
+            job_id="historial", type_id="person", property_id="profesion"
+        )
+    assert not list((state / "schema-backfill-jobs").glob("*.json"))

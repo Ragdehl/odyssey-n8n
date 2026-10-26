@@ -241,3 +241,38 @@ test("strict deterministic enrichment receipts reject forged IDs, counts and wri
     {...accepted,status:"attention"}, {...accepted,status:"complete"},
   ]) assert.throws(()=>validateSchemaOperationResponse("schema_backfill",bad),NotesRequestError);
 });
+
+test("unknown postwrite outcome offers journal verification instead of manual per-note approval", async()=>{
+  const calls=[];
+  let fail=true;
+  const client=async r=>{
+    calls.push(r);
+    if(r.operation==="schema_scan")return complete;
+    if(r.payload.action==="status")return fail
+      ? backfill("in_progress",0,1)
+      : {...backfill("in_progress",0,0),total:1,writing:1,updated:0};
+    if(fail){
+      fail=false;
+      throw Object.assign(Error("postwrite scheduling fault"),
+        {code:"SCHEMA_BACKFILL_OUTCOME_UNVERIFIED"});
+    }
+    return backfill("complete",1);
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",
+    propertyId:"profesion",revision:1,autoStart:true});
+  for(let i=0;i<55;i++)await Promise.resolve();
+  const message=panel.panel.children[6];
+  const resume=panel.panel.children[7];
+  assert.match(message.textContent,/verificar el resultado|confirmar el resultado/i);
+  assert.equal(resume.hidden,false);
+  assert.match(resume.textContent,/Verificar y continuar/);
+  assert.equal(calls.filter(c=>c.operation==="schema_backfill"&&
+    c.payload.action==="advance").length,1);
+  resume.click();
+  for(let i=0;i<55;i++)await Promise.resolve();
+  assert.match(message.textContent,/Autocompletado finalizado/);
+  assert.equal(resume.hidden,true);
+  assert.equal(calls.filter(c=>c.operation==="schema_backfill"&&
+    c.payload.action==="advance").length,2);
+});

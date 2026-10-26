@@ -129,6 +129,25 @@ Una primera planificación completa desde 07dd13b hasta 1273ea7 se bloqueó por 
 
 Estos cambios posteriores son **solo código fuente y regresiones sintéticas**; DEV sigue desplegado en 4e721a0, con escritura automática e IA pagada desactivadas y PROD fuera de alcance. Tras el gate completo y CI habrá que revisar el nuevo SHA con los especialistas restantes y comprobar las correcciones con independencia; no reutilizar el PASS del SHA antiguo como aprobación de la reparación. El alcance anterior del asistente semántico sigue requiriendo un examen independiente separado.
 
+## Seguimiento de P2 + ensayo de escala en Raspberry (código posterior, 26-10)
+
+- **Resultado de escritura desconocido:** el servidor HTTP Notes devuelve 409 con código fijo SCHEMA_BACKFILL_OUTCOME_UNVERIFIED cuando el escritor o el refresco de índices fallan sin poder probar todavía si Git confirmó. Notes muestra «Verificar y continuar» y exige reconsultar el mismo diario; jamás repite la confirmación humana ni suministra texto/ID de nota. Regresión con servidor HTTP real: error de cola después de commit físico, recibo 409 sin mensajes privados, reanudación validada por Git y ningún commit duplicado.
+- **Índices:** regresión en vault temporal, Core/E3/Git real, DerivedIndexRefreshCoordinator y ContextIndex SQLite real: el campo nuevo entra en el filtro de Notes tras wait_until_clean, y NoteDetail refleja el mismo valor. No se creó ningún índice de autoridad alternativo.
+- **Escaneo optimizado de staging:** en lugar de volver a ejecutar dos inventarios físicos completos por CADA página de 25, el diario usa un inventario inicial compartido, verifica las notas seleccionadas antes/después de leerlas y exige una segunda comprobación de inventario completo **antes** de persistir el plan. El escáner interactivo autónomo conserva sus garantías originales por página. Se prueba que son exactamente dos inventarios para 54 notas y que una edición en página ya visitada o una nota nueva durante el escaneo impiden publicar el checkpoint. Las mutaciones siguen requiriendo CAS al aplicar cada nota.
+
+**Mediciones locales, solo sintéticas, Raspberry Pi ARM64 4 GiB (sin GPT, sin DEV/PROD):**
+
+| Candidatas | Staging antes | Staging después |
+|---|---:|---:|
+| 50 | 0,02 s | No se volvió a medir |
+| 250 | 0,18 s | No se volvió a medir |
+| 1.000 | 1,95 s | No se volvió a medir |
+| 2.500 | 11,42 s | 1,25 s |
+| 5.000 | 44,61 s | 3,62 s |
+| 10.000 | No se midió | 11,40 s |
+
+Memoria RSS máxima reportada a 10.000: 60,6 MB; 2.500/5.000 optimizado 46,5/51,4 MB. SwapFree estable durante estas ejecuciones. El ensayo anterior de 50 commits individuales de Git: 1,97 s total, p50 39,4 ms y p95 40,1 ms, **sin refresco asíncrono de índices**. Benchmarks independientes con vault temporal y Git sintético; no son garantía de p95 con notas grandes, consumo térmico, contexto de usuario real, batería móvil, servicio embebido ni todo el backfill de 10.000 escrituras. La optimización y las pruebas están solo en la rama de fuente mientras DEV conserva el SHA desplegado 4e721a0. Los dictámenes Codex para el SHA anterior son evidencia histórica: se requiere revisión de esta modificación antes de aprobación final.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.

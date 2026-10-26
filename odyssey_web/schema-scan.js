@@ -139,6 +139,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   }
 
   function renderEnrichment(result) {
+    enrichButton.textContent = "Continuar autocompletado";
     enrichStatus.hidden = false;
     enrichStatus.textContent = result.updated + " propiedades completadas; " +
       result.deferred + " pendientes de IA; " + result.ambiguous +
@@ -195,16 +196,24 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
       halted = true;
       if (seq === generation && !panel.hidden) {
         enrichStatus.hidden = false;
-        enrichStatus.textContent = enrichmentReady
-          ? "No se ha podido reconciliar este cambio de forma segura. Odyssey conserva el estado y no repetirá la escritura hasta verificarlo."
-          : "El autocompletado todavía no está habilitado en esta instalación. La lectura no ha modificado notas.";
+        const recoverable = enrichmentReady &&
+          error?.code === "SCHEMA_BACKFILL_OUTCOME_UNVERIFIED";
+        enrichStatus.textContent = recoverable
+          ? "No se ha podido confirmar el resultado de una escritura. El estado y Git siguen guardados; usa «Verificar y continuar» para reconciliar sin duplicar cambios."
+          : enrichmentReady
+            ? "No se ha podido reconciliar este cambio de forma segura. Odyssey conserva el estado y no repetirá la escritura hasta verificarlo."
+            : "El autocompletado todavía no está habilitado en esta instalación. La lectura no ha modificado notas.";
+        if (recoverable) {
+          enrichButton.hidden = false;
+          enrichButton.textContent = "Verificar y continuar";
+        }
       }
     } finally {
       if (seq === generation) {
         enrichmentRunning = false;
         pauseButton.hidden = true;
         enrichButton.disabled = false;
-        if (halted) enrichButton.hidden = true;
+        if (halted && enrichButton.textContent !== "Verificar y continuar") enrichButton.hidden = true;
       }
     }
   }

@@ -113,6 +113,11 @@ class LocalBackfillJob:
             if existing is not None:
                 self._target(existing, type_id, property_id)
                 return self._summary(existing)
+            # A paged public scan rechecks all N files twice PER page.
+            # During this write-free staging transaction, capture N once,
+            # verify each selected note, and revalidate the whole set once
+            # before publishing. Later E3 writes still require source CAS.
+            stable_inventory = self.repository.note_version_snapshot()
             cursor = None
             progress = None
             rows: list[dict[str, Any]] = []
@@ -125,6 +130,7 @@ class LocalBackfillJob:
                     property_id=property_id,
                     cursor=cursor,
                     limit=25,
+                    _staged_inventory=stable_inventory,
                 )
                 progress = accumulate_schema_scan(page, progress)
                 rows.extend(
@@ -145,6 +151,8 @@ class LocalBackfillJob:
                 cursor = page.next_cursor
                 if cursor is None:
                     break
+            if self.repository.note_version_snapshot() != stable_inventory:
+                raise LocalBackfillJobError("Vault changed during staged source scan")
             record = {
                 "version": 1,
                 "scope": self.scope,

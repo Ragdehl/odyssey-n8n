@@ -341,3 +341,140 @@ def test_user_created_type_property_enriches_without_person_specific_routing(tmp
         app.notes("schema_backfill", payload, BOB)
     with pytest.raises(ValueError, match="not approved"):
         app.notes("schema_backfill", {**payload, "target_type_id": "task"}, ALICE)
+
+
+def test_http_backfill_postwrite_index_failure_is_recoverable_conflict(tmp_path):
+    """Genuine local HTTP: persisted Core/Git write must not look like invalid input."""
+    from http.client import HTTPConnection
+    from http.server import ThreadingHTTPServer
+    from threading import Thread
+
+    from odyssey_runtime.server import _handler_for
+
+    app, repo, state = fixture(tmp_path)
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    writer = AutomaticPropertyBackfill(
+        repository=repo,
+        schema=app.canonical_schema,
+        history=GitHistoryRecorder(repo.root),
+    )
+
+    def broken_refresh(_note_id):
+        raise RuntimeError("private synthetic index failure")
+
+    app.schema_backfill_factory = lambda actor: LocalBackfillJob(
+        state_root=state,
+        repository=repo,
+        writer=writer,
+        actor_id=actor,
+        on_updated=broken_refresh,
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(app))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def post(action: str):
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        body = {
+            "operation": "schema_backfill",
+            **request(action),
+            "authenticated_actor": {"stable_user_id": ALICE.stable_user_id},
+        }
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(body),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        status, content = response.status, json.loads(response.read())
+        connection.close()
+        return status, content
+
+    try:
+        assert post("stage")[0] == 200
+        code, response = post("advance")
+        assert code == 409
+        assert response == {"error": "SCHEMA_BACKFILL_OUTCOME_UNVERIFIED"}
+        assert "private" not in json.dumps(response)
+        assert app.notes("schema_backfill", request("status"), ALICE)["status"] == "attention"
+        assert parse_note(repo.read_text("0.md")).metadata["profesion"] == "médica"
+        assert repo.read_text("1.md") == before["1.md"]
+        commits_before = subprocess.check_output(
+            ["git", "rev-list", "--count", "HEAD"], cwd=repo.root, text=True
+        ).strip()
+        assert commits_before == "2"
+        app.schema_backfill_factory = lambda actor: LocalBackfillJob(
+            state_root=state,
+            repository=repo,
+            writer=writer,
+            actor_id=actor,
+            on_updated=lambda _note_id: None,
+        )
+        code, reconciled = post("advance")
+        assert code == 200 and reconciled["updated"] == 1
+        assert reconciled["pending"] == 1
+        assert (
+            subprocess.check_output(
+                ["git", "rev-list", "--count", "HEAD"], cwd=repo.root, text=True
+            ).strip()
+            == commits_before
+        )
+        assert all(repo.read_text(path) == before[path] for path in ("1.md",))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_backfill_refreshes_real_local_index_before_filtered_notes_readback(tmp_path):
+    """Canonical Markdown and a rebuilt local index agree after automatic writes."""
+    from odyssey_core.context import ContextFilter, ContextIndex
+    from odyssey_core.note_queries import NotesQueryService
+    from odyssey_runtime.composition import DerivedIndexRefreshCoordinator
+
+    app, repo, state = fixture(tmp_path)
+    schema = app.canonical_schema
+
+    class LocalEmbedder:
+        model_name = "tests/backfill-local"
+        model_version = "1"
+
+        def embed_documents(self, texts):
+            return [[1.0, 0.0] for _ in texts]
+
+        def embed_queries(self, texts):
+            return self.embed_documents(texts)
+
+    embedder = LocalEmbedder()
+    index = ContextIndex(tmp_path / "derived" / "context.sqlite3")
+    assert index.rebuild(repo, schema, embedder) == 2
+    notes = NotesQueryService(repo, schema, index)
+    condition = [ContextFilter("profesion", "eq", "médica")]
+    assert notes.query(filters=condition).total == 0
+    refreshes = []
+
+    def refresh(note_ids):
+        refreshes.append(tuple(note_ids))
+        index.refresh_notes(repo, schema, embedder, note_ids=note_ids)
+
+    coordinator = DerivedIndexRefreshCoordinator(refresh)
+    writer = AutomaticPropertyBackfill(
+        repository=repo, schema=schema, history=GitHistoryRecorder(repo.root)
+    )
+    app.schema_backfill_factory = lambda actor: LocalBackfillJob(
+        state_root=state,
+        repository=repo,
+        writer=writer,
+        actor_id=actor,
+        on_updated=lambda note_id: coordinator.schedule((note_id,)),
+    )
+    assert app.notes("schema_backfill", request("stage"), ALICE)["pending"] == 2
+    assert app.notes("schema_backfill", request("advance"), ALICE)["updated"] == 1
+    coordinator.wait_until_clean()
+    page = notes.query(filters=condition)
+    assert page.total == 1
+    assert [item.id for item in page.items] == ["persona-0"]
+    assert page.items[0].properties["profesion"] == "médica"
+    assert notes.detail("persona-0").note.properties["profesion"] == "médica"
+    assert refreshes == [("persona-0",)]

@@ -277,6 +277,7 @@ def scan_schema_sources(
     property_id: str | None = None,
     limit: int = 20,
     cursor: RetrospectionCursor | None = None,
+    _staged_inventory: dict[str, tuple[object, ...]] | None = None,
 ) -> RetrospectionPage:
     """Read ≤25 physical notes, preserving source hash and atomic fact locators.
 
@@ -284,6 +285,11 @@ def scan_schema_sources(
     changes without changing its name, subsequent pages reject as stale. Each
     selected file is checked before/after parsing, so a mixed-time batch is
     never silently considered complete. No network, model or write occurs.
+
+    The private _staged_inventory optimization is ONLY for a trusted caller
+    that verifies a fresh full-vault snapshot matches it after processing all
+    pages and BEFORE publishing a durable plan. Every selected physical file
+    remains checked before/after parsing; later canonical writes recheck CAS.
     """
     if (
         not isinstance(repository, VaultRepository)
@@ -307,7 +313,13 @@ def scan_schema_sources(
     }:
         raise SchemaRetrospectionError("Backfill property does not exist on target type")
 
-    versions = repository.note_version_snapshot()
+    # The journal stages all pages without writing, so it can reuse one
+    # private snapshot and perform ONE final full-vault equality check before
+    # publishing its plan. Standalone/interactive scans still verify the
+    # entire vault at the start and end of EVERY page as before.
+    versions = (
+        repository.note_version_snapshot() if _staged_inventory is None else _staged_inventory
+    )
     paths = sorted(versions)
     inventory_hash = hashlib.sha256(
         json.dumps([(path, versions[path]) for path in paths], sort_keys=True).encode()
@@ -372,7 +384,7 @@ def scan_schema_sources(
         candidates.append(_validated_source_note(path=path, raw=raw, note=note))
     # One page may overlap other writers; never publish mixed-time evidence
     # even if the selected notes themselves didn't change.
-    if repository.note_version_snapshot() != versions:
+    if _staged_inventory is None and repository.note_version_snapshot() != versions:
         raise SchemaRetrospectionError("Vault changed during scan")
     next_offset = offset + len(selected)
     return RetrospectionPage(

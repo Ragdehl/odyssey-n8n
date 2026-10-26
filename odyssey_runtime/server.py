@@ -26,6 +26,7 @@ from odyssey_core.identity_boundary import (
     IdentityBoundaryError,
 )
 from odyssey_core.note_queries import NotesQueryError, StaleCursorError
+from odyssey_core.schema_auto_backfill import AutoBackfillError
 from odyssey_core.schema_retrospection_jobs import LocalSchemaScanError
 
 from .composition import NotesTelemetryError, RuntimeComposition
@@ -366,6 +367,25 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                 except LocalBackfillJobError:
                     self._write_json(
                         HTTPStatus.CONFLICT, {"error": "SCHEMA_BACKFILL_ATTENTION_REQUIRED"}
+                    )
+                except AutoBackfillError:
+                    if operation != "schema_backfill":
+                        raise
+                    # The canonical writer may have committed before raising.
+                    # Only a later journal reconciliation can decide whether
+                    # retry is safe; never expose internal note/error details.
+                    self._write_json(
+                        HTTPStatus.CONFLICT,
+                        {"error": "SCHEMA_BACKFILL_OUTCOME_UNVERIFIED"},
+                    )
+                except (OSError, RuntimeError):
+                    if operation != "schema_backfill":
+                        raise
+                    # In particular, a post-write index scheduling failure
+                    # leaves the durable journal in its protected writing state.
+                    self._write_json(
+                        HTTPStatus.CONFLICT,
+                        {"error": "SCHEMA_BACKFILL_OUTCOME_UNVERIFIED"},
                     )
                 except StaleCursorError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "STALE_CURSOR"})
