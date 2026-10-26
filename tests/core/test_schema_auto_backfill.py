@@ -289,3 +289,47 @@ def test_stale_source_fact_and_duplicate_batch_identity_fail_closed(tmp_path):
             request_prefix="duplicate",
         )
     assert repo.read_text("0.md") == before
+
+
+def test_explicit_fast_path_never_overrides_a_later_free_prose_correction(tmp_path):
+    repo, schema, sources = _vault(tmp_path, ["Profesión: médica"])
+    from dataclasses import replace
+
+    from odyssey_core.schema_retrospection import SourceFact
+
+    # Full marked note context may indicate a later change, even when that
+    # other fact is not in key: value form. A one-label regex must abstain.
+    source = replace(
+        sources[0],
+        facts=(
+            sources[0].facts[0],
+            SourceFact("later:0", "Ya no ejerce la medicina, cambió de trabajo."),
+        ),
+    )
+    definition = next(
+        p
+        for kind in schema["types"]
+        if kind["id"] == "person"
+        for p in kind["properties"]
+        if p["id"] == "profesion"
+    )
+    assert (
+        choose_explicit_backfill(source, type_id="person", definition=definition).status
+        == "ambiguous"
+    )
+    service = AutomaticPropertyBackfill(
+        repository=repo, schema=schema, history=GitHistoryRecorder(repo.root)
+    )
+    before = repo.read_text("0.md")
+    assert (
+        service.apply(
+            source=source,
+            type_id="person",
+            property_id="profesion",
+            actor=ACTOR,
+            now=NOW,
+            request_id="must-not-overwrite",
+        ).status
+        == "ambiguous"
+    )
+    assert repo.read_text("0.md") == before

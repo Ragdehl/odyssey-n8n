@@ -53,6 +53,23 @@ class BackfillChoice:
 
 
 @dataclass(frozen=True, slots=True)
+class ReviewedSemanticBackfill:
+    """Source-bound proposal from the trusted, independently reviewed interpreter.
+
+    Internal-only value object; API callers cannot submit or bypass the
+    interpreter using a serialized reviewed flag. Core STILL rechecks its
+    source, field, source hash, and compares any explicit contradictory fact.
+    """
+
+    note_id: str
+    property_id: str
+    source_hash: str
+    source_locator: str
+    evidence_quote: str
+    value: str | int
+
+
+@dataclass(frozen=True, slots=True)
 class AutoBackfillReceipt:
     """One verified automated action. No user note text is copied into receipts."""
 
@@ -152,6 +169,10 @@ def choose_explicit_backfill(
             recognized.append((fact.locator, parsed))
     if not candidates:
         return BackfillChoice("no_evidence", property_id)
+    # Any legacy content can describe a later correction or negation. It has
+    # no atomic provenance, so the narrow autonomous fast path must abstain.
+    if source.legacy_coverage_unverified:
+        return BackfillChoice("ambiguous", property_id)
     # Legacy lines are not linkable evidence but may contradict a marked
     # value. Never ignore a competing field declaration just because it
     # predates Odyssey's atomic-fact markers.
@@ -160,6 +181,12 @@ def choose_explicit_backfill(
         legacy = re.match(r"([^:\n]{1,100}):[ \t]*", bare)
         if legacy is not None and _simple_label(legacy.group(1)) == _simple_label(property_id):
             return BackfillChoice("ambiguous", property_id)
+    # Other marked facts may correct a once-true property in free prose.
+    # A literal colon line cannot be considered current without reading
+    # those other facts semantically. The independently reviewed model path
+    # can analyze the entire bounded note later; the fast path abstains.
+    if len(source.facts) != 1:
+        return BackfillChoice("ambiguous", property_id)
     # A matching declaration with unparseable value is still conflicting
     # evidence, not permission to ignore it and pick a different line.
     if len(candidates) != len(recognized) or len({str(v) for _, v in recognized}) != 1:
@@ -201,6 +228,7 @@ class AutomaticPropertyBackfill:
         actor: dict[str, str | None],
         now: str,
         request_id: str,
+        reviewed_semantic: ReviewedSemanticBackfill | None = None,
     ) -> AutoBackfillReceipt:
         definitions = [kind for kind in self.schema["types"] if kind["id"] == type_id]
         if len(definitions) != 1:
@@ -209,6 +237,34 @@ class AutomaticPropertyBackfill:
         if len(properties) != 1 or properties[0].get("required", False):
             raise AutoBackfillError("Only registered optional properties may be enriched")
         decision = choose_explicit_backfill(source, type_id=type_id, definition=properties[0])
+        if reviewed_semantic is not None:
+            if type(reviewed_semantic) is not ReviewedSemanticBackfill or (
+                reviewed_semantic.note_id,
+                reviewed_semantic.property_id,
+                reviewed_semantic.source_hash,
+            ) != (source.note_id, property_id, source.source_hash):
+                raise AutoBackfillError("Semantic approval is not bound to this source")
+            if source.legacy_coverage_unverified:
+                return AutoBackfillReceipt("ambiguous", source.note_id, property_id)
+            if decision.status == "auto" and decision.value != reviewed_semantic.value:
+                return AutoBackfillReceipt("ambiguous", source.note_id, property_id)
+            candidates = [
+                fact for fact in source.facts if fact.locator == reviewed_semantic.source_locator
+            ]
+            if (
+                len(candidates) != 1
+                or not isinstance(reviewed_semantic.evidence_quote, str)
+                or len(reviewed_semantic.evidence_quote) < 5
+                or candidates[0].text.count(reviewed_semantic.evidence_quote) != 1
+            ):
+                raise AutoBackfillError("Semantic quote is not uniquely anchored")
+            try:
+                validate_field_value(property_id, reviewed_semantic.value, properties[0])
+            except NoteValidationError as error:
+                raise AutoBackfillError("Semantic value violates canonical field") from error
+            decision = BackfillChoice(
+                "auto", property_id, reviewed_semantic.value, reviewed_semantic.source_locator
+            )
         if decision.status != "auto":
             return AutoBackfillReceipt(
                 "ambiguous" if decision.status == "ambiguous" else "no_evidence",
