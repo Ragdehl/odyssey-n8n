@@ -2,6 +2,12 @@
 
 **Estado:** ideas de producto expresamente solicitadas por el usuario, recogidas para las **siguientes fases próximas**, no funcionalidades ya desarrolladas ni permiso para modificar datos reales. Preservar los acuerdos aunque se cambie de chat. Propietario de prioridad: este documento, enlazado desde `functional-roadmap.md`. Las implementaciones deben completar primero su contrato y pruebas de extremo a extremo desde la app, no solo un prompt en pruebas.
 
+## Principio de entrega: móvil local primero (26-10-2026)
+
+El objetivo del producto es una **app instalable que ejecuta Odyssey en el móvil del usuario**, con notas Markdown canónicas y estado del perfil guardados en el almacenamiento privado del dispositivo. Lectura, creación y edición locales básicas deben poder funcionar sin conexión y sin cuenta remota. La aplicación actual de navegador+n8n+Raspberry **no** cumple todavía ese objetivo: es el puente de desarrollo. Adaptación/paquetización Android/iOS, ciclos de vida de procesos, almacenamiento local protegido, backup/exportación y ensayos reales offline son hitos de producto antes de llamarla app móvil lista. Una funcionalidad de IA que necesite proveedor externo se indicará como tal; no afirmar inferencia offline sin modelo embebido validado.
+
+La **sincronización online será una opción posterior, no un prerrequisito**. Un perfil local selecciona `vault/state/runtime` aislados y mantiene Markdown como autoridad; una cuenta autenticada opcional podrá mapear a ese perfil para sincronizar con conflictos explícitos, sin convertir el servidor en base de conocimiento obligatoria. No sincronizar progreso de scans, locks, índices o fingerprints inode/stat locales. Este requisito condiciona las siguientes funcionalidades (incluidos recordatorios), pero no cambia por sí solo el orden funcional acordado. Contrato: [arquitectura local-first](overview.md#mobile-local-first-product-target-approved-26-october-2026).
+
 ## Orden acordado
 
 **1. Recordatorios (primera nueva funcionalidad) → 2. Ubicación como tipo de propiedad transversal → 3. Proyectos con vista Gantt.** La UX es una línea transversal inmediata para todas esas fases. Concluir el editor/revisión final de esquemas ya en marcha sin convertir perfecciones menores del prompt en un bloqueo indefinido.

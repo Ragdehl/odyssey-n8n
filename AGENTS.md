@@ -4,6 +4,8 @@
 
 ## Product, authority and architecture
 
+**Target: installable, local-first mobile app.** Each device/profile keeps its own canonical Markdown vault and local durable state; basic notes and local operations must not depend on n8n, Cloudflare, a remote account or optional future sync. Today's Raspberry/browser service is an interim implementation, NOT proof that the mobile app is packaged or offline-ready. Sync is explicitly opt-in and must not replace device-local ownership.
+
 Odyssey turns unstructured personal information into reusable, local-first Markdown knowledge. The user's canonical knowledge is Markdown, not n8n responses, browser state, model output, vector indexes or SQLite caches. `odyssey_core/` owns generic domain, identity, planning, validation and canonical persistence. `odyssey_apps/` owns only app-specific interpretation/lifecycle. `odyssey_runtime/` composes trusted boundaries. `workflows/` orchestrates n8n. `odyssey_web/` presents and sends user interactions. Do not import Apps into Core or create a competing writer/authority.
 
 **Core/E3 is the only canonical mutation authority.** Router routes exact-original-source groups; Temporal supplies bounded date evidence; Apps supply their own specific semantics; **none** independently authorizes identities, links, plans or writes. Keep exact source/provenance, authenticated actor/context isolation, checked readback, concurrency, idempotence and negative/ambiguous refusal. Avoid LangGraph, extra databases/services, blanket rewrites and new infra without a concrete approved requirement. Incremental Clean Architecture: reuse the existing shared contracts and extract ports only when real coupling warrants it.

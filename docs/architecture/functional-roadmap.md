@@ -4,6 +4,8 @@
 
 ## Current — 26 October 2026: schema editor DEV proof; retrospective jobs pending
 
+**Product invariant (26-10):** la aplicación final debe instalarse y funcionar en el móvil, con notas Markdown y estado duradero en almacenamiento privado **local por perfil**, sin exigir Raspberry/n8n/nube. Sincronización online futura y opcional; no confundir el puente DEV en Raspberry con una app Android/iOS lista. Ver [arquitectura objetivo](overview.md#mobile-local-first-product-target-approved-26-october-2026).
+
 **User-approved next direction: conversational evolution of note types and
 properties**. Full agreement, reuse inventory, implementation order and
 acceptance contract: [Post-UI2 conversational schema evolution, section C](post-ui2-note-creation-and-schema-evolution.md#contrato-de-implementación-acordado-para-la-siguiente-fase-24-10-2026).
@@ -33,7 +35,7 @@ notes below are NOT current blockers or an instruction to restart old work.
   rollback and backward compatibility first. Use bounded parallel *analysis*,
   durable resumable job progress and Core/E3 guarded *writes*; fix global index
   wait behavior before promising nonblocking unrelated queries.
-- **Current next:** partir del lector retrospectivo de solo lectura (`3994569` y acumulador posterior de páginas/IDs) para agregar jobs duraderos y reanudables por actor, interpretación con evidencia, deduplicación, confirmación de nuevas entidades en lote y backfill únicamente mediante Core/E3 CAS con readback; no inventar valores o fechas. Luego probar revisión final de IA con modelo real, cerrar recorrido completo Chromium→n8n→Core/Writer→Notas con datos sintéticos y ejecutar los **cuatro auditores Codex** sobre un mismo SHA candidato con CI válido antes de declarar la PR lista. Véanse `odyssey-verify-change` y `odyssey-results`. PROD/vault personal fuera de alcance.
+- **Current next:** partir del lector/acumulador retrospectivo y su checkpoint local reanudable (fuente posterior a `b1b7cd5`) para exponer su progreso en la UI por perfil, interpretación con evidencia, deduplicación, confirmación de nuevas entidades en lote y backfill únicamente mediante Core/E3 CAS con readback; no inventar valores o fechas. Luego probar revisión final de IA con modelo real, cerrar recorrido completo Chromium→n8n→Core/Writer→Notas con datos sintéticos y ejecutar los **cuatro auditores Codex** sobre un mismo SHA candidato con CI válido antes de declarar la PR lista. Véanse `odyssey-verify-change` y `odyssey-results`. PROD/vault personal fuera de alcance.
 
 **Base integrada en `dev`: PR #155 (`07dd13b`, 24-10-2026).**
 Registro versionado aditivo, propuesta autenticada de solo lectura, composición
@@ -69,7 +71,7 @@ identidad y JSON cerrado. La IA nunca aprueba ni escribe. Flag
 V1: **17/24**; [informe](schema-conversation-live-eval-20261025.md).
 V2 **20/24**; [informe](schema-conversation-v2-eval-20261025.md); V3 **33/40**; [informe](schema-conversation-v3-live-eval-20261025.md).
 V4 **39/40**, [idiomas erróneos](schema-conversation-v4-live-eval-20261025.md).
-V5 [no aprobada](schema-conversation-v5-live-eval-20261025.md); V6 [fuente](schema-conversation-v6-contract-20261025.md): 2 llamadas smoke; [editor y revisión final](post-ui2-note-creation-and-schema-evolution.md). [Lector y acumulador retrospectivo](schema-retrospection-reader-20261025.md) en fuente, sin job persistente ni escritura. Flags OFF; faltan IA E2E y backfill/discovery.
+V5 [no aprobada](schema-conversation-v5-live-eval-20261025.md); V6 [fuente](schema-conversation-v6-contract-20261025.md): 2 llamadas smoke; [editor y revisión final](post-ui2-note-creation-and-schema-evolution.md). [Lector y acumulador retrospectivo](schema-retrospection-reader-20261025.md) con checkpoint local en el siguiente corte, aún sin ejecución desde la UI ni escritura. Flags OFF; faltan IA E2E y backfill/discovery.
 
 **Continuidad verificada 26-10-2026:** PR #156 Draft, rama `feat/schema-confirm-activation` en `3994569` antes de la mejora de informes; último gate de código retrospectivo registrado **2.176 Python + 233 JS PASS** y GitHub CI PASS. DEV checkout/marker `5e340da`, servicios HTTP 200. Chromium real con transporte n8n/Core DEV probó creación y aprobación **manual** con vault sintético, restart y lectura; 1.275 notas originales sin cambio. Asistente/revisor con IA reales aún no E2E; 2 pruebas de humo V6 exitosas, sin evaluación integral. Lector retrospectivo no desplegado ni conectado a jobs; ningún cuatro-roles Codex final aprobado para #156. Historias completas y límites en [PR #156](https://github.com/Ragdehl/odyssey-n8n/pull/156) y [retrospectiva](schema-retrospection-reader-20261025.md). No recalcular ni asumir estado de otros worktrees históricos sin causa.
 
