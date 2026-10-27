@@ -44,7 +44,24 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="odyssey-campaign-large-", dir="/tmp") as root:
         started = time.perf_counter()
-        state, repo, writer = setup(Path(root), ["Profesión: médica"] * args.notes)
+        try:
+            state, repo, writer = setup(Path(root), ["Profesión: médica"] * args.notes)
+        except subprocess.CalledProcessError as error:
+            # The shared tiny pytest fixture captures Git stderr. Preserve
+            # its diagnostic when used as a >10k-file standalone benchmark.
+            print(
+                "SYNTHETIC_GIT_FIXTURE_ERROR",
+                json.dumps(
+                    {
+                        "notes": args.notes,
+                        "command": error.cmd,
+                        "code": error.returncode,
+                        "stderr": str(error.stderr)[-1800:],
+                    }
+                ),
+                flush=True,
+            )
+            raise
         prepared = time.perf_counter() - started
 
         worker = LocalBackfillJob(
