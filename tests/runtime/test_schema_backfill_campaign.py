@@ -512,3 +512,116 @@ def test_fifo_at_campaign_checkpoint_is_rejected_without_blocking(tmp_path):
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, previous)
+
+
+def test_campaign_fingerprint_binds_each_path_to_id_and_deleted_state(tmp_path):
+    """Swap live/deleted docs without changing public live IDs or eligibility."""
+    from odyssey_core.schema_retrospection import scan_schema_sources
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    sample = parse_note(repo.read_text("3.md"))
+    repo.create_text(
+        "a-document.md",
+        serialize_note(
+            Note(
+                {
+                    **sample.metadata,
+                    "id": "live-doc",
+                    "name": "Live document",
+                    "type": "document",
+                    "deleted": False,
+                },
+                sample.content,
+            )
+        ),
+    )
+    repo.create_text(
+        "b-document.md",
+        serialize_note(
+            Note(
+                {
+                    **sample.metadata,
+                    "id": "inactive-doc",
+                    "name": "Deleted document",
+                    "type": "document",
+                    "deleted": True,
+                },
+                sample.content,
+            )
+        ),
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "baseline-live-deleted-documents",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+
+    def scan():
+        return scan_schema_sources(
+            repository=repo,
+            schema=writer.schema,
+            kind="backfill_property",
+            target_type_id="person",
+            property_id="profesion",
+            limit=25,
+        )
+
+    initial_page = scan()
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(item)["updated"] == 1
+    assert step(item)["updated"] == 2
+    first = parse_note(repo.read_text("a-document.md"))
+    second = parse_note(repo.read_text("b-document.md"))
+    repo.replace_text(
+        "a-document.md",
+        serialize_note(
+            Note({**first.metadata, "id": "inactive-doc", "deleted": True}, first.content)
+        ),
+    )
+    repo.replace_text(
+        "b-document.md",
+        serialize_note(
+            Note({**second.metadata, "id": "live-doc", "deleted": False}, second.content)
+        ),
+    )
+    after_page = scan()
+    assert initial_page.source_note_ids == after_page.source_note_ids
+    assert initial_page.scanned_paths == after_page.scanned_paths
+    # Two person notes were correctly enriched by the first child; the
+    # non-target document swap itself adds no eligible property candidates.
+    assert tuple(x.note_id for x in after_page.eligible_notes) == tuple(
+        x.note_id for x in initial_page.eligible_notes[2:]
+    )
+    # The conventional active-ID list remains identical even though the
+    # path-to-ID/deleted relation changed, which the new fingerprint must reject.
+    with pytest.raises(LocalBackfillJobError, match="physical source identities changed"):
+        step(item)
+    assert item.status("all-people")["updated"] == 2
+
+
+@pytest.mark.parametrize("missing", ["completed_child", "terminal_empty_child"])
+def test_finished_campaign_requires_all_hmac_children_for_status(tmp_path, missing):
+    """A sealed parent must never certify completion after child evidence loss."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert run_to_end(item)[-1]["status"] == "complete"
+    parent = item._read("all-people")
+    index = 0 if missing == "completed_child" else parent["segment_index"]
+    child_id = item._child_id(item.worker.scope, "all-people", index)
+    item.worker._path(child_id).unlink()
+    with pytest.raises(LocalBackfillJobError, match="journal missing"):
+        item.status("all-people")
+    with pytest.raises(LocalBackfillJobError, match="journal missing"):
+        step(item)

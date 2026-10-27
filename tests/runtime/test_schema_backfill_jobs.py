@@ -549,7 +549,9 @@ def test_staged_scan_does_not_publish_after_any_concurrent_vault_change(
         return page
 
     monkeypatch.setattr(schema_backfill_jobs, "_scan_schema_sources_page", mutate_between_pages)
-    with pytest.raises(LocalBackfillJobError, match="Vault changed"):
+    with pytest.raises(
+        LocalBackfillJobError, match="Vault changed|canonical source changed mid-scan"
+    ):
         job(state, repo, writer).stage(
             job_id="historial", type_id="person", property_id="profesion"
         )

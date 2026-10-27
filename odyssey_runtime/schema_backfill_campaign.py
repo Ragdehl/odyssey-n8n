@@ -207,6 +207,28 @@ class LocalBackfillCampaign:
         return frozenset(written)
 
     def _summary(self, record: dict[str, Any]) -> dict[str, Any]:
+        if record["finished"]:
+            # Signed aggregate counts alone cannot certify completion if
+            # an earlier child receipt has disappeared since the last call.
+            self._completed_write_paths(
+                campaign_id=record["campaign_id"],
+                completed_segment_count=record["segment_index"],
+                type_id=record["type_id"],
+                property_id=record["property_id"],
+            )
+            # The final empty child proves that no further eligible sources
+            # remained at the end; it too must remain an HMAC-authenticated
+            # receipt rather than only a parent flag.
+            final_id = self._child_id(
+                self.worker.scope, record["campaign_id"], record["segment_index"]
+            )
+            with self.worker._lock():
+                final_child = self.worker._read(self.worker._path(final_id), final_id)
+                if final_child is None:
+                    raise LocalBackfillJobError("Campaign terminal proof journal missing")
+                self.worker._target(final_child, record["type_id"], record["property_id"])
+                if final_child["rows"]:
+                    raise LocalBackfillJobError("Campaign terminal proof contains pending sources")
         totals = dict(record["totals"])
         in_flight = {"pending": 0, "interpreting": 0, "writing": 0}
         active_id = record["active_segment"]

@@ -357,6 +357,7 @@ def _scan_schema_sources_page(
     limit: int = 20,
     cursor: RetrospectionCursor | None = None,
     _staged_inventory: _StagedScanInventory | _StagedScanPage | None = None,
+    _identity_witness: list[tuple[str, str, bool]] | None = None,
 ) -> RetrospectionPage:
     """Internal staged-page builder; results are PROVISIONAL with inventory.
 
@@ -464,6 +465,13 @@ def _scan_schema_sources_page(
             raise SchemaRetrospectionError("Canonical source invalid during scan") from error
         if repository.file_version(path) != versions[path]:
             raise SchemaRetrospectionError("Canonical source changed during scan")
+        # Private in-process witness for a write-free staging transaction.
+        # Unlike the public source_note_ids list, it includes deleted notes
+        # with positional path/ID/state and is NEVER returned to the browser.
+        if _identity_witness is not None:
+            _identity_witness.append(
+                (path, note.metadata["id"], note.metadata.get("deleted") is True)
+            )
         if note.metadata.get("deleted") is True:
             continue
         note_id = note.metadata["id"]

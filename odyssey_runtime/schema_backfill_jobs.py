@@ -220,6 +220,7 @@ class LocalBackfillJob:
             rows: list[dict[str, Any]] = []
             frontier = after_path
             while True:
+                page_id_witness: list[tuple[str, str, bool]] = []
                 page = _scan_schema_sources_page(
                     repository=self.repository,
                     schema=self.writer.schema,
@@ -229,6 +230,7 @@ class LocalBackfillJob:
                     cursor=cursor,
                     limit=25,
                     _staged_inventory=stable_inventory,
+                    _identity_witness=page_id_witness,
                 )
                 progress = _accumulate_schema_scan(page, progress, max_ids=_MAX_STAGED_SCAN_IDS)
                 scanned_id_bytes += sum(
@@ -241,13 +243,20 @@ class LocalBackfillJob:
                 # not this identity fingerprint.
                 offset = 0 if cursor is None else cursor.offset
                 physical_page = stable_inventory.paths[offset : offset + page.scanned_paths]
-                fingerprint.update(
-                    json.dumps(
-                        [physical_page, page.source_note_ids],
-                        ensure_ascii=False,
-                        separators=(",", ":"),
-                    ).encode("utf-8")
-                )
+                # The canonical scanner validated each Markdown and captured
+                # the path/ID/deleted state in scan order. Reuse those exact
+                # in-memory attestations: never hash separate path and active
+                # ID lists, and never reread all N files just for the hash.
+                if tuple(path for path, _, _ in page_id_witness) != tuple(physical_page):
+                    raise LocalBackfillJobError("Campaign positional identity proof invalid")
+                for physical_path, note_id, deleted in page_id_witness:
+                    fingerprint.update(
+                        json.dumps(
+                            (physical_path, note_id, deleted),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    )
                 eligible_paths = {note.path for note in page.eligible_notes}
                 for position, physical_path in enumerate(physical_page, start=offset):
                     bit = 1 << (position % 8)
