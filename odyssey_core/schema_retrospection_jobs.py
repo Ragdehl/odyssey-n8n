@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import stat
 import tempfile
 from collections.abc import Iterator
@@ -20,6 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from odyssey_core import schema_large_scan_jobs as large_scans
 from odyssey_core.schema_retrospection import (
     RetrospectionCursor,
     RetrospectionProgress,
@@ -100,8 +102,63 @@ class LocalSchemaScanJobs:
         if type(limit) is not int or not 1 <= limit <= 25:
             raise LocalSchemaScanError("Invalid scan page limit")
         path = self._path(job_id)
+        large_path = path.with_suffix(".sqlite3")
         with self._locked():
+            if large_path.is_symlink():
+                raise LocalSchemaScanError("Unsafe large scan checkpoint")
+            if large_path.exists():
+                if path.exists():
+                    raise LocalSchemaScanError("Conflicting scan receipt versions")
+                try:
+                    return large_scans.advance(
+                        large_path,
+                        repository=self._repository,
+                        scope=self._scope,
+                        job_id=job_id,
+                        schema=schema,
+                        kind=kind,
+                        target_type_id=target_type_id,
+                        property_id=property_id,
+                        limit=limit,
+                    )
+                except (
+                    SchemaRetrospectionError,
+                    OSError,
+                    ValueError,
+                    sqlite3.DatabaseError,
+                ) as error:
+                    raise LocalSchemaScanError("Large scan receipt invalid or stale") from error
             previous = self._read(path, job_id)
+            if previous is None:
+                try:
+                    if large_scans.create(
+                        large_path,
+                        repository=self._repository,
+                        scope=self._scope,
+                        job_id=job_id,
+                        schema=schema,
+                        kind=kind,
+                        target_type_id=target_type_id,
+                        property_id=property_id,
+                    ):
+                        return large_scans.advance(
+                            large_path,
+                            repository=self._repository,
+                            scope=self._scope,
+                            job_id=job_id,
+                            schema=schema,
+                            kind=kind,
+                            target_type_id=target_type_id,
+                            property_id=property_id,
+                            limit=limit,
+                        )
+                except (
+                    SchemaRetrospectionError,
+                    OSError,
+                    ValueError,
+                    sqlite3.DatabaseError,
+                ) as error:
+                    raise LocalSchemaScanError("Large scan staging unavailable") from error
             if previous is not None:
                 if (previous.kind, previous.target_type_id, previous.property_id) != (
                     kind,
@@ -150,6 +207,21 @@ class LocalSchemaScanJobs:
         """Return historical local checkpoint metadata; no vault revalidation."""
         path = self._path(job_id)
         with self._locked():
+            large_path = path.with_suffix(".sqlite3")
+            if large_path.is_symlink():
+                raise LocalSchemaScanError("Unsafe large scan checkpoint")
+            if large_path.exists():
+                if path.exists():
+                    raise LocalSchemaScanError("Conflicting scan receipt versions")
+                try:
+                    return large_scans.read(large_path, scope=self._scope, job_id=job_id)
+                except (
+                    SchemaRetrospectionError,
+                    OSError,
+                    ValueError,
+                    sqlite3.DatabaseError,
+                ) as error:
+                    raise LocalSchemaScanError("Large scan receipt unreadable") from error
             return self._read(path, job_id)
 
     def _path(self, job_id: str) -> Path:

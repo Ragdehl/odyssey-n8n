@@ -175,3 +175,34 @@ def test_scan_flag_refuses_prod_before_creating_any_pending_state(tmp_path, monk
     with pytest.raises(ValueError, match="isolated DEV"):
         build_runtime_from_environment()
     assert not any(tmp_path.iterdir())
+
+
+def test_api_scans_large_operational_vault_across_restarts_and_scopes(tmp_path, monkeypatch):
+    """Actual Notes API returns bounded progress while compact scanner holds 28 IDs."""
+    from odyssey_core import schema_large_scan_jobs
+    from odyssey_core.notes import parse_note
+
+    monkeypatch.setattr(schema_large_scan_jobs, "_LARGE_THRESHOLD", 3)
+    app, repo, state = runtime(tmp_path)
+    sample = parse_note(repo.read_text("0.md"))
+    for i in range(5, 28):
+        extra = Note(
+            {**sample.metadata, "id": f"person-{i}", "name": f"Person {i}"},
+            sample.content,
+        )
+        (repo.root / f"{i}.md").write_text(serialize_note(extra), encoding="utf-8")
+    first = app.notes("schema_scan", req(), ALICE)
+    assert first["status"] == "scanning"
+    assert first["scanned_paths"] == first["eligible_notes"] == 20
+    assert app.notes("schema_scan", req(action="status"), ALICE) == first
+    assert app.notes("schema_scan", req(action="status"), BOB)["status"] == "not_started"
+    second = app.notes("schema_scan", req(), ALICE)
+    assert second["status"] == "complete"
+    assert second["scanned_paths"] == second["eligible_notes"] == 28
+    assert app.notes("schema_scan", req(action="status"), ALICE) == second
+    assert app.notes("schema_scan", req(), ALICE) == second
+    assert len(list((state / "schema-retrospection-jobs").glob("*.sqlite3"))) == 1
+    assert not list((state / "schema-retrospection-jobs").glob("*.json"))
+    (repo.root / "25.md").write_text((repo.root / "25.md").read_text() + "edited")
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        app.notes("schema_scan", req(), ALICE)

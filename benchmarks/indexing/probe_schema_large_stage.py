@@ -26,6 +26,7 @@ from test_schema_backfill_jobs import ACTOR, NOW, setup  # noqa: E402
 
 from benchmarks.indexing.probe_schema_backfill_scale import host_memory_mib  # noqa: E402
 from odyssey_core.notes import Note, parse_note, serialize_note  # noqa: E402
+from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs  # noqa: E402
 from odyssey_runtime.schema_backfill_jobs import LocalBackfillJob  # noqa: E402
 
 
@@ -72,6 +73,33 @@ def main() -> None:
             check=True,
             timeout=180,
         )
+        read_only = LocalSchemaScanJobs(
+            state_root=state, repository=repo, actor_id="large-synthetic"
+        )
+        scan_started = time.perf_counter()
+        pages = 0
+        while True:
+            scan_result = read_only.advance(
+                job_id="ui-large",
+                schema=writer.schema,
+                kind="backfill_property",
+                target_type_id="person",
+                property_id="profesion",
+                limit=25,
+            )
+            pages += 1
+            if scan_result.complete:
+                break
+            if pages % 61 == 0:
+                # A fresh store object tests durable mid-scan resume.
+                read_only = LocalSchemaScanJobs(
+                    state_root=state, repository=repo, actor_id="large-synthetic"
+                )
+        scan_seconds = time.perf_counter() - scan_started
+        assert scan_result.scanned_paths == args.notes
+        assert scan_result.eligible_notes == args.eligible
+        assert scan_result.skipped_existing_values == args.notes - args.eligible
+        assert read_only.read("ui-large") == scan_result
         job = LocalBackfillJob(
             state_root=state, repository=repo, writer=writer, actor_id="large-synthetic"
         )
@@ -115,6 +143,9 @@ def main() -> None:
                 {
                     "physical_notes": args.notes,
                     "eligible_candidates": args.eligible,
+                    "ui_read_only_scan_s": round(scan_seconds, 2),
+                    "ui_progress_pages": pages,
+                    "ui_resume_verified": True,
                     "scanned_and_staged_s": round(stage_seconds, 2),
                     "one_protected_write_s": round(write_seconds, 2),
                     "reopened_journal": True,

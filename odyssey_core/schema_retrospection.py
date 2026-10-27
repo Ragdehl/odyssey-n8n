@@ -87,6 +87,10 @@ class RetrospectionProgress:
     legacy_sources: int
     seen_note_ids: frozenset[str]
     next_cursor: RetrospectionCursor | None
+    # An operational SQLite receipt deliberately does not materialize its
+    # entire 50k identity set. It MUST NOT be reused as a public accumulator
+    # proof; only the owner can validate that external manifest.
+    identity_proof: Literal["materialized", "external"] = "materialized"
 
     @property
     def complete(self) -> bool:
@@ -133,6 +137,7 @@ def _accumulate_schema_scan(
     else:
         if (
             not isinstance(previous, RetrospectionProgress)
+            or previous.identity_proof != "materialized"
             or previous.complete
             or page.input_cursor != previous.next_cursor
             or page.kind != previous.kind
@@ -332,6 +337,16 @@ def _staged_scan_inventory(repository: VaultRepository) -> _StagedScanInventory:
     return _StagedScanInventory(versions, paths, fingerprint)
 
 
+@dataclass(frozen=True, slots=True)
+class _StagedScanPage:
+    """Private indexed portion of a physically attested scan manifest."""
+
+    offset: int
+    total_paths: int
+    files: tuple[tuple[str, tuple[object, ...]], ...]
+    inventory_hash: str
+
+
 def _scan_schema_sources_page(
     *,
     repository: VaultRepository,
@@ -341,7 +356,7 @@ def _scan_schema_sources_page(
     property_id: str | None = None,
     limit: int = 20,
     cursor: RetrospectionCursor | None = None,
-    _staged_inventory: _StagedScanInventory | None = None,
+    _staged_inventory: _StagedScanInventory | _StagedScanPage | None = None,
 ) -> RetrospectionPage:
     """Internal staged-page builder; results are PROVISIONAL with inventory.
 
@@ -380,12 +395,25 @@ def _scan_schema_sources_page(
     if _staged_inventory is None:
         # The public API always obtains a fresh physical inventory per page.
         current = _staged_scan_inventory(repository)
-    else:
-        if not isinstance(_staged_inventory, _StagedScanInventory):
-            raise SchemaRetrospectionError("Invalid private staging inventory")
+    elif isinstance(_staged_inventory, (_StagedScanInventory, _StagedScanPage)):
         current = _staged_inventory
-    versions = current.versions
-    paths = current.paths
+    else:
+        raise SchemaRetrospectionError("Invalid private staging inventory")
+    page_manifest = current if isinstance(current, _StagedScanPage) else None
+    if page_manifest is not None:
+        versions = dict(page_manifest.files)
+        path_count = page_manifest.total_paths
+        if (
+            not 0 <= page_manifest.offset < path_count <= _MAX_STAGED_SCAN_IDS
+            or not 1 <= len(page_manifest.files) <= limit
+            or page_manifest.offset + len(page_manifest.files) > path_count
+            or len(versions) != len(page_manifest.files)
+        ):
+            raise SchemaRetrospectionError("Invalid staged page manifest")
+    else:
+        versions = current.versions
+        paths = current.paths
+        path_count = len(paths)
     inventory_hash = current.inventory_hash
     # A single vault can be queried for multiple schema operations. A cursor
     # from one query must never silently skip files in another query.
@@ -404,14 +432,19 @@ def _scan_schema_sources_page(
             or cursor.inventory_hash != inventory_hash
             or cursor.context_hash != context_hash
             or type(cursor.offset) is not int
-            or not 0 <= cursor.offset < len(paths)
+            or not 0 <= cursor.offset < path_count
         ):
             raise SchemaRetrospectionError("Stale or invalid scan cursor")
         offset = cursor.offset
 
     candidates: list[SourceNote] = []
     existing_count = 0
-    selected = paths[offset : offset + limit]
+    if page_manifest is not None:
+        if offset != page_manifest.offset:
+            raise SchemaRetrospectionError("Staged scan cursor/manifest mismatch")
+        selected = [path for path, _ in page_manifest.files]
+    else:
+        selected = paths[offset : offset + limit]
     seen_ids: set[str] = set()
     source_ids: list[str] = []
     for path in selected:
@@ -459,7 +492,7 @@ def _scan_schema_sources_page(
         skipped_existing_values=existing_count,
         next_cursor=(
             RetrospectionCursor(inventory_hash, next_offset, context_hash)
-            if next_offset < len(paths)
+            if next_offset < path_count
             else None
         ),
         inventory_hash=inventory_hash,

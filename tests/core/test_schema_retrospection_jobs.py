@@ -204,3 +204,160 @@ def test_completed_retry_validates_input_limit_and_long_valid_note_id(tmp_path: 
     assert _advance(store, schema, limit=25) == progress
     with pytest.raises(LocalSchemaScanError, match="page limit"):
         _advance(store, schema, limit=26)
+
+
+def test_large_operational_scan_resumes_without_repeating_whole_inventory(
+    tmp_path: Path, monkeypatch
+):
+    """SQLite stores operational uniqueness, not a second note/source authority."""
+    from odyssey_core import schema_large_scan_jobs
+
+    monkeypatch.setattr(schema_large_scan_jobs, "_LARGE_THRESHOLD", 3)
+    state, repo, schema = _scenario(tmp_path)
+    snapshots = []
+    original = repo.note_version_snapshot
+
+    def counted():
+        snapshots.append(True)
+        return original()
+
+    monkeypatch.setattr(repo, "note_version_snapshot", counted)
+    left = LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-a")
+    first = _advance(left, schema, limit=2)
+    assert first.scanned_paths == 2 and first.eligible_notes == 2
+    assert not first.complete
+    receipt = list((state / "schema-retrospection-jobs").glob("*.sqlite3"))
+    assert len(receipt) == 1
+    assert not list((state / "schema-retrospection-jobs").glob("*.json"))
+    # First advance freezes physical inventory and validates source arguments.
+    first_snapshots = len(snapshots)
+    second = LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-a").advance(
+        job_id="new-books",
+        schema=schema,
+        kind="discover_type",
+        target_type_id="book",
+        limit=2,
+    )
+    assert second.scanned_paths == 4
+    assert len(snapshots) == first_snapshots, "Intermediate pages must not restat entire vault"
+    third = _advance(left, schema)
+    assert third.complete and third.scanned_paths == third.eligible_notes == 5
+    assert _advance(left, schema) == third
+    assert left.read("new-books") == third
+    schema_changed = json.loads(json.dumps(schema))
+    schema_changed["types"][-1]["description"] = "Changed after completion"
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        left.advance(
+            job_id="new-books",
+            schema=schema_changed,
+            kind="discover_type",
+            target_type_id="book",
+            limit=2,
+        )
+    # The v2 progress receipt never serializes the entire set into one JSON.
+    assert third.seen_note_ids == frozenset()
+    assert third.identity_proof == "external"
+    from odyssey_core.schema_retrospection import (
+        SchemaRetrospectionError,
+        accumulate_schema_scan,
+        scan_schema_sources,
+    )
+
+    # Public APIs must never mistake the compact v2 progress for a complete
+    # in-memory ID uniqueness witness.
+    first_page = scan_schema_sources(
+        repository=repo,
+        schema=schema,
+        kind="discover_type",
+        target_type_id="book",
+        cursor=None,
+        limit=2,
+    )
+    with pytest.raises(SchemaRetrospectionError, match="Stale or out-of-order"):
+        accumulate_schema_scan(first_page, third)
+
+
+def test_large_scan_detects_duplicates_across_pages_and_refuses_completion(
+    tmp_path: Path, monkeypatch
+):
+    from odyssey_core import schema_large_scan_jobs
+
+    monkeypatch.setattr(schema_large_scan_jobs, "_LARGE_THRESHOLD", 3)
+    state, repo, schema = _scenario(tmp_path)
+    source = (repo.root / "4.md").read_text(encoding="utf-8")
+    (repo.root / "4.md").write_text(source.replace("note-4", "note-0"))
+    worker = LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-a")
+    assert _advance(worker, schema, limit=2).scanned_paths == 2
+    assert _advance(worker, schema, limit=2).scanned_paths == 4
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        _advance(worker, schema, limit=2)
+    assert worker.read("new-books").scanned_paths == 4
+    assert not worker.read("new-books").complete
+
+
+def test_large_scan_external_edit_before_last_page_fails_closed(tmp_path: Path, monkeypatch):
+    from odyssey_core import schema_large_scan_jobs
+
+    monkeypatch.setattr(schema_large_scan_jobs, "_LARGE_THRESHOLD", 3)
+    state, repo, schema = _scenario(tmp_path)
+    worker = LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-a")
+    _advance(worker, schema, limit=2)
+    _advance(worker, schema, limit=2)
+    (repo.root / "0.md").write_text((repo.root / "0.md").read_text() + "external edit")
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        _advance(worker, schema, limit=2)
+    assert worker.read("new-books").scanned_paths == 4
+
+
+def test_large_scan_actor_schema_and_database_tamper_are_rejected(tmp_path: Path, monkeypatch):
+    import sqlite3
+
+    from odyssey_core import schema_large_scan_jobs
+
+    monkeypatch.setattr(schema_large_scan_jobs, "_LARGE_THRESHOLD", 3)
+    state, repo, schema = _scenario(tmp_path)
+    worker = LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-a")
+    _advance(worker, schema, limit=2)
+    assert (
+        LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-b").read("new-books")
+        is None
+    )
+    changed = json.loads(json.dumps(schema))
+    changed["types"][-1]["description"] = "Different schema"
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        worker.advance(
+            job_id="new-books",
+            schema=changed,
+            kind="discover_type",
+            target_type_id="book",
+            limit=2,
+        )
+    receipt = next((state / "schema-retrospection-jobs").glob("*.sqlite3"))
+    with sqlite3.connect(receipt) as conn:
+        conn.execute("DELETE FROM seen WHERE note_id='note-0'")
+    _advance(worker, schema, limit=2)
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        _advance(worker, schema, limit=2)
+    assert worker.read("new-books").scanned_paths == 4
+    receipt.unlink()
+    receipt.symlink_to(repo.root / "0.md")
+    with pytest.raises(LocalSchemaScanError, match="Unsafe"):
+        worker.read("new-books")
+
+
+def test_large_scan_missing_metadata_never_resets_checkpoint(tmp_path, monkeypatch):
+    import sqlite3
+
+    from odyssey_core import schema_large_scan_jobs
+
+    monkeypatch.setattr(schema_large_scan_jobs, "_LARGE_THRESHOLD", 3)
+    state, repo, schema = _scenario(tmp_path)
+    worker = LocalSchemaScanJobs(state_root=state, repository=repo, actor_id="local-a")
+    assert _advance(worker, schema, limit=2).scanned_paths == 2
+    receipt = next((state / "schema-retrospection-jobs").glob("*.sqlite3"))
+    with sqlite3.connect(receipt) as conn:
+        conn.execute("DELETE FROM scan_meta")
+    with pytest.raises(LocalSchemaScanError, match="Large scan"):
+        _advance(worker, schema, limit=2)
+    with pytest.raises(LocalSchemaScanError, match="unreadable"):
+        worker.read("new-books")
