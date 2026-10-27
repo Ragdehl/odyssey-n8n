@@ -26,8 +26,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from odyssey_core.notes import parse_note  # noqa: E402
+from odyssey_core import schema_retrospection as scan_limits  # noqa: E402
+from odyssey_core.notes import Note, parse_note, serialize_note  # noqa: E402
 from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs  # noqa: E402
+from odyssey_runtime import schema_backfill_campaign as campaign_contract  # noqa: E402
 from scripts.odyssey_n8n_dynamic_webhook import BROKER_JS  # noqa: E402
 from scripts.odyssey_schema_n8n_core_isolated import (  # noqa: E402
     docker_argv,
@@ -116,7 +118,7 @@ def request_socket(sock: Path, path: str) -> tuple[int, str]:
         connection.close()
 
 
-def run_viewport(root: Path, view: str) -> dict:
+def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
     folder = root / view
     folder.mkdir()
     # Both mounts must be directly beneath /tmp, never a nested project/
@@ -128,6 +130,31 @@ def run_viewport(root: Path, view: str) -> dict:
         share = Path(bridge)
         os.chmod(share, 0o700)
         app, repo, state = fixture(folder)
+        if campaign_mode:
+            source = parse_note(repo.read_text("0.md"))
+            for i in range(2, 5):
+                new_note = Note(
+                    {**source.metadata, "id": f"persona-{i}", "name": f"Persona {i}"},
+                    f"# Added 26-10-2026\n- Profesión: médica\n"
+                    f"<!-- odyssey:fact request=req{i} ordinal=0 -->\n",
+                )
+                (repo.root / f"{i}.md").write_text(serialize_note(new_note), encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@localhost",
+                    "commit",
+                    "-qm",
+                    "additional synthetic people",
+                ],
+                cwd=repo.root,
+                check=True,
+            )
+            campaign_contract._DEFAULT_SEGMENT_SIZE = 2
         app.schema_scan_factory = lambda actor: LocalSchemaScanJobs(
             state_root=state, repository=repo, actor_id=actor
         )
@@ -136,6 +163,7 @@ def run_viewport(root: Path, view: str) -> dict:
             for p in repo.list_markdown_paths()
         }
         stats = {"core": 0}
+        routing_lock = threading.Lock()
 
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
@@ -177,7 +205,19 @@ def run_viewport(root: Path, view: str) -> dict:
                             for k, v in payload.items()
                             if k not in {"operation", "authenticated_actor"}
                         }
-                        reply = {"status": 200, "body": app.notes(operation, request, ALICE)}
+                        with routing_lock:
+                            # Backfill routing uses the REAL public dispatcher,
+                            # with only the physical threshold reduced inside
+                            # this isolated browser fixture. Read-only scan
+                            # retains its original cap to complete normally.
+                            original_max = scan_limits._MAX_PROGRESS_IDS
+                            try:
+                                if campaign_mode and operation == "schema_backfill":
+                                    scan_limits._MAX_PROGRESS_IDS = 3
+                                result = app.notes(operation, request, ALICE)
+                            finally:
+                                scan_limits._MAX_PROGRESS_IDS = original_max
+                        reply = {"status": 200, "body": result}
                         stats["core"] += 1
                 except (ValueError, TypeError, KeyError):
                     pass
@@ -236,6 +276,8 @@ def run_viewport(root: Path, view: str) -> dict:
                         environment = os.environ.copy()
                         environment["ODYSSEY_SYNTH_LOCAL_HTTP"] = "http://127.0.0.1:1/"
                         environment["ODYSSEY_SYNTH_N8N_SOCKET"] = str(ingress)
+                        if campaign_mode:
+                            environment["ODYSSEY_SYNTH_CAMPAIGN"] = "1"
                         libs = Path(
                             "/home/ragdehl/projects/.odyssey-agent-runs/"
                             "e6-chromium-runtime-deps/root/usr/lib/aarch64-linux-gnu"
@@ -299,16 +341,28 @@ def run_viewport(root: Path, view: str) -> dict:
                 ["git", "rev-list", "--count", "HEAD"], cwd=repo.root, text=True
             ).strip()
         )
-        if not (
-            commits == 2
-            and notes["0.md"]["profesion"] == "médica"
-            and notes["0.md"]["revision"] == 2
-            and "profesion" not in notes["1.md"]
-            and after["0.md"] != before["0.md"]
-            and after["1.md"] == before["1.md"]
-            and evidence["n8n"] == "REAL_OFFLINE"
-            and evidence["reloadPersisted"]
-        ):
+        if campaign_mode:
+            good = (
+                commits == 6  # 2 baseline commits + 4 independent E3 writes
+                and all(notes[f"{i}.md"]["profesion"] == "médica" for i in (0, 2, 3, 4))
+                and "profesion" not in notes["1.md"]
+                and all(after[f"{i}.md"] != before[f"{i}.md"] for i in (0, 2, 3, 4))
+                and after["1.md"] == before["1.md"]
+                and evidence["n8n"] == "REAL_OFFLINE"
+                and evidence["reloadPersisted"]
+            )
+        else:
+            good = (
+                commits == 2
+                and notes["0.md"]["profesion"] == "médica"
+                and notes["0.md"]["revision"] == 2
+                and "profesion" not in notes["1.md"]
+                and after["0.md"] != before["0.md"]
+                and after["1.md"] == before["1.md"]
+                and evidence["n8n"] == "REAL_OFFLINE"
+                and evidence["reloadPersisted"]
+            )
+        if not good:
             raise RuntimeError("Synthetic Markdown/Git evidence differs from browser")
         return {
             "viewport": view,
@@ -318,8 +372,9 @@ def run_viewport(root: Path, view: str) -> dict:
             "actualCoreGit": True,
             "deployedDev": False,
             "provider": "NONE",
-            "updated": 1,
+            "updated": 4 if campaign_mode else 1,
             "deferred": 1,
+            "multipleJournals": campaign_mode,
             "gitCommits": commits,
             "coreRequests": stats["core"],
             "browserReload": True,
@@ -330,17 +385,25 @@ def run_viewport(root: Path, view: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", action="store_true")
+    parser.add_argument(
+        "--campaign",
+        action="store_true",
+        help="Real Chromium+n8n multijournal user flow, disposable 5-note vault",
+    )
+    parser.add_argument("--viewport", choices=["desktop", "mobile", "both"], default="both")
     args = parser.parse_args()
     if not args.run:
         print("Opt-in only: --run starts offline disposable n8n/Chromium/Core")
         return 0
     with tempfile.TemporaryDirectory(prefix="odyssey-schema-full-ui-", dir="/tmp") as temp:
-        results = [run_viewport(Path(temp), view) for view in ("desktop", "mobile")]
+        views = ("desktop", "mobile") if args.viewport == "both" else (args.viewport,)
+        results = [run_viewport(Path(temp), view, campaign_mode=args.campaign) for view in views]
     result = {
         "pass": all(x["pass"] for x in results),
         "route": "Chromium -> real offline n8n -> host Core/E3 -> Markdown/Git",
         "DEV": "NOT_DEPLOYED",
         "provider": "NONE",
+        "campaignMode": args.campaign,
         "results": results,
     }
     print("ODYSSEY_SCHEMA_FULL_OFFLINE_UI=" + json.dumps(result))

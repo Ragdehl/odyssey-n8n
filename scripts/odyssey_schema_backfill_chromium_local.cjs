@@ -20,6 +20,7 @@ if(n8nSocket) {
 }
 const viewport=process.argv[2]==="mobile"?[390,844]:[1280,920];
 const calls=[];
+const campaign=process.env.ODYSSEY_SYNTH_CAMPAIGN==="1";
 const html='<!doctype html><html lang="es"><head><meta charset="utf-8">'+
   '<meta name="viewport" content="width=device-width,initial-scale=1">'+
   '<link rel="stylesheet" href="/odyssey_web/styles.css"></head><body>'+
@@ -95,17 +96,28 @@ const server=http.createServer(async(req,res)=>{
     await page.goto(url,{waitUntil:"networkidle0"});
     await page.waitForFunction(()=>window.__appReady===true);
     await page.click("#show");
-    await page.waitForFunction(()=>document.querySelector(".schema-model-enrichment-status")?.textContent.includes("1 pendientes de IA"),{timeout:20000});
+    await page.waitForFunction((expected)=>{
+      const text=document.querySelector(".schema-model-enrichment-status")?.textContent||"";
+      return text.includes(expected) && (!expected.startsWith("4 ") ||
+        text.includes("El resto requiere interpretación mediante IA."));
+    },{timeout:45000},campaign?"4 propiedades completadas":"1 pendientes de IA");
     const first=await page.$eval(".schema-model-enrichment-status",el=>el.textContent);
-    assert.match(first,/1 propiedades completadas/);
+    assert.match(first,campaign?/4 propiedades completadas/:/1 propiedades completadas/);
+    assert.match(first,/1 pendientes de IA/);
+    assert.match(first,/requiere interpretación mediante IA/);
     assert.equal(errors.length,0,JSON.stringify(errors));
     await page.reload({waitUntil:"networkidle0"});
     await page.waitForFunction(()=>window.__appReady===true);
     await page.click("#show");
-    await page.waitForFunction(()=>document.querySelector(".schema-model-enrichment-status")?.textContent.includes("1 pendientes de IA"),{timeout:20000});
+    await page.waitForFunction((expected)=>{
+      const text=document.querySelector(".schema-model-enrichment-status")?.textContent||"";
+      return text.includes(expected) && (!expected.startsWith("4 ") ||
+        text.includes("El resto requiere interpretación mediante IA."));
+    },{timeout:45000},campaign?"4 propiedades completadas":"1 pendientes de IA");
     const second=await page.$eval(".schema-model-enrichment-status",el=>el.textContent);
-    assert.match(second,/1 propiedades completadas/);
-    assert.equal(calls.filter(x=>x==="schema_backfill:advance").length,2);
+    assert.match(second,campaign?/4 propiedades completadas/:/1 propiedades completadas/);
+    assert.match(second,/1 pendientes de IA/);
+    assert.equal(calls.filter(x=>x==="schema_backfill:advance").length,campaign?6:2);
     const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+4);
     assert.equal(overflow,false,"Mobile horizontal overflow");
     assert.equal(errors.length,0,JSON.stringify(errors));
