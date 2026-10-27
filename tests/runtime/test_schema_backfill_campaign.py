@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 
@@ -250,7 +251,7 @@ def test_campaign_missing_active_journal_stops_without_fabricating_progress(tmp_
     child.unlink()
     with pytest.raises(LocalBackfillJobError, match="journal is missing"):
         worker.status("all-people")
-    with pytest.raises(LocalBackfillJobError, match="journal missing"):
+    with pytest.raises(LocalBackfillJobError, match="journal is missing"):
         step(worker)
 
 
@@ -619,7 +620,7 @@ def test_finished_campaign_requires_all_hmac_children_for_status(tmp_path, missi
     assert run_to_end(item)[-1]["status"] == "complete"
     parent = item._read("all-people")
     index = 0 if missing == "completed_child" else parent["segment_index"]
-    child_id = item._child_id(item.worker.scope, "all-people", index)
+    child_id = item._child_id(item.worker.scope, "all-people", index, parent["generation"])
     item.worker._path(child_id).unlink()
     with pytest.raises(LocalBackfillJobError, match="journal missing"):
         item.status("all-people")
@@ -637,7 +638,7 @@ def test_campaign_rejects_valid_hmac_receipt_replayed_from_prior_campaign_run(tm
     assert run_to_end(first)[-1]["status"] == "complete"
     parent = first._read("all-people")
     old_index = 0 if replay == "completed_child" else parent["segment_index"]
-    old_job = first._child_id(first.worker.scope, "all-people", old_index)
+    old_job = first._child_id(first.worker.scope, "all-people", old_index, parent["generation"])
     old_path = first.worker._path(old_job)
     old_signed_bytes = old_path.read_bytes()
 
@@ -673,19 +674,20 @@ def test_campaign_rejects_valid_hmac_receipt_replayed_from_prior_campaign_run(tm
     assert run_to_end(second)[-1]["status"] == "complete"
     assert second._read("all-people")["totals"]["updated"] == 4
 
-    latest_path = second.worker._path(old_job)
+    latest_parent = second._read("all-people")
+    latest_job = second._child_id(
+        second.worker.scope, "all-people", old_index, latest_parent["generation"]
+    )
+    assert latest_job != old_job
+    latest_path = second.worker._path(latest_job)
     assert latest_path.read_bytes() != old_signed_bytes
     latest_path.write_bytes(old_signed_bytes)
-    # Child HMAC, job ID, actor, schema, type, and property ALL remain valid.
+    # The old receipt has a VALID signature for the old generation, but is
+    # unauthorized at the current generation's immutable child identity.
     assert second.worker._read(latest_path, old_job) is not None
-    expected = (
-        "signed parent/child evidence mismatch"
-        if replay == "completed_child"
-        else "terminal signed proof replayed"
-    )
-    with pytest.raises(LocalBackfillJobError, match=expected):
+    with pytest.raises(LocalBackfillJobError, match="Journal does not match actor/schema"):
         second.status("all-people")
-    with pytest.raises(LocalBackfillJobError, match=expected):
+    with pytest.raises(LocalBackfillJobError, match="Journal does not match actor/schema"):
         step(second)
 
 
@@ -704,7 +706,128 @@ def test_campaign_can_finish_without_candidates_and_requires_terminal_receipt(tm
     assert terminal["total"] == terminal["updated"] == 0
     assert item.status("all-people") == terminal
     parent = item._read("all-people")
-    child_id = item._child_id(item.worker.scope, "all-people", parent["segment_index"])
+    child_id = item._child_id(
+        item.worker.scope, "all-people", parent["segment_index"], parent["generation"]
+    )
     item.worker._path(child_id).unlink()
     with pytest.raises(LocalBackfillJobError, match="terminal proof journal missing"):
         item.status("all-people")
+
+
+def test_active_child_replay_from_previous_generation_fails_before_status_or_write(tmp_path):
+    """A valid HMAC from a previous campaign must never certify new progress."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    originals = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    first = campaign(state, repo, writer)
+    first.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(first)["updated"] == 1
+    old_id = first._read("all-people")["active_segment"]
+    old_signed_child = first.worker._path(old_id).read_bytes()
+
+    # Create a second legitimate campaign on restored synthetic Markdown while
+    # preserving the original HMAC key: the replay is cryptographically valid.
+    for path in (state / "schema-backfill-jobs").glob("*.json"):
+        path.unlink()
+    for path, original in originals.items():
+        repo.replace_text(path, original)
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "restore-synthetic-notes-for-new-generation",
+        ],
+        cwd=repo.root,
+        check=True,
+        capture_output=True,
+    )
+    second = campaign(state, repo, writer)
+    second.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    parent = second._read("all-people")
+    new_id = parent["active_segment"]
+    assert old_id != new_id
+    assert second.status("all-people")["updated"] == 0
+    second.worker._path(new_id).write_bytes(old_signed_child)
+    assert second.worker._read(second.worker._path(new_id), old_id) is not None
+    with pytest.raises(LocalBackfillJobError, match="Journal does not match actor/schema"):
+        second.status("all-people")
+    with pytest.raises(LocalBackfillJobError, match="Journal does not match actor/schema"):
+        step(second)
+    assert {path: repo.read_text(path) for path in originals} == originals
+
+
+def test_active_child_signed_manifest_change_is_rejected_without_writes(tmp_path):
+    """Even a re-signed current child cannot choose different source evidence."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    original = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    active_id = item._read("all-people")["active_segment"]
+    child_path = item.worker._path(active_id)
+    child = item.worker._required(child_path, active_id)
+    child["rows"][0]["hash"] = "0" * 64
+    item.worker._write(child_path, child)
+    assert item.worker._read(child_path, active_id) is not None
+    with pytest.raises(LocalBackfillJobError, match="active signed source manifest mismatch"):
+        item.status("all-people")
+    with pytest.raises(LocalBackfillJobError, match="active signed source manifest mismatch"):
+        step(item)
+    assert {path: repo.read_text(path) for path in original} == original
+
+
+def test_previous_v1_finished_campaign_remains_readable_after_generation_upgrade(tmp_path):
+    """Old completed campaign proofs are not silently discarded by V2 protection."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    completed = run_to_end(item)[-1]
+    parent = item._read("all-people")
+    nonce = parent["generation"]
+    chain = "0" * 64
+    terminal = None
+    for index in range(parent["segment_index"] + 1):
+        new_id = item._child_id(item.worker.scope, "all-people", index, nonce)
+        old_id = item._child_id(item.worker.scope, "all-people", index)
+        child = item.worker._required(item.worker._path(new_id), new_id)
+        child["job_id"] = old_id
+        for row_index, row in enumerate(child["rows"]):
+            if row["request"] is not None:
+                row["request"] = (
+                    f"schema-{hashlib.sha256(f'{item.worker.scope}:{old_id}'.encode()).hexdigest()[:16]}-{row_index:05d}"
+                )
+        item.worker._write(item.worker._path(old_id), child)
+        if index < parent["segment_index"]:
+            chain = item._chain_next(chain, child)
+        else:
+            terminal = item.worker._integrity(child)
+    parent["completed_chain"] = chain
+    parent["terminal_receipt_hash"] = terminal
+    del parent["generation"]
+    del parent["active_manifest_hash"]
+    parent["version"] = 1
+    item._save("all-people", parent)
+    assert item.status("all-people") == completed
+    assert step(item) == completed
+
+
+def test_previous_v1_active_campaign_requires_explicit_safe_replan(tmp_path):
+    """Do not implicitly trust an old HMAC child with no generation binding."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    original = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    parent = item._read("all-people")
+    del parent["generation"]
+    del parent["active_manifest_hash"]
+    parent["version"] = 1
+    item._save("all-people", parent)
+    with pytest.raises(LocalBackfillJobError, match="Invalid campaign state or owner"):
+        item.status("all-people")
+    with pytest.raises(LocalBackfillJobError, match="Invalid campaign state or owner"):
+        step(item)
+    assert {path: repo.read_text(path) for path in original} == original

@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -45,10 +46,15 @@ class LocalBackfillCampaign:
         return path.with_suffix(".campaign.json")
 
     @staticmethod
-    def _child_id(scope: str, campaign_id: str, index: int) -> str:
-        return hashlib.sha256(
-            f"schema-campaign:{scope}:{campaign_id}:{index}".encode()
-        ).hexdigest()[:48]
+    def _child_id(scope: str, campaign_id: str, index: int, generation: str | None = None) -> str:
+        # A new generation has disjoint signed child identities. Old completed
+        # V1 parents can still inspect their historical deterministic receipts.
+        token = (
+            f"schema-campaign:{scope}:{campaign_id}:{generation}:{index}"
+            if generation is not None
+            else f"schema-campaign:{scope}:{campaign_id}:{index}"
+        )
+        return hashlib.sha256(token.encode()).hexdigest()[:48]
 
     @contextmanager
     def _locked(self) -> Iterator[None]:
@@ -121,9 +127,35 @@ class LocalBackfillCampaign:
             "finished",
             "totals",
         }
+        version = record.get("version")
+        if version == 2:
+            expected |= {"generation", "active_manifest_hash"}
         if (
-            set(record) != expected
-            or record["version"] != 1
+            version not in (1, 2)
+            or set(record) != expected
+            or (version == 1 and not record["finished"])
+            or (
+                version == 2
+                and (
+                    not isinstance(record["generation"], str)
+                    or len(record["generation"]) != 32
+                    or any(c not in "0123456789abcdef" for c in record["generation"])
+                    or (
+                        record["active_manifest_hash"] is not None
+                        and (
+                            not isinstance(record["active_manifest_hash"], str)
+                            or len(record["active_manifest_hash"]) != 64
+                            or any(
+                                c not in "0123456789abcdef" for c in record["active_manifest_hash"]
+                            )
+                        )
+                    )
+                    or (
+                        (record["active_segment"] is None)
+                        != (record["active_manifest_hash"] is None)
+                    )
+                )
+            )
             or record["scope"] != self.worker.scope
             or record["schema_hash"] != self.worker.schema_hash
             or record["campaign_id"] != campaign_id
@@ -168,7 +200,12 @@ class LocalBackfillCampaign:
             or (
                 record["active_segment"] is not None
                 and record["active_segment"]
-                != self._child_id(self.worker.scope, campaign_id, record["segment_index"])
+                != self._child_id(
+                    self.worker.scope,
+                    campaign_id,
+                    record["segment_index"],
+                    record.get("generation"),
+                )
             )
             or (record["active_segment"] is None and record["active_frontier"] is not None)
             or (record["finished"] and record["active_segment"] is not None)
@@ -196,6 +233,49 @@ class LocalBackfillCampaign:
             bytes.fromhex(previous) + bytes.fromhex(self.worker._integrity(child))
         ).hexdigest()
 
+    @staticmethod
+    def _active_manifest(child: dict[str, Any]) -> str:
+        """Commit to staged source identities, not mutable per-note outcomes."""
+        fixed = {
+            "scope": child["scope"],
+            "schema_hash": child["schema_hash"],
+            "job_id": child["job_id"],
+            "type_id": child["type_id"],
+            "property_id": child["property_id"],
+            "inventory_hash": child["inventory_hash"],
+            "sources": [
+                [row["id"], row["path"], row["hash"], row["revision"]] for row in child["rows"]
+            ],
+        }
+        return hashlib.sha256(
+            json.dumps(fixed, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+    def _verified_active(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Never trust an HMAC-valid child unbound to this signed parent."""
+        child_id = record["active_segment"]
+        if child_id is None:
+            raise LocalBackfillJobError("Campaign active journal is missing")
+        with self.worker._lock():
+            child = self.worker._read(self.worker._path(child_id), child_id)
+            if child is None:
+                raise LocalBackfillJobError("Campaign active journal is missing")
+            self.worker._target(child, record["type_id"], record["property_id"])
+            if (
+                not child["rows"]
+                or len(child["rows"]) > record["segment_size"]
+                or child["rows"][-1]["path"] != record["active_frontier"]
+                or (
+                    record["after_path"] is not None
+                    and child["rows"][0]["path"] <= record["after_path"]
+                )
+                or not hmac.compare_digest(
+                    self._active_manifest(child), record["active_manifest_hash"]
+                )
+            ):
+                raise LocalBackfillJobError("Campaign active signed source manifest mismatch")
+            return self.worker._summary(child)
+
     def _completed_write_paths(
         self,
         *,
@@ -213,9 +293,14 @@ class LocalBackfillCampaign:
         child_totals = {"total": 0, **{key: 0 for key in _COUNTERS}}
         chain = _ZERO_CHAIN
         previous_path: str | None = None
+        parent = self._read(campaign_id)
+        if parent is None:
+            raise LocalBackfillJobError("Campaign signed parent missing")
         with self.worker._lock():
             for index in range(completed_segment_count):
-                child_id = self._child_id(self.worker.scope, campaign_id, index)
+                child_id = self._child_id(
+                    self.worker.scope, campaign_id, index, parent.get("generation")
+                )
                 receipt = self.worker._read(self.worker._path(child_id), child_id)
                 if receipt is None:
                     raise LocalBackfillJobError("Campaign completed journal missing")
@@ -242,8 +327,7 @@ class LocalBackfillCampaign:
         # incarnation of the same deterministic job_id. Require exact linkage
         # with this separately signed parent: total counts, frontier and the
         # rolling digest of each child HMAC in strict order.
-        parent = self._read(campaign_id)
-        if parent is None or (
+        if (
             parent["segment_index"] != completed_segment_count
             or (parent["type_id"], parent["property_id"]) != (type_id, property_id)
             or parent["totals"] != child_totals
@@ -267,7 +351,10 @@ class LocalBackfillCampaign:
             # remained at the end; it too must remain an HMAC-authenticated
             # receipt rather than only a parent flag.
             final_id = self._child_id(
-                self.worker.scope, record["campaign_id"], record["segment_index"]
+                self.worker.scope,
+                record["campaign_id"],
+                record["segment_index"],
+                record.get("generation"),
             )
             with self.worker._lock():
                 final_child = self.worker._read(self.worker._path(final_id), final_id)
@@ -284,9 +371,7 @@ class LocalBackfillCampaign:
         in_flight = {"pending": 0, "interpreting": 0, "writing": 0}
         active_id = record["active_segment"]
         if active_id is not None:
-            current = self.worker.status(active_id)
-            if current is None:
-                raise LocalBackfillJobError("Campaign active journal is missing")
+            current = self._verified_active(record)
             for key in totals:
                 totals[key] += current.get(key, 0)
             for key in in_flight:
@@ -318,13 +403,15 @@ class LocalBackfillCampaign:
             record = self._read(campaign_id)
             if record is None:
                 record = {
-                    "version": 1,
+                    "version": 2,
                     "scope": self.worker.scope,
                     "schema_hash": self.worker.schema_hash,
                     "campaign_id": campaign_id,
                     "type_id": type_id,
                     "property_id": property_id,
                     "segment_size": self.segment_size,
+                    "generation": secrets.token_hex(16),
+                    "active_manifest_hash": None,
                     "identity_hash": None,
                     "eligibility_bitmap": None,
                     "completed_chain": _ZERO_CHAIN,
@@ -346,7 +433,7 @@ class LocalBackfillCampaign:
             ):
                 # Preserve the historical stage() contract: prepare the first
                 # bounded plan but NEVER perform an E3/Git write in stage().
-                child_id = self._child_id(self.worker.scope, campaign_id, 0)
+                child_id = self._child_id(self.worker.scope, campaign_id, 0, record["generation"])
                 child, frontier, identity, eligibility = self.worker._stage_segment(
                     job_id=child_id,
                     type_id=type_id,
@@ -364,8 +451,10 @@ class LocalBackfillCampaign:
                 else:
                     if frontier is None:
                         raise LocalBackfillJobError("Campaign first frontier missing")
+                    child_record = self.worker._required(self.worker._path(child_id), child_id)
                     record["active_segment"] = child_id
                     record["active_frontier"] = frontier
+                    record["active_manifest_hash"] = self._active_manifest(child_record)
                 self._save(campaign_id, record)
             return self._summary(record)
 
@@ -393,9 +482,7 @@ class LocalBackfillCampaign:
             if record["finished"]:
                 return self._summary(record)
             if record["active_segment"] is not None:
-                current = self.worker.status(record["active_segment"])
-                if current is None:
-                    raise LocalBackfillJobError("Campaign journal missing")
+                current = self._verified_active(record)
                 if current["status"] in {"complete", "awaiting_ai"} and current["pending"] == 0:
                     self._completed_write_paths(
                         campaign_id=campaign_id,
@@ -415,6 +502,7 @@ class LocalBackfillCampaign:
                     record["segment_index"] += 1
                     record["active_segment"] = None
                     record["active_frontier"] = None
+                    record["active_manifest_hash"] = None
                     self._save(campaign_id, record)
                 # An in-flight Git intent is handled by the existing child's
                 # advance() reconciliation. If the outcome is ambiguous, that
@@ -423,7 +511,9 @@ class LocalBackfillCampaign:
             if record["active_segment"] is None:
                 if record["segment_index"] >= _MAX_SEGMENTS:
                     raise LocalBackfillJobError("Campaign segment capacity exceeded")
-                child_id = self._child_id(self.worker.scope, campaign_id, record["segment_index"])
+                child_id = self._child_id(
+                    self.worker.scope, campaign_id, record["segment_index"], record["generation"]
+                )
                 verified_completed_paths = self._completed_write_paths(
                     campaign_id=campaign_id,
                     completed_segment_count=record["segment_index"],
@@ -451,8 +541,10 @@ class LocalBackfillCampaign:
                     return self._summary(record)
                 if frontier is None or frontier == record["after_path"]:
                     raise LocalBackfillJobError("Campaign frontier failed to advance")
+                child_record = self.worker._required(self.worker._path(child_id), child_id)
                 record["active_segment"] = child_id
                 record["active_frontier"] = frontier
+                record["active_manifest_hash"] = self._active_manifest(child_record)
                 self._save(campaign_id, record)
 
             self.worker.advance(

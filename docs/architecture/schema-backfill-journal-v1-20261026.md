@@ -357,3 +357,40 @@ El supervisor `schema-campaign-closure4role-20261027` verificó los cuatro roles
 **Corrección en fuente, pendiente de aceptación final:** el padre HMAC ahora guarda una cadena SHA-256 de los HMAC exactos de **cada hijo terminado y en orden**, más el HMAC del diario terminal vacío. Al contabilizar un hijo se incorpora a la cadena antes de persistir el padre; al reabrir, se releen todos los hijos autenticados y se comparan el orden de rutas, la frontera final, cada contador `updated/deferred/...`, y la cadena contra el padre firmado. Ni una falsificación sin clave ni un **replay de un hijo auténtico antiguo** puede certificar `complete` por sí solo. No se mantiene un segundo índice de autoridad ni una lista creciente de hashes; el tamaño de la cadena en el padre es constante.
 
 **Pruebas adversariales:** dos encarnaciones de la misma campaña con HMAC/key/actor/vault/ID reales y fuentes canónicas distintas; se reemplaza un hijo firmado antiguo y, por separado, el diario terminal antiguo. En ambos casos el HMAC del hijo individual sigue siendo VÁLIDO, pero `status` y `advance` rechazan por incompatibilidad con el padre. Escenario sin candidatos también emite y exige prueba terminal válida. Batería focalizada 82 Python PASS más regresión de campaña vacía; el fixture de 11k elegibles/3 escrituras continúa pasando: stage 3,71 s, tres avances 11,12 s, RSS 68,7 MiB. Medición aislada, NO 11k escrituras. Falta todavía gate transversal/código SHA fijado y aceptación desplegada DEV+Access+GPT.
+
+
+## Corrección de replay de diario activo — 27-10-2026, rama fuente
+
+La auditoría independiente incremental sobre `250ae42` detectó que un diario hijo
+**activo**, aunque HMAC-válido, podía ser sustituido por una versión de otra
+encarnación de campaña con el mismo ID determinista. Calidad devolvió FAIL;
+Pruebas confirmó la omisión y quedó BLOCKED por la aceptación externa todavía
+pendiente. Generalidad PASS; Rendimiento NO EJECUTADO por la reserva de 50k
+frente al saldo de 40.584 tokens del ciclo. Estos dictámenes son históricos
+y NO autorizan el nuevo código.
+
+**Corrección en fuente (sin desplegar):** el checkpoint padre V2 HMAC registra
+una generación criptográficamente aleatoria persistida **antes** de publicar
+el primer hijo; todos los IDs de diarios hijos derivan de esa generación.
+Además registra el SHA-256 de un manifiesto de selección inmutable
+(alcance, esquema, ID hijo, inventario y tuplas ordenadas de ruta/ID/hash/
+revisión de fuente). `status` y `advance` lo revalidan contra el diario HMAC
+activo antes de sumar resultados o autorizar una nueva escritura; las
+transiciones de segmento limpian el vínculo anterior. Esto no elimina el
+CAS/E3/Git ni el journal por nota.
+
+**Compatibilidad/recuperación:** los padres V1 terminados conservan lectura
+y validación de sus diarios originales. Un padre V1 **activo**, sin vínculo
+generacional seguro, no se acepta automáticamente: debe replanificarse
+de forma supervisada después de verificar las escrituras físicas. Nunca se
+reinterpreta en silencio ni se borra un diario de usuario. La protección
+corrige el replay entre encarnaciones; no pretende que un HMAC local
+impida a un atacante con control total de la clave y todos los checkpoints
+restaurar simultáneamente el estado completo a un snapshot anterior.
+
+**Pruebas sintéticas verificadas:** replay de hijo activo válido de generación previa,
+manifiesto alterado y re-firmado, parent V1 completado legible, parent V1
+activo rechazado, recuperación entre segmentos y Git, más cobertura
+existente. Gate integral local: **2.329 Python + 7 subtests y 255 JavaScript PASS**, Ruff/formato/documentación PASS. Chromium auténtico escritorio y móvil → n8n offline real → Core/E3/Git sobre vault desechable **PASS**: 4 escrituras, 1 diferida, múltiples diarios, recarga y sin duplicados (proveedor OFF, NO DEV). El hito requiere auditoría fresca sobre nuevo SHA,
+GPT real/acceso externo autorizados cuando proceda y aceptación E2E
+matching-SHA para cierre de producto. PROD sin autorización de despliegue.
