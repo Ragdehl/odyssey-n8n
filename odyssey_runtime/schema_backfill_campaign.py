@@ -76,7 +76,11 @@ class LocalBackfillCampaign:
         if not path.exists():
             return None
         try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            # lstat and O_NONBLOCK both matter: even if a regular file is
+            # replaced by a FIFO after lstat, opening it cannot hang.
+            if not stat.S_ISREG(path.lstat().st_mode):
+                raise LocalBackfillJobError("Unsafe campaign checkpoint type")
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             with os.fdopen(fd, "rb") as source:
                 attrs = os.fstat(source.fileno())
                 if (
@@ -170,6 +174,37 @@ class LocalBackfillCampaign:
     def _check_target(record: dict[str, Any], type_id: str, property_id: str) -> None:
         if (record["type_id"], record["property_id"]) != (type_id, property_id):
             raise LocalBackfillJobError("Campaign approved target changed")
+
+    def _completed_write_paths(
+        self,
+        *,
+        campaign_id: str,
+        completed_segment_count: int,
+        type_id: str,
+        property_id: str,
+    ) -> frozenset[str]:
+        """Derive finished writes from authenticated child journals, not a new index.
+
+        This is a bounded read of the already durable HMAC receipts (max 50k
+        candidates). Missing, unfinished or altered evidence fails closed.
+        """
+        written: set[str] = set()
+        with self.worker._lock():
+            for index in range(completed_segment_count):
+                child_id = self._child_id(self.worker.scope, campaign_id, index)
+                receipt = self.worker._read(self.worker._path(child_id), child_id)
+                if receipt is None:
+                    raise LocalBackfillJobError("Campaign completed journal missing")
+                self.worker._target(receipt, type_id, property_id)
+                if any(
+                    row["status"] in {"pending", "interpreting", "writing"}
+                    for row in receipt["rows"]
+                ):
+                    raise LocalBackfillJobError("Campaign earlier journal is incomplete")
+                for row in receipt["rows"]:
+                    if row["status"] in {"updated", "already_present"}:
+                        written.add(row["path"])
+        return frozenset(written)
 
     def _summary(self, record: dict[str, Any]) -> dict[str, Any]:
         totals = dict(record["totals"])
@@ -300,6 +335,12 @@ class LocalBackfillCampaign:
                 if record["segment_index"] >= _MAX_SEGMENTS:
                     raise LocalBackfillJobError("Campaign segment capacity exceeded")
                 child_id = self._child_id(self.worker.scope, campaign_id, record["segment_index"])
+                verified_completed_paths = self._completed_write_paths(
+                    campaign_id=campaign_id,
+                    completed_segment_count=record["segment_index"],
+                    type_id=type_id,
+                    property_id=property_id,
+                )
                 child, frontier, physical_identity, eligibility = self.worker._stage_segment(
                     job_id=child_id,
                     type_id=type_id,
@@ -308,6 +349,7 @@ class LocalBackfillCampaign:
                     max_candidates=self.segment_size,
                     expected_identity_hash=record["identity_hash"],
                     expected_eligibility_bitmap=record["eligibility_bitmap"],
+                    verified_completed_paths=verified_completed_paths,
                 )
                 if record["identity_hash"] is None:
                     record["identity_hash"] = physical_identity

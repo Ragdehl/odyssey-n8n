@@ -109,6 +109,7 @@ class LocalBackfillJob:
             max_candidates=_LIMIT,
             expected_identity_hash=None,
             expected_eligibility_bitmap=None,
+            verified_completed_paths=frozenset(),
             segmented=False,
         )
         return result
@@ -123,6 +124,7 @@ class LocalBackfillJob:
         max_candidates: int,
         expected_identity_hash: str | None,
         expected_eligibility_bitmap: str | None = None,
+        verified_completed_paths: frozenset[str] = frozenset(),
     ) -> tuple[dict[str, Any], str | None, str, str]:
         """Private segment selection; only the signed campaign coordinator calls this.
 
@@ -154,6 +156,7 @@ class LocalBackfillJob:
             max_candidates=max_candidates,
             expected_identity_hash=expected_identity_hash,
             expected_eligibility_bitmap=expected_eligibility_bitmap,
+            verified_completed_paths=verified_completed_paths,
             segmented=True,
         )
 
@@ -167,6 +170,7 @@ class LocalBackfillJob:
         max_candidates: int,
         expected_identity_hash: str | None,
         expected_eligibility_bitmap: str | None,
+        verified_completed_paths: frozenset[str],
         segmented: bool,
     ) -> tuple[dict[str, Any], str | None, str, str]:
         """Scan and attest all physical IDs; publish one bounded E3/Git journal."""
@@ -248,6 +252,14 @@ class LocalBackfillJob:
                 for position, physical_path in enumerate(physical_page, start=offset):
                     bit = 1 << (position % 8)
                     current_eligible = physical_path in eligible_paths
+                    # Independently authenticated previous child receipts
+                    # identify successful Core/E3 writes. If a person removed
+                    # a property after it was written, never silently skip
+                    # that newly incomplete note behind the signed cursor.
+                    if current_eligible and physical_path in verified_completed_paths:
+                        raise LocalBackfillJobError(
+                            "Campaign previously written property was removed"
+                        )
                     if current_eligible:
                         bitmap[position // 8] |= bit
                     if initial_bitmap is not None:
@@ -299,6 +311,13 @@ class LocalBackfillJob:
                 raise LocalBackfillJobError("Campaign physical source identities changed")
             if existing is not None:
                 self._target(existing, type_id, property_id)
+                # A published child with an unsaved parent is immutable. A
+                # restart must not adopt a changed physical inventory as
+                # its original campaign identity/eligibility proof.
+                if not hmac.compare_digest(existing["inventory_hash"], progress.inventory_hash):
+                    raise LocalBackfillJobError(
+                        "Campaign staged child inventory changed before parent checkpoint"
+                    )
                 if [r["id"] for r in existing["rows"]] != [r["id"] for r in rows]:
                     # An already-written target disappeared from candidate
                     # selection after property update. That is expected, so

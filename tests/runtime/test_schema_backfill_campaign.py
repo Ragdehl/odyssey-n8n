@@ -419,3 +419,96 @@ def test_mixed_type_and_nonnumeric_paths_detect_new_candidate_behind_frontier(tm
         step(item)
     assert item.status("all-people")["updated"] == 2
     assert "profesion" not in parse_note(repo.read_text("z-persona.md")).metadata
+
+
+def test_recovery_of_first_child_rejects_vault_changed_before_parent_proof(tmp_path, monkeypatch):
+    """A crash cannot adopt a new 00.md behind an unsealed first frontier."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    original = campaign(state, repo, writer)
+    stage_child = original.worker._stage_segment
+
+    def publish_then_interrupt(**kwargs):
+        stage_child(**kwargs)
+        raise RuntimeError("interrupt after first child publication")
+
+    monkeypatch.setattr(original.worker, "_stage_segment", publish_then_interrupt)
+    with pytest.raises(RuntimeError, match="first child"):
+        original.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert original.status("all-people")["total"] == 0
+    old = parse_note(repo.read_text("3.md"))
+    repo.create_text(
+        "00.md",
+        serialize_note(
+            Note(
+                {**old.metadata, "id": "persona-new", "name": "New between 0 and 1"},
+                old.content,
+            )
+        ),
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "external-mid-frontier-note",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    restarted = campaign(state, repo, writer)
+    with pytest.raises(LocalBackfillJobError, match="staged child inventory changed"):
+        restarted.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert restarted.status("all-people")["updated"] == 0
+    assert "profesion" not in parse_note(repo.read_text("00.md")).metadata
+
+
+def test_campaign_rejects_external_removal_of_property_it_already_wrote(tmp_path):
+    """A previous successful E3 update may not silently become incomplete."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(item)["updated"] == 1
+    assert step(item)["updated"] == 2
+    written = parse_note(repo.read_text("0.md"))
+    assert written.metadata["profesion"] == "médica"
+    repo.replace_text(
+        "0.md",
+        serialize_note(
+            Note(
+                {key: value for key, value in written.metadata.items() if key != "profesion"},
+                written.content,
+            )
+        ),
+    )
+    with pytest.raises(LocalBackfillJobError, match="previously written property was removed"):
+        step(item)
+    assert item.status("all-people")["updated"] == 2
+    assert "profesion" not in parse_note(repo.read_text("2.md")).metadata
+
+
+def test_fifo_at_campaign_checkpoint_is_rejected_without_blocking(tmp_path):
+    """Fail before an O_RDONLY FIFO open, including a bounded hang regression."""
+    import os
+    import signal
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    item = campaign(state, repo, writer)
+    path = item._path("all-people")
+    os.mkfifo(path, mode=0o600)
+
+    def unsafe_open_timeout(_signal, _frame):
+        raise AssertionError("FIFO checkpoint caused a blocking read")
+
+    previous = signal.signal(signal.SIGALRM, unsafe_open_timeout)
+    signal.setitimer(signal.ITIMER_REAL, 2.0)
+    try:
+        with pytest.raises(LocalBackfillJobError, match="Unsafe campaign checkpoint"):
+            item.status("all-people")
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
