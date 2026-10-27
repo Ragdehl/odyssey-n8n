@@ -1,6 +1,6 @@
 # E5: visita futura declarativa — incidente DEV 27-10-2026
 
-**Estado:** corrección de prompt V5 **solo en fuente**, sin aceptación de modelo real, PR ni despliegue posterior. El DEV probado sigue en `250ae42`; cualquier otro estado debe contrastarse con su marcador real.
+**Estado:** V5 evaluado con GPT real 12/12 PASS y con tests de código PASS; corrección todavía **solo en fuente**, sin DEV ni E2E del nuevo commit. El DEV probado sigue en `250ae42`; cualquier otro estado debe contrastarse con su marcador real.
 
 ## Síntoma y prueba observable
 
@@ -29,7 +29,13 @@
 | Dato no evento | Mi prima tiene 30 años el 16 de noviembre de 2026 | ABSTAIN |
 | Tarea | Tengo que llamar a mi prima el 16 de noviembre de 2026 | ABSTAIN |
 
-**Prompt:** GPT-6 Luna low, `e5_event_intent_v5`; V4 SHA-256 `ae6d955030e54060111355e8c9be7a6f96306e11e3b04411fa54a299586a381c`; V5 SHA-256 `d43908fb880533dd81ac14dfd7717834dcb6d3f4f022f9c2787e104ae3317ad2`. La matriz anterior todavía no se ha ejecutado con llamadas nuevas al modelo. Las pruebas deterministas validan el esquema, la procedencia exacta, la ruta sintética Core/E3 y Calendar, **no la tasa de interpretación GPT**.
+**Prompt:** GPT-6 Luna low, `e5_event_intent_v5`; V4 SHA-256 `ae6d955030e54060111355e8c9be7a6f96306e11e3b04411fa54a299586a381c`; V5 SHA-256 `d43908fb880533dd81ac14dfd7717834dcb6d3f4f022f9c2787e104ae3317ad2`. La matriz anterior se ejecutó con llamadas nuevas al GPT real: **12/12 PASS**, sin escrituras y con datos sintéticos. Las pruebas deterministas adicionales validan esquema, procedencia exacta, ruta sintética Core/E3 y Calendar; ninguna sustituye al E2E de la app desplegada.
+
+## Evidencia de evaluación con GPT real (27-10-2026)
+
+El ejecutor de lectura scripts/odyssey_event_visit_v5_live_gate.py usó **OpenAIEventInterpreter de producción, GPT-6 Luna, effort low**, output estricto e5_event_intent_v5, store=False, guardia de entorno systemd y 12 llamadas máximas sin acceso al vault. El prompt exacto tiene hash SHA-256 d43908fb880533dd81ac14dfd7717834dcb6d3f4f022f9c2787e104ae3317ad2. Todas las 12 interpretaciones nuevas correspondieron a su expectativa congelada; se incluyeron 4 visitas ES/FR/EN, 6 abstenciones adversariales, un evento ordinario y una consulta. Títulos y fechas citados del texto original, validados por el intérprete tipado. Coste estimado: **0,0015024 USD** de acuerdo con la tabla de precios de 09-10-2026, no con una factura.
+
+Recibo JSON privado en Raspberry: /home/ragdehl/projects/.odyssey-agent-runs/event-visit-v5-live-20261027/result.json. No contiene secretos ni hechos personales. La prueba NO invocó Router ni Temporal/Core/Writer, NO fue una sesión de usuario autenticada en navegador y NO valida que en DEV se hayan guardado nuevas notas. Debe mantenerse pendiente esta prueba vertical hasta el deploy del SHA final, sin realizar más llamadas GPT por repetición rutinaria.
 
 ## Corrección de respuesta al usuario
 
