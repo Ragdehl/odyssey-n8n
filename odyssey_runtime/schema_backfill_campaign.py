@@ -338,6 +338,16 @@ class LocalBackfillCampaign:
         return frozenset(written)
 
     def _summary(self, record: dict[str, Any]) -> dict[str, Any]:
+        # The signed parent cannot certify progress while a completed child
+        # has vanished or been replaced. Check earlier children even while a
+        # later child remains active or while between segment boundaries.
+        if record["segment_index"] and not record["finished"]:
+            self._completed_write_paths(
+                campaign_id=record["campaign_id"],
+                completed_segment_count=record["segment_index"],
+                type_id=record["type_id"],
+                property_id=record["property_id"],
+            )
         if record["finished"]:
             # Signed aggregate counts alone cannot certify completion if
             # an earlier child receipt has disappeared since the last call.
@@ -481,6 +491,15 @@ class LocalBackfillCampaign:
             self._check_target(record, type_id, property_id)
             if record["finished"]:
                 return self._summary(record)
+            # In-flight child counters are not enough: refuse another E3/Git
+            # write until EVERY older child's HMAC and parent chain match.
+            if record["segment_index"]:
+                self._completed_write_paths(
+                    campaign_id=campaign_id,
+                    completed_segment_count=record["segment_index"],
+                    type_id=type_id,
+                    property_id=property_id,
+                )
             if record["active_segment"] is not None:
                 current = self._verified_active(record)
                 if current["status"] in {"complete", "awaiting_ai"} and current["pending"] == 0:

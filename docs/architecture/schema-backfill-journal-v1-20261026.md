@@ -394,3 +394,12 @@ activo rechazado, recuperación entre segmentos y Git, más cobertura
 existente. Gate integral local: **2.329 Python + 7 subtests y 255 JavaScript PASS**, Ruff/formato/documentación PASS. Chromium auténtico escritorio y móvil → n8n offline real → Core/E3/Git sobre vault desechable **PASS**: 4 escrituras, 1 diferida, múltiples diarios, recarga y sin duplicados (proveedor OFF, NO DEV). El hito requiere auditoría fresca sobre nuevo SHA,
 GPT real/acceso externo autorizados cuando proceda y aceptación E2E
 matching-SHA para cierre de producto. PROD sin autorización de despliegue.
+
+
+## Cierre focalizado de integridad intersegmento — 27-10-2026
+
+La segunda auditoría Codex sobre `d40590d` (`033c323..d40590d`) obtuvo **Generalidad PASS, Calidad FAIL, Pruebas BLOCKED, Rendimiento PASS**. Calidad detectó otra frontera: cuando una campaña ya tenía un hijo posterior activo, `status` y `advance` verificaban el hijo activo, pero podían omitir temporalmente la cadena de diarios **terminados** anteriores hasta el próximo cambio de segmento. La falta o alteración de un hijo pasado no debe permitir ni nuevos informes ni escrituras E3/Git.
+
+**Nueva reparación exclusiva en fuente:** antes de mostrar el estado de una campaña todavía activa, y también antes de autorizar la próxima escritura de su hijo activo, el coordinador relee y valida la cadena HMAC de todos los hijos terminados y su correspondencia exacta con el padre firmado. Las campañas finalizadas ya tenían este control. Dos regresiones con un diario previo eliminado o re-firmado confirman que fallan `status` y `advance`, sin nueva mutación ni commit Git. Batería focalizada: **30 PASS**. El gate transversal del commit definitivo, auditoría del nuevo SHA y aceptación externa siguen siendo puertas distintas; no se reclaman cuatro PASS ni aceptación de producto.
+
+**Coste esperado:** se releen diarios cerrados en los avances de una campaña larga. Es un compromiso de integridad en el camino de escritura; no hay medición de latencia a 10k escrituras ni prueba Android de batería. No reducir verificaciones de integridad para optimizar sin un diseño alternativo de prueba inmutable y revisión independiente.

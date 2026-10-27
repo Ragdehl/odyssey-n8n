@@ -831,3 +831,39 @@ def test_previous_v1_active_campaign_requires_explicit_safe_replan(tmp_path):
     with pytest.raises(LocalBackfillJobError, match="Invalid campaign state or owner"):
         step(item)
     assert {path: repo.read_text(path) for path in original} == original
+
+
+@pytest.mark.parametrize("poison", ["missing", "re-signed"])
+def test_later_active_child_rejects_missing_or_changed_previous_journal(tmp_path, poison):
+    """Never report or write active progress when an older signed child is lost."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 5)
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(item)["updated"] == 1
+    assert step(item)["updated"] == 2
+    assert step(item)["updated"] == 3
+    parent = item._read("all-people")
+    assert parent["segment_index"] == 1 and parent["active_segment"] is not None
+    previous_id = item._child_id(item.worker.scope, "all-people", 0, parent["generation"])
+    previous_path = item.worker._path(previous_id)
+    if poison == "missing":
+        previous_path.unlink()
+        failure = "Campaign completed journal missing"
+    else:
+        receipt = item.worker._required(previous_path, previous_id)
+        receipt["rows"][0]["hash"] = "0" * 64
+        item.worker._write(previous_path, receipt)
+        failure = "Campaign signed parent/child evidence mismatch"
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    before_git = subprocess.check_output(
+        ["git", "rev-list", "--count", "HEAD"], cwd=repo.root, text=True
+    )
+    with pytest.raises(LocalBackfillJobError, match=failure):
+        item.status("all-people")
+    with pytest.raises(LocalBackfillJobError, match=failure):
+        step(item)
+    assert {path: repo.read_text(path) for path in before} == before
+    assert (
+        subprocess.check_output(["git", "rev-list", "--count", "HEAD"], cwd=repo.root, text=True)
+        == before_git
+    )
