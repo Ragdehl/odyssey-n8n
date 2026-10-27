@@ -94,17 +94,33 @@ class RetrospectionProgress:
 
 
 _MAX_PROGRESS_IDS = 10000
+# Bounded *transient* whole-vault scan, separate from durable 10k-ID scan
+# checkpoints and the much smaller 10k-candidate mutation journal.
+_MAX_STAGED_SCAN_IDS = 50000
+_MAX_STAGED_ID_BYTES = 12_000_000
 
 
 def accumulate_schema_scan(
     page: RetrospectionPage, previous: RetrospectionProgress | None = None
 ) -> RetrospectionProgress:
-    """Validate bounded page order/identity before any future job reports progress.
+    """Validate durable or public scan progress within its 10k identity budget."""
+    return _accumulate_schema_scan(page, previous, max_ids=_MAX_PROGRESS_IDS)
 
-    The caller must use scan_schema_sources for each page. This neither stores
-    progress nor interprets evidence, but prevents a future job from reporting
-    success when a page was repeated, skipped or contained a cross-page Note ID.
+
+def _accumulate_schema_scan(
+    page: RetrospectionPage,
+    previous: RetrospectionProgress | None = None,
+    *,
+    max_ids: int,
+) -> RetrospectionProgress:
+    """Validate page order and uniqueness across one entire scanned inventory.
+
+    The public caller uses the original 10k bound. Only an unpublished,
+    fully revalidated private staging transaction may use up to 50k physical
+    IDs; the durable mutation plan still enforces its independent 10k cap.
     """
+    if type(max_ids) is not int or not _MAX_PROGRESS_IDS <= max_ids <= _MAX_STAGED_SCAN_IDS:
+        raise SchemaRetrospectionError("Invalid scan identity budget")
     if not isinstance(page, RetrospectionPage) or (
         page.input_cursor is not None and not isinstance(page.input_cursor, RetrospectionCursor)
     ):
@@ -148,7 +164,7 @@ def accumulate_schema_scan(
         or len(current) != len(set(current))
         or any(not isinstance(identifier, str) or not identifier for identifier in current)
         or seen.intersection(current)
-        or len(seen) + len(current) > _MAX_PROGRESS_IDS
+        or len(seen) + len(current) > max_ids
         or page.skipped_existing_values < 0
         or page.scanned_paths < len(page.eligible_notes) + page.skipped_existing_values
         or (
@@ -294,6 +310,28 @@ def scan_schema_sources(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _StagedScanInventory:
+    """One transaction's provisional inventory; NEVER valid outside full end recheck.
+
+    This is intentionally consumed only by LocalBackfillJob.stage. Every
+    public scan remains responsible for its own physical pre/post proof.
+    """
+
+    versions: dict[str, tuple[object, ...]]
+    paths: tuple[str, ...]
+    inventory_hash: str
+
+
+def _staged_scan_inventory(repository: VaultRepository) -> _StagedScanInventory:
+    versions = repository.note_version_snapshot()
+    paths = tuple(sorted(versions))
+    fingerprint = hashlib.sha256(
+        json.dumps([(path, versions[path]) for path in paths], sort_keys=True).encode()
+    ).hexdigest()
+    return _StagedScanInventory(versions, paths, fingerprint)
+
+
 def _scan_schema_sources_page(
     *,
     repository: VaultRepository,
@@ -303,7 +341,7 @@ def _scan_schema_sources_page(
     property_id: str | None = None,
     limit: int = 20,
     cursor: RetrospectionCursor | None = None,
-    _staged_inventory: dict[str, tuple[object, ...]] | None = None,
+    _staged_inventory: _StagedScanInventory | None = None,
 ) -> RetrospectionPage:
     """Internal staged-page builder; results are PROVISIONAL with inventory.
 
@@ -339,13 +377,16 @@ def _scan_schema_sources_page(
     # private snapshot and perform ONE final full-vault equality check before
     # publishing its plan. Standalone/interactive scans still verify the
     # entire vault at the start and end of EVERY page as before.
-    versions = (
-        repository.note_version_snapshot() if _staged_inventory is None else _staged_inventory
-    )
-    paths = sorted(versions)
-    inventory_hash = hashlib.sha256(
-        json.dumps([(path, versions[path]) for path in paths], sort_keys=True).encode()
-    ).hexdigest()
+    if _staged_inventory is None:
+        # The public API always obtains a fresh physical inventory per page.
+        current = _staged_scan_inventory(repository)
+    else:
+        if not isinstance(_staged_inventory, _StagedScanInventory):
+            raise SchemaRetrospectionError("Invalid private staging inventory")
+        current = _staged_inventory
+    versions = current.versions
+    paths = current.paths
+    inventory_hash = current.inventory_hash
     # A single vault can be queried for multiple schema operations. A cursor
     # from one query must never silently skip files in another query.
     context_hash = hashlib.sha256(

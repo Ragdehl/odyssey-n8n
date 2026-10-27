@@ -671,3 +671,135 @@ def test_cached_inventory_new_duplicate_stops_next_write(tmp_path):
     result = advance(worker)
     assert result["updated"] == 1 and result["stale"] == 1
     assert repo.read_text("1.md") == old
+
+
+def test_stage_separates_physical_inventory_capacity_from_write_candidates(tmp_path, monkeypatch):
+    """Private staging scans all IDs, even past public receipt capacity."""
+    from odyssey_core import schema_retrospection
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 28 + ["Profesión: ingeniero"])
+    # Simulate passing the much smaller 10k public limit without expensive
+    # 10k fixtures in the routine gate; the full 10k+ proof is opt-in.
+    monkeypatch.setattr(schema_retrospection, "_MAX_PROGRESS_IDS", 25)
+    worker = job(state, repo, writer)
+    summary = worker.stage(job_id="over-limit", type_id="person", property_id="profesion")
+    assert summary["total"] == 29
+    assert worker.status("over-limit")["pending"] == 29
+    # The public/durable per-page accumulator remains bounded.
+    from odyssey_core.schema_retrospection import (
+        SchemaRetrospectionError,
+        accumulate_schema_scan,
+        scan_schema_sources,
+    )
+
+    first = scan_schema_sources(
+        repository=repo,
+        schema=writer.schema,
+        kind="backfill_property",
+        target_type_id="person",
+        property_id="profesion",
+        limit=25,
+    )
+    second = scan_schema_sources(
+        repository=repo,
+        schema=writer.schema,
+        kind="backfill_property",
+        target_type_id="person",
+        property_id="profesion",
+        cursor=first.next_cursor,
+        limit=25,
+    )
+    with pytest.raises(SchemaRetrospectionError, match="Duplicate or inconsistent"):
+        accumulate_schema_scan(second, accumulate_schema_scan(first))
+
+
+def test_staged_large_scan_still_rejects_duplicate_identity_across_pages(tmp_path, monkeypatch):
+    """The private extended limit does not weaken cross-page collision rejection."""
+    from odyssey_core import schema_retrospection
+    from odyssey_core.schema_retrospection import SchemaRetrospectionError
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 26)
+    original = parse_note(repo.read_text("25.md"))
+    duplicate = type(original)(
+        {**original.metadata, "id": "persona-0"},
+        original.content,
+    )
+    repo.replace_text("25.md", serialize_note(duplicate))
+    monkeypatch.setattr(schema_retrospection, "_MAX_PROGRESS_IDS", 10)
+    worker = job(state, repo, writer)
+    with pytest.raises(SchemaRetrospectionError, match="Duplicate"):
+        worker.stage(job_id="duplicate", type_id="person", property_id="profesion")
+    assert worker.status("duplicate") is None
+    assert parse_note(repo.read_text("0.md")).metadata.get("profesion") is None
+
+
+def test_stage_rejects_staged_inventory_changed_after_page_zero(tmp_path, monkeypatch):
+    """A new note anywhere invalidates the snapshot before plan publication."""
+    from odyssey_runtime import schema_backfill_jobs as jobs
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 31)
+    original = jobs._scan_schema_sources_page
+    injected = False
+
+    def external_insert(**kwargs):
+        nonlocal injected
+        page = original(**kwargs)
+        if not injected:
+            injected = True
+            extra = parse_note(repo.read_text("0.md"))
+            repo.create_text(
+                "added.md",
+                serialize_note(type(extra)({**extra.metadata, "id": "inserted"}, extra.content)),
+            )
+        return page
+
+    monkeypatch.setattr(jobs, "_scan_schema_sources_page", external_insert)
+    worker = job(state, repo, writer)
+    with pytest.raises(LocalBackfillJobError, match="Vault changed"):
+        worker.stage(job_id="external", type_id="person", property_id="profesion")
+    assert injected and worker.status("external") is None
+
+
+def test_staged_scan_never_silently_exceeds_bounded_mutation_plan(tmp_path, monkeypatch):
+    """More candidate writes than the durable budget abort before any plan exists."""
+    from odyssey_runtime import schema_backfill_jobs as jobs
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    monkeypatch.setattr(jobs, "_LIMIT", 3)
+    worker = job(state, repo, writer)
+    with pytest.raises(LocalBackfillJobError, match="capacity"):
+        worker.stage(job_id="too-many", type_id="person", property_id="profesion")
+    assert worker.status("too-many") is None
+    assert all(
+        parse_note(repo.read_text(f"{i}.md")).metadata.get("profesion") is None for i in range(4)
+    )
+
+
+def test_large_staged_inventory_uses_only_two_physical_snapshots(tmp_path, monkeypatch):
+    """Pages share one proof; final publication still checks every path again."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 53)
+    calls = []
+    original = repo.note_version_snapshot
+
+    def counted_snapshot():
+        calls.append(True)
+        return original()
+
+    monkeypatch.setattr(repo, "note_version_snapshot", counted_snapshot)
+    worker = job(state, repo, writer)
+    assert (
+        worker.stage(job_id="snapshots", type_id="person", property_id="profesion")["pending"] == 53
+    )
+    assert len(calls) == 2
+
+
+def test_staged_id_bytes_cannot_exceed_bounded_memory_proof(tmp_path, monkeypatch):
+    """Very long identities must not create unbounded transient scan receipts."""
+    from odyssey_runtime import schema_backfill_jobs as jobs
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    monkeypatch.setattr(jobs, "_MAX_STAGED_ID_BYTES", 12)
+    worker = job(state, repo, writer)
+    with pytest.raises(LocalBackfillJobError, match="memory budget"):
+        worker.stage(job_id="oversized", type_id="person", property_id="profesion")
+    assert worker.status("oversized") is None

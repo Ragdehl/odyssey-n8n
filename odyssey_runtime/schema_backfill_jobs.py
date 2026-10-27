@@ -24,9 +24,12 @@ from typing import Any
 from odyssey_core.notes import parse_note, validate_note
 from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill, choose_explicit_backfill
 from odyssey_core.schema_retrospection import (
+    _MAX_STAGED_ID_BYTES,
+    _MAX_STAGED_SCAN_IDS,
     SchemaRetrospectionError,
+    _accumulate_schema_scan,
     _scan_schema_sources_page,
-    accumulate_schema_scan,
+    _staged_scan_inventory,
     reload_staged_backfill_source,
 )
 from odyssey_core.storage import VaultRepository
@@ -95,7 +98,7 @@ class LocalBackfillJob:
         ).hexdigest()
 
     def stage(self, *, job_id: str, type_id: str, property_id: str) -> dict[str, Any]:
-        """Finish a consistent source scan before any mutation (max 10,000)."""
+        """Scan up to 50k physical IDs, stage at most 10k bounded write candidates."""
         # Do not publish a plan that can never write because the property
         # is not optional. The canonical scanner independently checks IDs.
         definitions = [
@@ -117,9 +120,12 @@ class LocalBackfillJob:
             # During this write-free staging transaction, capture N once,
             # verify each selected note, and revalidate the whole set once
             # before publishing. Later E3 writes still require source CAS.
-            stable_inventory = self.repository.note_version_snapshot()
+            stable_inventory = _staged_scan_inventory(self.repository)
+            if len(stable_inventory.paths) > _MAX_STAGED_SCAN_IDS:
+                raise LocalBackfillJobError("Physical scan inventory exceeds bounded budget")
             cursor = None
             progress = None
+            scanned_id_bytes = 0
             rows: list[dict[str, Any]] = []
             while True:
                 page = _scan_schema_sources_page(
@@ -132,7 +138,12 @@ class LocalBackfillJob:
                     limit=25,
                     _staged_inventory=stable_inventory,
                 )
-                progress = accumulate_schema_scan(page, progress)
+                progress = _accumulate_schema_scan(page, progress, max_ids=_MAX_STAGED_SCAN_IDS)
+                scanned_id_bytes += sum(
+                    len(identifier.encode("utf-8")) for identifier in page.source_note_ids
+                )
+                if scanned_id_bytes > _MAX_STAGED_ID_BYTES:
+                    raise LocalBackfillJobError("Physical identity evidence exceeds memory budget")
                 rows.extend(
                     {
                         "id": note.note_id,
@@ -151,7 +162,7 @@ class LocalBackfillJob:
                 cursor = page.next_cursor
                 if cursor is None:
                     break
-            if self.repository.note_version_snapshot() != stable_inventory:
+            if self.repository.note_version_snapshot() != stable_inventory.versions:
                 raise LocalBackfillJobError("Vault changed during staged source scan")
             record = {
                 "version": 1,
