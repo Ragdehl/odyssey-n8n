@@ -963,8 +963,12 @@ class ContextIndex:
         inventory_current: dict[str, tuple[str, str, str, str, str, str, str]] = {}
         seen_ids: set[str] = set()
         unchanged_requested: set[str] = set()
-        for path in repository.list_markdown_paths():
-            before_version = repository.file_version(path)
+        # A single stable, no-symlink filesystem inventory supplies exact
+        # versions for all candidate paths. The old per-file path resolution
+        # repeated thousands of stat/resolve calls after listing the same
+        # directories. Changed files are still reparsed and final publication
+        # independently rechecks every physical version.
+        for path, before_version in sorted(repository.note_version_snapshot().items()):
             previous = old_inventory.get(path)
             if previous is not None and previous[2] == json.dumps(
                 before_version, ensure_ascii=False
@@ -1133,6 +1137,43 @@ class ContextIndex:
                         "Incremental context refresh detected unrelated index drift"
                     )
 
+                # Backfilled frontmatter can alter filters/embedding without
+                # altering the wikilink graph. Do NOT rebuild every source's
+                # links when each changed Note retains its exact path, body,
+                # aliases and fact projection. CREATE/DELETE, move, body edit,
+                # renamed identity or an inconsistent old projection must
+                # still take the global link reconciliation path.
+                stable_links = all(
+                    note_id in current
+                    and note_id in indexed
+                    and indexed[note_id][:3] == current_identity[note_id][:3]
+                    and (
+                        connection.execute(
+                            "SELECT aliases,body_text FROM note_projection WHERE note_id = ?",
+                            (note_id,),
+                        ).fetchone()
+                        == (
+                            json.dumps(current[note_id][8], ensure_ascii=False),
+                            current[note_id][10],
+                        )
+                    )
+                    and (
+                        connection.execute(
+                            "SELECT * FROM note_facts WHERE note_id = ? ORDER BY ordinal",
+                            (note_id,),
+                        ).fetchall()
+                        == list(current[note_id][14])
+                    )
+                    and (
+                        connection.execute(
+                            "SELECT status FROM note_fact_integrity WHERE note_id = ?",
+                            (note_id,),
+                        ).fetchone()
+                        == (current[note_id][15],)
+                    )
+                    for note_id in changed_requested
+                )
+
                 indexed_inventory = {
                     row[1]: row
                     for row in connection.execute(
@@ -1235,7 +1276,8 @@ class ContextIndex:
                         "INSERT INTO note_fact_integrity VALUES (?, ?)", (note_id, item[15])
                     )
 
-                _refresh_derived_links(connection)
+                if not stable_links:
+                    _refresh_derived_links(connection)
                 if not source_inventory_unchanged(
                     repository,
                     {row[0]: tuple(json.loads(row[2])) for row in inventory_current.values()},

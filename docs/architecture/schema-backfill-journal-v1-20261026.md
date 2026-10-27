@@ -200,7 +200,20 @@ RSS máxima acumulada del proceso 76,4/102,1/133,4 MiB respectivamente; `SwapFre
 
 La caché final incluyó comprobación de que añadir un ID duplicado tras el staging o tras la primera escritura la invalida, que cambiar otra nota obliga a recalcular el mapa canónico, que una duplicación después del write impide atribuirlo en Git y que un origen SQLite modificado no autoriza Core. El script no mide 10.000 **escrituras**, SLA/p95 robusto, GPT real, índice semántico neural, concurrencia, energía o el scheduler de Android/iOS. La mediana inicial de cada tanda incluye el primer coste de parsear toda la bóveda; la mejora no es O(1) porque aún se revisan todas las versiones y ContextIndex. La ruta actual UI→50 avances con pausas **no constituye aún un worker móvil real en background**; en móvil hará falta priorización, cuotas CPU/batería y persistencia de reanudación independiente de la pantalla.
 
-**Próximo cuello de botella:** evaluación del coste global de comprobar inventario y actualizar índices por nota; estudiar agrupación *solo de los refrescos derivados*, sin agrupar a ciegas commits Git ni debilitar CAS o reanudación, y medir en teléfono real antes de aceptar autonomía masiva.
+**Optimización adicional ContextIndex (fuente, 27-10):** en `refresh_notes`, el inventario de rutas/versiones se obtiene una sola vez con `repository.note_version_snapshot()` (sin seguir symlinks, directorios estables), en vez de `list_markdown_paths()` seguida de `file_version()` para cada nota. Antes del commit SQLite sigue existiendo la segunda comprobación física global. Para cambios solo de frontmatter se conservan los enlaces existentes **únicamente cuando** todos los targets modificados retienen ruta/identidad, alias, body y filas de hechos verificadas contra la proyección previa; si hay altas, bajas, cambio en cuerpo/fact, discrepancia de SQL o drift ajeno, se recalcula todo el grafo. Las propiedades, atributos, embeddings y inventario de las fichas cambiadas sí se actualizan siempre. Nuevos tests prueban salto de grafo en metadatos, refresco global en body edit y reparación ante un estado de hechos incompatible.
+
+**Medición repetida tras AMBAS mejoras de ContextIndex** en la misma sonda y máquina, muestras independientes (no p95 estable):
+
+| Notas | Core/Git anterior | Con refresco de índices optimizado | Refresco ContextIndex anterior → nuevo | Muestra |
+|---|---:|---:|---:|---:|
+| 1.000 | 302 ms | 252 ms | 120 → 69 ms por nota aprox. | 12 |
+| 5.000 | 1.415 ms | 1.174 ms | 578 → 339 ms por nota aprox. | 8 |
+| 10.000 | 2.800 ms | 2.332 ms | 1.146 → 675 ms por nota aprox. | 5 |
+
+Total desde el código inicial 10k 4.797 → 2.332 s (~51 %), aún O(N) por comprobaciones de integridad y todavía lejos de una campaña real de 10k escrituras. La sonda usa `on_updated` **síncrono** para medir explícitamente el refresco después de cada escritura, mientras que el runtime productivo usa el coordinador asíncrono y la barrera de lectura; no es medición del teléfono ni del end-to-end n8n/GPT.
+
+**Próximo cuello de botella:** comprobar el beneficio y las garantías de **agrupar únicamente refrescos de índices** (no commits Git ni saltarse journal), preservar barrera de lectura y recuperación tras caída, y medir con índice semántico real y dispositivo móvil. No afirmar que ya existe worker Android ni que los índices puedan quedarse obsoletos para las consultas.
+
 
 ## No implementado / siguiente puerta
 
