@@ -168,6 +168,22 @@ Una revisión read-only Codex independiente y **acotada exclusivamente al cambio
 
 **Corrección posterior en fuente:** scan_schema_sources ha recuperado la firma pública sin posibilidad de aceptar instantáneas previas y exige comprobaciones completas por página. El constructor _scan_schema_sources_page, deliberadamente interno, solo produce evidencias preliminares para el diario, cuya última verificación del inventario es obligatoria antes de crear el checkpoint. Nueva regresión de API: intentar inyectar un inventario anterior provoca TypeError y un escaneo público normal detecta la nota recién añadida. Tras separar API pública y constructor provisional, el banco opt-in de **10.000 notas sintéticas** sobre Raspberry volvió a pasar: 10,98 s de preparación, CPU 10,97 s, memoria RSS máxima 60,3 MB; comparable a los 11,40 s anteriores, no un cambio de escritura o de seguridad. Las regresiones del diario siguen detectando mutación de la primera página o nota nueva y rechazan toda publicación del plan. No se habilitan escrituras nuevas ni se toca el modelo.
 
+## Auditoría incremental y perfil de escala del 27-10 (solo fuente, SHA 718a6eb)
+
+Revisión independiente Codex de cuatro roles, fijada al commit `718a6eb`, con diff de reparación `7d95125..718a6eb`: **Generalidad PASS, Calidad PASS con advertencias externas, Pruebas BLOCKED por falta de aceptación del mismo SHA en Chromium/Access y campaña GPT real, Rendimiento BLOCKED por falta de prueba completa de escrituras + todos los índices a escala 10.000**. No equivale a una auditoría de integración íntegra ni a cuatro aprobaciones. El intento original con base `6c5a197` quedó bloqueado **antes de consumir modelo** porque excedía el paquete de evidencia de 256 KiB. El intento acotado consumió 254.648 tokens reportados y no realizó modificaciones. Evidencia privada: jobs `schema-backfill-final-sha-20261027` y `schema-backfill-final-delta-20261027`. CI y suite transversal en el SHA de código `473871d`: 2.263 Python + 252 JavaScript, 7 subtests PASS; commit posterior `718a6eb` solo añadió el brief de auditoría y volvió a pasar su gate de commit/CI.
+
+**Banco adicional Raspberry Pi ARM64 de 4 GiB:** reproducible con `PYTHONPATH=. python3 benchmarks/indexing/probe_schema_backfill_scale.py --scales 1000:12,5000:8,10000:5` desde la raíz de Odyssey, con memoria mínima disponible de 900 MiB y datos totalmente sintéticos. Se construyeron bóvedas Git efímeras con 1.000, 5.000 y 10.000 notas sintéticas; `LocalBackfillJob` real, un commit Git por propiedad, `ContextIndex` SQLite real y embedder determinista sin red. Cada muestra verifica `NotesQueryService` sobre exactamente las propiedades escritas; NO procesa 10.000 escrituras ni carga el modelo de embeddings neural de producción.
+
+| Notas en la bóveda | Muestra de escrituras | Staging | Escrituras + ContextIndex total | Mediana por escritura | Percentil 95 observado en la muestra |
+|---|---:|---:|---:|---:|---:|
+| 1.000 | 12 | 0,41 s | 6,22 s | 502 ms | 508 ms |
+| 5.000 | 8 | 3,89 s | 20,27 s | 2.422 ms | 2.441 ms |
+| 10.000 | 5 | 12,15 s | 25,75 s | 4.797 ms | 4.806 ms |
+
+RSS máxima acumulada del proceso 76,4/102,1/133,4 MiB respectivamente; `SwapFree` no cayó materialmente durante las muestras (aprox. 1,22 GiB). p95 con 5–12 observaciones **no es SLA ni estimación estadística robusta**. Los tiempos demuestran coste creciente por escritura casi proporcional a la cantidad de notas; no se extrapolan a 10.000 commits, a hardware móvil ni al índice semántico completo. El servidor avanza **una fuente por llamada**, la UI pausa tras 50 avances por sesión y el diario reanuda sin repetir escrituras inciertas, pero esto limita cada iteración, **no soluciona el cuello de botella O(N)**.
+
+**Siguiente puerta de ingeniería:** perfilar el doble recorrido físico de identidad/Git y el inventario del índice con pruebas adversariales de cambios externos y colisiones; diseñar un catálogo verificado o una transacción acotada que reutilice evidencia de unicidad/frescura sin relajar CAS, E3, actor, journal duradero ni historial/undo por nota. Repetir comparación y probar un lote grande representativo *antes* de declarar que 10.000 actualizaciones funcionan o activar un worker móvil. No bajar silenciosamente la autonomía de escaneo a 250 fuentes.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.
