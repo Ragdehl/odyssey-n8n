@@ -360,31 +360,67 @@ class NotesTelemetryError(RuntimeError):
 
 
 class DerivedIndexRefreshCoordinator:
-    """Run derived-index maintenance off the response path with a strict read barrier.
+    """Maintain derived indexes asynchronously with a strict reader barrier.
 
-    Mutations publish only stable note IDs. A single daemon worker coalesces IDs that arrive while
-    one refresh is running. Readers call :meth:`wait_until_clean` before consulting derived state;
-    an unrecoverable refresh failure therefore fails closed instead of exposing stale indexes.
+    Ordinary updates refresh immediately. A schema backfill can hold only its
+    *derived* index updates briefly, combining several already-committed Core/Git
+    notes in one verified refresh. The first pending backfill write starts a
+    fixed maximum wait: continuous writes cannot prolong it. A reader or an
+    ordinary mutation flushes pending work immediately. Neither source writes
+    nor local Git history are batched by this coordinator.
     """
 
-    def __init__(self, refresh: Callable[[Sequence[str]], None]) -> None:
+    def __init__(
+        self,
+        refresh: Callable[[Sequence[str]], None],
+        *,
+        backfill_window_s: float = 6.0,
+        backfill_flush_threshold: int = 8,
+    ) -> None:
+        if (
+            not isinstance(backfill_window_s, (int, float))
+            or isinstance(backfill_window_s, bool)
+            or not 0 < backfill_window_s <= 10
+            or type(backfill_flush_threshold) is not int
+            or not 2 <= backfill_flush_threshold <= 64
+        ):
+            raise ValueError("Invalid bounded backfill index refresh window")
         self._refresh = refresh
+        self._backfill_window_s = float(backfill_window_s)
+        self._backfill_flush_threshold = backfill_flush_threshold
         self._condition = Condition()
         self._pending: set[str] = set()
+        # Failed IDs remain unresolved until an actual later refresh includes
+        # them and succeeds. A subsequent unrelated successful refresh must
+        # never turn a partial derived index into a falsely clean one.
+        self._failed_ids: set[str] = set()
+        self._flush_deadline: float | None = None
+        self._flush_requested = False
         self._requested_generation = 0
         self._completed_generation = 0
         self._last_error: Exception | None = None
         self._worker: Thread | None = None
 
     def schedule(self, note_ids: Sequence[str]) -> int:
-        """Queue affected stable IDs and return the generation that now needs reconciliation."""
+        """Schedule ordinary changed IDs without an intentional batching delay."""
+        return self._queue(note_ids, backfill=False)
+
+    def schedule_backfill(self, note_ids: Sequence[str]) -> int:
+        """Coalesce source-committed backfill IDs for a bounded index-only window."""
+        return self._queue(note_ids, backfill=True)
+
+    def _queue(self, note_ids: Sequence[str], *, backfill: bool) -> int:
         bounded = tuple(dict.fromkeys(note_ids))
         if not bounded or any(not isinstance(note_id, str) or not note_id for note_id in bounded):
             raise ValueError("index refresh scheduling requires stable note IDs")
         with self._condition:
+            if backfill and self._flush_deadline is None:
+                self._flush_deadline = perf_counter() + self._backfill_window_s
             self._pending.update(bounded)
             self._requested_generation += 1
             generation = self._requested_generation
+            if not backfill or len(self._pending) >= self._backfill_flush_threshold:
+                self._flush_requested = True
             if self._worker is None or not self._worker.is_alive():
                 self._worker = Thread(
                     target=self._run,
@@ -396,9 +432,12 @@ class DerivedIndexRefreshCoordinator:
             return generation
 
     def wait_until_clean(self) -> None:
-        """Block until all refresh work visible at call time has completed successfully."""
+        """Flush pending backfill promptly, then refuse stale/failed derived reads."""
         with self._condition:
             target = self._requested_generation
+            if self._completed_generation < target and self._pending:
+                self._flush_requested = True
+                self._condition.notify_all()
             while self._completed_generation < target:
                 self._condition.wait()
             if self._last_error is not None:
@@ -407,11 +446,23 @@ class DerivedIndexRefreshCoordinator:
     def _run(self) -> None:
         while True:
             with self._condition:
-                while not self._pending:
-                    self._condition.wait()
-                note_ids = tuple(sorted(self._pending))
+                while True:
+                    if not self._pending:
+                        self._condition.wait()
+                        continue
+                    remaining = (
+                        None
+                        if self._flush_deadline is None
+                        else self._flush_deadline - perf_counter()
+                    )
+                    if self._flush_requested or remaining is not None and remaining <= 0:
+                        break
+                    self._condition.wait(timeout=remaining)
+                note_ids = tuple(sorted(self._pending | self._failed_ids))
                 self._pending.clear()
                 generation = self._requested_generation
+                self._flush_deadline = None
+                self._flush_requested = False
             error: Exception | None = None
             try:
                 self._refresh(note_ids)
@@ -419,7 +470,13 @@ class DerivedIndexRefreshCoordinator:
                 error = caught
             with self._condition:
                 self._completed_generation = max(self._completed_generation, generation)
-                self._last_error = error
+                if error is not None:
+                    self._failed_ids.update(note_ids)
+                    self._last_error = error
+                else:
+                    self._failed_ids.difference_update(note_ids)
+                    if not self._failed_ids:
+                        self._last_error = None
                 self._condition.notify_all()
 
 
@@ -3254,7 +3311,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
                 repository=repository,
                 writer=deterministic_writer,
                 actor_id=actor_id,
-                on_updated=lambda note_id: index_refresh_coordinator.schedule((note_id,)),
+                on_updated=lambda note_id: index_refresh_coordinator.schedule_backfill((note_id,)),
             )
 
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":

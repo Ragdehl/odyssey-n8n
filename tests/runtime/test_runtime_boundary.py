@@ -3009,3 +3009,121 @@ def test_authenticated_http_final_schema_review_is_readonly_and_cas_bound(
     finally:
         app.shutdown()
         app.server_close()
+
+
+def test_index_backfill_coalesces_commits_without_delaying_ordinary_writes() -> None:
+    """Many committed backfill notes refresh together; normal writes flush at once."""
+    calls: list[tuple[str, ...]] = []
+    refreshed = threading.Event()
+    coordinator = composition.DerivedIndexRefreshCoordinator(
+        lambda ids: (calls.append(tuple(ids)), refreshed.set()),
+        backfill_window_s=0.3,
+        backfill_flush_threshold=4,
+    )
+    for note_id in ("a", "b", "c"):
+        coordinator.schedule_backfill((note_id,))
+    assert not refreshed.wait(0.05)
+    coordinator.schedule_backfill(("d", "b"))
+    assert refreshed.wait(0.6)
+    coordinator.wait_until_clean()
+    assert calls == [("a", "b", "c", "d")]
+
+    refreshed.clear()
+    coordinator.schedule_backfill(("later",))
+    assert not refreshed.wait(0.05)
+    coordinator.schedule(("normal",))
+    assert refreshed.wait(0.3)
+    coordinator.wait_until_clean()
+    assert calls[-1] == ("later", "normal")
+
+
+def test_index_backfill_reader_flushes_immediately_and_waits_for_actual_update() -> None:
+    """The read barrier cannot leak a partially indexed batch before refresh returns."""
+    started = threading.Event()
+    release = threading.Event()
+    completed = threading.Event()
+    calls: list[tuple[str, ...]] = []
+
+    def refresh(ids: tuple[str, ...]) -> None:
+        calls.append(tuple(ids))
+        started.set()
+        assert release.wait(2)
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(refresh, backfill_window_s=2.0)
+    coordinator.schedule_backfill(("a",))
+    coordinator.schedule_backfill(("b",))
+    reader = threading.Thread(
+        target=lambda: (coordinator.wait_until_clean(), completed.set()),
+        daemon=True,
+    )
+    reader.start()
+    assert started.wait(0.5), "A reader must override the batch timer"
+    assert not completed.wait(0.05)
+    release.set()
+    assert completed.wait(1)
+    assert calls == [("a", "b")]
+
+
+def test_index_backfill_first_deadline_is_not_extended_by_more_writes() -> None:
+    """A continuous producer cannot starve the asynchronous index writer."""
+    calls: list[tuple[str, ...]] = []
+    refreshed = threading.Event()
+    coordinator = composition.DerivedIndexRefreshCoordinator(
+        lambda ids: (calls.append(tuple(ids)), refreshed.set()),
+        backfill_window_s=0.12,
+        backfill_flush_threshold=8,
+    )
+    coordinator.schedule_backfill(("a",))
+    assert not refreshed.wait(0.04)
+    coordinator.schedule_backfill(("b",))
+    assert not refreshed.wait(0.04)
+    coordinator.schedule_backfill(("c",))
+    assert refreshed.wait(0.5)
+    coordinator.wait_until_clean()
+    assert calls == [("a", "b", "c")]
+
+
+def test_index_backfill_failure_surfaces_to_reader_without_stale_results() -> None:
+    """Batched refresh exceptions remain fatal to derived-index reads."""
+    refreshed = threading.Event()
+
+    def broken(_ids: tuple[str, ...]) -> None:
+        refreshed.set()
+        raise ValueError("invalid canonical inventory")
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(broken, backfill_window_s=0.2)
+    coordinator.schedule_backfill(("a",))
+    assert not refreshed.wait(0.04)
+    with pytest.raises(RuntimeError, match="derived index refresh failed"):
+        coordinator.wait_until_clean()
+    assert refreshed.is_set()
+
+
+@pytest.mark.parametrize("delay,size", [(0, 8), (12, 8), (0.1, 1), (0.1, 65)])
+def test_index_backfill_window_is_bounded(delay, size) -> None:
+    with pytest.raises(ValueError, match="bounded"):
+        composition.DerivedIndexRefreshCoordinator(
+            lambda _ids: None, backfill_window_s=delay, backfill_flush_threshold=size
+        )
+
+
+def test_index_failure_retries_all_missing_ids_not_just_last_successful_note() -> None:
+    """A later good refresh cannot silently abandon failed canonical changes."""
+    calls: list[tuple[str, ...]] = []
+    refreshed = threading.Event()
+
+    def flaky(ids: tuple[str, ...]) -> None:
+        calls.append(tuple(ids))
+        refreshed.set()
+        if len(calls) == 1:
+            raise ValueError("first refresh failed")
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(flaky)
+    coordinator.schedule(("unindexed",))
+    with pytest.raises(RuntimeError, match="derived index refresh failed"):
+        coordinator.wait_until_clean()
+    assert refreshed.is_set()
+    refreshed.clear()
+    coordinator.schedule(("later",))
+    coordinator.wait_until_clean()
+    assert calls == [("unindexed",), ("later", "unindexed")]

@@ -478,3 +478,94 @@ def test_backfill_refreshes_real_local_index_before_filtered_notes_readback(tmp_
     assert page.items[0].properties["profesion"] == "médica"
     assert notes.detail("persona-0").note.properties["profesion"] == "médica"
     assert refreshes == [("persona-0",)]
+
+
+def test_real_backfill_batches_index_refresh_but_reader_sees_all_properties(tmp_path):
+    """Six E3/Git commits reconcile context plus semantic in one derived batch."""
+    import hashlib
+    import sqlite3
+
+    from odyssey_core.context import ContextFilter, ContextIndex
+    from odyssey_core.note_queries import NotesQueryService
+    from odyssey_core.semantic import SemanticEntityIndex
+    from odyssey_core.verified_source_inventory import verified_context_source_inventory
+    from odyssey_runtime.composition import DerivedIndexRefreshCoordinator
+    from odyssey_runtime.index_startup import p4_indexes_reusable
+    from tests.runtime.test_schema_backfill_jobs import ACTOR, NOW, setup
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 6)
+    schema = writer.schema
+
+    class LocalEmbedder:
+        model_name = "tests/batched-index"
+        model_version = "1"
+
+        def embed_documents(self, texts):
+            return [[1.0, 0.0] for _ in texts]
+
+        def embed_queries(self, texts):
+            return self.embed_documents(texts)
+
+    embedder = LocalEmbedder()
+    index = ContextIndex(tmp_path / "derived" / "context.sqlite3")
+    index.rebuild(repo, schema, embedder)
+    semantic = SemanticEntityIndex(tmp_path / "derived" / "semantic.sqlite3")
+    semantic.rebuild(repo, schema, embedder)
+    refreshes = []
+
+    def refresh(note_ids):
+        refreshes.append(tuple(note_ids))
+        index.refresh_notes(repo, schema, embedder, note_ids=note_ids)
+        inventory = verified_context_source_inventory(repo, schema, index.path)
+        semantic.refresh_notes(
+            repo, schema, embedder, note_ids=note_ids, verified_inventory=inventory
+        )
+
+    coordinator = DerivedIndexRefreshCoordinator(
+        refresh, backfill_window_s=5, backfill_flush_threshold=8
+    )
+    worker = LocalBackfillJob(
+        state_root=state,
+        repository=repo,
+        writer=writer,
+        actor_id="synthetic",
+        on_updated=lambda note_id: coordinator.schedule_backfill((note_id,)),
+    )
+    assert worker.stage(job_id="batch", type_id="person", property_id="profesion")["pending"] == 6
+    for count in range(1, 7):
+        receipt = worker.advance(
+            job_id="batch",
+            type_id="person",
+            property_id="profesion",
+            actor=ACTOR,
+            now=NOW,
+        )
+        assert receipt["updated"] == count
+    assert not refreshes, "Derived index work should coalesce without blocking E3/Git"
+    # If the process dies now, bootstrap MUST reject the stale indexes and
+    # rebuild from physical canonical Markdown instead of trusting a lost queue.
+    assert not p4_indexes_reusable(repo, schema, embedder, index, semantic, {})
+    coordinator.wait_until_clean()
+    assert p4_indexes_reusable(repo, schema, embedder, index, semantic, {})
+    assert refreshes == [tuple(f"persona-{i}" for i in range(6))]
+    results = NotesQueryService(repo, schema, index).query(
+        filters=[ContextFilter("profesion", "eq", "médica")], page_size=20
+    )
+    assert results.total == 6
+    assert all(
+        parse_note(repo.read_text(f"{i}.md")).metadata["profesion"] == "médica" for i in range(6)
+    )
+    with sqlite3.connect(semantic.path) as connection:
+        indexed_hashes = dict(connection.execute("SELECT id,source_hash FROM notes"))
+    assert indexed_hashes == {
+        f"persona-{i}": hashlib.sha256(repo.read_text(f"{i}.md").encode()).hexdigest()
+        for i in range(6)
+    }
+    commits = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=repo.root,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert commits.stdout.strip() == "7"  # baseline + 6 independently undoable commits

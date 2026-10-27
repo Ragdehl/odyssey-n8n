@@ -212,7 +212,27 @@ La caché final incluyó comprobación de que añadir un ID duplicado tras el st
 
 Total desde el código inicial 10k 4.797 → 2.332 s (~51 %), aún O(N) por comprobaciones de integridad y todavía lejos de una campaña real de 10k escrituras. La sonda usa `on_updated` **síncrono** para medir explícitamente el refresco después de cada escritura, mientras que el runtime productivo usa el coordinador asíncrono y la barrera de lectura; no es medición del teléfono ni del end-to-end n8n/GPT.
 
-**Próximo cuello de botella:** comprobar el beneficio y las garantías de **agrupar únicamente refrescos de índices** (no commits Git ni saltarse journal), preservar barrera de lectura y recuperación tras caída, y medir con índice semántico real y dispositivo móvil. No afirmar que ya existe worker Android ni que los índices puedan quedarse obsoletos para las consultas.
+## Agrupación acotada de refrescos derivados — 27-10-2026 (fuente, no desplegado)
+
+**Problema:** el coordinador ya ejecutaba refrescos en un daemon thread con barrera de lectura, pero tras cada nota Core/Git lo activaba inmediatamente. La escritura siguiente habitualmente llegaba después y desencadenaba otro barrido global de versiones y de SQLite. Reutilizar una caché de identidad canónica y acelerar ContextIndex no eliminaba este coste repetido.
+
+**Cambio mínimo en el coordinador existente:** solo `LocalBackfillJob.on_updated` de la composición llama a `DerivedIndexRefreshCoordinator.schedule_backfill` en vez de `schedule`. El primer ID fija una **ventana máxima de 6 s** que posteriores escrituras no prolongan; 8 IDs distintos solicitan un refresco inmediato (umbral de activación, **no** tamaño máximo de batch). El worker combina IDs solicitados y deja la fuente Markdown, journal HMAC, autorización por actor, CAS, readback y commits Git **individuales** sin cambios. Las demás escrituras conservan `schedule` inmediato y fuerzan también a procesar cualquier lote pendiente. `wait_until_clean` adelanta inmediatamente el refresco si una consulta lo necesita; solo devuelve control tras terminar el índice o produce error de lectura, nunca sirve voluntariamente una proyección atrasada. Si un refresco falla, sus IDs quedan registrados como pendientes en memoria y un intento posterior los vuelve a incluir, incluso si el nuevo commit afecta a otra nota. Las excepciones no desaparecen por un refresco parcial posterior.
+
+**Recuperación:** si el proceso desaparece con IDs en espera, esos IDs en memoria desaparecen (no existe una cola durable nueva), pero los cambios siguen físicamente en Markdown y Git. En el arranque, `p4_indexes_reusable` compara los índices ContextIndex y SemanticEntityIndex con el inventario canónico; detecta el desfase y exige reconstruir. Prueba integrada nueva: después de 6 commits Git antes del refresco, el reutilizador **rechaza** los índices viejos; después de un único batch ContextIndex + SemanticEntityIndex, los reutiliza, y una búsqueda por propiedad recupera las seis notas y sus hashes. Suite de concurrencia: agrupación, vencimiento fijo, lectura anticipada, prioridad de escrituras ordinarias, fallo que bloquea al lector, arrastre de IDs de intentos fallidos y límites de configuración. No equivale a programar un worker duradero Android/iOS.
+
+**Prueba reproducible** `python3 benchmarks/indexing/probe_schema_backfill_batches.py --scales 250:12,1000:12,5000:8,10000:5`, y `--with-semantic` para incluir el índice semántico genérico. Bóvedas Git sintéticas y descartables, embedder determinista sin red, índice inicial previamente construido. El tiempo total contiene los commits E3/Git uno por nota, journal, un refresco agrupado y **la espera explícita del lector**; no contiene el staging ni el índice inicial. Una medición concreta, sin garantía estadística:
+
+| Total notas | Escrituras probadas | Refrescos ContextIndex | Total batch ContextIndex | Serie por nota (referencia f73242a) | Total batch + semantic |
+|---|---:|---:|---:|---:|---:|
+| 250 | 12 | 1 | 0,85 s | no medida comparable | no medido |
+| 1.000 | 12 | 1 | 2,60 s | 3,33 s | 2,69 s |
+| 5.000 | 8 | 1 | 8,68 s | 10,87 s | 9,05 s |
+| 10.000 | 5 | 1 | 12,20 s | 14,43 s | 13,08 s |
+
+A escala de 10.000 notas y 5 commits, el paso de 14,43 a 12,20 s reduce ≈15 % el tiempo total frente al anterior índice por nota, además de las anteriores optimizaciones Core/Git. En la variante `--with-semantic`, 10k y 5 commits: un lote context+semantic tardó 1,59 s; hashes semánticos y filtro Notes se contrastan con Markdown físico, 6 commits Git (incluido baseline). **Aún NO** son 10.000 escrituras, todos los índices App Tasks/Events, FastEmbed/ONNX real, medidas móviles de batería, ni una evaluación de IA real. El coordinador de runtime mantiene la lógica productiva de reconstrucción íntegra de índices derivados si falla su refresco incremental y el índice de arranque exige consistencia física.
+
+**Próximo trabajo:** contrastar agrupación con todos los índices App e inferencia neural real, estresar cambios concurrentes y el flujo desde DEV desplegado sobre el mismo SHA. Después, diseñar el ejecutor local móvil realmente durable, con políticas de batería y reanudación independientes de Chromium, sin reemplazar Markdown por SQLite ni cambiar el contrato de una aprobación.
+
 
 
 ## No implementado / siguiente puerta
