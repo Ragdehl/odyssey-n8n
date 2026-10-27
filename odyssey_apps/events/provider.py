@@ -14,7 +14,7 @@ from typing import Any
 from .interpretation import EventInterpretation, EventInterpretationError, EventOperation
 from .proposal import validate_event_proposal
 
-EVENTS_PROMPT_V4 = """Classify ONLY the current exact source as an Events-calendar operation.
+EVENTS_PROMPT = """Classify ONLY the current exact source as an Events-calendar operation.
 An Event is a scheduled occurrence (appointment, meeting, outing, school activity,
 performance, camp, trip, bounded recurring activity), NOT a task, reminder,
 historical memory, or any dated statement. For mixed Tasks+Events in the SAME
@@ -44,22 +44,6 @@ as DATE; never silently discard one. If reference or date is ambiguous,
 ABSTAIN. The Event runtime validates the target's existing calendar date.
 For CREATE only, START+END may describe a bounded multi-day interval.
 Never resolve dates, time zones, participants, or note IDs. Return strict JSON."""
-
-# An additive revision: keep every V4 refusal, source quote and lifecycle rule.
-EVENTS_PROMPT_V5_EXTENSION = """
-A confirmed, explicitly dated future arrival or visit is an Event occurrence
-also when reported as a declarative future fact, not an imperative to create
-an appointment. Examples of this semantic class include a relative visiting
-on Saturday or a guest arriving on a named date. This does NOT make every
-dated assertion an Event. For CREATE, if no event-naming noun phrase exists,
-title_quote may quote the exact contiguous verbal phrase describing the
-scheduled occurrence (e.g. 'Mi prima vendrá a casa'), without its date.
-Never use only the person's name, destination or the date as an event title.
-Do not turn questions, hypothetical/conditional visits, uncertain predictions,
-negated/cancelled plans, tasks or historical memories into confirmed Events.
-If explicit scheduling cannot be grounded in the source, ABSTAIN.
-"""
-EVENTS_PROMPT = EVENTS_PROMPT_V4 + EVENTS_PROMPT_V5_EXTENSION
 
 ROLES = [
     "DATE",
@@ -182,7 +166,7 @@ class OpenAIEventInterpreter:
             text={
                 "format": {
                     "type": "json_schema",
-                    "name": "e5_event_intent_v5",
+                    "name": "e5_event_intent_v4",
                     "strict": True,
                     "schema": PROPOSAL_SCHEMA,
                 }
