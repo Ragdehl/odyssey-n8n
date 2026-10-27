@@ -22,6 +22,7 @@ from odyssey_runtime.schema_backfill_jobs import LocalBackfillJob, LocalBackfill
 
 _MAX_SEGMENTS = 50002
 _DEFAULT_SEGMENT_SIZE = 1000
+_ZERO_CHAIN = "0" * 64
 _COUNTERS = ("updated", "no_evidence", "ambiguous", "stale", "already_present", "deferred")
 
 
@@ -111,6 +112,8 @@ class LocalBackfillCampaign:
             "segment_size",
             "identity_hash",
             "eligibility_bitmap",
+            "completed_chain",
+            "terminal_receipt_hash",
             "segment_index",
             "after_path",
             "active_segment",
@@ -124,6 +127,18 @@ class LocalBackfillCampaign:
             or record["scope"] != self.worker.scope
             or record["schema_hash"] != self.worker.schema_hash
             or record["campaign_id"] != campaign_id
+            or not isinstance(record["completed_chain"], str)
+            or len(record["completed_chain"]) != 64
+            or any(c not in "0123456789abcdef" for c in record["completed_chain"])
+            or (
+                record["terminal_receipt_hash"] is not None
+                and (
+                    not isinstance(record["terminal_receipt_hash"], str)
+                    or len(record["terminal_receipt_hash"]) != 64
+                    or any(c not in "0123456789abcdef" for c in record["terminal_receipt_hash"])
+                )
+            )
+            or (record["finished"] != (record["terminal_receipt_hash"] is not None))
             or type(record["segment_index"]) is not int
             or not 0 <= record["segment_index"] < _MAX_SEGMENTS
             or type(record["segment_size"]) is not int
@@ -175,6 +190,12 @@ class LocalBackfillCampaign:
         if (record["type_id"], record["property_id"]) != (type_id, property_id):
             raise LocalBackfillJobError("Campaign approved target changed")
 
+    def _chain_next(self, previous: str, child: dict[str, Any]) -> str:
+        """Order-sensitive digest of the exact HMAC-authenticated child receipt."""
+        return hashlib.sha256(
+            bytes.fromhex(previous) + bytes.fromhex(self.worker._integrity(child))
+        ).hexdigest()
+
     def _completed_write_paths(
         self,
         *,
@@ -189,6 +210,9 @@ class LocalBackfillCampaign:
         candidates). Missing, unfinished or altered evidence fails closed.
         """
         written: set[str] = set()
+        child_totals = {"total": 0, **{key: 0 for key in _COUNTERS}}
+        chain = _ZERO_CHAIN
+        previous_path: str | None = None
         with self.worker._lock():
             for index in range(completed_segment_count):
                 child_id = self._child_id(self.worker.scope, campaign_id, index)
@@ -201,9 +225,32 @@ class LocalBackfillCampaign:
                     for row in receipt["rows"]
                 ):
                     raise LocalBackfillJobError("Campaign earlier journal is incomplete")
+                if not receipt["rows"]:
+                    raise LocalBackfillJobError("Campaign completed child was empty")
+                child_totals["total"] += len(receipt["rows"])
                 for row in receipt["rows"]:
+                    if row["status"] not in _COUNTERS:
+                        raise LocalBackfillJobError("Campaign completed child outcome invalid")
+                    if previous_path is not None and row["path"] <= previous_path:
+                        raise LocalBackfillJobError("Campaign completed child frontier replay")
+                    previous_path = row["path"]
+                    child_totals[row["status"]] += 1
                     if row["status"] in {"updated", "already_present"}:
                         written.add(row["path"])
+                chain = self._chain_next(chain, receipt)
+        # A child can be correctly HMAC-signed yet REPLAYED from an older
+        # incarnation of the same deterministic job_id. Require exact linkage
+        # with this separately signed parent: total counts, frontier and the
+        # rolling digest of each child HMAC in strict order.
+        parent = self._read(campaign_id)
+        if parent is None or (
+            parent["segment_index"] != completed_segment_count
+            or (parent["type_id"], parent["property_id"]) != (type_id, property_id)
+            or parent["totals"] != child_totals
+            or parent["completed_chain"] != chain
+            or parent["after_path"] != previous_path
+        ):
+            raise LocalBackfillJobError("Campaign signed parent/child evidence mismatch")
         return frozenset(written)
 
     def _summary(self, record: dict[str, Any]) -> dict[str, Any]:
@@ -229,6 +276,10 @@ class LocalBackfillCampaign:
                 self.worker._target(final_child, record["type_id"], record["property_id"])
                 if final_child["rows"]:
                     raise LocalBackfillJobError("Campaign terminal proof contains pending sources")
+                if not hmac.compare_digest(
+                    self.worker._integrity(final_child), record["terminal_receipt_hash"]
+                ):
+                    raise LocalBackfillJobError("Campaign terminal signed proof replayed")
         totals = dict(record["totals"])
         in_flight = {"pending": 0, "interpreting": 0, "writing": 0}
         active_id = record["active_segment"]
@@ -276,6 +327,8 @@ class LocalBackfillCampaign:
                     "segment_size": self.segment_size,
                     "identity_hash": None,
                     "eligibility_bitmap": None,
+                    "completed_chain": _ZERO_CHAIN,
+                    "terminal_receipt_hash": None,
                     "segment_index": 0,
                     "after_path": None,
                     "active_segment": None,
@@ -305,6 +358,8 @@ class LocalBackfillCampaign:
                 record["identity_hash"] = identity
                 record["eligibility_bitmap"] = eligibility
                 if child["total"] == 0:
+                    terminal = self.worker._required(self.worker._path(child_id), child_id)
+                    record["terminal_receipt_hash"] = self.worker._integrity(terminal)
                     record["finished"] = True
                 else:
                     if frontier is None:
@@ -342,6 +397,18 @@ class LocalBackfillCampaign:
                 if current is None:
                     raise LocalBackfillJobError("Campaign journal missing")
                 if current["status"] in {"complete", "awaiting_ai"} and current["pending"] == 0:
+                    self._completed_write_paths(
+                        campaign_id=campaign_id,
+                        completed_segment_count=record["segment_index"],
+                        type_id=type_id,
+                        property_id=property_id,
+                    )
+                    completed_receipt = self.worker._required(
+                        self.worker._path(record["active_segment"]), record["active_segment"]
+                    )
+                    record["completed_chain"] = self._chain_next(
+                        record["completed_chain"], completed_receipt
+                    )
                     for key in record["totals"]:
                         record["totals"][key] += current.get(key, 0)
                     record["after_path"] = record["active_frontier"]
@@ -377,6 +444,8 @@ class LocalBackfillCampaign:
                     record["identity_hash"] = physical_identity
                     record["eligibility_bitmap"] = eligibility
                 if child["total"] == 0:
+                    terminal = self.worker._required(self.worker._path(child_id), child_id)
+                    record["terminal_receipt_hash"] = self.worker._integrity(terminal)
                     record["finished"] = True
                     self._save(campaign_id, record)
                     return self._summary(record)

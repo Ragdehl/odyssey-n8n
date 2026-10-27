@@ -625,3 +625,86 @@ def test_finished_campaign_requires_all_hmac_children_for_status(tmp_path, missi
         item.status("all-people")
     with pytest.raises(LocalBackfillJobError, match="journal missing"):
         step(item)
+
+
+@pytest.mark.parametrize("replay", ["completed_child", "terminal_receipt"])
+def test_campaign_rejects_valid_hmac_receipt_replayed_from_prior_campaign_run(tmp_path, replay):
+    """An OLD but correctly signed receipt must not authenticate a NEW parent."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    originals = {name: repo.read_text(name) for name in repo.list_markdown_paths()}
+    first = campaign(state, repo, writer)
+    first.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert run_to_end(first)[-1]["status"] == "complete"
+    parent = first._read("all-people")
+    old_index = 0 if replay == "completed_child" else parent["segment_index"]
+    old_job = first._child_id(first.worker.scope, "all-people", old_index)
+    old_path = first.worker._path(old_job)
+    old_signed_bytes = old_path.read_bytes()
+
+    # Reset only the DISPOSABLE campaign receipts, while retaining the local
+    # HMAC key and physical vault identity. Start another valid incarnation
+    # using the SAME deterministic job IDs but changed canonical identity.
+    for path in (state / "schema-backfill-jobs").glob("*.json"):
+        path.unlink()
+    for name, body in originals.items():
+        repo.replace_text(name, body)
+    changed = parse_note(repo.read_text("0.md"))
+    repo.replace_text(
+        "0.md",
+        serialize_note(Note({**changed.metadata, "id": "persona-changed"}, changed.content)),
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "synthetic-second-incarnation",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    second = campaign(state, repo, writer)
+    second.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert run_to_end(second)[-1]["status"] == "complete"
+    assert second._read("all-people")["totals"]["updated"] == 4
+
+    latest_path = second.worker._path(old_job)
+    assert latest_path.read_bytes() != old_signed_bytes
+    latest_path.write_bytes(old_signed_bytes)
+    # Child HMAC, job ID, actor, schema, type, and property ALL remain valid.
+    assert second.worker._read(latest_path, old_job) is not None
+    expected = (
+        "signed parent/child evidence mismatch"
+        if replay == "completed_child"
+        else "terminal signed proof replayed"
+    )
+    with pytest.raises(LocalBackfillJobError, match=expected):
+        second.status("all-people")
+    with pytest.raises(LocalBackfillJobError, match=expected):
+        step(second)
+
+
+def test_campaign_can_finish_without_candidates_and_requires_terminal_receipt(tmp_path):
+    """No E3 writes: terminal proof still belongs to signed parent."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 2)
+    for name in repo.list_markdown_paths():
+        note = parse_note(repo.read_text(name))
+        repo.replace_text(
+            name,
+            serialize_note(Note({**note.metadata, "profesion": "existente"}, note.content)),
+        )
+    item = campaign(state, repo, writer)
+    terminal = item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert terminal["status"] == "complete" and terminal["finished"] is True
+    assert terminal["total"] == terminal["updated"] == 0
+    assert item.status("all-people") == terminal
+    parent = item._read("all-people")
+    child_id = item._child_id(item.worker.scope, "all-people", parent["segment_index"])
+    item.worker._path(child_id).unlink()
+    with pytest.raises(LocalBackfillJobError, match="terminal proof journal missing"):
+        item.status("all-people")
