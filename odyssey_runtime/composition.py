@@ -1911,26 +1911,66 @@ class RuntimeComposition:
                     ensure_ascii=False,
                 ).encode("utf-8")
             ).hexdigest()[:48]
+            # Preserve V1 journals already staged before this deployment.
+            # For NEW campaigns in a >10k-physical-note vault, use a sealed
+            # actor-bound sequence of small V1 journals; never truncate V1.
+            # The same confirmed property is checked above on EVERY action.
+            from odyssey_core import schema_retrospection as scan_limits
+
+            from . import schema_backfill_campaign as campaign_contract
+
+            campaign = campaign_contract.LocalBackfillCampaign(
+                worker=worker, segment_size=campaign_contract._DEFAULT_SEGMENT_SIZE
+            )
+            legacy = worker.status(job_id)
+            saved_campaign = campaign.status(job_id)
+            if legacy is not None and saved_campaign is not None:
+                raise ValueError("Conflicting local backfill campaign and legacy journal")
+            use_campaign = saved_campaign is not None or (
+                legacy is None
+                and len(worker.repository.note_version_snapshot()) > scan_limits._MAX_PROGRESS_IDS
+            )
             if payload["action"] == "stage":
-                result = worker.stage(
-                    job_id=job_id,
-                    type_id=payload["target_type_id"],
-                    property_id=payload["property_id"],
+                result = (
+                    campaign.stage(
+                        campaign_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                    )
+                    if use_campaign
+                    else worker.stage(
+                        job_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                    )
                 )
             elif payload["action"] == "status":
-                result = worker.status(job_id)
+                result = campaign.status(job_id) if use_campaign else legacy
                 if result is None:
                     return {"kind": "schema_backfill", "status": "not_started"}
             else:
                 # Source-only rollout: explicit deterministic facts can write.
                 # NO provider is injected here before live-model acceptance.
-                result = worker.advance(
-                    job_id=job_id,
-                    type_id=payload["target_type_id"],
-                    property_id=payload["property_id"],
-                    actor={"human": resolved_actor, "app": "odyssey-schema-backfill"},
-                    now=_current_time()["timestamp"],
-                    interpreter=None,
+                actor = {"human": resolved_actor, "app": "odyssey-schema-backfill"}
+                now = _current_time()["timestamp"]
+                result = (
+                    campaign.advance(
+                        campaign_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                        actor=actor,
+                        now=now,
+                        interpreter=None,
+                    )
+                    if use_campaign
+                    else worker.advance(
+                        job_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                        actor=actor,
+                        now=now,
+                        interpreter=None,
+                    )
                 )
             return {"kind": "schema_backfill", **result}
         if operation in {"schema_confirm", "schema_status"}:

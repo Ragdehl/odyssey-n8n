@@ -98,7 +98,72 @@ class LocalBackfillJob:
         ).hexdigest()
 
     def stage(self, *, job_id: str, type_id: str, property_id: str) -> dict[str, Any]:
-        """Scan up to 50k physical IDs, stage at most 10k bounded write candidates."""
+        """Original all-or-reject staging; never truncate a standalone plan."""
+        result, _, _ = self._stage_bounded(
+            job_id=job_id,
+            type_id=type_id,
+            property_id=property_id,
+            after_path=None,
+            max_candidates=_LIMIT,
+            expected_identity_hash=None,
+            segmented=False,
+        )
+        return result
+
+    def _stage_segment(
+        self,
+        *,
+        job_id: str,
+        type_id: str,
+        property_id: str,
+        after_path: str | None,
+        max_candidates: int,
+        expected_identity_hash: str | None,
+    ) -> tuple[dict[str, Any], str | None, str]:
+        """Private segment selection; only the signed campaign coordinator calls this.
+
+        All Markdown identities, including skipped and out-of-range notes, are
+        verified during every selection. The HMAC parent binds each next
+        frontier; no public Notes argument controls the cursor or size.
+        """
+        if (
+            type(max_candidates) is not int
+            or not 1 <= max_candidates <= _LIMIT
+            or (
+                after_path is not None
+                and (not isinstance(after_path, str) or not 1 <= len(after_path) <= 4096)
+            )
+            or (
+                expected_identity_hash is not None
+                and (
+                    not isinstance(expected_identity_hash, str)
+                    or _SHA.fullmatch(expected_identity_hash) is None
+                )
+            )
+        ):
+            raise LocalBackfillJobError("Invalid bounded segment selection")
+        return self._stage_bounded(
+            job_id=job_id,
+            type_id=type_id,
+            property_id=property_id,
+            after_path=after_path,
+            max_candidates=max_candidates,
+            expected_identity_hash=expected_identity_hash,
+            segmented=True,
+        )
+
+    def _stage_bounded(
+        self,
+        *,
+        job_id: str,
+        type_id: str,
+        property_id: str,
+        after_path: str | None,
+        max_candidates: int,
+        expected_identity_hash: str | None,
+        segmented: bool,
+    ) -> tuple[dict[str, Any], str | None, str]:
+        """Scan and attest all physical IDs; publish one bounded E3/Git journal."""
         # Do not publish a plan that can never write because the property
         # is not optional. The canonical scanner independently checks IDs.
         definitions = [
@@ -113,9 +178,13 @@ class LocalBackfillJob:
         path = self._path(job_id)
         with self._lock():
             existing = self._read(path, job_id)
-            if existing is not None:
+            # An existing segment has already produced canonical writes.
+            # Never restage/reinterpret it from a changed vault. The sealed
+            # frontier is saved by its parent and the journal is authoritative
+            # only for recovery of its own guarded individual writes.
+            if existing is not None and not segmented:
                 self._target(existing, type_id, property_id)
-                return self._summary(existing)
+                return self._summary(existing), None, ""
             # A paged public scan rechecks all N files twice PER page.
             # During this write-free staging transaction, capture N once,
             # verify each selected note, and revalidate the whole set once
@@ -126,7 +195,9 @@ class LocalBackfillJob:
             cursor = None
             progress = None
             scanned_id_bytes = 0
+            fingerprint = hashlib.sha256()
             rows: list[dict[str, Any]] = []
+            frontier = after_path
             while True:
                 page = _scan_schema_sources_page(
                     repository=self.repository,
@@ -144,26 +215,60 @@ class LocalBackfillJob:
                 )
                 if scanned_id_bytes > _MAX_STAGED_ID_BYTES:
                     raise LocalBackfillJobError("Physical identity evidence exceeds memory budget")
-                rows.extend(
-                    {
-                        "id": note.note_id,
-                        "path": note.path,
-                        "hash": note.source_hash,
-                        "revision": note.revision,
-                        "status": "pending",
-                        "request": None,
-                        "digest": None,
-                        "undo": None,
-                    }
-                    for note in page.eligible_notes
+                # Bind path order and all ID-bearing notes, including those
+                # outside the current segment. Property writes change content,
+                # not this identity fingerprint.
+                offset = 0 if cursor is None else cursor.offset
+                physical_page = stable_inventory.paths[offset : offset + page.scanned_paths]
+                fingerprint.update(
+                    json.dumps(
+                        [physical_page, page.source_note_ids],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
                 )
-                if len(rows) > _LIMIT:
-                    raise LocalBackfillJobError("Local plan source capacity exceeded")
+                for note in page.eligible_notes:
+                    if segmented and after_path is not None and note.path <= after_path:
+                        continue
+                    if len(rows) >= max_candidates:
+                        if not segmented:
+                            raise LocalBackfillJobError("Local plan source capacity exceeded")
+                        continue
+                    rows.append(
+                        {
+                            "id": note.note_id,
+                            "path": note.path,
+                            "hash": note.source_hash,
+                            "revision": note.revision,
+                            "status": "pending",
+                            "request": None,
+                            "digest": None,
+                            "undo": None,
+                        }
+                    )
+                    frontier = note.path
                 cursor = page.next_cursor
                 if cursor is None:
                     break
             if self.repository.note_version_snapshot() != stable_inventory.versions:
                 raise LocalBackfillJobError("Vault changed during staged source scan")
+            identity_hash = fingerprint.hexdigest()
+            if expected_identity_hash is not None and not hmac.compare_digest(
+                identity_hash, expected_identity_hash
+            ):
+                raise LocalBackfillJobError("Campaign physical source identities changed")
+            if existing is not None:
+                self._target(existing, type_id, property_id)
+                if [r["id"] for r in existing["rows"]] != [r["id"] for r in rows]:
+                    # An already-written target disappeared from candidate
+                    # selection after property update. That is expected, so
+                    # the parent reuses its sealed frontier instead; never
+                    # reconstruct an existing segment from current eligibility.
+                    return (
+                        self._summary(existing),
+                        existing["rows"][-1]["path"] if existing["rows"] else after_path,
+                        identity_hash,
+                    )
             record = {
                 "version": 1,
                 "scope": self.scope,
@@ -175,7 +280,7 @@ class LocalBackfillJob:
                 "rows": rows,
             }
             self._write(path, record)
-            return self._summary(record)
+            return self._summary(record), frontier, identity_hash
 
     def status(self, job_id: str) -> dict[str, Any] | None:
         path = self._path(job_id)

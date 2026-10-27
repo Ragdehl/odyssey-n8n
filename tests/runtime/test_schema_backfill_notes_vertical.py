@@ -584,3 +584,60 @@ def test_backfill_batches_all_four_indexes_with_real_task_and_event_notes(tmp_pa
     assert result["batch_sizes"] == [3]
     assert result["filtered_query_count"] == 3
     assert result["git_commits"] == 5  # two baseline commits and one per E3 write
+
+
+def test_confirmed_notes_api_routes_large_corpus_to_bounded_campaign(tmp_path, monkeypatch):
+    """No new UI action/permission: same actor approval, independently scoped segments."""
+    from odyssey_core import schema_retrospection
+    from odyssey_core.notes import parse_note
+    from odyssey_runtime import schema_backfill_campaign
+
+    app, repo, state = fixture(tmp_path)
+    monkeypatch.setattr(schema_retrospection, "_MAX_PROGRESS_IDS", 3)
+    monkeypatch.setattr(schema_backfill_campaign, "_DEFAULT_SEGMENT_SIZE", 2)
+    sample = parse_note(repo.read_text("0.md"))
+    for i in range(2, 7):
+        note = Note(
+            {**sample.metadata, "id": f"persona-{i}", "name": f"Persona {i}"},
+            "# Added 26-10-2026\n- Profesión: médica\n<!-- odyssey:fact request=req0 ordinal=0 -->\n",
+        )
+        (repo.root / f"{i}.md").write_text(serialize_note(note), encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "extend-synthetic-vault",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    assert app.notes("schema_backfill", request(), ALICE)["status"] == "not_started"
+    staged = app.notes("schema_backfill", request("stage"), ALICE)
+    assert staged["pending"] == 2 and staged["total"] == 2
+    for unauthorized, payload in [
+        (BOB, request("advance")),
+        (ALICE, {**request("advance"), "property_id": "otro"}),
+        (ALICE, request("advance", revision=0)),
+    ]:
+        with pytest.raises(ValueError):
+            app.notes("schema_backfill", payload, unauthorized)
+    result = None
+    for _ in range(15):
+        result = app.notes("schema_backfill", request("advance"), ALICE)
+        if result["finished"]:
+            break
+    assert result is not None and result["finished"]
+    assert result["total"] == 7
+    assert result["updated"] == 6
+    assert result["deferred"] == 1
+    assert result["status"] == "awaiting_ai"
+    assert app.notes("schema_backfill", request("status"), ALICE) == result
+    for i in range(2, 7):
+        assert parse_note(repo.read_text(f"{i}.md")).metadata["profesion"] == "médica"
+    assert len(list((state / "schema-backfill-jobs").glob("*.campaign.json"))) == 1
