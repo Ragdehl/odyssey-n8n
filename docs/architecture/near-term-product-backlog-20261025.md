@@ -8,6 +8,64 @@ El objetivo del producto es una **app instalable que ejecuta Odyssey en el móvi
 
 La **sincronización online será una opción posterior, no un prerrequisito**. Un perfil local selecciona `vault/state/runtime` aislados y mantiene Markdown como autoridad; una cuenta autenticada opcional podrá mapear a ese perfil para sincronizar con conflictos explícitos, sin convertir el servidor en base de conocimiento obligatoria. No sincronizar progreso de scans, locks, índices o fingerprints inode/stat locales. Este requisito condiciona las siguientes funcionalidades (incluidos recordatorios), pero no cambia por sí solo el orden funcional acordado. Contrato: [arquitectura local-first](overview.md#mobile-local-first-product-target-approved-26-october-2026).
 
+## Prioridad transversal inmediata — registrar conocimiento general y aclarar destinos ambiguos (27-10-2026)
+
+**Estado:** problema real observado en DEV, propuesto por el usuario y confirmado como
+riesgo arquitectónico por auditoría independiente del commit de Events `bef3191`.
+**NO implementado** como funcionalidad general, ni permiso de migración, cambio de
+esquema, fusión o despliegue. Es deuda de fiabilidad/UX de las capacidades actuales,
+no una nueva App ni sustitución silenciosa del orden Recordatorios → Location → Gantt.
+
+**Principio:** una afirmación útil no deja de ser conocimiento porque el Router no
+encuentre una App específica. Mantener como opción primaria el recorrido genérico de
+hechos Core/Writer/E3 —que ya existe— para afirmaciones que puedan representarse y
+relacionarse sin inventar identidades, propiedades o acciones. Events gestiona
+ocurrencias con semántica de calendario; Tasks, acciones; las Apps no son el único
+modo de escribir Markdown. El Router no puede convertir una simple fecha en
+autorización para calendarizar.
+
+**Si falta una decisión de intención o de destino**, ofrecer una aclaración corta
+y accionable con opciones fundamentadas en la fuente y en notas verificadas, por
+ejemplo «Manu vendrá el 16: ¿lo guardo como dato sobre Manu o como visita en
+Calendario?». No hacer preguntas cuando el hecho y destino estén suficientemente
+claros ni repetir el mismo interrogatorio por cada mensaje. Conservar la frase
+original en estado *pendiente* durable por actor/conversación/entrega, distinguir
+ese estado de «guardado como nota canónica» y continuar tras la selección con
+Core/E3, CAS, idempotencia y lectura posterior; nunca lanzar dos escrituras al
+resolver la aclaración. Si no existe representación segura, decir por qué y
+permitir conservar la fuente sin clasificarla engañosamente; decidir con producto
+si ese último recurso es un borrador explícito o una nota general confirmada.
+
+**Errores con evidencia, no excusas genéricas:** distinguir `no interpretado`,
+`función no disponible`, `destino ambiguo`, `ausencia de escritura
+atestiguada`, `escritura parcial`, `resultado de escritura desconocido` y
+`fallo técnico`. Solo Core/runtime deben afirmar qué se escribió; el mensaje
+del asistente no deriva certeza de la ausencia de IDs ni de un gráfico. El error
+específico Events actual tiene defectos bloqueantes de prueba/estado y debe
+repararse con contrato transversal, no con otra excepción en `workflows`.
+
+**Escenarios mínimos de aceptación:** «me gusta la pintura», «quizá cambie de
+trabajo», «la reunión fue un desastre», «Manu vendrá el 16», «apunta en el
+calendario la visita de Manu», «recuérdame escribirle», dos hechos independientes,
+una fecha negativa o contradictoria, persona homónima y ruta desconocida.
+Verificar con modelo real y la app DEV (móvil/escritorio) los 0/1/N hechos,
+clarificación o registro general correcto, persistencia original/pending,
+lectura y búsqueda, calendario solo si procede, links, gráfico, reload, replay
+sin duplicaciones, mensajes y coste/p95. No añadir una llamada GPT
+incondicional por cada rechazo; usar la señal original del Router y recuperación
+acotada. La decisión sobre el **destino por defecto de una visita futura
+declarativa** requiere validar contrato de producto, no hacer que Events
+absorba silenciosamente todos los hechos fechados.
+
+**Auditoría puntual:** cuatro roles ejecutados sobre `4db42bc..bef3191`:
+Generalidad **FAIL** (calendario sin intención y error específico), Calidad
+**FAIL** (certeza de escritura no atestiguada y fixture inválido), Pruebas
+**BLOCKED** (incluido estado incorrecto sin guía C4 y Access externo no
+verificado), Rendimiento **PASS** solo sin regresión visible en el diff,
+**sin** medición nueva de p50/p95. No son cuatro aprobaciones del cambio ni
+de toda la PR #156. Conservar recibos de auditoría y separar reparaciones
+de código del contrato de producto futuro.
+
 ## Orden acordado
 
 **1. Recordatorios (primera nueva funcionalidad) → 2. Ubicación como tipo de propiedad transversal → 3. Proyectos con vista Gantt.** La UX es una línea transversal inmediata para todas esas fases. Concluir el editor/revisión final de esquemas ya en marcha sin convertir perfecciones menores del prompt en un bloqueo indefinido.
