@@ -48,7 +48,7 @@ v3 compatible, campos consultables y protección de generaciones del runtime
 (arranque exclusivo, servicio compartido y drenaje de peticiones), con
 verificaciones de rutas DEV protegidas. Gate final **2.112 Python + 202 JS
 PASS**, GitHub CI PASS y revisiones independientes con defectos corregidos.
-Base fusionada en `dev`; DEV actual se verifica en el marcador, no a partir de esta nota histórica.
+Base fusionada en `dev`; DEV actual se verifica en el marcador, no a partir de esta nota histórica. **Auditoría acotada sobre d9ddc05:** Generalidad FAIL (candidatos que cambian elegibilidad detrás del cursor), Calidad FAIL (cliente V1 rechaza recibos de campaña y UI para en primer hijo), Pruebas BLOCKED (defectos + DEV/GPT), Rendimiento NO EJECUTADO por reserva insuficiente: 262.512 tokens consumidos en 3 roles, 37.488 restantes <50.000 necesarios. **Correcciones posteriores en fuente:** bitset de elegibilidad inicial firmado y comprobado en cada tramo (incluye rutas no numéricas y cambio de tipo), contrato JS V1/campaña hasta 50k y panel que sigue hasta `finished`. Suites Python/Node específicas PASS; falta gate full y auditoría sobre nuevo SHA. No declarar cuatro PASS ni DEV aceptado.
 
 **Fase actual — PR de confirmación y reactivación (25-10-2026, source-only).**
 El circuito Notes/n8n agrega `schema_confirm` y `schema_status` bajo bandera

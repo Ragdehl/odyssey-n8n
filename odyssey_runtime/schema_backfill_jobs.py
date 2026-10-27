@@ -7,6 +7,8 @@ No model output or source body is persisted in the journal.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import fcntl
 import hashlib
 import hmac
@@ -99,13 +101,14 @@ class LocalBackfillJob:
 
     def stage(self, *, job_id: str, type_id: str, property_id: str) -> dict[str, Any]:
         """Original all-or-reject staging; never truncate a standalone plan."""
-        result, _, _ = self._stage_bounded(
+        result, _, _, _ = self._stage_bounded(
             job_id=job_id,
             type_id=type_id,
             property_id=property_id,
             after_path=None,
             max_candidates=_LIMIT,
             expected_identity_hash=None,
+            expected_eligibility_bitmap=None,
             segmented=False,
         )
         return result
@@ -119,7 +122,8 @@ class LocalBackfillJob:
         after_path: str | None,
         max_candidates: int,
         expected_identity_hash: str | None,
-    ) -> tuple[dict[str, Any], str | None, str]:
+        expected_eligibility_bitmap: str | None = None,
+    ) -> tuple[dict[str, Any], str | None, str, str]:
         """Private segment selection; only the signed campaign coordinator calls this.
 
         All Markdown identities, including skipped and out-of-range notes, are
@@ -149,6 +153,7 @@ class LocalBackfillJob:
             after_path=after_path,
             max_candidates=max_candidates,
             expected_identity_hash=expected_identity_hash,
+            expected_eligibility_bitmap=expected_eligibility_bitmap,
             segmented=True,
         )
 
@@ -161,8 +166,9 @@ class LocalBackfillJob:
         after_path: str | None,
         max_candidates: int,
         expected_identity_hash: str | None,
+        expected_eligibility_bitmap: str | None,
         segmented: bool,
-    ) -> tuple[dict[str, Any], str | None, str]:
+    ) -> tuple[dict[str, Any], str | None, str, str]:
         """Scan and attest all physical IDs; publish one bounded E3/Git journal."""
         # Do not publish a plan that can never write because the property
         # is not optional. The canonical scanner independently checks IDs.
@@ -184,7 +190,7 @@ class LocalBackfillJob:
             # only for recovery of its own guarded individual writes.
             if existing is not None and not segmented:
                 self._target(existing, type_id, property_id)
-                return self._summary(existing), None, ""
+                return self._summary(existing), None, "", ""
             # A paged public scan rechecks all N files twice PER page.
             # During this write-free staging transaction, capture N once,
             # verify each selected note, and revalidate the whole set once
@@ -192,6 +198,17 @@ class LocalBackfillJob:
             stable_inventory = _staged_scan_inventory(self.repository)
             if len(stable_inventory.paths) > _MAX_STAGED_SCAN_IDS:
                 raise LocalBackfillJobError("Physical scan inventory exceeds bounded budget")
+            bitmap = bytearray((len(stable_inventory.paths) + 7) // 8)
+            initial_bitmap: bytes | None = None
+            if expected_eligibility_bitmap is not None:
+                try:
+                    initial_bitmap = base64.b64decode(expected_eligibility_bitmap, validate=True)
+                except (ValueError, binascii.Error) as error:
+                    raise LocalBackfillJobError("Invalid original eligibility proof") from error
+                if len(initial_bitmap) != len(bitmap):
+                    raise LocalBackfillJobError("Original eligibility proof size changed")
+            if segmented and after_path is not None and initial_bitmap is None:
+                raise LocalBackfillJobError("Missing original eligibility for later segment")
             cursor = None
             progress = None
             scanned_id_bytes = 0
@@ -227,6 +244,29 @@ class LocalBackfillJob:
                         separators=(",", ":"),
                     ).encode("utf-8")
                 )
+                eligible_paths = {note.path for note in page.eligible_notes}
+                for position, physical_path in enumerate(physical_page, start=offset):
+                    bit = 1 << (position % 8)
+                    current_eligible = physical_path in eligible_paths
+                    if current_eligible:
+                        bitmap[position // 8] |= bit
+                    if initial_bitmap is not None:
+                        originally_eligible = bool(initial_bitmap[position // 8] & bit)
+                        # An older ineligible note cannot become a candidate
+                        # behind the signed frontier; an unprocessed original
+                        # candidate cannot disappear or be newly invented.
+                        if (
+                            physical_path > (after_path or "")
+                            and originally_eligible != current_eligible
+                        ) or (
+                            after_path is not None
+                            and physical_path <= after_path
+                            and current_eligible
+                            and not originally_eligible
+                        ):
+                            raise LocalBackfillJobError(
+                                "Campaign source eligibility changed across segments"
+                            )
                 for note in page.eligible_notes:
                     if segmented and after_path is not None and note.path <= after_path:
                         continue
@@ -268,6 +308,7 @@ class LocalBackfillJob:
                         self._summary(existing),
                         existing["rows"][-1]["path"] if existing["rows"] else after_path,
                         identity_hash,
+                        expected_eligibility_bitmap or base64.b64encode(bitmap).decode("ascii"),
                     )
             record = {
                 "version": 1,
@@ -280,7 +321,12 @@ class LocalBackfillJob:
                 "rows": rows,
             }
             self._write(path, record)
-            return self._summary(record), frontier, identity_hash
+            return (
+                self._summary(record),
+                frontier,
+                identity_hash,
+                expected_eligibility_bitmap or base64.b64encode(bitmap).decode("ascii"),
+            )
 
     def status(self, job_id: str) -> dict[str, Any] | None:
         path = self._path(job_id)

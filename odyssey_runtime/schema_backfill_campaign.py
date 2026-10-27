@@ -106,6 +106,7 @@ class LocalBackfillCampaign:
             "property_id",
             "segment_size",
             "identity_hash",
+            "eligibility_bitmap",
             "segment_index",
             "after_path",
             "active_segment",
@@ -132,6 +133,13 @@ class LocalBackfillCampaign:
                 and (
                     not isinstance(record["identity_hash"], str)
                     or len(record["identity_hash"]) != 64
+                )
+            )
+            or (
+                record["eligibility_bitmap"] is not None
+                and (
+                    not isinstance(record["eligibility_bitmap"], str)
+                    or len(record["eligibility_bitmap"]) > 8400
                 )
             )
             or any(
@@ -186,6 +194,9 @@ class LocalBackfillCampaign:
             )
         if record["finished"]:
             status = "awaiting_ai" if totals["deferred"] else "complete"
+        elif status in {"complete", "awaiting_ai"}:
+            # A child is finished; the parent still owns more segments.
+            status = "in_progress"
         return {
             "status": status,
             "segment": record["segment_index"],
@@ -207,6 +218,7 @@ class LocalBackfillCampaign:
                     "property_id": property_id,
                     "segment_size": self.segment_size,
                     "identity_hash": None,
+                    "eligibility_bitmap": None,
                     "segment_index": 0,
                     "after_path": None,
                     "active_segment": None,
@@ -225,7 +237,7 @@ class LocalBackfillCampaign:
                 # Preserve the historical stage() contract: prepare the first
                 # bounded plan but NEVER perform an E3/Git write in stage().
                 child_id = self._child_id(self.worker.scope, campaign_id, 0)
-                child, frontier, identity = self.worker._stage_segment(
+                child, frontier, identity, eligibility = self.worker._stage_segment(
                     job_id=child_id,
                     type_id=type_id,
                     property_id=property_id,
@@ -234,6 +246,7 @@ class LocalBackfillCampaign:
                     expected_identity_hash=None,
                 )
                 record["identity_hash"] = identity
+                record["eligibility_bitmap"] = eligibility
                 if child["total"] == 0:
                     record["finished"] = True
                 else:
@@ -287,16 +300,18 @@ class LocalBackfillCampaign:
                 if record["segment_index"] >= _MAX_SEGMENTS:
                     raise LocalBackfillJobError("Campaign segment capacity exceeded")
                 child_id = self._child_id(self.worker.scope, campaign_id, record["segment_index"])
-                child, frontier, physical_identity = self.worker._stage_segment(
+                child, frontier, physical_identity, eligibility = self.worker._stage_segment(
                     job_id=child_id,
                     type_id=type_id,
                     property_id=property_id,
                     after_path=record["after_path"],
                     max_candidates=self.segment_size,
                     expected_identity_hash=record["identity_hash"],
+                    expected_eligibility_bitmap=record["eligibility_bitmap"],
                 )
                 if record["identity_hash"] is None:
                     record["identity_hash"] = physical_identity
+                    record["eligibility_bitmap"] = eligibility
                 if child["total"] == 0:
                     record["finished"] = True
                     self._save(campaign_id, record)

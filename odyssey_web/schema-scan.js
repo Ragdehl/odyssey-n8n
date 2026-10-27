@@ -138,6 +138,11 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
         !panel.hidden && !pauseRequested && !interrupted) void runEnrichment(seq);
   }
 
+  function canContinueEnrichment(result) {
+    return (result.finished === undefined || result.finished === false) &&
+      ["in_progress", "attention"].includes(result.status);
+  }
+
   function renderEnrichment(result) {
     enrichButton.textContent = "Continuar autocompletado";
     enrichStatus.hidden = false;
@@ -149,7 +154,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
         result.status === "awaiting_ai" ? "El resto requiere interpretación mediante IA." :
         result.status === "attention" ? "Una escritura necesita una revisión de seguridad." :
         "Odyssey continúa con el siguiente lote.");
-    enrichButton.hidden = !["in_progress", "attention"].includes(result.status);
+    enrichButton.hidden = !canContinueEnrichment(result);
   }
 
   async function runEnrichment(seq = generation) {
@@ -179,7 +184,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
       enrichmentReady = true;
       renderEnrichment(progress);
       for (let i = 0; i < MAX_UPDATES_PER_RUN && !pauseRequested &&
-           ["in_progress", "attention"].includes(progress.status); i += 1) {
+           canContinueEnrichment(progress); i += 1) {
         progress = await client({endpoint, operation: "schema_backfill",
           payload: {target_type_id: target.target_type_id,
             property_id: target.property_id, expected_revision: target.expected_revision,
@@ -187,7 +192,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
         if (seq !== generation || panel.hidden) return;
         renderEnrichment(progress);
       }
-      if (progress.status === "in_progress" && !pauseRequested) {
+      if (canContinueEnrichment(progress) && progress.status === "in_progress" && !pauseRequested) {
         enrichStatus.textContent += " Pausa de rendimiento tras 50 notas: puedes reanudar.";
       } else if (pauseRequested && progress.status === "in_progress") {
         enrichStatus.textContent += " Pausado; el progreso queda guardado.";

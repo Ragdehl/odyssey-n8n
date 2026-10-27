@@ -276,3 +276,51 @@ test("unknown postwrite outcome offers journal verification instead of manual pe
   assert.equal(calls.filter(c=>c.operation==="schema_backfill"&&
     c.payload.action==="advance").length,2);
 });
+
+test("campaign validates 50k bounded totals and rejects false terminal or injected receipts", () => {
+  const running = {...backfill("in_progress", 2, 0, 1), segment: 0, finished: false};
+  assert.deepEqual(validateSchemaOperationResponse("schema_backfill", running), running);
+  const completed = {...backfill("complete", 12000), segment: 12, finished: true};
+  assert.deepEqual(validateSchemaOperationResponse("schema_backfill", completed), completed);
+  for (const bad of [
+    {...running, finished: true},
+    {...running, status: "awaiting_ai"},
+    {...completed, finished: false},
+    {...completed, segment: -1},
+    {...completed, segment: 60000},
+    {...completed, total: 50001},
+    {...completed, actor_id: "attacker"},
+    {...completed, eligibility_bitmap: "secret"},
+  ]) assert.throws(
+    () => validateSchemaOperationResponse("schema_backfill", bad), NotesRequestError);
+  assert.throws(
+    () => validateSchemaOperationResponse("schema_backfill", backfill("complete", 12000)),
+    NotesRequestError);
+});
+
+test("UI continues across a deferred child boundary until campaign parent completes", async () => {
+  const calls = [];
+  const client = async (req) => {
+    calls.push(req);
+    if(req.operation === "schema_scan") return complete;
+    if(req.payload.action === "status") return {kind:"schema_backfill",status:"not_started"};
+    if(req.payload.action === "stage") return {
+      ...backfill("in_progress", 0, 2), segment: 0, finished: false
+    };
+    const count = calls.filter(x=>x.operation==="schema_backfill" &&
+      x.payload.action==="advance").length;
+    if(count===1) return {...backfill("in_progress", 0, 1, 1), segment:0, finished:false};
+    if(count===2) return {...backfill("in_progress", 1, 0, 1), segment:0, finished:false};
+    if(count===3) return {...backfill("in_progress", 2, 1, 1), segment:1, finished:false};
+    return {...backfill("awaiting_ai", 3, 0, 1), segment:2, finished:true};
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",
+    propertyId:"profesion",revision:1,autoStart:true});
+  for(let i=0;i<65;i++) await Promise.resolve();
+  assert.equal(calls.filter(c=>c.operation==="schema_backfill" &&
+    c.payload.action==="advance").length,4);
+  assert.match(panel.panel.children[6].textContent,/3 propiedades completadas/);
+  assert.match(panel.panel.children[6].textContent,/1 pendientes de IA/);
+  assert.equal(panel.panel.children[7].hidden,true);
+});

@@ -110,3 +110,23 @@ test("final schema review response is advisory, hash-bound, and never carries ap
   assert.equal(validateSchemaOperationResponse("schema_review", {...result,
     verdict: "READY", issues: []}).verdict, "READY");
 });
+
+test("schema_backfill HTTP transport accepts exact signed-campaign public counters", async () => {
+  const receipt = {
+    kind: "schema_backfill", status: "in_progress", segment: 11, finished: false,
+    total: 11000, pending: 500, interpreting: 0, writing: 0, updated: 10500,
+    no_evidence: 0, ambiguous: 0, stale: 0, already_present: 0, deferred: 0,
+  };
+  const reply = await requestNotes({
+    operation: "schema_backfill",
+    payload: {target_type_id: "person", property_id: "profesion",
+      expected_revision: 1, action: "status"},
+    fetchImpl: async () => ({ok: true, json: async () => receipt}),
+  });
+  assert.deepEqual(reply, receipt);
+  await assert.rejects(
+    requestNotes({operation: "schema_backfill", payload: {},
+      fetchImpl: async () => ({ok: true, json: async () =>
+        ({...receipt, mutable_approved: true})})}),
+    NotesRequestError);
+});

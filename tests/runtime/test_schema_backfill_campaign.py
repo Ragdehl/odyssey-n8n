@@ -126,7 +126,7 @@ def test_campaign_refuses_cross_segment_added_or_duplicated_identity(tmp_path):
         "new.md",
         serialize_note(Note({**sample.metadata, "id": "new-id"}, sample.content)),
     )
-    with pytest.raises(LocalBackfillJobError, match="identities changed"):
+    with pytest.raises(LocalBackfillJobError, match="identities changed|eligibility changed"):
         step(worker)
     assert worker.status("all-people")["updated"] == 2
     assert "profesion" not in parse_note(repo.read_text("2.md")).metadata
@@ -296,3 +296,126 @@ def test_existing_v1_job_keeps_its_original_receipts_when_vault_expands(tmp_path
     reply = app.notes("schema_backfill", request("status"), ALICE)
     assert reply["total"] == 2
     assert "segment" not in reply
+
+
+def test_campaign_rejects_newly_eligible_note_behind_frontier(tmp_path):
+    """An originally occupied property cannot become a skipped candidate."""
+    state, repo, writer = setup(tmp_path, ["Profesión: ocupada"] * 4)
+    before = parse_note(repo.read_text("0.md"))
+    repo.replace_text(
+        "0.md",
+        serialize_note(Note({**before.metadata, "profesion": "preexistente"}, before.content)),
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "preexisting-property",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(item)["updated"] == 1
+    assert step(item)["updated"] == 2
+    changed = parse_note(repo.read_text("0.md"))
+    repo.replace_text(
+        "0.md",
+        serialize_note(
+            Note(
+                {key: value for key, value in changed.metadata.items() if key != "profesion"},
+                changed.content,
+            )
+        ),
+    )
+    with pytest.raises(LocalBackfillJobError, match="eligibility changed"):
+        step(item)
+    assert item.status("all-people")["updated"] == 2
+
+
+def test_campaign_rejects_eligibility_change_ahead_of_frontier(tmp_path):
+    """A future initial candidate cannot silently disappear mid-campaign."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(item)["updated"] == 1
+    assert step(item)["updated"] == 2
+    source = parse_note(repo.read_text("3.md"))
+    repo.replace_text(
+        "3.md",
+        serialize_note(Note({**source.metadata, "profesion": "ocupada"}, source.content)),
+    )
+    with pytest.raises(LocalBackfillJobError, match="eligibility changed"):
+        step(item)
+    assert item.status("all-people")["updated"] == 2
+
+
+def test_campaign_still_progresses_when_completed_child_contains_deferred(tmp_path):
+    """An awaiting_ai child cannot stop the subsequent bounded segments."""
+    state, repo, writer = setup(
+        tmp_path, ["Sin datos", "Profesión: médica", "Profesión: médica", "Profesión: médica"]
+    )
+    item = campaign(state, repo, writer)
+    item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert step(item)["deferred"] == 1
+    boundary = step(item)
+    assert boundary["finished"] is False
+    assert boundary["status"] == "in_progress"
+    assert boundary["updated"] == 1
+    final = run_to_end(item)[-1]
+    assert final["finished"] is True
+    assert final["status"] == "awaiting_ai"
+    assert final["updated"] == 3
+    assert final["deferred"] == 1
+
+
+def test_mixed_type_and_nonnumeric_paths_detect_new_candidate_behind_frontier(tmp_path):
+    """A previously excluded document cannot become a skipped Person after cursor."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    mapping = {
+        "0.md": "a-antes.md",
+        "1.md": "b-persona.md",
+        "2.md": "m-persona.md",
+        "3.md": "z-persona.md",
+    }
+    for old, new in mapping.items():
+        (repo.root / old).rename(repo.root / new)
+    old = parse_note(repo.read_text("a-antes.md"))
+    repo.replace_text(
+        "a-antes.md", serialize_note(Note({**old.metadata, "type": "document"}, old.content))
+    )
+    subprocess.run(["git", "add", "-A"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-qm",
+            "nonnumeric-mixed-type-baseline",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    item = campaign(state, repo, writer)
+    initial = item.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    assert initial["total"] == 2
+    assert step(item)["updated"] == 1
+    assert step(item)["updated"] == 2
+    changed = parse_note(repo.read_text("a-antes.md"))
+    repo.replace_text(
+        "a-antes.md", serialize_note(Note({**changed.metadata, "type": "person"}, changed.content))
+    )
+    with pytest.raises(LocalBackfillJobError, match="eligibility changed"):
+        step(item)
+    assert item.status("all-people")["updated"] == 2
+    assert "profesion" not in parse_note(repo.read_text("z-persona.md")).metadata

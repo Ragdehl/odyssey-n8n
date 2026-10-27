@@ -65,19 +65,29 @@ export function validateSchemaOperationResponse(operation, value) {
     }
     const fields = ["pending", "interpreting", "writing", "updated",
       "no_evidence", "ambiguous", "stale", "already_present", "deferred"];
+    const isLegacy = expected(["kind", "status", "total", ...fields]);
+    const isCampaign = expected(["kind", "status", "total", ...fields, "segment", "finished"]);
+    const capacity = isCampaign ? 50000 : 10000;
     if (value.kind === "schema_backfill" &&
         ["in_progress", "complete", "awaiting_ai", "attention"].includes(value.status) &&
-        expected(["kind", "status", "total", ...fields]) &&
-        Number.isSafeInteger(value.total) && value.total >= 0 && value.total <= 10000 &&
+        (isLegacy || isCampaign) &&
+        Number.isSafeInteger(value.total) && value.total >= 0 && value.total <= capacity &&
         fields.every((name) => Number.isSafeInteger(value[name]) && value[name] >= 0 &&
           value[name] <= value.total) &&
         fields.reduce((count, name) => count + value[name], 0) === value.total &&
         (value.status !== "attention" || value.writing === 1) &&
         (value.status !== "complete" || value.pending + value.interpreting +
           value.writing + value.deferred === 0) &&
-        (value.status !== "awaiting_ai" || value.deferred > 0)) {
+        (value.status !== "awaiting_ai" || value.deferred > 0) &&
+        (!isCampaign ||
+          (Number.isSafeInteger(value.segment) && value.segment >= 0 && value.segment <= 50002 &&
+           typeof value.finished === "boolean" &&
+           (value.finished
+             ? ["complete", "awaiting_ai"].includes(value.status)
+             : ["in_progress", "attention"].includes(value.status))))) {
       return {kind: "schema_backfill", status: value.status, total: value.total,
-        ...Object.fromEntries(fields.map((field) => [field, value[field]]))};
+        ...Object.fromEntries(fields.map((field) => [field, value[field]])),
+        ...(isCampaign ? {segment: value.segment, finished: value.finished} : {})};
     }
   }
   if (operation === "schema_scan") {
