@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Any
 
 from odyssey_core.notes import parse_note, validate_note
@@ -264,3 +265,163 @@ def verified_catalog_if_active(
     except (OSError, ValueError, TypeError, KeyError) as error:
         scope.snapshot = None
         raise VerifiedCatalogError("Cannot verify canonical metadata") from error
+
+
+def verified_mutation_catalog_if_active(
+    repository: VaultRepository, schema: dict[str, Any]
+) -> _VerifiedSnapshot | None:
+    """Mutation reuse requires metadata parsed from *canonical files*, never SQLite.
+
+    The preexisting P4 read-only catalog can load a complete derived SQLite
+    inventory; it is valuable for hints but cannot prove a negative identity
+    claim for new Core writes if the derived metadata was tampered with.
+    """
+    scope = _ACTIVE.get()
+    if scope is None or scope.index_path is not None:
+        return None
+    return verified_catalog_if_active(repository, schema)
+
+
+def verified_history_paths_if_active(
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    affected_ids: tuple[str, ...],
+) -> tuple[str, ...] | None:
+    """Reattribute a write using prior canonical uniqueness proof, not stale IDs.
+
+    This optional same-delivery optimization is usable only AFTER the mutation
+    gate built/verified a complete snapshot. The exact affected paths may
+    change; every *other* source must retain its physical version and path.
+    Re-read and validate all affected Markdown, then check the entire inventory
+    again. Drift or uncertainty falls back to Git's full canonical scan.
+    """
+    scope = _ACTIVE.get()
+    if (
+        scope is None
+        or scope.index_path is not None
+        or scope.repo is not repository
+        or scope.schema is not schema
+        or scope.snapshot is None
+    ):
+        return None
+    snapshot = scope.snapshot
+    mapping: dict[str, str] = {}
+    for stable_id in affected_ids:
+        matches = snapshot.id_candidates(stable_id)
+        if len(matches) != 1:
+            return None
+        mapping[matches[0].path] = stable_id
+    if len(mapping) != len(set(affected_ids)):
+        return None
+    try:
+        original_versions = dict(zip(snapshot.paths, snapshot.versions, strict=True))
+        current = repository.note_version_snapshot()
+        if current.keys() != original_versions.keys():
+            return None
+        if any(
+            current[path] != version
+            for path, version in original_versions.items()
+            if path not in mapping
+        ):
+            return None
+        for path, stable_id in mapping.items():
+            note = parse_note(repository.read_text(path))
+            validate_note(note, schema)
+            if note.metadata.get("id") != stable_id:
+                return None
+        if repository.note_version_snapshot() != current:
+            return None
+        return tuple(sorted(mapping))
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+
+
+class CanonicalMutationInventoryCache:
+    """In-process canonical proof reused by a trusted serial backfill writer.
+
+    The first delivery parses the ENTIRE Markdown vault. Subsequent deliveries
+    compare the full path/fingerprint inventory; a confirmed self-write can
+    update one row only after verified canonical readback and full freshness
+    checks. No SQLite/index input, durable cache, cross-vault or actor authority.
+    Any unexpected drift discards the hint and forces a fresh full scan.
+    """
+
+    def __init__(self, repository: VaultRepository, schema: dict[str, Any]) -> None:
+        self.repository = repository
+        self.schema = schema
+        self._schema_signature = json.dumps(schema, sort_keys=True, ensure_ascii=False)
+        self._snapshot: _VerifiedSnapshot | None = None
+        self._lock = RLock()
+
+    @contextmanager
+    def scoped(self) -> Iterator[CanonicalMutationInventoryCache]:
+        """Lock cache access for one Core/E3/Git mutation and readback."""
+        with self._lock:
+            token = _ACTIVE.set(
+                _Scope(
+                    repo=self.repository,
+                    schema=self.schema,
+                    schema_signature=self._schema_signature,
+                    snapshot=self._snapshot,
+                    index_path=None,
+                )
+            )
+            try:
+                yield self
+            finally:
+                current = _ACTIVE.get()
+                self._snapshot = current.snapshot if current is not None else None
+                _ACTIVE.reset(token)
+
+    def confirm_write(self, *, path: str, stable_id: str) -> None:
+        """Refresh only an E3+Git-confirmed target; unknown outcome keeps old proof.
+
+        Never raise on a cache failure after an actual commit: Core receipts
+        already prove the write. A failed hint is simply discarded.
+        """
+        scope = _ACTIVE.get()
+        if (
+            scope is None
+            or scope.repo is not self.repository
+            or scope.schema is not self.schema
+            or scope.index_path is not None
+            or scope.snapshot is None
+        ):
+            return
+        prior = scope.snapshot
+        scope.snapshot = None
+        try:
+            matching = prior.id_candidates(stable_id)
+            if len(matching) != 1 or matching[0].path != path:
+                return
+            old = dict(zip(prior.paths, prior.versions, strict=True))
+            current = self.repository.note_version_snapshot()
+            if current.keys() != old.keys() or any(
+                current[item] != version for item, version in old.items() if item != path
+            ):
+                return
+            before = self.repository.file_version(path)
+            note = parse_note(self.repository.read_text(path))
+            validate_note(note, self.schema)
+            if note.metadata["id"] != stable_id or self.repository.file_version(path) != before:
+                return
+            if self.repository.note_version_snapshot() != current:
+                return
+            position = prior.paths.index(path)
+            rows = list(prior.rows)
+            rows[position] = _MetadataRow(
+                path=path,
+                id=stable_id,
+                type=note.metadata["type"],
+                name=note.metadata["name"],
+                aliases=tuple(note.metadata.get("aliases", [])),
+                content_excerpt=note.content.strip()[:320],
+                date=note.metadata.get("date"),
+                deleted=note.metadata.get("deleted") is True,
+            )
+            versions = list(prior.versions)
+            versions[position] = current[path]
+            scope.snapshot = _VerifiedSnapshot(prior.paths, tuple(versions), tuple(rows))
+        except (OSError, ValueError, TypeError, KeyError, IndexError):
+            # Never resurrect a stale or half-updated source inventory.
+            scope.snapshot = None

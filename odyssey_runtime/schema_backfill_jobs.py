@@ -252,15 +252,21 @@ class LocalBackfillJob:
                 )
                 row["status"] = "writing"
                 self._write(path, record)
-                receipt = self.writer.apply(
-                    source=source,
-                    type_id=type_id,
-                    property_id=property_id,
-                    actor=actor,
-                    now=now,
-                    request_id=row["request"],
-                    reviewed_semantic=reviewed,
-                )
+                # The writer owns a temporary canonical-only proof. Subsequent
+                # advancements recheck the whole physical inventory and reuse
+                # it only while unrelated Markdown remains byte-version-stable.
+                with self.writer.identity_cache.scoped() as cache:
+                    receipt = self.writer.apply(
+                        source=source,
+                        type_id=type_id,
+                        property_id=property_id,
+                        actor=actor,
+                        now=now,
+                        request_id=row["request"],
+                        reviewed_semantic=reviewed,
+                    )
+                    if receipt.status == "updated" and receipt.undo_commit:
+                        cache.confirm_write(path=row["path"], stable_id=source.note_id)
                 if receipt.status not in _DONE:
                     raise LocalBackfillJobError("Unexpected write receipt")
                 if receipt.status == "updated" and not receipt.undo_commit:

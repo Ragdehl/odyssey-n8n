@@ -554,3 +554,120 @@ def test_staged_scan_does_not_publish_after_any_concurrent_vault_change(
             job_id="historial", type_id="person", property_id="profesion"
         )
     assert not list((state / "schema-backfill-jobs").glob("*.json"))
+
+
+def test_git_history_reuses_one_canonical_identity_scan_per_backfill(tmp_path, monkeypatch):
+    """History may reuse prewrite canonical evidence, never parse N notes twice."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 85)
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    reads = []
+    original_read = repo.read_text
+
+    def counted_read(path):
+        reads.append(path)
+        return original_read(path)
+
+    monkeypatch.setattr(repo, "read_text", counted_read)
+    result = advance(worker)
+    assert result["updated"] == 1
+    assert 85 <= len(reads) < 105, f"Unexpected full-vault reparsing: {len(reads)}"
+    assert sum(path == "0.md" for path in reads) >= 3
+    assert parse_note(original_read("0.md")).metadata["profesion"] == "médica"
+    reads.clear()
+    result = advance(worker)
+    assert result["updated"] == 2
+    assert len(reads) < 15, f"Canonical cache did not survive a confirmed write: {len(reads)}"
+    assert (
+        subprocess.run(
+            ["git", "log", "-1", "--format=%B"],
+            cwd=repo.root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.count("Odyssey-Request:")
+        == 1
+    )
+
+
+def test_duplicate_identity_added_after_staging_blocks_automatic_update(tmp_path):
+    """A new duplicate on disk must defeat any earlier scan or ID hint."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica", "Profesión: docente"])
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    original = repo.read_text("0.md")
+    repo.create_text("shadow.md", original)
+    result = advance(worker)
+    assert result["updated"] == 0 and result["stale"] == 1
+    assert repo.read_text("0.md") == original
+
+
+def test_history_fails_closed_if_duplicate_appears_after_target_write(tmp_path, monkeypatch):
+    """A changed path set between Core prepare and Git attribution is unsafe."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica", "Profesión: docente"])
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    previous_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo.root,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout.strip()
+    original_record = writer.history.record
+    injected = False
+
+    def inject_duplicate_after_write(**kwargs):
+        nonlocal injected
+        if not injected:
+            injected = True
+            repo.create_text("shadow.md", repo.read_text("0.md"))
+        return original_record(**kwargs)
+
+    monkeypatch.setattr(writer.history, "record", inject_duplicate_after_write)
+    with pytest.raises(Exception, match="history"):
+        advance(worker)
+    assert injected
+    assert parse_note(repo.read_text("0.md")).metadata["profesion"] == "médica"
+    assert (
+        subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=repo.root, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        == previous_head
+    )
+    assert worker.status("historial")["status"] == "attention"
+
+
+def test_cached_inventory_invalidates_when_another_note_changes(tmp_path, monkeypatch):
+    """An unrelated physical change defeats the cache and forces canonical reads."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 45)
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    assert advance(worker)["updated"] == 1
+    fresh_count = 0
+    original = repo.read_text
+
+    def counted(path):
+        nonlocal fresh_count
+        fresh_count += 1
+        return original(path)
+
+    monkeypatch.setattr(repo, "read_text", counted)
+    # An unrelated note's body changed without an authorized revision bump.
+    repo.replace_text("12.md", original("12.md") + "\nExternal edit.\n")
+    assert advance(worker)["updated"] == 2
+    assert fresh_count >= 45
+    assert parse_note(original("12.md")).content.endswith("External edit.\n")
+
+
+def test_cached_inventory_new_duplicate_stops_next_write(tmp_path):
+    """Even after a confirmed first write, a new path can invalidate uniqueness."""
+    state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 4)
+    worker = job(state, repo, writer)
+    worker.stage(job_id="historial", type_id="person", property_id="profesion")
+    assert advance(worker)["updated"] == 1
+    old = repo.read_text("1.md")
+    repo.create_text("shadow.md", old)
+    result = advance(worker)
+    assert result["updated"] == 1 and result["stale"] == 1
+    assert repo.read_text("1.md") == old

@@ -94,24 +94,36 @@ class GitHistoryRecorder:
         if not requested_ids:
             return GitHistoryResult(HistoryStatus.NO_CHANGES)
 
-        matches_by_id = {stable_id: [] for stable_id in requested_ids}
-        for path in repository.list_markdown_paths():
-            try:
-                note = parse_note(repository.read_text(path))
-                validate_note(note, schema)
-            except (NoteFormatError, NoteValidationError, OSError):
-                return GitHistoryResult(HistoryStatus.FAILED, reason="canonical attribution failed")
-            stable_id = note.metadata.get("id")
-            if stable_id in matches_by_id:
-                matches_by_id[stable_id].append(path)
+        from .verified_metadata_catalog import verified_history_paths_if_active
 
-        paths: list[str] = []
-        for stable_id in requested_ids:
-            matches = matches_by_id[stable_id]
-            if len(matches) != 1:
-                return GitHistoryResult(HistoryStatus.FAILED, reason="affected ID cannot be mapped")
-            paths.append(matches[0])
-        paths.sort()
+        verified_paths = verified_history_paths_if_active(repository, schema, requested_ids)
+        if verified_paths is not None:
+            paths = list(verified_paths)
+        else:
+            # Conservative fallback for an absent, incomplete or drifting
+            # same-delivery proof. No derived inventory becomes Git authority.
+            matches_by_id = {stable_id: [] for stable_id in requested_ids}
+            for path in repository.list_markdown_paths():
+                try:
+                    note = parse_note(repository.read_text(path))
+                    validate_note(note, schema)
+                except (NoteFormatError, NoteValidationError, OSError):
+                    return GitHistoryResult(
+                        HistoryStatus.FAILED, reason="canonical attribution failed"
+                    )
+                stable_id = note.metadata.get("id")
+                if stable_id in matches_by_id:
+                    matches_by_id[stable_id].append(path)
+
+            paths = []
+            for stable_id in requested_ids:
+                matches = matches_by_id[stable_id]
+                if len(matches) != 1:
+                    return GitHistoryResult(
+                        HistoryStatus.FAILED, reason="affected ID cannot be mapped"
+                    )
+                paths.append(matches[0])
+            paths.sort()
         if set(paths) & snapshot.dirty_paths:
             return GitHistoryResult(
                 HistoryStatus.SKIPPED_UNSAFE, reason="affected path was pre-dirty"

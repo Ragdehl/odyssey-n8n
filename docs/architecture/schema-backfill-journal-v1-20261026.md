@@ -184,6 +184,24 @@ RSS máxima acumulada del proceso 76,4/102,1/133,4 MiB respectivamente; `SwapFre
 
 **Siguiente puerta de ingeniería:** perfilar el doble recorrido físico de identidad/Git y el inventario del índice con pruebas adversariales de cambios externos y colisiones; diseñar un catálogo verificado o una transacción acotada que reutilice evidencia de unicidad/frescura sin relajar CAS, E3, actor, journal duradero ni historial/undo por nota. Repetir comparación y probar un lote grande representativo *antes* de declarar que 10.000 actualizaciones funcionan o activar un worker móvil. No bajar silenciosamente la autonomía de escaneo a 250 fuentes.
 
+## Optimización de escrituras E3/Git con catálogo canónico efímero — 27-10-2026 (fuente, NO DEV)
+
+**Problema reproducido:** cada una de las escrituras de propiedad llamaba a `CanonicalMutationGate.prepare` (recorrido validando todas las notas por ID) y `GitHistoryRecorder.record` (segundo recorrido validando todas las notas para atribuir ID→ruta). ContextIndex añade su propio coste de inventario y refresco. Que el navegador pause tras 50 avances y el índice pueda refrescarse fuera de la petición no evita CPU, I/O ni batería en el dispositivo móvil.
+
+**Cambio de código (solo backfill):** `AutomaticPropertyBackfill` tiene un `CanonicalMutationInventoryCache` limitado al proceso y su propia bóveda. En el primer avance se parsea y valida íntegramente el Markdown canónico; en los siguientes solo se reutiliza la identidad si coincide la lista completa de rutas y su huella física. Después de cada escritura con recibo E3+Git válido, el catálogo se renueva releyendo la nota exacta y comprobando que **todas las demás** mantienen la versión de antes. GitHistory reutiliza la prueba del mismo avance, vuelve a validar todas las versiones y la nota modificada, y conserva el commit/undo individual. Si falta prueba, hay cambio externo, nota nueva, duplicado, corrida, crash o un índice derivado no fiable, se vuelve al recorrido físico completo (o se rechaza la escritura y se conserva el estado de resultado incierto). **Nunca se emplean filas SQLite para autorizar identidad negativa**. No hay caché persistente ni permisos de escritura nuevos; si muere el proceso la siguiente sesión reconstruye desde Markdown. El presupuesto de lectura pasa de dos parseos de toda la bóveda *por escritura* a un parseo inicial y comprobaciones físicas posteriores, conservando parseo completo ante cualquier drift inesperado.
+
+**Banco reproducible:** `PYTHONPATH=. python3 benchmarks/indexing/probe_schema_backfill_scale.py --scales 1000:12,5000:8,10000:5`; Raspberry Pi 4 de 4 GiB, Git y ContextIndex reales, embedder determinista, notas efímeras sintéticas, ejecución serial, sin DEV/PROD ni llamadas a GPT.
+
+| Notas en la bóveda | Mediana anterior por escritura | Mediana con caché canónica | Mejora aprox. | Muestra de escrituras |
+|---|---:|---:|---:|---:|
+| 1.000 | 502 ms | 302 ms | 40 % | 12 |
+| 5.000 | 2.422 ms | 1.415 ms | 42 % | 8 |
+| 10.000 | 4.797 ms | 2.800 ms | 42 % | 5 |
+
+La caché final incluyó comprobación de que añadir un ID duplicado tras el staging o tras la primera escritura la invalida, que cambiar otra nota obliga a recalcular el mapa canónico, que una duplicación después del write impide atribuirlo en Git y que un origen SQLite modificado no autoriza Core. El script no mide 10.000 **escrituras**, SLA/p95 robusto, GPT real, índice semántico neural, concurrencia, energía o el scheduler de Android/iOS. La mediana inicial de cada tanda incluye el primer coste de parsear toda la bóveda; la mejora no es O(1) porque aún se revisan todas las versiones y ContextIndex. La ruta actual UI→50 avances con pausas **no constituye aún un worker móvil real en background**; en móvil hará falta priorización, cuotas CPU/batería y persistencia de reanudación independiente de la pantalla.
+
+**Próximo cuello de botella:** evaluación del coste global de comprobar inventario y actualizar índices por nota; estudiar agrupación *solo de los refrescos derivados*, sin agrupar a ciegas commits Git ni debilitar CAS o reanudación, y medir en teléfono real antes de aceptar autonomía masiva.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.

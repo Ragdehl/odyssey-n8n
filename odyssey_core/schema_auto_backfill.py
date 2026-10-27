@@ -217,6 +217,9 @@ class AutomaticPropertyBackfill:
         self.repository = repository
         self.schema = schema
         self.history = history
+        from .verified_metadata_catalog import CanonicalMutationInventoryCache
+
+        self.identity_cache = CanonicalMutationInventoryCache(repository, schema)
         self.gate = CanonicalMutationGate(repository, schema, history)
 
     def apply(
