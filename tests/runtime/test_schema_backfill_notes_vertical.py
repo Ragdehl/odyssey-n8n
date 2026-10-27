@@ -569,3 +569,18 @@ def test_real_backfill_batches_index_refresh_but_reader_sees_all_properties(tmp_
         check=True,
     )
     assert commits.stdout.strip() == "7"  # baseline + 6 independently undoable commits
+
+
+def test_backfill_batches_all_four_indexes_with_real_task_and_event_notes(tmp_path):
+    """The four production-shaped index roles agree after three protected commits."""
+    from benchmarks.indexing.probe_schema_backfill_batches import run_sample
+
+    result = run_sample(tmp_path, 28, 3, with_app_indexes=True)
+    assert result["vault_notes"] == 28
+    assert result["eligible_people"] == 26
+    assert result["app_indexes_enabled"] == ["tasks", "events"]
+    assert result["semantic_enabled"] is True
+    assert result["refresh_calls"] == 1
+    assert result["batch_sizes"] == [3]
+    assert result["filtered_query_count"] == 3
+    assert result["git_commits"] == 5  # two baseline commits and one per E3 write

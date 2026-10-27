@@ -231,7 +231,24 @@ Total desde el código inicial 10k 4.797 → 2.332 s (~51 %), aún O(N) por comp
 
 A escala de 10.000 notas y 5 commits, el paso de 14,43 a 12,20 s reduce ≈15 % el tiempo total frente al anterior índice por nota, además de las anteriores optimizaciones Core/Git. En la variante `--with-semantic`, 10k y 5 commits: un lote context+semantic tardó 1,59 s; hashes semánticos y filtro Notes se contrastan con Markdown físico, 6 commits Git (incluido baseline). **Aún NO** son 10.000 escrituras, todos los índices App Tasks/Events, FastEmbed/ONNX real, medidas móviles de batería, ni una evaluación de IA real. El coordinador de runtime mantiene la lógica productiva de reconstrucción íntegra de índices derivados si falla su refresco incremental y el índice de arranque exige consistencia física.
 
-**Próximo trabajo:** contrastar agrupación con todos los índices App e inferencia neural real, estresar cambios concurrentes y el flujo desde DEV desplegado sobre el mismo SHA. Después, diseñar el ejecutor local móvil realmente durable, con políticas de batería y reanudación independientes de Chromium, sin reemplazar Markdown por SQLite ni cambiar el contrato de una aprobación.
+## Batería ampliada: cuatro índices y ONNX local — 27-10-2026 (fuente)
+
+`benchmarks/indexing/probe_schema_backfill_batches.py` amplía la prueba con `--with-app-indexes`: añade **una Task real y un Event real** al vault, compone los tipos de las Apps de producción mediante `compose_application_schema`, inicializa/reconcilia **ContextIndex + SemanticEntityIndex general + semantic-tasks + semantic-events**, verifica identidad, hashes canónicos de **todas** las notas en cada índice, propiedades filtrables, número exacto de refrescos y el commit Git individual. `--offline-model-cache RUTA` sustituye el embedder simulado por `FastEmbedTextEmbedder(...,local_files_only=True)` en una caché existente: sin descarga, GPT, red ni notas personales. La regresión de cuatro índices está incluida en el gate transversal a través de `tests/runtime/test_schema_backfill_notes_vertical.py`.
+
+**Mediciones sobre Raspberry Pi 4, sin tomar la creación del índice ni staging en el tiempo de escritura y consulta:**
+
+| Notas físicas en la bóveda | Escrituras | Cuatro índices, embedder determinista | Un refresco derivado | Nota |
+|---|---:|---:|---:|---|
+| 1.000 (998 Person + Task + Event) | 12 | 2,81 s | 0,27 s | hashes de los cuatro índices OK |
+| 5.000 (4.998 Person + Task + Event) | 8 | 9,53 s | 1,29 s | hashes de los cuatro índices OK |
+| 10.000 (9.998 Person + Task + Event) | 5 | 13,80 s | 2,44 s | 7 commits totales contando 2 baseline; hashes de los cuatro índices OK |
+
+**Prueba ONNX offline de la misma ruta:** con 80 notas totales, 3 escrituras + 4 índices: **0,49 s** (0,36 s índice), pico RSS **857 MiB**; con 250 notas, 8 escrituras + 4 índices: **1,51 s** (0,94 s índice), pico RSS **1.204 MiB**, MemAvailable después del lote 1.252 MiB, swap libre sin caída material. Modelo **sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2** cargado desde la caché derivada **solo DEV**, `local_files_only=True`, sin llamadas externas. FastEmbed 0.7.3 emite un aviso de cambio histórico de pooling CLS→mean; los contratos de versión/modelo existentes y la migración de índices deben verificarse antes de asumir equivalencia con versiones anteriores. No se ha medido un lote neural de 10.000 notas ni el rendimiento energético de un teléfono.
+
+**Límite real detectado (NO resuelto):** el escáner `accumulate_schema_scan` conserva como prueba de unicidad un conjunto acotado de **10.000 IDs físicos**, definido junto a `_MAX_IDS` en el diario de escaneo y `_LIMIT` en el backfill. Un primer intento con **10.002 fuentes** (10k Person + Task + Event) se rechazó antes de escribir: `SchemaRetrospectionError: Duplicate or inconsistent scan progress`. El caso de exactamente 10k físicas sí funcionó. El objetivo acordado incluye eventualmente decenas de miles de notas: hace falta un diseño de páginas/checkpoints que permita continuar volúmenes mayores conservando prueba de unicidad, protección de colisiones entre páginas y manifiesto físico final, sin ampliar sin más límites de RAM o de recibos. No presentar la capacidad de >10k como implementada.
+
+**Próximo trabajo:** auditoría independiente acotada de la agrupación/indexación y revisión de recuperación bajo concurrencia; aceptación real DEV del SHA coincidente y proveedor semántico autorizado. Diseñar el ejecutor local móvil realmente durable, con políticas de batería y reanudación independientes de Chromium; la extensión segura por encima de 10k es otro requisito previo a la autonomía masiva. No reemplazar Markdown por SQLite ni cambiar el contrato de una aprobación.
+
 
 
 
