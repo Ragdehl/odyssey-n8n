@@ -247,3 +247,27 @@ test("C4 generic ambiguity includes future App document/project targets", () => 
   assert.match(r.message, /identificador del elemento/);
   assert.doesNotMatch(r.message, /persona o la tarea/);
 });
+
+test("Verified prewrite Event abstention tells user no event was saved, not an unknown failure", () => {
+  const input = {
+    request_id: "c3-synthetic", status: "needs_attention", product_outcome: "CANNOT_ANSWER",
+    product_reason: "EVENT_ROUTING_ABSTAIN", affected_stable_note_ids: [], actions: [],
+    note_result_snapshot: null,
+    execution_flow: {version: 1, input: "Mi prima vendrá a Lyon el lunes", routes: [
+      {capability: "events", status: "needs_attention", stage_count: 1, temporal: [], steps: []},
+    ]},
+    error_guidance: {status: "needs_attention", reason_code: "EVENT_ROUTING_ABSTAIN",
+      write_evidence: "UNKNOWN", guidance_kind: "UNKNOWN", hint: "EXPLAIN"},
+  };
+  const r = render(input);
+  assert.equal(r.kind, "cannot_answer");
+  assert.equal(r.status, "needs_attention");
+  assert.match(r.message, /No he guardado ningún evento/);
+  assert.match(r.message, /visita o llegada prevista/);
+  assert.doesNotMatch(r.message, /No puedo confirmar todavía/);
+  assert.equal(validateProductResponse(r).status, "needs_attention");
+
+  const ambiguous = render({...input, actions: [{kind: "write", status: "uncertain"}]});
+  assert.doesNotMatch(ambiguous.message, /No he guardado ningún evento/);
+  assert.match(ambiguous.message, /No puedo confirmar todavía/);
+});
