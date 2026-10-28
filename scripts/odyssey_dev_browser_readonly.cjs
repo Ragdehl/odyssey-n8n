@@ -54,6 +54,36 @@ const executablePath=process.env.ODYSSEY_CHROMIUM_BINARY ||
      return {checked:buttons.length,renderedWithSvg:drawings,coreReceipts,routeFlows:flows,
        duplicateReceiptViews:dupes,falseLegacyWarnings:stale};
    });
+   // Exercise visible Notes and every Calendar layout. A pressed tab alone
+   // is not evidence of loaded calendar data: wait for the requested grid.
+   const navigation={notesRendered:false,calendarModes:[],chatPreserved:false};
+   await page.click('#notes-tab');
+   await page.waitForFunction(()=>!document.querySelector('#notes-surface')?.hidden,{timeout:15000});
+   await page.waitForFunction(()=>document.querySelector('#notes-list')?.childElementCount>0,{timeout:20000});
+   navigation.notesRendered=true;
+   await page.click('#notes-calendar-tab');
+   await page.waitForFunction(()=>!document.querySelector('#calendar-surface')?.hidden,{timeout:15000});
+   for(const mode of ['month','7','3','1']){
+    await page.click('#calendar-view-'+mode);
+    await page.waitForFunction(mode=>{
+     const status=document.querySelector('#calendar-status')?.textContent||'';
+     const grid=document.querySelector(mode==='month'?'#calendar-grid':'#calendar-schedule-grid');
+     const ready=grid?.childElementCount>0&&!status&&
+       (mode==='month'||grid.classList.contains('calendar-schedule-'+mode));
+     return ready||/No se ha podido|no está disponible/.test(status);
+    },{timeout:20000},mode);
+    const displayed=await page.evaluate(mode=>{
+     const status=document.querySelector('#calendar-status')?.textContent||'';
+     const grid=document.querySelector(mode==='month'?'#calendar-grid':'#calendar-schedule-grid');
+     return !status&&grid?.childElementCount>0&&
+       (mode==='month'||grid.classList.contains('calendar-schedule-'+mode));
+    },mode);
+    navigation.calendarModes.push({mode,rendered:!!displayed});
+   }
+   await page.click('#calendar-chat-tab');
+   navigation.chatPreserved=(await page.$eval('#interaction',el=>el.childElementCount))===before.turns;
+   navigation.pass=navigation.notesRendered&&navigation.chatPreserved&&
+     navigation.calendarModes.length===4&&navigation.calendarModes.every(v=>v.rendered);
    await page.reload({waitUntil:'domcontentloaded',timeout:25000});
    await page.waitForFunction(()=>document.querySelector('#interaction')?.childElementCount>0,{timeout:25000});
    const after=await page.evaluate(()=>({
@@ -61,9 +91,10 @@ const executablePath=process.env.ODYSSEY_CHROMIUM_BINARY ||
      details:document.querySelectorAll('.detail-button').length
    }));
    report.scenarios[profile]={
-    http:res.status(),before,after,graphical,exceptions:errors,
+    http:res.status(),before,after,graphical,navigation,exceptions:errors,
     pass:res.status()===200 && before.turns>0 && before.details>0 &&
       before.turns===after.turns && before.details===after.details &&
+      navigation.pass &&
       graphical.renderedWithSvg===graphical.checked &&
       graphical.duplicateReceiptViews===0&&graphical.falseLegacyWarnings===0 &&
       errors.length===0
