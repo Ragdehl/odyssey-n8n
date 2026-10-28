@@ -61,6 +61,24 @@ const executablePath=process.env.ODYSSEY_CHROMIUM_BINARY ||
    await page.waitForFunction(()=>!document.querySelector('#notes-surface')?.hidden,{timeout:15000});
    await page.waitForFunction(()=>document.querySelector('#notes-list')?.childElementCount>0,{timeout:20000});
    navigation.notesRendered=true;
+   // Open the deployed schema editor by a user-visible click, without suggesting,
+   // proposing or confirming anything. The only new allowed operation is status.
+   await page.click('.notes-create-type-button');
+   await page.waitForFunction(()=>{
+     const sheet=document.querySelector('.schema-model-sheet');
+     const form=sheet?.querySelector('.schema-model-form');
+     const status=sheet?.querySelector('.schema-model-message')?.textContent||'';
+     return sheet&&!sheet.hidden&&(/Describe el cambio|preparar y revisar/.test(status)||
+       /no está disponible|no está listo/.test(status));
+   },{timeout:15000});
+   navigation.schemaEditor=await page.evaluate(()=>{
+     const sheet=document.querySelector('.schema-model-sheet');
+     const message=sheet?.querySelector('.schema-model-message')?.textContent||'';
+     const form=sheet?.querySelector('.schema-model-form');
+     return {opened:!!sheet&&!sheet.hidden,formVisible:!!form&&!form.hidden,
+       unavailable:/no está disponible|no está listo/.test(message)};
+   });
+   await page.click('.schema-model-close');
    await page.click('#notes-calendar-tab');
    await page.waitForFunction(()=>!document.querySelector('#calendar-surface')?.hidden,{timeout:15000});
    for(const mode of ['month','7','3','1']){
@@ -82,7 +100,8 @@ const executablePath=process.env.ODYSSEY_CHROMIUM_BINARY ||
    }
    await page.click('#calendar-chat-tab');
    navigation.chatPreserved=(await page.$eval('#interaction',el=>el.childElementCount))===before.turns;
-   navigation.pass=navigation.notesRendered&&navigation.chatPreserved&&
+   navigation.pass=navigation.notesRendered&&navigation.schemaEditor?.opened&&
+     navigation.schemaEditor?.formVisible&&!navigation.schemaEditor?.unavailable&&navigation.chatPreserved&&
      navigation.calendarModes.length===4&&navigation.calendarModes.every(v=>v.rendered);
    await page.reload({waitUntil:'domcontentloaded',timeout:25000});
    await page.waitForFunction(()=>document.querySelector('#interaction')?.childElementCount>0,{timeout:25000});
