@@ -15,6 +15,7 @@ from typing import Any, Literal
 from odyssey_core.atomic_facts import AtomicFactError, parse_atomic_facts
 from odyssey_core.notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from odyssey_core.storage import VaultRepository
+from odyssey_core.storage.repository import MAX_PHYSICAL_VERSION_PATHS
 
 ScanKind = Literal["discover_type", "backfill_property"]
 _MAX_PAGE = 25
@@ -100,7 +101,7 @@ class RetrospectionProgress:
 _MAX_PROGRESS_IDS = 10000
 # Bounded *transient* whole-vault scan, separate from durable 10k-ID scan
 # checkpoints and the much smaller 10k-candidate mutation journal.
-_MAX_STAGED_SCAN_IDS = 50000
+_MAX_STAGED_SCAN_IDS = MAX_PHYSICAL_VERSION_PATHS
 _MAX_STAGED_ID_BYTES = 12_000_000
 
 

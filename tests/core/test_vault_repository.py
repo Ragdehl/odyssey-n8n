@@ -369,6 +369,23 @@ class BulkPhysicalVersionProofTests(unittest.TestCase):
         (self.repo.root / "deep/b.md").unlink()
         assert len(self.repo.note_version_snapshot()) == 1
 
+    def test_large_physical_snapshot_matches_schema_capacity_and_fails_closed(self):
+        # A small patched limit tests the exact boundary, not a huge fixture
+        # in ordinary pytest. The separate Pi benchmark covers real 50k files.
+        from odyssey_core.schema_retrospection import _MAX_STAGED_SCAN_IDS
+        from odyssey_core.storage import repository as storage_source
+
+        assert storage_source.MAX_PHYSICAL_VERSION_PATHS == _MAX_STAGED_SCAN_IDS == 50_000
+        (self.repo.root / "first.md").write_text("one", encoding="utf-8")
+        (self.repo.root / "second.md").write_text("two", encoding="utf-8")
+        (self.repo.root / "external.md").symlink_to(self.repo.root / "first.md")
+        with patch.object(storage_source, "MAX_PHYSICAL_VERSION_PATHS", 2):
+            assert len(self.repo.note_version_snapshot()) == 2
+            (self.repo.root / "third.md").write_text("three", encoding="utf-8")
+            with self.assertRaisesRegex(VaultAccessError, "bounded capacity"):
+                self.repo.note_version_snapshot()
+        assert len(self.repo.note_version_snapshot()) == 3
+
     def test_bulk_scan_never_follows_external_or_internal_symlink(self):
         self.repo.create_text("a.md", "in")
         external = Path(self.temp.name) / "outside.md"

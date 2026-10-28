@@ -17,6 +17,10 @@ from pathlib import Path, PurePosixPath
 _REQUEST_READ_MAX_BYTES = 8 * 1024 * 1024
 _REQUEST_READ_MAX_NOTES = 4096
 _REQUEST_PATH_LIST_MAX_NOTES = 20_000
+# Upper bound for the *physical version inventory*, not the smaller per-request
+# path-list cache or the 10k mutation journal. Schema's large read-only scan
+# must use the same single authoritative finite cap (issue #160).
+MAX_PHYSICAL_VERSION_PATHS = 50_000
 
 
 class InvalidNotePath(ValueError):
@@ -246,7 +250,7 @@ class VaultRepository:
                                 entry_status.st_mtime_ns,
                                 entry_status.st_ctime_ns,
                             )
-                        if len(paths) > 30_000:
+                        if len(paths) > MAX_PHYSICAL_VERSION_PATHS:
                             raise VaultAccessError("Vault version proof exceeds bounded capacity")
             if any(
                 not stat.S_ISDIR(folder.lstat().st_mode) or self._fingerprint(folder) != previous
