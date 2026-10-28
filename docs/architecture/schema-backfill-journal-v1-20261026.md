@@ -318,6 +318,8 @@ La revisión independiente sobre `ae0ee2a` (`schema-followup-review-1028`, delta
 
 **Estado de producto:** fuente y pruebas sintéticas, sin nueva versión desplegada en DEV, sin ejecución pagada y sin permisos alterados. La autorización del usuario para ampliar tokens de **Codex** no autoriza gasto con OpenAI Runtime, modificar Cloudflare ni usar notas reales. La PR permanece borrador y la aceptación externa con sesión legítima continúa bloqueada.
 
+**Pruebas adicionales, 28-10:** el seguimiento genérico está cubierto por el tipo de nota definido por el usuario **Libro** y su propiedad **entera** `paginas` (frase atómica `Este libro tiene 384 páginas.` → segunda campaña de interpretación con revisión independiente → `paginas: 384`, 2 llamadas falsas, otra nota Persona intacta). Sonda repetible y sin red `PYTHONPATH=. python benchmarks/indexing/probe_schema_followup.py`: crea 12 notas y 6 diarios HMAC de origen en `/tmp`, recupera las 12 en nuevos diarios con Git/E3, verifica recarga/replay y emite JSON con latencia de preparación, status, advance, RSS/SwapFree/temperatura cuando están disponibles y duración total. No usa ni notas DEV ni GPT. El archivo fuente de la sonda permite al auditor reproducir las mediciones sin entrar en el estado privado del operador; las cifras son muestras de Pi, no un SLA de producción.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.

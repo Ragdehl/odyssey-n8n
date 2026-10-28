@@ -325,3 +325,132 @@ def test_crash_before_reservation_can_safely_use_initial_allowance(tmp_path, mon
     assert done["updated"] == 1 and done["status"] == "complete"
     assert gateway.calls == 2 and adapter.ledger.status()["reserved_calls"] == 2
     assert parse_note(repo.read_text("0.md")).metadata["profesion"] == "profesora"
+
+
+def test_followup_works_for_custom_book_type_and_integer_property(tmp_path):
+    """A user-defined Book's page count must use the same signed Core protocol.
+
+    Do not teach the follow-up anything about the Person/Profession example.
+    """
+    import subprocess
+
+    from odyssey_core.git_history import GitHistoryRecorder
+    from odyssey_core.notes import Note, serialize_note
+    from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill
+    from odyssey_runtime.schema_backfill_campaign import LocalBackfillCampaign
+    from odyssey_runtime.schema_backfill_jobs import LocalBackfillJob
+
+    state, repo, original_writer = setup(
+        tmp_path, ["Ana trabaja como profesora.", "Libro de ejemplo"]
+    )
+    schema = original_writer.schema
+    schema["types"].append(
+        {
+            "id": "book",
+            "name": "Libro",
+            "description": "Libros del usuario",
+            "examples": ["Una novela"],
+            "properties": [
+                {
+                    "id": "paginas",
+                    "value_type": "integer",
+                    "required": False,
+                    "description": "Número exacto de páginas",
+                    "filterable": True,
+                }
+            ],
+        }
+    )
+    old = parse_note(repo.read_text("1.md"))
+    book = Note(
+        {**old.metadata, "type": "book", "id": "libro-1", "name": "Libro de ejemplo"},
+        "# Added 26-10-2026\n- Este libro tiene 384 páginas.\n"
+        "<!-- odyssey:fact request=book1 ordinal=0 -->\n",
+    )
+    (repo.root / "1.md").write_text(serialize_note(book))
+    subprocess.run(["git", "add", "1.md"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-q",
+            "-m",
+            "synthetic book baseline",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    writer = AutomaticPropertyBackfill(
+        repository=repo, schema=schema, history=GitHistoryRecorder(repo.root)
+    )
+    run = LocalBackfillCampaign(
+        worker=LocalBackfillJob(
+            state_root=state, repository=repo, writer=writer, actor_id="profile-a"
+        ),
+        segment_size=2,
+    )
+    assert (
+        run.stage(campaign_id="book-original", type_id="book", property_id="paginas")["pending"]
+        == 1
+    )
+    original = run.advance(
+        campaign_id="book-original",
+        type_id="book",
+        property_id="paginas",
+        actor=ACTOR,
+        now=NOW,
+    )
+    assert original["deferred"] == 1
+    original = run.advance(
+        campaign_id="book-original",
+        type_id="book",
+        property_id="paginas",
+        actor=ACTOR,
+        now=NOW,
+    )
+    assert original["finished"] and original["deferred"] == 1
+    cid = semantic_followup_id("book-original")
+    assert (
+        run.stage_followup(
+            campaign_id=cid,
+            original_id="book-original",
+            origin_kind="campaign",
+            type_id="book",
+            property_id="paginas",
+        )["pending"]
+        == 1
+    )
+
+    class BooksGateway:
+        calls = 0
+
+        def _complete(self, **kwargs):
+            self.calls += 1
+            fact = kwargs["data"]["marked_atomic_facts"][0]
+            reply = {"locator": fact["locator"], "quote": fact["text"], "value": 384}
+            if kwargs["name"] == "odyssey_schema_backfill_interpret_v1":
+                return {"decision": "SET", **reply}
+            return {"verdict": "APPROVE", "reason": "ENTAILED_CURRENT", **reply}
+
+    provider = BooksGateway()
+    interpreter = budgeted(run, provider, cid=cid, cap=4)
+    for _ in range(4):
+        result = run.advance(
+            campaign_id=cid,
+            type_id="book",
+            property_id="paginas",
+            actor=ACTOR,
+            now=NOW,
+            interpreter=interpreter,
+        )
+        if result["finished"]:
+            break
+    assert result["finished"] and result["updated"] == 1
+    assert provider.calls == interpreter.ledger.status()["reserved_calls"] == 2
+    assert parse_note(repo.read_text("1.md")).metadata["paginas"] == 384
+    assert parse_note(repo.read_text("0.md")).metadata.get("paginas") is None
+    assert run.status("book-original") == original
