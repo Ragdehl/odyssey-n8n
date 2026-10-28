@@ -95,6 +95,55 @@ declare an Event write. New isolated positive and negative regressions
 exercise this distinction. The older independent FAIL stands until a new
 independent reviewer examines the repair's actual SHA.
 
+### New independent Generality review (29 October, source SHA 75632c1)
+
+An additional *independent* GPT-6 Sol / medium read-only Generality reviewer
+returned **FAIL**, recording two blocking cross-domain gaps and one warning.
+This verdict remains immutable in private
+`.odyssey-agent-runs/issue157-live-20261028/review-generality-sha756.json`:
+
+1. The independent **Event + Task** path still rejected every nonempty
+   relationship span despite real valid future appointments with a partner.
+   Source partitions must independently attest exact source bytes and retain
+   previously grounded SELF relationships rather than silently deleting them.
+2. Previously, verified members from all SELF groups were passed to the
+   whole-source coverage checker as a single unscoped list. That verified
+   each *person*, but not that the person participated in the *particular
+   atomic fact*. Distinct source assertions could cross-attribute groups.
+3. Warning: router instructions said "any number" while the executor
+   conservatively limits source relation spans to **eight**. This is a
+   documented finite safety cap, not permission to drop the ninth member.
+
+The new source candidate introduces an **optional original-source group
+provenance map** to the existing Core coverage validator. A person verified
+by a SELF group must belong to a relationship phrase literally supporting
+the specific atomic fact. A continuation may inherit the exact same
+previously proven group only after a preceding atomic fact explicitly
+introduced **all** groups together. Independent facts with distinct groups
+cannot borrow one another's members. Explicit literal source name evidence
+is still checked separately. Tests cover valid distinct facts, three
+cross-assignments that must fail, a multi-group continuation and a valid
+single-group continuation.
+
+The Event+Task independent partition now permits already verified SELF
+spans, requires each span to map to **exactly one** byte-exact reviewed
+scope and rechecks the original actor-owned canonical SELF proof **after
+both operation preparations and immediately before the first E3 write**.
+A later E3 operation may invalidate the derived verified catalog; reentering
+that stale cache between two independently planned operations could reject
+the second operation after the first was already written. The request-level
+operation manifest and each delegate's E3 guard still own their respective
+writes; we do not bypass the catalogue or silently re-index the entire
+vault in the critical path. Tests cover positive future Event + independent
+Task with a verified partner, unverified partner, SELF source changed during
+preparation, E3/Markdown readback and replay.
+
+These are **repairs in progress**, not new Generality PASS. They must be
+subjected to the full offline gate, then a fresh independent review on the
+final commit and product-authenticated synthetic browser E2E. Any source
+change after the 12 authorized product GPT calls is **Core-side
+validation/delegation only**, not a revalidated new Router prompt.
+
 A genuine GPT Router response from the corrected Spanish multi-relation
 case has been frozen in
 `tests/fixtures/issue157_recorded_live_router_v2.json`. Its

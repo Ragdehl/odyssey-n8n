@@ -92,6 +92,7 @@ from odyssey_core.whole_message_identity_guard import (
     reject_unproven_person_collisions,
 )
 from odyssey_core.whole_message_relationship_proof import (
+    VerifiedSelfRelationship,
     WholeSourceRelationshipError,
     recheck_self_relationship,
     verify_self_relationship,
@@ -929,7 +930,6 @@ class WholeSourceLightExecutor:
                 and len(capabilities) == len(set(capabilities))
                 and route.get("interpretation") == "separable"
                 and route.get("reason") == "independent"
-                and not proposed_relation_spans
                 and isinstance(scopes, list)
                 and len(scopes) >= 2
                 and all(
@@ -952,6 +952,7 @@ class WholeSourceLightExecutor:
                     delivery_instant=instant,
                     router_started=router_started,
                     route_scopes=scopes,
+                    verified_relationships=tuple(relationships),
                 )
             # The authenticated SELF/actor guard is already complete. One
             # independently declared Events scope is equivalent to no scopes
@@ -1362,6 +1363,10 @@ class WholeSourceLightExecutor:
                 review,
                 capabilities,
                 verified_relationship_members=tuple(verified_members.values()),
+                verified_relationship_groups=tuple(
+                    (proof.original_relation_span, tuple(name for _id, name in proof.members))
+                    for proof in relationships
+                ),
                 core_anchored_evidence=self.core_anchored_coverage_enabled,
             )
             names = tuple(
@@ -2613,6 +2618,7 @@ class WholeSourceLightExecutor:
         delivery_instant: datetime,
         router_started: float,
         route_scopes: list[dict[str, object]],
+        verified_relationships: tuple[VerifiedSelfRelationship, ...] = (),
     ) -> ApplicationResult:
         # Proposed scopes are non-authoritative byte ranges. No trimming,
         # deletion, or LLM-authored canonical identities in this boundary.
@@ -2655,6 +2661,15 @@ class WholeSourceLightExecutor:
             for part in verified
         ):
             return self._abstain(delivery, "INDEPENDENT_ROUTE_PARTITION_MISMATCH")
+        # A Router-suggested SELF relationship cannot be shifted from one
+        # independently source-verified application scope to another.
+        # Every model-supplied span must belong to exactly one exact partition.
+        if verified_relationships:
+            if not event_mix or any(
+                sum(proof.original_relation_span in part.source for part in verified) != 1
+                for proof in verified_relationships
+            ):
+                return self._abstain(delivery, "INDEPENDENT_RELATION_PARTITION_UNVERIFIED")
         # Reject overlong derived locators BEFORE writing anything. This keeps
         # the outer E3 claim responsible for the full logical request.
         locators = [f"{delivery}-independent-{part.index}" for part in verified]
@@ -2727,6 +2742,21 @@ class WholeSourceLightExecutor:
                     prepared_events[part.index] = (candidate, temporal)
                 except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
                     return self._abstain(delivery, "INDEPENDENT_EVENT_PREWRITE_UNAVAILABLE")
+        # A trust check must run AFTER both AI partition reviewers and ALL
+        # Task/Event prepare phases, immediately before the first mutation.
+        # No E3 operation is allowed to race this prewrite membership check.
+        if verified_relationships:
+            try:
+                for proof in verified_relationships:
+                    recheck_self_relationship(
+                        proof,
+                        repository=self.repository,
+                        schema=self.schema,
+                        actor=actor,
+                        bindings=self.bindings,
+                    )
+            except (WholeSourceRelationshipError, ValueError):
+                return self._abstain(delivery, "INDEPENDENT_SELF_RELATION_STALE")
         if self.operation_manifest_begin is not None:
             self.operation_manifest_begin(
                 delivery,
@@ -2738,6 +2768,12 @@ class WholeSourceLightExecutor:
         outcomes: list[ApplicationResult] = []
         pending_index_ids: list[str] = []
         for part, locator in zip(verified, locators, strict=True):
+            # The verified SELF groups were already freshly re-grounded after
+            # BOTH independent partition reviewers and all operation prepares,
+            # immediately before the first E3 mutation. Do not re-enter the
+            # full verified catalog after an earlier E3 commit while its derived
+            # snapshot is legitimately stale; each independently reviewed
+            # delegate still owns its own guarded write and request-level CAS.
             # An earlier canonical Writer may have made derived hints stale.
             # Refresh only the changed Note IDs before another Core planner
             # reads derived context. Never rebuild the complete index, and

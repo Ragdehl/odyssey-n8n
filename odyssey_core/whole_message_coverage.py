@@ -117,6 +117,7 @@ def validate_whole_message_coverage(
     capabilities: Sequence[str],
     *,
     verified_relationship_members: Sequence[str] = (),
+    verified_relationship_groups: Sequence[tuple[str, tuple[str, ...]]] = (),
     core_anchored_evidence: bool = False,
 ) -> ReviewedFullSource:
     """Verify semantic proposal/reviewer agreement and literal source provenance.
@@ -150,6 +151,18 @@ def validate_whole_message_coverage(
     verified = set(verified_relationship_members)
     if not all(isinstance(name, str) and name.strip() for name in verified):
         raise WholeMessageCoverageError("Invalid relationship evidence")
+    # Core supplies each source-quoted relation AND its verified members.
+    # Names known somewhere in SELF do not prove membership in every fact.
+    groups = tuple(verified_relationship_groups)
+    if len(groups) > 8 or any(
+        not isinstance(phrase, str)
+        or phrase not in source
+        or not isinstance(members, (tuple, list))
+        or not members
+        or not all(isinstance(name, str) and name in verified for name in members)
+        for phrase, members in groups
+    ):
+        raise WholeMessageCoverageError("Invalid source-bound relationship groups")
     output: list[ReviewedFullSourceFact] = []
     evidence_spans: list[tuple[int, int]] = []
     anchored = anchor_planned_source_evidence(source, proposal) if core_anchored_evidence else ()
@@ -227,6 +240,32 @@ def validate_whole_message_coverage(
                 and name not in verified
             ):
                 raise WholeMessageCoverageError("Participant absent from original source")
+        if groups:
+            # A quote with its own group phrase authorizes only THAT phrase's
+            # members, never the union of all SELF relations in the message.
+            # A later elliptical continuation can inherit a combined group
+            # only when a preceding single fact literally introduced every
+            # one of the groups together. Separate source facts cannot be
+            # silently pooled into a fabricated joint subject.
+            direct = {name for phrase, members in groups if phrase in quote for name in members}
+            if not direct:
+                if any(
+                    all(phrase in prior.source_quote for phrase, _members in groups)
+                    and prior.source_spans[-1][1] <= span[0]
+                    for prior in output
+                ):
+                    direct = {name for _phrase, members in groups for name in members}
+            for name in names:
+                if (
+                    name in verified
+                    and name not in direct
+                    and not re.search(
+                        r"(?<!\w)" + re.escape(name) + r"(?!\w)", quote, re.IGNORECASE
+                    )
+                ):
+                    raise WholeMessageCoverageError(
+                        "Verified group member unsupported by this atomic source fact"
+                    )
         references = [int(x) for x in _REF.findall(text)]
         if sorted(references) != list(range(len(names))) or len(references) != len(names):
             raise WholeMessageCoverageError("Symbolic Core references missing or repeated")
