@@ -49,11 +49,15 @@ def workflow() -> dict:
     }
     cases = [
         ("valid", correct),
+        ("followup_stage", {**correct, "action": "stage_followup"}),
+        ("followup_status", {**correct, "action": "status_followup"}),
+        ("followup_advance", {**correct, "action": "advance_followup"}),
         ("forged", {**correct, "authenticated_actor": {"stable_user_id": "forged"}}),
         ("bad_action", {**correct, "action": "reset"}),
         ("scan", {**correct, "operation": "schema_scan", "scan_kind": "backfill_property"}),
         ("bool_version", {**correct, "expected_revision": True}),
         ("extra_approval", {**correct, "approved": True}),
+        ("forged_followup", {**correct, "action": "advance_followup", "job_id": "forged"}),
     ]
     nodes = [
         {
@@ -99,7 +103,7 @@ const fs=require('node:fs');
 const raw=fs.readFileSync('/tmp/trace.json','utf8');
 const start=raw.indexOf('{');if(start<0)throw Error('missing n8n result');
 const trace=JSON.parse(raw.slice(start));
-const names=['valid','forged','bad_action','scan','bool_version','extra_approval'];
+const names=['valid','followup_stage','followup_status','followup_advance','forged','bad_action','scan','bool_version','extra_approval','forged_followup'];
 const results={};
 for(const name of names){
  results[name]=trace?.data?.resultData?.runData?.['Validate '+name]
@@ -111,14 +115,18 @@ const pass=trace.status==='success' && trace.finished===true &&
  results.valid?.operation==='schema_backfill' &&
  results.valid?.authenticated_actor?.stable_user_id===actor &&
  results.valid?.invalid!==true &&
+ ['stage_followup','status_followup','advance_followup']
+  .every((a,i)=>results[['followup_stage','followup_status','followup_advance'][i]]?.action===a &&
+   results[['followup_stage','followup_status','followup_advance'][i]]?.invalid!==true &&
+   results[['followup_stage','followup_status','followup_advance'][i]]?.authenticated_actor?.stable_user_id===actor) &&
  results.scan?.operation==='schema_scan' &&
  results.scan?.authenticated_actor?.stable_user_id===actor &&
  results.scan?.invalid!==true &&
- ['forged','bad_action','bool_version','extra_approval']
+ ['forged','bad_action','bool_version','extra_approval','forged_followup']
   .every(x=>results[x]?.invalid===true);
 console.log('ODYSSEY_SCHEMA_N8N_ENGINE='+JSON.stringify({
  pass, engine:'real n8n 2', code:'exact current Notes validator',
- allowed:2,rejected:['forged','bad_action','bool_version','extra_approval']
+ allowed:5,rejected:['forged','bad_action','bool_version','extra_approval','forged_followup']
   .filter(x=>results[x]?.invalid===true).length, provider:'NONE',deployedDev:false}));
 if(!pass)process.exitCode=7;
 JS

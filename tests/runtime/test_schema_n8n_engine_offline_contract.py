@@ -21,11 +21,13 @@ def test_offline_projection_reuses_exact_validator_and_actor_contract():
     assert "schema_confirm" in code
     assert "operation !== 'schema_backfill'" in code
     result = workflow()
-    assert len(result["nodes"]) == 13
+    assert len(result["nodes"]) == 21
     assert all("credentials" not in node for node in result["nodes"])
     validator = next(n for n in result["nodes"] if n["name"] == "Validate valid")
     assert validator["parameters"]["jsCode"] == code
-    for name in ("forged", "bad_action", "bool_version", "extra_approval"):
+    for name in ("forged", "bad_action", "bool_version", "extra_approval", "forged_followup"):
+        assert next(n for n in result["nodes"] if n["name"] == "Validate " + name)
+    for name in ("followup_stage", "followup_status", "followup_advance"):
         assert next(n for n in result["nodes"] if n["name"] == "Validate " + name)
     assert "$input.first()" in code
     assert "n8n execute" in SHELL and "n8n import:workflow" in SHELL

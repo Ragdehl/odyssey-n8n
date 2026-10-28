@@ -175,3 +175,25 @@ test("n8n forwards only actor-bound deterministic property backfill actions", ()
     {...input, request_id:"some"},
   ]) assert.equal(run(bad).invalid, true, JSON.stringify(bad));
 });
+
+test("actual n8n Notes validator forwards the three explicit semantic follow-up actions", () => {
+  const base={operation:"schema_backfill",target_type_id:"book",property_id:"paginas",expected_revision:1};
+  const actor={stable_user_id:"00000000-0000-4000-8000-000000000001"};
+  for(const action of ["stage","status","advance","stage_followup","status_followup","advance_followup"]){
+    const input={...base,action};
+    assert.deepEqual(run(input),{...input,authenticated_actor:actor},action);
+  }
+  for(const bad of [
+    {...base,action:"advance_followup",authenticated_actor:actor},
+    {...base,action:"advance_followup",actor_id:"other"},
+    {...base,action:"advance_followup",note_ids:["injected"]},
+    {...base,action:"stage_followup",value:384},
+    {...base,action:"stage_followup",call_limit:36},
+    {...base,action:"stage_followup",expected_revision:true},
+    {...base,action:"status_followup",property_id:"../invalid"},
+    {...base,action:"reset_followup"},
+    {...base,operation:"schema_scan",scan_kind:"backfill_property",action:"stage_followup"},
+  ]){
+    assert.equal(run(bad).invalid,true,JSON.stringify(bad));
+  }
+});

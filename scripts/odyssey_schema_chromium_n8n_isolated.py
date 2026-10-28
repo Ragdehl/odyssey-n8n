@@ -30,6 +30,7 @@ from odyssey_core import schema_retrospection as scan_limits  # noqa: E402
 from odyssey_core.notes import Note, parse_note, serialize_note  # noqa: E402
 from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs  # noqa: E402
 from odyssey_runtime import schema_backfill_campaign as campaign_contract  # noqa: E402
+from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter  # noqa: E402
 from scripts.odyssey_n8n_dynamic_webhook import BROKER_JS  # noqa: E402
 from scripts.odyssey_schema_n8n_core_isolated import (  # noqa: E402
     docker_argv,
@@ -39,6 +40,7 @@ from tests.runtime.test_schema_backfill_notes_vertical import (  # noqa: E402
     ALICE,
     fixture,
 )
+from tests.runtime.test_schema_semantic_budget import ProfessionGateway  # noqa: E402
 
 BROWSER = ROOT / "scripts/odyssey_schema_backfill_chromium_local.cjs"
 INGRESS = r"""
@@ -75,11 +77,13 @@ http.createServer(async(req,res)=>{
     !['schema_scan','schema_backfill'].includes(body.operation)||
     body.target_type_id!=='person'||body.property_id!=='profesion'||
     body.expected_revision!==1||
-    !['status','stage','advance'].includes(body.action)||
+    !(['status','stage','advance'].includes(body.action)||
+      (body.operation==='schema_backfill'&&
+       ['stage_followup','status_followup','advance_followup'].includes(body.action)))||
     Object.keys(body).some(k=>!['operation','target_type_id','property_id',
       'expected_revision','scan_kind','action'].includes(k))||
     (body.operation==='schema_scan'&&
-      (body.scan_kind!=='backfill_property'||body.action==='stage'))||
+      (body.scan_kind!=='backfill_property'||!['status','advance'].includes(body.action)))||
     (body.operation==='schema_backfill'&&body.scan_kind!==undefined)) {
     res.writeHead(403);res.end('{}');return;
   }
@@ -118,7 +122,9 @@ def request_socket(sock: Path, path: str) -> tuple[int, str]:
         connection.close()
 
 
-def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
+def run_viewport(
+    root: Path, view: str, *, campaign_mode: bool = False, followup_mode: bool = False
+) -> dict:
     folder = root / view
     folder.mkdir()
     # Both mounts must be directly beneath /tmp, never a nested project/
@@ -130,6 +136,10 @@ def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
         share = Path(bridge)
         os.chmod(share, 0o700)
         app, repo, state = fixture(folder)
+        gateway = ProfessionGateway() if followup_mode else None
+        if gateway is not None:
+            app.schema_backfill_interpreter = SemanticPropertyInterpreter(gateway)
+            app.schema_backfill_call_limit = 6
         if campaign_mode:
             source = parse_note(repo.read_text("0.md"))
             for i in range(2, 5):
@@ -191,7 +201,19 @@ def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
                         and payload["property_id"] == "profesion"
                         and type(payload["expected_revision"]) is int
                         and payload["expected_revision"] == 1
-                        and payload["action"] in {"stage", "advance", "status"}
+                        and payload["action"]
+                        in (
+                            {
+                                "stage",
+                                "advance",
+                                "status",
+                                "stage_followup",
+                                "status_followup",
+                                "advance_followup",
+                            }
+                            if operation == "schema_backfill"
+                            else {"status", "advance"}
+                        )
                         and (
                             operation != "schema_scan"
                             or (
@@ -278,6 +300,8 @@ def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
                         environment["ODYSSEY_SYNTH_N8N_SOCKET"] = str(ingress)
                         if campaign_mode:
                             environment["ODYSSEY_SYNTH_CAMPAIGN"] = "1"
+                        if followup_mode:
+                            environment["ODYSSEY_SYNTH_FOLLOWUP"] = "1"
                         libs = Path(
                             "/home/ragdehl/projects/.odyssey-agent-runs/"
                             "e6-chromium-runtime-deps/root/usr/lib/aarch64-linux-gnu"
@@ -343,11 +367,18 @@ def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
         )
         if campaign_mode:
             good = (
-                commits == 6  # 2 baseline commits + 4 independent E3 writes
+                commits == (7 if followup_mode else 6)
                 and all(notes[f"{i}.md"]["profesion"] == "médica" for i in (0, 2, 3, 4))
-                and "profesion" not in notes["1.md"]
+                and (
+                    (
+                        notes["1.md"].get("profesion") == "profesora"
+                        and after["1.md"] != before["1.md"]
+                        and gateway.calls == 2
+                    )
+                    if followup_mode
+                    else ("profesion" not in notes["1.md"] and after["1.md"] == before["1.md"])
+                )
                 and all(after[f"{i}.md"] != before[f"{i}.md"] for i in (0, 2, 3, 4))
-                and after["1.md"] == before["1.md"]
                 and evidence["n8n"] == "REAL_OFFLINE"
                 and evidence["reloadPersisted"]
             )
@@ -371,9 +402,10 @@ def run_viewport(root: Path, view: str, *, campaign_mode: bool = False) -> dict:
             "actualN8n": True,
             "actualCoreGit": True,
             "deployedDev": False,
-            "provider": "NONE",
-            "updated": 4 if campaign_mode else 1,
-            "deferred": 1,
+            "provider": "FAKE_STRUCTURED_NO_NETWORK" if followup_mode else "NONE",
+            "updated": 5 if followup_mode else 4 if campaign_mode else 1,
+            "deferred": 0 if followup_mode else 1,
+            "fakeProviderCalls": gateway.calls if followup_mode else 0,
             "multipleJournals": campaign_mode,
             "gitCommits": commits,
             "coreRequests": stats["core"],
@@ -391,19 +423,30 @@ def main() -> int:
         help="Real Chromium+n8n multijournal user flow, disposable 5-note vault",
     )
     parser.add_argument("--viewport", choices=["desktop", "mobile", "both"], default="both")
+    parser.add_argument(
+        "--followup",
+        action="store_true",
+        help="Only with --campaign: explicit second click through real offline n8n and fake two-pass gateway",
+    )
     args = parser.parse_args()
     if not args.run:
         print("Opt-in only: --run starts offline disposable n8n/Chromium/Core")
         return 0
+    if args.followup and not args.campaign:
+        parser.error("--followup requires --campaign")
     with tempfile.TemporaryDirectory(prefix="odyssey-schema-full-ui-", dir="/tmp") as temp:
         views = ("desktop", "mobile") if args.viewport == "both" else (args.viewport,)
-        results = [run_viewport(Path(temp), view, campaign_mode=args.campaign) for view in views]
+        results = [
+            run_viewport(Path(temp), view, campaign_mode=args.campaign, followup_mode=args.followup)
+            for view in views
+        ]
     result = {
         "pass": all(x["pass"] for x in results),
         "route": "Chromium -> real offline n8n -> host Core/E3 -> Markdown/Git",
         "DEV": "NOT_DEPLOYED",
-        "provider": "NONE",
+        "provider": "FAKE_STRUCTURED_NO_NETWORK" if args.followup else "NONE",
         "campaignMode": args.campaign,
+        "followupMode": args.followup,
         "results": results,
     }
     print("ODYSSEY_SCHEMA_FULL_OFFLINE_UI=" + json.dumps(result))

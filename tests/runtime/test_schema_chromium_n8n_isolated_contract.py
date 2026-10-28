@@ -27,6 +27,11 @@ def test_offline_chromium_n8n_two_way_socket_is_bounded():
     assert "http://127.0.0.1:5678/webhook/" in INGRESS
     assert "n8n publish:workflow" in SHELL
     assert "n8n start" in SHELL
+    assert "--followup" in driver
+    assert "ODYSSEY_SYNTH_FOLLOWUP" in driver + js
+    assert "stage_followup" in INGRESS
+    assert "advance_followup" in INGRESS
+    assert "gateway.calls == 2" in driver
     assert "docker_argv(flow, share)" in driver
     assert "args[mount].removesuffix(" in driver
     assert "process.wait(timeout=10)" in driver
@@ -49,7 +54,7 @@ def test_unsafe_fixture_is_rejected_before_docker_run(tmp_path):
 def test_not_deployed_ambiguity_protected():
     python_source = (ROOT / "scripts/odyssey_schema_chromium_n8n_isolated.py").read_text()
     assert '"DEV": "NOT_DEPLOYED"' in python_source
-    assert '"provider": "NONE"' in python_source
+    assert '"provider": "FAKE_STRUCTURED_NO_NETWORK" if args.followup else "NONE"' in python_source
     assert '"deployedDev": False' in python_source
     assert "browserReload" in python_source
     assert "after" in python_source
