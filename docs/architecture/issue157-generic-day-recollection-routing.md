@@ -28,6 +28,18 @@ fact**, its combined link set cannot prove each separate membership,
 so Core must abstain instead of cross-attributing people. Missing, stale,
 duplicated, excessive or unverified sources abstain before mutation.
 
+The first **six** authorized live GPT-6 Luna low-effort schema-bound
+Router checks found 4/6 strict PASS: all six correctly chose Core rather
+than Events, but the Spanish two-group source collapsed two coordinated
+relationship references into a single combined span, and the French
+two-group source omitted the singular partner reference. English correctly
+returned both, and single/no-group controls passed. No private notes or
+real user data were sent; signed private receipt is outside Git in
+`.odyssey-agent-runs/issue157-live-20261028/attempt-ledger.json`.
+The contract now requests minimal distinct references (singular or plural),
+each verbatim and in source order. The next fresh gate must not relabel those
+two failed outcomes as successes.
+
 The Event-capable Router prompt is also clarified at the **general intent
 boundary**: a completed dated recollection is durable Core/day knowledge;
 a schedule, future occurrence or Event lifecycle command remains Events.
