@@ -12,6 +12,7 @@ from dataclasses import replace
 import pytest
 
 from odyssey_core import create_entity
+from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.atomic_facts import render_atomic_facts
 from odyssey_core.notes import parse_note, serialize_note
 from odyssey_runtime.whole_source_model_contract import capability_route_contract
@@ -222,7 +223,7 @@ def test_overlapping_relation_phrases_in_one_indivisible_fact_do_not_cross_assig
 
 
 def test_event_only_route_cannot_bypass_unverified_group_as_event(tmp_path):
-    repo, actor, service, runtime = _family(tmp_path)
+    repo, actor, service, runtime = _family(tmp_path, include_partner=False)
     # One genuine future appointment may be handed to Events, but a Router
     # reply which simultaneously claims an ungrounded participant set cannot.
     service.client = RecordedClient(
@@ -298,3 +299,53 @@ def test_saved_real_gpt_router_v2_does_real_core_e3_day_and_family_readback(tmp_
         "delivery_replayed"
     ]
     assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+
+
+def test_future_event_with_verified_partner_reaches_event_delegate_and_replays(tmp_path):
+    """A valid scheduled Event must not be rejected for a proven relationship."""
+    repo, actor, service, runtime = _family(tmp_path)
+    source = "Mañana tengo una cita con mi pareja."
+    routed = {
+        "capabilities": ["events", "temporal"],
+        "interpretation": "joint",
+        "reason": "single",
+        "app_scopes": [],
+        "self_relation_span": "mi pareja",
+        "self_relation_spans": ["mi pareja"],
+    }
+    received = []
+
+    def event_delegate(original, delivery, identity):
+        received.append((original, delivery, identity))
+        return ApplicationResult(delivery, ApplicationStatus.COMPLETED, (), ())
+
+    service.event_delegate = event_delegate
+    service.client = RecordedClient([routed])
+    result = runtime.execute_product(source, "issue157-verified-future-event", "main", actor)
+    assert result["status"] == "completed", result
+    assert len(received) == 1 and received[0] == (source, "issue157-verified-future-event", actor)
+    assert result["execution_flow"]["routes"][0]["capability"] == "events"
+    assert runtime.execute_product(source, "issue157-verified-future-event", "main", actor)[
+        "delivery_replayed"
+    ]
+    assert len(received) == 1
+    assert len([p for p in repo.list_markdown_paths() if "calendar/days/" in p]) == 0
+
+
+def test_unknown_partner_in_future_event_is_not_delegated(tmp_path):
+    """A Router's claimed relationship cannot substitute for SELF evidence."""
+    repo, actor, service, runtime = _family(tmp_path, include_partner=False)
+    source = "Mañana tengo una cita con mi pareja."
+    route = {
+        "capabilities": ["events", "temporal"],
+        "interpretation": "joint",
+        "reason": "single",
+        "app_scopes": [],
+        "self_relation_span": "mi pareja",
+        "self_relation_spans": ["mi pareja"],
+    }
+    service.client = RecordedClient([route])
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "issue157-unknown-future-partner", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}

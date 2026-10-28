@@ -74,6 +74,27 @@ predeclared primary capability and exact relation-span checks**, not full
 semantic endorsement of every optional model field. Keep this warning
 visible for independent reviewers; do not rewrite expected results.
 
+### Independent read-only code quality review and first repair
+
+An actual independent GPT-6 Sol / medium read-only source reviewer assessed
+the source-only PR SHA `e4a76f7` and returned **FAIL** with one repairable
+blocking finding (private raw review retained; it has **not** been rewritten).
+With the expanded Events-enabled Router, a legitimate upcoming Event
+mentioning a canonical singular SELF relationship could be proposed with
+a `self_relation_spans` entry, while the Events branch rejected every
+nonempty list before Core grounded the relationship.
+
+The next change moves the **existing canonical SELF relationship proofs
+before Events delegation**, rechecks all of them at the delegate boundary,
+and rejects unverified/stale groups. A valid future appointment with a
+proved partner now reaches Events; one with a missing canonical partner
+is safely withheld. The mixed Event+Task partition remains conservative.
+The Event delegate remains responsible for its own independently reviewed
+lifecycle, actor authorization and E3 semantics; the Router still cannot
+declare an Event write. New isolated positive and negative regressions
+exercise this distinction. The older independent FAIL stands until a new
+independent reviewer examines the repair's actual SHA.
+
 A genuine GPT Router response from the corrected Spanish multi-relation
 case has been frozen in
 `tests/fixtures/issue157_recorded_live_router_v2.json`. Its

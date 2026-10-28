@@ -885,6 +885,41 @@ class WholeSourceLightExecutor:
             )
         ):
             return self._abstain(delivery)
+        # Ground every model-suggested group in fresh authenticated SELF.
+        # Reuse already-verified identities, never deduce an ID from grammar.
+        relationships = []
+        verified_members: dict[str, str] = {}
+        try:
+            for relation_span in proposed_relation_spans:
+                proof = verify_self_relationship(
+                    source,
+                    relation_span,
+                    repository=self.repository,
+                    schema=self.schema,
+                    actor=actor,
+                    bindings=self.bindings,
+                )
+                # Two distinct relation phrases in one canonical atomic fact
+                # may project the SAME combined target set. Its target list
+                # cannot prove which member belongs to which phrase. Refuse
+                # ambiguous grouping rather than attribute unrelated people.
+                if any(
+                    prior.source_id == proof.source_id
+                    and prior.fact_locator == proof.fact_locator
+                    and prior.original_relation_span != proof.original_relation_span
+                    for prior in relationships
+                ):
+                    raise WholeSourceRelationshipError("Groups share an indivisible source fact")
+                relationships.append(proof)
+                for note_id, name in proof.members:
+                    if note_id in verified_members and verified_members[note_id] != name:
+                        raise WholeSourceRelationshipError("Conflicting member proof")
+                    verified_members[note_id] = name
+            if len(set(verified_members.values())) != len(verified_members):
+                raise WholeSourceRelationshipError("Ambiguous member names")
+        except (WholeSourceRelationshipError, ValueError):
+            return self._abstain(delivery)
+        group_members = [{"name": name} for name in verified_members.values()]
         if "events" in capabilities:
             # Two independent Event+Task spans reuse the E2 two-review
             # source partition and the existing E3 operation manifest.
@@ -933,12 +968,27 @@ class WholeSourceLightExecutor:
             if (
                 set(capabilities) not in ({"events"}, {"events", "temporal"})
                 or len(capabilities) != len(set(capabilities))
-                or proposed_relation_spans
                 or (scopes != [] and not one_event_scope)
                 or self.event_delegate is None
                 or independent_scope is not None
             ):
                 return self._abstain(delivery, "EVENT_MIXED_SOURCE_NEEDS_CLARIFICATION")
+            # Event-specific interpretation still owns its lifecycle and E3
+            # mutations. The Router's group spans grant no identity authority.
+            # Recheck every earlier Core relationship proof at this boundary,
+            # because the canonical SELF note may have changed since routing.
+            if relationships:
+                try:
+                    for relationship in relationships:
+                        recheck_self_relationship(
+                            relationship,
+                            repository=self.repository,
+                            schema=self.schema,
+                            actor=actor,
+                            bindings=self.bindings,
+                        )
+                except (WholeSourceRelationshipError, ValueError):
+                    return self._abstain(delivery)
             result = self.event_delegate(source, delivery, actor)
             if result.request_id != delivery:
                 raise WholeSourceLightError("Events route broke delivery correlation")
@@ -966,41 +1016,6 @@ class WholeSourceLightExecutor:
             or not set(capabilities) <= {independent_scope, "temporal"}
         ):
             return self._abstain(delivery)
-        # Ground every model-suggested group in fresh authenticated SELF.
-        # Reuse already-verified identities, never deduce an ID from grammar.
-        relationships = []
-        verified_members: dict[str, str] = {}
-        try:
-            for relation_span in proposed_relation_spans:
-                proof = verify_self_relationship(
-                    source,
-                    relation_span,
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    bindings=self.bindings,
-                )
-                # Two distinct relation phrases in one canonical atomic fact
-                # may project the SAME combined target set. Its target list
-                # cannot prove which member belongs to which phrase. Refuse
-                # ambiguous grouping rather than attribute unrelated people.
-                if any(
-                    prior.source_id == proof.source_id
-                    and prior.fact_locator == proof.fact_locator
-                    and prior.original_relation_span != proof.original_relation_span
-                    for prior in relationships
-                ):
-                    raise WholeSourceRelationshipError("Groups share an indivisible source fact")
-                relationships.append(proof)
-                for note_id, name in proof.members:
-                    if note_id in verified_members and verified_members[note_id] != name:
-                        raise WholeSourceRelationshipError("Conflicting member proof")
-                    verified_members[note_id] = name
-            if len(set(verified_members.values())) != len(verified_members):
-                raise WholeSourceRelationshipError("Ambiguous member names")
-        except (WholeSourceRelationshipError, ValueError):
-            return self._abstain(delivery)
-        group_members = [{"name": name} for name in verified_members.values()]
         if self.progress is not None:
             self.progress("routing.ready", {"route_count": 1})
         # Only a fully source-partitioned and independently attested set of
