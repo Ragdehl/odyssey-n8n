@@ -209,8 +209,10 @@ def test_provider_nonuse_on_partial_dates_and_unsupported_types():
     assert not empty.calls
 
 
+@pytest.mark.parametrize("reviewed_value", ["profesora", "profesora de primaria"])
 def test_semantic_approval_binds_review_to_source_and_cannot_overwrite_user_metadata(
     tmp_path: Path,
+    reviewed_value: str,
 ):
     import subprocess
 
@@ -263,7 +265,7 @@ def test_semantic_approval_binds_review_to_source_and_cannot_overwrite_user_meta
         target_type_id="person",
         property_id="profesion",
     ).eligible_notes[0]
-    g = FakeGateway(proposal(), approval())
+    g = FakeGateway(proposal(value=reviewed_value), approval(value=reviewed_value))
     reviewed = SemanticPropertyInterpreter(g).propose_and_review(
         source=scanned, type_id="person", property_definition=DEF
     )
@@ -282,7 +284,7 @@ def test_semantic_approval_binds_review_to_source_and_cannot_overwrite_user_meta
     )
     assert receipt.status == "updated" and receipt.undo_commit
     updated = parse_note(repo.read_text("ana.md"))
-    assert updated.metadata["profesion"] == "profesora"
+    assert updated.metadata["profesion"] == reviewed_value
     assert updated.metadata["revision"] == 2
     assert updated.content == note.content
     assert (
