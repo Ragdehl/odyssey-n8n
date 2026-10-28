@@ -227,7 +227,7 @@ def test_symlink_poisoning_does_not_touch_vault(tmp_path):
     assert repo.read_text("0.md") == content
 
 
-def test_model_failure_before_write_is_retryable_without_unsafe_receipt(tmp_path):
+def test_model_failure_before_write_defers_without_automatic_billable_retry(tmp_path):
     state, repo, writer = setup(tmp_path, ["Ana trabaja como médica."])
     worker = job(state, repo, writer)
     worker.stage(job_id="historial", type_id="person", property_id="profesion")
@@ -239,9 +239,9 @@ def test_model_failure_before_write_is_retryable_without_unsafe_receipt(tmp_path
     with pytest.raises(RuntimeError, match="model offline"):
         advance(worker, model=SemanticPropertyInterpreter(BadGateway()))
     restarted = job(state, repo, writer)
-    assert restarted.status("historial")["pending"] == 1
-    assert advance(restarted)["status"] == "awaiting_ai"
+    assert restarted.status("historial")["pending"] == 0
     assert restarted.status("historial")["deferred"] == 1
+    assert advance(restarted)["status"] == "awaiting_ai"
     assert parse_note(repo.read_text("0.md")).metadata.get("profesion") is None
 
 

@@ -579,6 +579,7 @@ class RuntimeComposition:
     # Semantic interpretation is an independently gated, trusted runtime
     # adapter. No browser-supplied provider or value can authorize a write.
     schema_backfill_interpreter: object | None = None
+    schema_backfill_call_limit: int | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1914,6 +1915,23 @@ class RuntimeComposition:
                     ensure_ascii=False,
                 ).encode("utf-8")
             ).hexdigest()[:48]
+            # Trust only this actor-bound, signed local allowance. This is a
+            # request-count ceiling, not a promise of exact provider dollars.
+            interpreter = None
+            if self.schema_backfill_interpreter is not None:
+                if self.schema_backfill_call_limit is None:
+                    raise ValueError("Semantic campaign requires a trusted call cap")
+                from .schema_semantic_budget import (
+                    BudgetedSemanticInterpreter,
+                    SemanticCallLedger,
+                )
+
+                interpreter = BudgetedSemanticInterpreter(
+                    interpreter=self.schema_backfill_interpreter,
+                    ledger=SemanticCallLedger(
+                        worker=worker, campaign_id=job_id, limit=self.schema_backfill_call_limit
+                    ),
+                )
             # Preserve V1 journals already staged before this deployment.
             # For NEW campaigns in a >10k-physical-note vault, use a sealed
             # actor-bound sequence of small V1 journals; never truncate V1.
@@ -1964,7 +1982,7 @@ class RuntimeComposition:
                         property_id=payload["property_id"],
                         actor=actor,
                         now=now,
-                        interpreter=self.schema_backfill_interpreter,
+                        interpreter=interpreter,
                     )
                     if use_campaign
                     else worker.advance(
@@ -1973,10 +1991,14 @@ class RuntimeComposition:
                         property_id=payload["property_id"],
                         actor=actor,
                         now=now,
-                        interpreter=self.schema_backfill_interpreter,
+                        interpreter=interpreter,
                     )
                 )
-            return {"kind": "schema_backfill", **result}
+            return {
+                "kind": "schema_backfill",
+                **result,
+                **(interpreter.ledger.status() if interpreter is not None else {}),
+            }
         if operation in {"schema_confirm", "schema_status"}:
             if (
                 authenticated_actor is None
@@ -3202,6 +3224,13 @@ def build_runtime_from_environment() -> RuntimeComposition:
         raise ValueError("Semantic schema backfill requires approved isolated DEV backfill")
     if semantic_enabled == "1" and not os.environ.get("OPENAI_API_KEY"):
         raise ValueError("Semantic schema backfill provider is unavailable")
+    raw_call_limit = os.environ.get("ODYSSEY_SCHEMA_SEMANTIC_CALL_LIMIT", "")
+    if semantic_enabled == "1" and (
+        not raw_call_limit.isascii()
+        or not raw_call_limit.isdecimal()
+        or not 1 <= int(raw_call_limit) <= 36
+    ):
+        raise ValueError("Semantic schema backfill requires a bounded host call allowance")
     # Reject an accidental PROD assistant request *before* touching roots.
     suggestion_enabled = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
     if suggestion_enabled not in {"0", "1"}:
@@ -3251,11 +3280,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
             if semantic_interpreter is not None
             else {}
         )
+        if semantic_interpreter is not None:
+            kwargs["schema_backfill_call_limit"] = int(raw_call_limit)
         return _build_runtime_from_environment_unlocked(**kwargs)
 
 
 def _build_runtime_from_environment_unlocked(
-    *, schema_backfill_interpreter: object | None = None
+    *,
+    schema_backfill_interpreter: object | None = None,
+    schema_backfill_call_limit: int | None = None,
 ) -> RuntimeComposition:
     """Build the production Core composition from environment-owned configuration.
 
@@ -5842,6 +5875,7 @@ def _build_runtime_from_environment_unlocked(
         schema_scan_factory=schema_scan_factory,
         schema_backfill_factory=schema_backfill_factory,
         schema_backfill_interpreter=schema_backfill_interpreter,
+        schema_backfill_call_limit=schema_backfill_call_limit,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

@@ -158,6 +158,7 @@ def test_approved_semantic_evidence_uses_same_core_writer_and_git(tmp_path):
 
     provider = ReviewedGateway()
     app.schema_backfill_interpreter = SemanticPropertyInterpreter(provider)
+    app.schema_backfill_call_limit = 6
     before = repo.read_text("1.md")
     with pytest.raises(ValueError, match="approved"):
         app.notes("schema_backfill", request("stage"), BOB)
@@ -168,6 +169,7 @@ def test_approved_semantic_evidence_uses_same_core_writer_and_git(tmp_path):
     assert provider.calls == []  # Explicit values use no extra model call.
     finished = app.notes("schema_backfill", request("advance"), ALICE)
     assert finished["updated"] == 2 and finished["status"] == "complete"
+    assert finished["reserved_calls"] == 2 and finished["call_limit"] == 6
     assert len(provider.calls) == 2
     assert [call["name"] for call in provider.calls] == [
         "odyssey_schema_backfill_interpret_v1",
@@ -254,6 +256,7 @@ def _semantic_enabled_env(monkeypatch, root):
         "ODYSSEY_SCHEMA_CONFIRM_ENABLED": "1",
         "ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1",
         "ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "1",
+        "ODYSSEY_SCHEMA_SEMANTIC_CALL_LIMIT": "6",
         "ODYSSEY_SCHEMA_ASSISTANT_ENABLED": "0",
         "ODYSSEY_VAULT_ROOT": str(root / "vault"),
         "ODYSSEY_STATE_ROOT": str(root / "state"),
@@ -284,13 +287,15 @@ def test_semantic_enabled_environment_wires_trusted_interpreter(tmp_path, monkey
     )
     seen = {}
 
-    def build_under_lease(*, schema_backfill_interpreter):
+    def build_under_lease(*, schema_backfill_interpreter, schema_backfill_call_limit):
         seen["interpreter"] = schema_backfill_interpreter
+        assert schema_backfill_call_limit == 6
         assert (root / "state").exists()
         return RuntimeComposition(
             core_execute=lambda *_args, **_kwargs: None,
             refresh_indexes=lambda: None,
             schema_backfill_interpreter=schema_backfill_interpreter,
+            schema_backfill_call_limit=schema_backfill_call_limit,
         )
 
     monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", build_under_lease)
@@ -298,6 +303,16 @@ def test_semantic_enabled_environment_wires_trusted_interpreter(tmp_path, monkey
     assert isinstance(result.schema_backfill_interpreter, SemanticPropertyInterpreter)
     assert result.schema_backfill_interpreter.gateway is gateway
     assert seen["interpreter"] is result.schema_backfill_interpreter
+
+
+def test_semantic_missing_or_invalid_host_allowance_precedes_state_creation(tmp_path, monkeypatch):
+    root = tmp_path / "isolated-invalid-budget"
+    _semantic_enabled_env(monkeypatch, root)
+    for raw in ("", "0", "37", "-1", "5.0", "unbounded", "٣"):
+        monkeypatch.setenv("ODYSSEY_SCHEMA_SEMANTIC_CALL_LIMIT", raw)
+        with pytest.raises(ValueError, match="host call allowance"):
+            build_runtime_from_environment()
+        assert not root.exists()
 
 
 def test_semantic_provider_construction_failure_precedes_state_creation(tmp_path, monkeypatch):

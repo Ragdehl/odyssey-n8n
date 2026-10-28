@@ -50,6 +50,10 @@ class LocalBackfillJobError(RuntimeError):
     """A local progress state cannot be trusted or safely resumed."""
 
 
+class SemanticBudgetStopped(LocalBackfillJobError):
+    """No more billable calls are authorized for this candidate/campaign."""
+
+
 class LocalBackfillJob:
     """Actor/vault-bound writer. Requires an explicit foreground advance."""
 
@@ -382,7 +386,14 @@ class LocalBackfillJob:
                     i
                     for i, row in enumerate(record["rows"])
                     if row["status"] not in _DONE
-                    or (interpreter is not None and row["status"] == "deferred")
+                    or (
+                        interpreter is not None
+                        and row["status"] == "deferred"
+                        and (
+                            not callable(getattr(interpreter, "can_attempt", None))
+                            or interpreter.can_attempt(row["id"])
+                        )
+                    )
                 ),
                 None,
             )
@@ -420,9 +431,21 @@ class LocalBackfillJob:
                 reviewed = None
                 if choice.status != "auto":
                     if interpreter is not None:
-                        reviewed = interpreter.propose_and_review(
-                            source=source, type_id=type_id, property_definition=definition
-                        )
+                        try:
+                            reviewed = interpreter.propose_and_review(
+                                source=source, type_id=type_id, property_definition=definition
+                            )
+                        except SemanticBudgetStopped:
+                            row["status"] = "deferred"
+                            self._write(path, record)
+                            return self._summary(record)
+                        except Exception:
+                            # The provider might have charged a request before
+                            # timing out. Preserve an unsigned-data-free pause;
+                            # never silently reissue the same billable call.
+                            row["status"] = "deferred"
+                            self._write(path, record)
+                            raise
                     if reviewed is None:
                         row["status"] = (
                             "deferred"
