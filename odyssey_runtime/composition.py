@@ -3233,14 +3233,30 @@ def build_runtime_from_environment() -> RuntimeComposition:
         raise ValueError("DEV user schema cannot access production storage")
     if state_root.is_symlink():
         raise ValueError("User schema state root must not be a symlink")
+    # Provider import and construction must fail BEFORE local state is touched.
+    # The public Notes API cannot enable this adapter or supply a model.
+    semantic_interpreter = None
+    if semantic_enabled == "1":
+        from .schema_backfill_interpreter import SemanticPropertyInterpreter
+
+        semantic_interpreter = SemanticPropertyInterpreter(
+            OpenAIConversationGateway.from_environment()
+        )
     # Legacy composition creates the pending root later, but the schema lease
     # needs the state parent now on a first DEV boot.
     state_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     with UserSchemaRegistry.bootstrap_lease(state_root):
-        return _build_runtime_from_environment_unlocked()
+        kwargs = (
+            {"schema_backfill_interpreter": semantic_interpreter}
+            if semantic_interpreter is not None
+            else {}
+        )
+        return _build_runtime_from_environment_unlocked(**kwargs)
 
 
-def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
+def _build_runtime_from_environment_unlocked(
+    *, schema_backfill_interpreter: object | None = None
+) -> RuntimeComposition:
     """Build the production Core composition from environment-owned configuration.
 
     Returns:
@@ -3282,7 +3298,6 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     schema_suggestion_service = None
     schema_scan_factory = None
     schema_backfill_factory = None
-    schema_backfill_interpreter = None
     backfill_flag = os.environ.get("ODYSSEY_SCHEMA_BACKFILL_ENABLED", "0")
     if backfill_flag not in {"0", "1"}:
         raise ValueError("Local schema backfill flag is invalid")
@@ -3367,15 +3382,6 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
                 actor_id=actor_id,
                 on_updated=lambda note_id: index_refresh_coordinator.schedule_backfill((note_id,)),
             )
-
-    if os.environ.get("ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED", "0") == "1":
-        # Only the trusted runtime can connect the two-pass model gateway.
-        # The public Notes API supplies no prompt, value, evidence, or model.
-        from .schema_backfill_interpreter import SemanticPropertyInterpreter
-
-        schema_backfill_interpreter = SemanticPropertyInterpreter(
-            OpenAIConversationGateway.from_environment()
-        )
 
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
         if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or not light_source_enabled:

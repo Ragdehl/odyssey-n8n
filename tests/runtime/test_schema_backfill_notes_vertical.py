@@ -245,6 +245,80 @@ def test_backfill_requires_explicit_dev_and_is_rejected_before_touching_roots(
         assert not root.exists()
 
 
+def _semantic_enabled_env(monkeypatch, root):
+    """Synthetic, isolated DEV roots: never the running host's vault or secrets."""
+    settings = {
+        "ODYSSEY_DEPLOYMENT_ENV": "DEV",
+        "ODYSSEY_USER_SCHEMA_ENABLED": "1",
+        "ODYSSEY_SCHEMA_SCAN_ENABLED": "1",
+        "ODYSSEY_SCHEMA_CONFIRM_ENABLED": "1",
+        "ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1",
+        "ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "1",
+        "ODYSSEY_SCHEMA_ASSISTANT_ENABLED": "0",
+        "ODYSSEY_VAULT_ROOT": str(root / "vault"),
+        "ODYSSEY_STATE_ROOT": str(root / "state"),
+        "ODYSSEY_PENDING_ROOT": str(root / "state" / "pending"),
+        "ODYSSEY_RUNTIME_ROOT": str(root / "runtime"),
+        "ODYSSEY_EMBEDDING_CACHE": str(root / "cache"),
+        "OPENAI_API_KEY": "synthetic-placeholder-never-used",
+    }
+    for key, value in settings.items():
+        monkeypatch.setenv(key, value)
+
+
+def test_semantic_enabled_environment_wires_trusted_interpreter(tmp_path, monkeypatch):
+    from odyssey_runtime import composition
+
+    root = tmp_path / "isolated-accepted"
+    _semantic_enabled_env(monkeypatch, root)
+
+    class FakeStructuredGateway:
+        def _complete(self, **kwargs):
+            raise AssertionError("Model must never be called at runtime construction")
+
+    gateway = FakeStructuredGateway()
+    monkeypatch.setattr(
+        composition.OpenAIConversationGateway,
+        "from_environment",
+        classmethod(lambda cls: gateway),
+    )
+    seen = {}
+
+    def build_under_lease(*, schema_backfill_interpreter):
+        seen["interpreter"] = schema_backfill_interpreter
+        assert (root / "state").exists()
+        return RuntimeComposition(
+            core_execute=lambda *_args, **_kwargs: None,
+            refresh_indexes=lambda: None,
+            schema_backfill_interpreter=schema_backfill_interpreter,
+        )
+
+    monkeypatch.setattr(composition, "_build_runtime_from_environment_unlocked", build_under_lease)
+    result = build_runtime_from_environment()
+    assert isinstance(result.schema_backfill_interpreter, SemanticPropertyInterpreter)
+    assert result.schema_backfill_interpreter.gateway is gateway
+    assert seen["interpreter"] is result.schema_backfill_interpreter
+
+
+def test_semantic_provider_construction_failure_precedes_state_creation(tmp_path, monkeypatch):
+    from odyssey_runtime import composition
+
+    root = tmp_path / "isolated-provider-failure"
+    _semantic_enabled_env(monkeypatch, root)
+
+    def unavailable_provider(_cls):
+        raise RuntimeError("provider SDK unavailable before state creation")
+
+    monkeypatch.setattr(
+        composition.OpenAIConversationGateway,
+        "from_environment",
+        classmethod(unavailable_provider),
+    )
+    with pytest.raises(RuntimeError, match="provider SDK unavailable"):
+        build_runtime_from_environment()
+    assert not root.exists()
+
+
 def test_real_local_http_adapter_accepts_confirmed_backfill_and_writes_markdown(tmp_path):
     """Real HTTP adapter + registry + Core/E3 + Git, without n8n or model mocks."""
     from http.client import HTTPConnection
