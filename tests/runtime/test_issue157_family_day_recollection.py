@@ -1,0 +1,252 @@
+"""Issue #157: past family/day knowledge is not an Events lifecycle write.
+
+All fixtures are synthetic. Router/Planner model outputs are frozen proposals;
+physical Core/E3 Markdown, identity resolution and delivery replay are real.
+No assertion here replaces a fresh production GPT/DEV end-to-end gate.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+
+from odyssey_core import create_entity
+from odyssey_core.atomic_facts import render_atomic_facts
+from odyssey_core.notes import parse_note, serialize_note
+from odyssey_runtime.whole_source_model_contract import capability_route_contract
+from tests.runtime.test_whole_source_light_product_p4 import (
+    SCHEMA,
+    RecordedClient,
+    _fixture,
+)
+
+SOURCE = "Hoy mis hijos, mi pareja y yo visitamos un jardín. Después visitamos un museo."
+DAY = "2026-10-16"
+PEOPLE = ("Nora", "Ivo", "Vera")
+FACTS = ("Hoy mis hijos, mi pareja y yo visitamos un jardín.", "Después visitamos un museo.")
+
+
+def _family(tmp_path, *, include_partner: bool = True):
+    repo, actor, service, runtime = _fixture(tmp_path)
+    for name in PEOPLE[: 3 if include_partner else 2]:
+        create_entity(
+            repo,
+            SCHEMA,
+            path=f"{name}.md",
+            entity_id=f"person-{name}",
+            metadata={"name": name, "type": "person"},
+            content="",
+            actor="synthetic",
+            now="2026-10-16T08:00:00+02:00",
+        )
+    me = parse_note(repo.read_text("self.md"))
+    family_facts = ["Mis hijos son [[Nora]] y [[Ivo]]."]
+    if include_partner:
+        family_facts.append("Mi pareja es [[Vera]].")
+    body = render_atomic_facts(
+        tuple(family_facts), "self-relations", tuple(range(len(family_facts))), DAY
+    )
+    repo.replace_text("self.md", serialize_note(replace(me, content=body)))
+    service.context_index.rebuild(repo, SCHEMA, service.embedder)
+    service.semantic_index.rebuild(repo, SCHEMA, service.embedder)
+    service.event_delegate = lambda *_: pytest.fail(
+        "Past recollection was delegated as a future Event"
+    )
+    return repo, actor, service, runtime
+
+
+def _model_responses():
+    route = {
+        "capabilities": ["core", "temporal"],
+        "self_relation_span": None,
+        "self_relation_spans": ["mis hijos", "mi pareja"],
+        "interpretation": "joint",
+        "reason": "shared_subject",
+        "app_scopes": [],
+    }
+    plan = {
+        "entities": [],
+        "facts": [
+            {
+                "meaning": text,
+                "kind": "record",
+                "subject": "family",
+                "date": DAY,
+                "daypart": None,
+                "participants": list(PEOPLE),
+                "source_evidence": text,
+                "dependent_on_fact_index": None,
+                "needs_clarification": False,
+            }
+            for text in FACTS
+        ],
+        "unresolved": [],
+    }
+    review = {
+        "approved": True,
+        "complete": True,
+        "reason": None,
+        "facts": [
+            {
+                "ordinal": i,
+                "source_quote": text,
+                "kind": "record",
+                "reviewed_text": (
+                    "{{ref:0}}, {{ref:1}} y {{ref:2}} visitamos "
+                    + ("un jardín." if i == 0 else "un museo.")
+                ),
+                "date": DAY,
+                "reference_names": list(PEOPLE),
+                "supported": True,
+            }
+            for i, text in enumerate(FACTS)
+        ],
+    }
+    speaker = {
+        "facts": [
+            {
+                "ordinal": i,
+                "role": "self_participant",
+                "assertion": "asserted",
+                "source_quote": text,
+            }
+            for i, text in enumerate(FACTS)
+        ]
+    }
+    return [route, plan, review, speaker, speaker]
+
+
+def test_event_enabled_contract_supports_variable_groups_without_changing_legacy():
+    base, _ = capability_route_contract(enable_events=False)
+    enabled, prompt = capability_route_contract(enable_events=True)
+    assert "self_relation_spans" not in base["properties"]
+    assert "self_relation_spans" in enabled["required"]
+    assert enabled["properties"]["self_relation_spans"]["items"]["type"] == "string"
+    assert enabled["additionalProperties"] is False
+    assert "already-completed shared experiences" in prompt
+    assert "Events requires an actual scheduled/upcoming occurrence" in prompt
+    assert "EACH exact contiguous source span" in prompt
+    assert "historical memory" in prompt
+
+
+def test_current_router_core_writes_two_day_facts_with_all_verified_relations(tmp_path):
+    repo, actor, service, runtime = _family(tmp_path)
+    service.client = RecordedClient(_model_responses())
+    result = runtime.execute_product(SOURCE, "issue157-recollection", "main", actor)
+    assert result["status"] == "completed", result
+    assert service.client.calls[0] == "odyssey_light_capability_route_events_v1"
+    notes = [parse_note(repo.read_text(path)) for path in repo.list_markdown_paths()]
+    days = [note for note in notes if note.metadata["id"] == f"date:{DAY}"]
+    assert len(days) == 1
+    body = days[0].content
+    assert body.count("odyssey:fact request=issue157-recollection-") == 2
+    assert "jardín" in body and "museo" in body
+    assert all("[[" + name in body for name in PEOPLE)
+    assert len([note for note in notes if note.metadata["type"] == "person"]) == 4
+    current = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    replay = runtime.execute_product(SOURCE, "issue157-recollection", "main", actor)
+    assert replay["delivery_replayed"] is True
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == current
+
+
+@pytest.mark.parametrize(
+    "case", ["missing_verified_partner", "unattested_relation", "duplicate_group", "excess_groups"]
+)
+def test_multiple_relation_proofs_fail_closed_without_any_write(tmp_path, case):
+    repo, actor, service, runtime = _family(
+        tmp_path, include_partner=case != "missing_verified_partner"
+    )
+    rows = _model_responses()
+    if case == "unattested_relation":
+        rows[0]["self_relation_spans"] = ["mis hijos", "mis amigos"]
+    if case == "duplicate_group":
+        rows[0]["self_relation_spans"] = ["mis hijos", "mis hijos"]
+    if case == "excess_groups":
+        rows[0]["self_relation_spans"] = ["mis hijos"] * 9
+    service.client = RecordedClient(rows[:1])
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    result = runtime.execute_product(SOURCE, f"issue157-{case}", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+
+
+def test_stale_second_relationship_abstains_before_any_physical_write(tmp_path):
+    """Changing any confirmed SELF group during GPT review invalidates all."""
+    repo, actor, service, runtime = _family(tmp_path)
+    client = RecordedClient(_model_responses())
+    original = client.create
+
+    def remove_partner_after_source_review(**kwargs):
+        result = original(**kwargs)
+        if kwargs["text"]["format"]["name"] == "odyssey_speaker_full_B":
+            note = parse_note(repo.read_text("self.md"))
+            body = render_atomic_facts(
+                ("Mis hijos son [[Nora]] y [[Ivo]].",), "self-relations", (0,), DAY
+            )
+            repo.replace_text("self.md", serialize_note(replace(note, content=body)))
+        return result
+
+    client.create = remove_partner_after_source_review
+    service.client = client
+    outcome = runtime.execute_product(SOURCE, "issue157-stale-partner", "main", actor)
+    assert outcome["status"] == "needs_attention", outcome
+    assert not any(
+        "odyssey:fact request=issue157-stale-partner" in repo.read_text(path)
+        for path in repo.list_markdown_paths()
+    )
+
+
+def test_overlapping_relation_phrases_in_one_indivisible_fact_do_not_cross_assign_people(
+    tmp_path,
+):
+    repo, actor, service, runtime = _family(tmp_path)
+    prior = parse_note(repo.read_text("self.md"))
+    mixed = render_atomic_facts(
+        ("Mis hijos y mi pareja son [[Nora]], [[Ivo]] y [[Vera]].",),
+        "self-relations",
+        (0,),
+        DAY,
+    )
+    repo.replace_text("self.md", serialize_note(replace(prior, content=mixed)))
+    service.context_index.rebuild(repo, SCHEMA, service.embedder)
+    service.semantic_index.rebuild(repo, SCHEMA, service.embedder)
+    service.client = RecordedClient(_model_responses()[:1])
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    outcome = runtime.execute_product(SOURCE, "issue157-overlapping-groups", "main", actor)
+    assert outcome["status"] == "needs_attention"
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+
+
+def test_event_only_route_cannot_bypass_unverified_group_as_event(tmp_path):
+    repo, actor, service, runtime = _family(tmp_path)
+    # One genuine future appointment may be handed to Events, but a Router
+    # reply which simultaneously claims an ungrounded participant set cannot.
+    service.client = RecordedClient(
+        [
+            {
+                "capabilities": ["events", "temporal"],
+                "interpretation": "joint",
+                "reason": "single",
+                "app_scopes": [],
+                "self_relation_span": None,
+                "self_relation_spans": ["mis hijos", "mi pareja"],
+            }
+        ]
+    )
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    outcome = runtime.execute_product(SOURCE, "issue157-unsafe-events", "main", actor)
+    assert outcome["status"] == "needs_attention"
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+
+
+def test_router_must_not_invent_family_names_when_relation_evidence_is_absent(tmp_path):
+    repo, actor, service, runtime = _family(tmp_path)
+    replies = _model_responses()
+    replies[0]["self_relation_spans"] = []
+    replies[0]["self_relation_span"] = None
+    service.client = RecordedClient(replies)
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    outcome = runtime.execute_product(SOURCE, "issue157-no-relations", "main", actor)
+    assert outcome["status"] == "needs_attention", outcome
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before

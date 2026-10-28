@@ -50,7 +50,33 @@ def capability_route_contract(*, enable_events: bool) -> tuple[dict, str]:
     schema = copy.deepcopy(ROUTE_SCHEMA)
     schema["properties"]["capabilities"]["items"]["enum"].append("events")
     schema["properties"]["app_scopes"]["items"]["properties"]["capability"]["enum"].append("events")
+    # One historical scalar relation is insufficient for a source containing
+    # several distinct authenticated relationship groups. This new field is
+    # restricted to the opted-in Events route; the frozen legacy P4 contract
+    # remains completely unchanged until its own provider evaluation.
+    schema["properties"]["self_relation_spans"] = {
+        "type": "array",
+        "items": {"type": "string"},
+    }
+    schema["required"].append("self_relation_spans")
     instructions = ROUTER_INSTRUCTIONS + (
+        " Treat narrated, already-completed shared experiences and personal "
+        "recollections as durable Core knowledge, with Temporal as a dependency "
+        "when a calendar day needs resolution. Several completed actions in "
+        "one recollection are not several upcoming Event lifecycle requests. "
+        "A dated mention of a visit is not by itself a future appointment: "
+        "Events requires an actual scheduled/upcoming occurrence, lifecycle "
+        "change or Event query. Preserve all independently asserted facts and "
+        "their shared context for later Core coverage review, rather than "
+        "selecting Events based on location names or date wording. "
+        "For any number of explicit, independently identifiable SELF-owned "
+        "relationship group references, copy EACH exact contiguous source span "
+        "once into self_relation_spans, in source order; return [] if none. "
+        "The existing self_relation_span is the first span for compatibility "
+        "when there is exactly one, otherwise null. Never fill these with "
+        "canonical identities, names, guessed family members or invented "
+        "text; Core independently verifies every group against current SELF "
+        "and refuses any unproven or stale group. "
         " Events is the calendar-occurrence lifecycle capability: explicit "
         "upcoming appointments, dated concerts, school excursions and scheduled "
         "activities, even expressed as declarative statements; moving, cancelling "

@@ -857,6 +857,34 @@ class WholeSourceLightExecutor:
             or not set(capabilities) <= allowed
         ):
             return self._abstain(delivery)
+        # The Events-enabled router can propose multiple exact SELF-owned
+        # relationship groups; older frozen router outputs remain readable.
+        # Model-proposed spans grant NO identity authority. Verify every group
+        # against one current canonical SELF fact or decline the entire source.
+        proposed_relation_spans = route.get("self_relation_spans")
+        legacy_relation_span = route.get("self_relation_span")
+        if proposed_relation_spans is None:
+            proposed_relation_spans = (
+                [legacy_relation_span] if isinstance(legacy_relation_span, str) else []
+            )
+        if (
+            not isinstance(proposed_relation_spans, list)
+            or len(proposed_relation_spans) > 8
+            or any(
+                not isinstance(span, str) or not span or len(span) > 128
+                for span in proposed_relation_spans
+            )
+            or len(proposed_relation_spans) != len(set(proposed_relation_spans))
+            or (
+                legacy_relation_span is not None
+                and (
+                    not isinstance(legacy_relation_span, str)
+                    or not proposed_relation_spans
+                    or legacy_relation_span not in proposed_relation_spans
+                )
+            )
+        ):
+            return self._abstain(delivery)
         if "events" in capabilities:
             # Two independent Event+Task spans reuse the E2 two-review
             # source partition and the existing E3 operation manifest.
@@ -866,7 +894,7 @@ class WholeSourceLightExecutor:
                 and len(capabilities) == len(set(capabilities))
                 and route.get("interpretation") == "separable"
                 and route.get("reason") == "independent"
-                and route.get("self_relation_span") is None
+                and not proposed_relation_spans
                 and isinstance(scopes, list)
                 and len(scopes) >= 2
                 and all(
@@ -905,7 +933,7 @@ class WholeSourceLightExecutor:
             if (
                 set(capabilities) not in ({"events"}, {"events", "temporal"})
                 or len(capabilities) != len(set(capabilities))
-                or route.get("self_relation_span") is not None
+                or proposed_relation_spans
                 or (scopes != [] and not one_event_scope)
                 or self.event_delegate is None
                 or independent_scope is not None
@@ -938,13 +966,13 @@ class WholeSourceLightExecutor:
             or not set(capabilities) <= {independent_scope, "temporal"}
         ):
             return self._abstain(delivery)
-        # Router can only propose an exact source span, never relationship
-        # membership or a Note ID. Core re-grounds the group in CURRENT SELF.
-        relationship = None
-        relation_span = route.get("self_relation_span")
-        if relation_span is not None:
-            try:
-                relationship = verify_self_relationship(
+        # Ground every model-suggested group in fresh authenticated SELF.
+        # Reuse already-verified identities, never deduce an ID from grammar.
+        relationships = []
+        verified_members: dict[str, str] = {}
+        try:
+            for relation_span in proposed_relation_spans:
+                proof = verify_self_relationship(
                     source,
                     relation_span,
                     repository=self.repository,
@@ -952,13 +980,27 @@ class WholeSourceLightExecutor:
                     actor=actor,
                     bindings=self.bindings,
                 )
-            except (WholeSourceRelationshipError, ValueError):
-                return self._abstain(delivery)
-        group_members = (
-            [{"name": name} for _id, name in relationship.members]
-            if relationship is not None
-            else []
-        )
+                # Two distinct relation phrases in one canonical atomic fact
+                # may project the SAME combined target set. Its target list
+                # cannot prove which member belongs to which phrase. Refuse
+                # ambiguous grouping rather than attribute unrelated people.
+                if any(
+                    prior.source_id == proof.source_id
+                    and prior.fact_locator == proof.fact_locator
+                    and prior.original_relation_span != proof.original_relation_span
+                    for prior in relationships
+                ):
+                    raise WholeSourceRelationshipError("Groups share an indivisible source fact")
+                relationships.append(proof)
+                for note_id, name in proof.members:
+                    if note_id in verified_members and verified_members[note_id] != name:
+                        raise WholeSourceRelationshipError("Conflicting member proof")
+                    verified_members[note_id] = name
+            if len(set(verified_members.values())) != len(verified_members):
+                raise WholeSourceRelationshipError("Ambiguous member names")
+        except (WholeSourceRelationshipError, ValueError):
+            return self._abstain(delivery)
+        group_members = [{"name": name} for name in verified_members.values()]
         if self.progress is not None:
             self.progress("routing.ready", {"route_count": 1})
         # Only a fully source-partitioned and independently attested set of
@@ -1304,9 +1346,7 @@ class WholeSourceLightExecutor:
                 proposed,
                 review,
                 capabilities,
-                verified_relationship_members=tuple(name for _id, name in relationship.members)
-                if relationship is not None
-                else (),
+                verified_relationship_members=tuple(verified_members.values()),
                 core_anchored_evidence=self.core_anchored_coverage_enabled,
             )
             names = tuple(
@@ -1404,22 +1444,9 @@ class WholeSourceLightExecutor:
         # A SELF fact/member set might change while GPT is reasoning or between
         # source preflight and a delayed write. Never convert stale members to
         # fresh references, even when the prior reviewer was satisfied.
-        if relationship is not None:
+        if relationships:
             try:
-                recheck_self_relationship(
-                    relationship,
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    bindings=self.bindings,
-                )
-            except (WholeSourceRelationshipError, ValueError):
-                return self._abstain(delivery)
-        # The existing Core Writer and E3 guard remain the ONLY write path;
-        # no app-specific plan rewrites or per-example validators execute.
-        for operation in operations:
-            if relationship is not None:
-                try:
+                for relationship in relationships:
                     recheck_self_relationship(
                         relationship,
                         repository=self.repository,
@@ -1427,6 +1454,21 @@ class WholeSourceLightExecutor:
                         actor=actor,
                         bindings=self.bindings,
                     )
+            except (WholeSourceRelationshipError, ValueError):
+                return self._abstain(delivery)
+        # The existing Core Writer and E3 guard remain the ONLY write path;
+        # no app-specific plan rewrites or per-example validators execute.
+        for operation in operations:
+            if relationships:
+                try:
+                    for relationship in relationships:
+                        recheck_self_relationship(
+                            relationship,
+                            repository=self.repository,
+                            schema=self.schema,
+                            actor=actor,
+                            bindings=self.bindings,
+                        )
                 except (WholeSourceRelationshipError, ValueError):
                     return self._partial(delivery, results) if results else self._abstain(delivery)
             result = self._measure_local(
