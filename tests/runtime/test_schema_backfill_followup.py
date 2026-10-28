@@ -229,3 +229,99 @@ def test_future_deferred_source_changed_between_segments_fails_closed(tmp_path):
         advance_campaign(original, cid, interpreter)
     assert gateway.calls == 4
     assert "profesion" not in parse_note(repo.read_text("2.md")).metadata
+
+
+def test_crash_during_reserved_model_call_restarts_without_rebill_or_stranding(tmp_path):
+    """Power loss after signed pre-call reservation is a deferred, not a retry loop."""
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["deferred"] == 1
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    before = repo.read_text("0.md")
+    orig_parent = original._path("all-people").read_bytes()
+
+    class ExitDuringCall:
+        calls = 0
+
+        def _complete(self, **_kwargs):
+            self.calls += 1
+            raise SystemExit("synthetic process abruptly killed after reservation")
+
+    dead = ExitDuringCall()
+    dying_adapter = budgeted(original, dead, cid=cid, cap=4)
+    with pytest.raises(SystemExit, match="synthetic process"):
+        advance_campaign(original, cid, dying_adapter)
+    assert dead.calls == 1
+    assert dying_adapter.ledger.status()["reserved_calls"] == 1
+    # The HMAC-signed child still contains the interrupted status. _read
+    # safely maps it to pending in memory, so the next advance can pause it.
+    parent = original._read(cid)
+    with original.worker._lock():
+        restarted_row = original.worker._required(
+            original.worker._path(parent["active_segment"]),
+            parent["active_segment"],
+        )["rows"][0]
+    assert restarted_row["status"] == "pending"
+
+    resumed = campaign(state, repo, writer)
+    gateway = ProfessionGateway()
+    adapter = budgeted(resumed, gateway, cid=cid, cap=4)
+    for _ in range(6):
+        done = advance_campaign(resumed, cid, adapter)
+        if done["finished"]:
+            break
+    assert done["finished"] is True
+    assert done["status"] == "awaiting_ai"
+    assert done["deferred"] == 1
+    assert done["updated"] == 0
+    assert adapter.ledger.status()["reserved_calls"] == 1
+    assert gateway.calls == 0  # Never call the provider again for the same ID.
+    assert repo.read_text("0.md") == before
+    assert original._path("all-people").read_bytes() == orig_parent
+    assert advance_campaign(campaign(state, repo, writer), cid, adapter) == done
+
+
+def test_crash_before_reservation_can_safely_use_initial_allowance(tmp_path, monkeypatch):
+    """An uncharged interrupted interpretation can resume with its first call."""
+    from odyssey_runtime.schema_semantic_budget import SemanticCallLedger
+
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["deferred"] == 1
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    actual = SemanticCallLedger.reserve
+
+    def crash_before_reserve(self, note_id, expected_previous_calls):
+        raise SystemExit("pre-reservation synthetic power loss")
+
+    monkeypatch.setattr(SemanticCallLedger, "reserve", crash_before_reserve)
+    with pytest.raises(SystemExit, match="pre-reservation"):
+        advance_campaign(original, cid, budgeted(original, ProfessionGateway(), cid=cid))
+    monkeypatch.setattr(SemanticCallLedger, "reserve", actual)
+
+    resumed = campaign(state, repo, writer)
+    gateway = ProfessionGateway()
+    adapter = budgeted(resumed, gateway, cid=cid)
+    for _ in range(6):
+        done = advance_campaign(resumed, cid, adapter)
+        if done["finished"]:
+            break
+    assert done["updated"] == 1 and done["status"] == "complete"
+    assert gateway.calls == 2 and adapter.ledger.status()["reserved_calls"] == 2
+    assert parse_note(repo.read_text("0.md")).metadata["profesion"] == "profesora"
