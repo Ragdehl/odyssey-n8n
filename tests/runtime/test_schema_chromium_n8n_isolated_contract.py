@@ -32,6 +32,11 @@ def test_offline_chromium_n8n_two_way_socket_is_bounded():
     assert "stage_followup" in INGRESS
     assert "advance_followup" in INGRESS
     assert "gateway.calls == 2" in driver
+    assert "AbortSignal.timeout(90000)" in INGRESS
+    assert 'core_node["parameters"]["options"]["timeout"] = 90000' in driver
+    assert "timeout=190 if followup_mode else 90" in driver
+    assert "timeout:followup?95000:20000" in js
+    assert "timeout:105000" in js
     assert "docker_argv(flow, share)" in driver
     assert "args[mount].removesuffix(" in driver
     assert "process.wait(timeout=10)" in driver

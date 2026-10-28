@@ -70,7 +70,8 @@ const server=http.createServer(async(req,res)=>{
     calls.push(body.operation+":"+body.action);
     const next=http.request(n8nSocket ? {
       socketPath:n8nSocket,method:"POST",path:"/execute",
-      headers:{"content-type":"application/json"},timeout:20000
+      headers:{"content-type":"application/json"},
+      timeout:followup?95000:20000
     }:{
       hostname:"127.0.0.1",port:Number(upstream.port),
       method:"POST",path:"/notes",headers:{"content-type":"application/json"},timeout:15000
@@ -121,7 +122,7 @@ const server=http.createServer(async(req,res)=>{
       await page.waitForFunction(()=>{
         const t=document.querySelector(".schema-model-enrichment-status")?.textContent||"";
         return t.includes("2 de 6")&&t.includes("Autocompletado finalizado.");
-      },{timeout:45000});
+      },{timeout:105000});
       assert.equal(calls.filter(x=>x==="schema_backfill:stage_followup").length,1);
       assert.equal(calls.filter(x=>x==="schema_backfill:advance_followup").length,2);
     }
@@ -146,7 +147,7 @@ const server=http.createServer(async(req,res)=>{
       await page.waitForFunction(()=>{
         const t=document.querySelector(".schema-model-enrichment-status")?.textContent||"";
         return t.includes("2 de 6")&&t.includes("Autocompletado finalizado.");
-      },{timeout:45000});
+      },{timeout:105000});
       assert.equal(calls.filter(x=>x==="schema_backfill:stage_followup").length,1,
         "Reload must never restage and rewrite the signed follow-up");
       assert.equal(calls.filter(x=>x==="schema_backfill:advance_followup").length,2,

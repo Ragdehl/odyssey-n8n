@@ -53,7 +53,7 @@ const preflight={operation:'schema_scan',scan_kind:'backfill_property',
   target_type_id:'person',property_id:'profesion',expected_revision:1,action:'status'};
 async function forward(body) {
   const response=await fetch(target,{method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify(body),signal:AbortSignal.timeout(13000)});
+    body:JSON.stringify(body),signal:AbortSignal.timeout(90000)});
   return {status:response.status,body:await response.text()};
 }
 http.createServer(async(req,res)=>{
@@ -258,7 +258,18 @@ def run_viewport(
                 os.chmod(share / "broker.cjs", 0o444)
                 os.chmod(share / "ingress.cjs", 0o444)
                 flow = Path(flow_dir) / "workflow.json"
-                flow.write_text(json.dumps(workflow(), ensure_ascii=False))
+                flow_definition = workflow()
+                if followup_mode:
+                    # Two real provider passes can each use up to 30 s.
+                    # This is a disposable offline harness, not a new timeout
+                    # on any deployed Odyssey or public endpoint.
+                    core_node = next(
+                        node
+                        for node in flow_definition["nodes"]
+                        if node["name"] == "Invoke real synthetic Core"
+                    )
+                    core_node["parameters"]["options"]["timeout"] = 90000
+                flow.write_text(json.dumps(flow_definition, ensure_ascii=False))
                 args = docker_argv(flow, share)
                 # Container may create ONLY its own ingress.sock in disposable
                 # /tmp bridge; no host vault or credential path is mounted.
@@ -315,7 +326,7 @@ def run_viewport(
                             cwd=ROOT,
                             capture_output=True,
                             text=True,
-                            timeout=90,
+                            timeout=190 if followup_mode else 90,
                             env=environment,
                         )
                         output_lines = [
