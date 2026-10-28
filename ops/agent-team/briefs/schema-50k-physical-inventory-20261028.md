@@ -28,7 +28,7 @@ Host measured safe synthetic 50k path at corrected source SHA `5074e3e`:
 50,000 regular Markdown files, 1 candidate, 49,999 with property existing,
 2,000 pages of 25, 4 read-only job restarts, final SQLite/physical
 consistency PASS. Two separate Pi runs: scan 37.90/37.57 sec,
-end-to-end setup+scan+cleanup 42.32/42.05 sec, per-process CPU
+setup+scan before temporary-file cleanup 42.32/42.05 sec, per-process CPU
 42.33/42.02 sec, sampled RSS peak 99.36/97.91 MiB, min available host
 RAM 1,673.52/1,658.08 MiB, system swap max 1424.11/1424.89 MiB
 near starting values 1423.98/1423.66 MiB, temperatures 55.1/54.0 °C.
