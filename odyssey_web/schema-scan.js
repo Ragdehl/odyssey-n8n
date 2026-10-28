@@ -47,6 +47,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   const MAX_UPDATES_PER_RUN = 50;
   let enrichmentRunning = false;
   let enrichmentReady = false;
+  let enrichmentNextPhase = "primary";
 
   function render(data, isHistorical = false) {
     if (data.status === "not_started") {
@@ -144,7 +145,12 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   }
 
   function renderEnrichment(result) {
-    enrichButton.textContent = "Continuar autocompletado";
+    const isFollowup = result.phase === "semantic_followup";
+    const canStartFollowup = !isFollowup && result.status === "awaiting_ai" &&
+      Number.isSafeInteger(result.call_limit) && result.call_limit > 0;
+    enrichmentNextPhase = canStartFollowup ? "followup" : isFollowup ? "followup" : "primary";
+    enrichButton.textContent = canStartFollowup ? "Interpretar pendientes con IA" :
+      isFollowup ? "Continuar interpretación" : "Continuar autocompletado";
     enrichStatus.hidden = false;
     enrichStatus.textContent = result.updated + " propiedades completadas; " +
       result.deferred + " pendientes de IA; " + result.ambiguous +
@@ -153,11 +159,14 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
       (result.status === "complete" ? "Autocompletado finalizado." :
         result.status === "awaiting_ai" ? "El resto requiere interpretación mediante IA." :
         result.status === "attention" ? "Una escritura necesita una revisión de seguridad." :
-        "Odyssey continúa con el siguiente lote.");
-    enrichButton.hidden = !canContinueEnrichment(result);
+        "Odyssey continúa con el siguiente lote.") +
+      (Number.isSafeInteger(result.call_limit) ?
+        " Llamadas reservadas: " + result.reserved_calls + " de " + result.call_limit +
+        " (no es un importe de facturación)." : "");
+    enrichButton.hidden = !(canContinueEnrichment(result) || canStartFollowup);
   }
 
-  async function runEnrichment(seq = generation) {
+  async function runEnrichment(seq = generation, phase = "primary") {
     if (!target || target.scan_kind !== "backfill_property" ||
         panel.hidden || enrichmentRunning || seq !== generation) return;
     enrichmentRunning = true;
@@ -165,6 +174,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
     pauseButton.hidden = false;
     enrichButton.disabled = true;
     let halted = false;
+    const actionFor = (operation) => phase === "followup" ? operation + "_followup" : operation;
     try {
       // Status is read-only. Stage only after an authoritative read scan
       // completed. The host checks an actor-owned schema publication for
@@ -172,13 +182,13 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
       let progress = await client({endpoint, operation: "schema_backfill",
         payload: {target_type_id: target.target_type_id,
           property_id: target.property_id, expected_revision: target.expected_revision,
-          action: "status"}});
+          action: actionFor("status")}});
       if (seq !== generation || panel.hidden) return;
       if (progress.status === "not_started") {
         progress = await client({endpoint, operation: "schema_backfill",
           payload: {target_type_id: target.target_type_id,
             property_id: target.property_id, expected_revision: target.expected_revision,
-            action: "stage"}});
+            action: actionFor("stage")}});
       }
       if (seq !== generation || panel.hidden) return;
       enrichmentReady = true;
@@ -188,7 +198,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
         progress = await client({endpoint, operation: "schema_backfill",
           payload: {target_type_id: target.target_type_id,
             property_id: target.property_id, expected_revision: target.expected_revision,
-            action: "advance"}});
+            action: actionFor("advance")}});
         if (seq !== generation || panel.hidden) return;
         renderEnrichment(progress);
       }
@@ -203,8 +213,10 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
         enrichStatus.hidden = false;
         const recoverable = enrichmentReady &&
           error?.code === "SCHEMA_BACKFILL_OUTCOME_UNVERIFIED";
-        enrichStatus.textContent = recoverable
-          ? "No se ha podido confirmar el resultado de una escritura. El estado y Git siguen guardados; usa «Verificar y continuar» para reconciliar sin duplicar cambios."
+        enrichStatus.textContent = error?.code === "SCHEMA_BACKFILL_SEMANTIC_PAUSED"
+          ? "La interpretación por IA se ha pausado antes de escribir la fuente actual. La petición al modelo puede contar en el límite de llamadas. No se reintentará automáticamente."
+          : recoverable
+            ? "No se ha podido confirmar el resultado de una escritura. El estado y Git siguen guardados; usa «Verificar y continuar» para reconciliar sin duplicar cambios."
           : enrichmentReady
             ? "No se ha podido reconciliar este cambio de forma segura. Odyssey conserva el estado y no repetirá la escritura hasta verificarlo."
             : "El autocompletado todavía no está habilitado en esta instalación. La lectura no ha modificado notas.";
@@ -226,7 +238,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
   advanceButton.addEventListener("click", () => void scanAll());
   statusButton.addEventListener("click", () => void request("status"));
   pauseButton.addEventListener("click", () => {pauseRequested = true;});
-  enrichButton.addEventListener("click", () => void runEnrichment());
+  enrichButton.addEventListener("click", () => void runEnrichment(generation, enrichmentNextPhase));
 
   function show({scanKind, typeId, propertyId = null, revision, autoStart = false}) {
     generation += 1;
@@ -235,6 +247,7 @@ export function createSchemaScanPanel({root, endpoint = "/api/notes", client = r
     pauseButton.hidden = true;
     enrichmentRunning = false;
     enrichmentReady = false;
+    enrichmentNextPhase = "primary";
     enrichStatus.hidden = true;
     enrichButton.hidden = true;
     if (!["discover_type", "backfill_property"].includes(scanKind) ||

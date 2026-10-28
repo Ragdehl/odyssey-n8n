@@ -167,8 +167,16 @@ def test_approved_semantic_evidence_uses_same_core_writer_and_git(tmp_path):
     assert app.notes("schema_backfill", request("stage"), ALICE)["pending"] == 2
     assert app.notes("schema_backfill", request("advance"), ALICE)["updated"] == 1
     assert provider.calls == []  # Explicit values use no extra model call.
-    finished = app.notes("schema_backfill", request("advance"), ALICE)
-    assert finished["updated"] == 2 and finished["status"] == "complete"
+    first_pass = app.notes("schema_backfill", request("advance"), ALICE)
+    assert first_pass["updated"] == 1 and first_pass["deferred"] == 1
+    assert first_pass["status"] == "awaiting_ai"
+    assert first_pass["reserved_calls"] == 0
+    assert len(provider.calls) == 0  # The scan's auto-pass never uses GPT.
+    staged = app.notes("schema_backfill", request("stage_followup"), ALICE)
+    assert staged["phase"] == "semantic_followup"
+    assert staged["total"] == staged["pending"] == 1
+    finished = app.notes("schema_backfill", request("advance_followup"), ALICE)
+    assert finished["updated"] == 1 and finished["status"] == "in_progress"
     assert finished["reserved_calls"] == 2 and finished["call_limit"] == 6
     assert len(provider.calls) == 2
     assert [call["name"] for call in provider.calls] == [
@@ -176,7 +184,9 @@ def test_approved_semantic_evidence_uses_same_core_writer_and_git(tmp_path):
         "odyssey_schema_backfill_review_v1",
     ]
     assert parse_note(repo.read_text("1.md")).metadata["profesion"] == "profesora"
-    assert app.notes("schema_backfill", request("advance"), ALICE) == finished
+    completed = app.notes("schema_backfill", request("advance_followup"), ALICE)
+    assert completed["status"] == "complete" and completed["reserved_calls"] == 2
+    assert app.notes("schema_backfill", request("advance_followup"), ALICE) == completed
     assert len(provider.calls) == 2  # Replay never reissues paid model calls.
     assert (
         sum("profesora" in p.read_text() for p in (state / "schema-backfill-jobs").glob("*.json"))
@@ -792,3 +802,142 @@ def test_confirmed_notes_api_routes_large_corpus_to_bounded_campaign(tmp_path, m
     for i in range(2, 7):
         assert parse_note(repo.read_text(f"{i}.md")).metadata["profesion"] == "médica"
     assert len(list((state / "schema-backfill-jobs").glob("*.campaign.json"))) == 1
+
+
+@pytest.mark.parametrize("force_campaign", [False, True])
+def test_notes_actor_explicit_semantic_followup_preserves_sealed_original(
+    tmp_path, monkeypatch, force_campaign
+):
+    """The public Notes API cannot replay the old job or select new candidates."""
+    from odyssey_core import schema_retrospection as scan_limits
+
+    app, repo, state = fixture(tmp_path)
+    if force_campaign:
+        monkeypatch.setattr(scan_limits, "_MAX_PROGRESS_IDS", 1)
+    assert app.notes("schema_backfill", request("stage"), ALICE)["pending"] >= 1
+    for _ in range(7):
+        original = app.notes("schema_backfill", request("advance"), ALICE)
+        if original["status"] == "awaiting_ai" and (
+            original.get("finished") is True or "finished" not in original
+        ):
+            break
+    assert original["updated"] == 1 and original["deferred"] == 1
+    old_receipts = {f.name: f.read_bytes() for f in (state / "schema-backfill-jobs").glob("*.json")}
+    original_md = repo.read_text("1.md")
+    assert "profesion" not in parse_note(original_md).metadata
+
+    class Gateway:
+        def __init__(self):
+            self.calls = []
+
+        def _complete(self, **kwargs):
+            self.calls.append(kwargs)
+            common = {
+                "locator": "req1:0",
+                "quote": "Ana trabaja como profesora.",
+                "value": "profesora",
+            }
+            if len(self.calls) == 1:
+                return {"decision": "SET", **common}
+            return {"verdict": "APPROVE", "reason": "ENTAILED_CURRENT", **common}
+
+    gateway = Gateway()
+    with pytest.raises(ValueError, match="enabled trusted model"):
+        app.notes("schema_backfill", request("stage_followup"), ALICE)
+    app.schema_backfill_interpreter = SemanticPropertyInterpreter(gateway)
+    app.schema_backfill_call_limit = 4
+
+    assert app.notes("schema_backfill", request("status_followup"), ALICE) == {
+        "kind": "schema_backfill",
+        "status": "not_started",
+    }
+    with pytest.raises(ValueError, match="approved"):
+        app.notes("schema_backfill", request("stage_followup"), BOB)
+    stage = app.notes("schema_backfill", request("stage_followup"), ALICE)
+    assert stage["phase"] == "semantic_followup"
+    assert stage["pending"] == stage["total"] == 1
+    assert stage["reserved_calls"] == 0
+    assert repo.read_text("1.md") == original_md
+    for _ in range(7):
+        done = app.notes("schema_backfill", request("advance_followup"), ALICE)
+        if done["finished"]:
+            break
+    assert done["status"] == "complete" and done["updated"] == 1
+    assert done["reserved_calls"] == 2 and done["call_limit"] == 4
+    assert len(gateway.calls) == 2
+    assert parse_note(repo.read_text("1.md")).metadata["profesion"] == "profesora"
+    assert app.notes("schema_backfill", request("advance_followup"), ALICE) == done
+    assert len(gateway.calls) == 2
+    assert app.notes("schema_backfill", request("status"), ALICE)["deferred"] == 1
+    after = {
+        f.name: f.read_bytes()
+        for f in (state / "schema-backfill-jobs").glob("*.json")
+        if f.name in old_receipts
+    }
+    assert after == old_receipts
+
+
+def test_http_provider_failure_is_precise_pause_not_unknown_write(tmp_path):
+    """No E3 write intent occurred: return a truthful semantic pause code."""
+    from http.client import HTTPConnection
+    from http.server import ThreadingHTTPServer
+    from threading import Thread
+
+    from odyssey_runtime.server import _handler_for
+
+    app, repo, _state = fixture(tmp_path)
+
+    class FailedGateway:
+        calls = 0
+
+        def _complete(self, **_kwargs):
+            self.calls += 1
+            raise RuntimeError("synthetic secret diagnostic, do not echo")
+
+    gateway = FailedGateway()
+    app.schema_backfill_interpreter = SemanticPropertyInterpreter(gateway)
+    app.schema_backfill_call_limit = 4
+    before = repo.read_text("1.md")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(app))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def post(action):
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        payload = {
+            "operation": "schema_backfill",
+            **request(action),
+            "authenticated_actor": {"stable_user_id": ALICE.stable_user_id},
+        }
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(payload),
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        output = response.status, json.loads(response.read())
+        connection.close()
+        return output
+
+    try:
+        assert post("stage")[0] == 200
+        assert post("advance")[1]["updated"] == 1
+        first = post("advance")
+        assert first[0] == 200 and first[1]["status"] == "awaiting_ai"
+        assert gateway.calls == 0  # Never call model in first pass.
+        assert post("stage_followup")[0] == 200
+        code, error = post("advance_followup")
+        assert code == 409
+        assert error == {"error": "SCHEMA_BACKFILL_SEMANTIC_PAUSED"}
+        assert "secret" not in json.dumps(error)
+        assert repo.read_text("1.md") == before
+        state = post("status_followup")[1]
+        assert state["deferred"] == 1 and state["reserved_calls"] == 1
+        assert post("advance_followup")[1]["status"] == "awaiting_ai"
+        assert gateway.calls == 1
+        assert repo.read_text("1.md") == before
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

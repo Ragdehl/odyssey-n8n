@@ -128,14 +128,16 @@ class LocalBackfillCampaign:
             "totals",
         }
         version = record.get("version")
-        if version == 2:
+        if version in (2, 3):
             expected |= {"generation", "active_manifest_hash"}
+        if version == 3:
+            expected |= {"source_campaign_id", "source_kind", "source_receipt_hash"}
         if (
-            version not in (1, 2)
+            version not in (1, 2, 3)
             or set(record) != expected
             or (version == 1 and not record["finished"])
             or (
-                version == 2
+                version in (2, 3)
                 and (
                     not isinstance(record["generation"], str)
                     or len(record["generation"]) != 32
@@ -154,6 +156,17 @@ class LocalBackfillCampaign:
                         (record["active_segment"] is None)
                         != (record["active_manifest_hash"] is None)
                     )
+                )
+            )
+            or (
+                version == 3
+                and (
+                    record["source_kind"] not in {"legacy", "campaign"}
+                    or not isinstance(record["source_campaign_id"], str)
+                    or record["source_campaign_id"] == campaign_id
+                    or not isinstance(record["source_receipt_hash"], str)
+                    or len(record["source_receipt_hash"]) != 64
+                    or any(c not in "0123456789abcdef" for c in record["source_receipt_hash"])
                 )
             )
             or record["scope"] != self.worker.scope
@@ -337,7 +350,71 @@ class LocalBackfillCampaign:
             raise LocalBackfillJobError("Campaign signed parent/child evidence mismatch")
         return frozenset(written)
 
+    def _original_deferred(
+        self, *, original_id: str, origin_kind: str, type_id: str, property_id: str
+    ) -> tuple[dict[str, tuple[str, str, int]], str]:
+        """Collect ONLY HMAC-signed deferred sources from a sealed original.
+
+        Both the original signed parent and the full ordered child chain must
+        still verify. This never edits or reopens any original child journal.
+        """
+        deferred: dict[str, tuple[str, str, int]] = {}
+        if origin_kind == "legacy":
+            with self.worker._lock():
+                old = self.worker._required(self.worker._path(original_id), original_id)
+                self.worker._target(old, type_id, property_id)
+                counts = self.worker._summary(old)
+                if counts["status"] != "awaiting_ai" or counts["pending"] or counts["writing"]:
+                    raise LocalBackfillJobError("Original legacy job is not sealed awaiting AI")
+                receipts = [old]
+        elif origin_kind == "campaign":
+            old = self._read(original_id)
+            if old is None or old["version"] == 3:
+                raise LocalBackfillJobError("Original campaign is not a closed source")
+            self._check_target(old, type_id, property_id)
+            counts = self._summary(old)
+            if not old["finished"] or counts["status"] != "awaiting_ai":
+                raise LocalBackfillJobError("Original campaign is not sealed awaiting AI")
+            # _summary has verified the full HMAC chain and terminal proof.
+            receipts = []
+            with self.worker._lock():
+                for index in range(old["segment_index"]):
+                    child_id = self._child_id(
+                        self.worker.scope, original_id, index, old.get("generation")
+                    )
+                    receipt = self.worker._required(self.worker._path(child_id), child_id)
+                    self.worker._target(receipt, type_id, property_id)
+                    receipts.append(receipt)
+        else:
+            raise LocalBackfillJobError("Invalid original campaign kind")
+
+        for receipt in receipts:
+            for row in receipt["rows"]:
+                if row["status"] != "deferred":
+                    continue
+                if row["path"] in deferred:
+                    raise LocalBackfillJobError("Repeated original deferred path")
+                deferred[row["path"]] = (row["id"], row["hash"], row["revision"])
+        if len(deferred) != counts["deferred"] or not deferred:
+            raise LocalBackfillJobError("Original signed deferred count mismatch")
+        return deferred, self.worker._integrity(old)
+
+    def _followup_sources(self, record: dict[str, Any]) -> dict[str, tuple[str, str, int]] | None:
+        if record["version"] != 3:
+            return None
+        deferred, original_hash = self._original_deferred(
+            original_id=record["source_campaign_id"],
+            origin_kind=record["source_kind"],
+            type_id=record["type_id"],
+            property_id=record["property_id"],
+        )
+        if not hmac.compare_digest(original_hash, record["source_receipt_hash"]):
+            raise LocalBackfillJobError("Original sealed receipt changed after follow-up")
+        return deferred
+
     def _summary(self, record: dict[str, Any]) -> dict[str, Any]:
+        # For V3 follow-ups the original closed proof remains authoritative.
+        self._followup_sources(record)
         # The signed parent cannot certify progress while a completed child
         # has vanished or been replaced. Check earlier children even while a
         # later child remains active or while between segment boundaries.
@@ -409,11 +486,56 @@ class LocalBackfillCampaign:
         }
 
     def stage(self, *, campaign_id: str, type_id: str, property_id: str) -> dict[str, Any]:
+        return self._stage(
+            campaign_id=campaign_id,
+            type_id=type_id,
+            property_id=property_id,
+            original_id=None,
+            origin_kind=None,
+        )
+
+    def stage_followup(
+        self,
+        *,
+        campaign_id: str,
+        original_id: str,
+        origin_kind: str,
+        type_id: str,
+        property_id: str,
+    ) -> dict[str, Any]:
+        """Explicit new approved campaign; original signed journals stay immutable."""
+        if campaign_id == original_id:
+            raise LocalBackfillJobError("A follow-up must have an independent campaign ID")
+        return self._stage(
+            campaign_id=campaign_id,
+            type_id=type_id,
+            property_id=property_id,
+            original_id=original_id,
+            origin_kind=origin_kind,
+        )
+
+    def _stage(
+        self,
+        *,
+        campaign_id: str,
+        type_id: str,
+        property_id: str,
+        original_id: str | None,
+        origin_kind: str | None,
+    ) -> dict[str, Any]:
         with self._locked():
             record = self._read(campaign_id)
+            source_filter = None
+            if original_id is not None:
+                source_filter, origin_hash = self._original_deferred(
+                    original_id=original_id,
+                    origin_kind=origin_kind,
+                    type_id=type_id,
+                    property_id=property_id,
+                )
             if record is None:
                 record = {
-                    "version": 2,
+                    "version": 3 if source_filter is not None else 2,
                     "scope": self.worker.scope,
                     "schema_hash": self.worker.schema_hash,
                     "campaign_id": campaign_id,
@@ -433,8 +555,23 @@ class LocalBackfillCampaign:
                     "finished": False,
                     "totals": {"total": 0, **{key: 0 for key in _COUNTERS}},
                 }
+                if source_filter is not None:
+                    record.update(
+                        source_campaign_id=original_id,
+                        source_kind=origin_kind,
+                        source_receipt_hash=origin_hash,
+                    )
                 self._save(campaign_id, record)
             self._check_target(record, type_id, property_id)
+            if source_filter is None and record["version"] == 3:
+                raise LocalBackfillJobError("Follow-up requires explicit action")
+            if source_filter is not None and (
+                record["version"] != 3
+                or record["source_campaign_id"] != original_id
+                or record["source_kind"] != origin_kind
+                or not hmac.compare_digest(record["source_receipt_hash"], origin_hash)
+            ):
+                raise LocalBackfillJobError("Follow-up original receipt identity changed")
             if (
                 not record["finished"]
                 and record["segment_index"] == 0
@@ -451,6 +588,7 @@ class LocalBackfillCampaign:
                     after_path=None,
                     max_candidates=self.segment_size,
                     expected_identity_hash=None,
+                    deferred_sources=source_filter,
                 )
                 record["identity_hash"] = identity
                 record["eligibility_bitmap"] = eligibility
@@ -489,6 +627,7 @@ class LocalBackfillCampaign:
             if record is None:
                 raise LocalBackfillJobError("No staged campaign")
             self._check_target(record, type_id, property_id)
+            source_filter = self._followup_sources(record)
             if record["finished"]:
                 return self._summary(record)
             # In-flight child counters are not enough: refuse another E3/Git
@@ -548,6 +687,7 @@ class LocalBackfillCampaign:
                     expected_identity_hash=record["identity_hash"],
                     expected_eligibility_bitmap=record["eligibility_bitmap"],
                     verified_completed_paths=verified_completed_paths,
+                    deferred_sources=source_filter,
                 )
                 if record["identity_hash"] is None:
                     record["identity_hash"] = physical_identity

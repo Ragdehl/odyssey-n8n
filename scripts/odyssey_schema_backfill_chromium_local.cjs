@@ -21,6 +21,7 @@ if(n8nSocket) {
 const viewport=process.argv[2]==="mobile"?[390,844]:[1280,920];
 const calls=[];
 const campaign=process.env.ODYSSEY_SYNTH_CAMPAIGN==="1";
+const followup=process.env.ODYSSEY_SYNTH_FOLLOWUP==="1";
 const html='<!doctype html><html lang="es"><head><meta charset="utf-8">'+
   '<meta name="viewport" content="width=device-width,initial-scale=1">'+
   '<link rel="stylesheet" href="/odyssey_web/styles.css"></head><body>'+
@@ -51,7 +52,11 @@ const server=http.createServer(async(req,res)=>{
     let body;
     try{body=JSON.parse(data);}catch{res.writeHead(400);res.end();return;}
     if(!["schema_scan","schema_backfill"].includes(body?.operation)||
-       !["status","advance","stage"].includes(body?.action)||
+       !(
+         ["status","advance","stage"].includes(body?.action)||
+         (followup && body.operation==="schema_backfill" &&
+          ["status_followup","stage_followup","advance_followup"].includes(body?.action))
+       )||
        body.target_type_id!=="person"||body.property_id!=="profesion"||
        body.expected_revision!==1||
        Object.keys(body).some(k=>!["operation","action","target_type_id",
@@ -106,6 +111,20 @@ const server=http.createServer(async(req,res)=>{
     assert.match(first,/1 pendientes de IA/);
     assert.match(first,/requiere interpretación mediante IA/);
     assert.equal(errors.length,0,JSON.stringify(errors));
+    if (followup) {
+      const followButton=".schema-model-enrichment-resume";
+      await page.waitForFunction((selector)=>{
+        const el=document.querySelector(selector);
+        return el&&!el.hidden&&el.textContent.includes("Interpretar pendientes con IA");
+      },{timeout:12000},followButton);
+      await page.click(followButton);
+      await page.waitForFunction(()=>{
+        const t=document.querySelector(".schema-model-enrichment-status")?.textContent||"";
+        return t.includes("2 de 6")&&t.includes("Autocompletado finalizado.");
+      },{timeout:45000});
+      assert.equal(calls.filter(x=>x==="schema_backfill:stage_followup").length,1);
+      assert.equal(calls.filter(x=>x==="schema_backfill:advance_followup").length,2);
+    }
     await page.reload({waitUntil:"networkidle0"});
     await page.waitForFunction(()=>window.__appReady===true);
     await page.click("#show");
@@ -118,6 +137,21 @@ const server=http.createServer(async(req,res)=>{
     assert.match(second,campaign?/4 propiedades completadas/:/1 propiedades completadas/);
     assert.match(second,/1 pendientes de IA/);
     assert.equal(calls.filter(x=>x==="schema_backfill:advance").length,campaign?6:2);
+    if (followup) {
+      await page.waitForFunction(()=>{
+        const b=document.querySelector(".schema-model-enrichment-resume");
+        return b&&!b.hidden&&b.textContent.includes("Interpretar pendientes con IA");
+      },{timeout:12000});
+      await page.click(".schema-model-enrichment-resume");
+      await page.waitForFunction(()=>{
+        const t=document.querySelector(".schema-model-enrichment-status")?.textContent||"";
+        return t.includes("2 de 6")&&t.includes("Autocompletado finalizado.");
+      },{timeout:45000});
+      assert.equal(calls.filter(x=>x==="schema_backfill:stage_followup").length,1,
+        "Reload must never restage and rewrite the signed follow-up");
+      assert.equal(calls.filter(x=>x==="schema_backfill:advance_followup").length,2,
+        "Reload must not retry the model");
+    }
     const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+4);
     assert.equal(overflow,false,"Mobile horizontal overflow");
     assert.equal(errors.length,0,JSON.stringify(errors));

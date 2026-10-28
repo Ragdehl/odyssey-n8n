@@ -31,7 +31,7 @@ from odyssey_core.schema_retrospection_jobs import LocalSchemaScanError
 
 from .composition import NotesTelemetryError, RuntimeComposition
 from .delivery_results import DeliveryResultError
-from .schema_backfill_jobs import LocalBackfillJobError
+from .schema_backfill_jobs import LocalBackfillJobError, SemanticProviderDeferred
 from .serialization import operational_to_response
 from .user_schema_registry import UserSchemaError, UserSchemaRegistry
 
@@ -364,6 +364,10 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                             trigger.set()
                 except LocalSchemaScanError:
                     self._write_json(HTTPStatus.CONFLICT, {"error": "SCHEMA_SCAN_STALE_OR_INVALID"})
+                except SemanticProviderDeferred:
+                    self._write_json(
+                        HTTPStatus.CONFLICT, {"error": "SCHEMA_BACKFILL_SEMANTIC_PAUSED"}
+                    )
                 except LocalBackfillJobError:
                     self._write_json(
                         HTTPStatus.CONFLICT, {"error": "SCHEMA_BACKFILL_ATTENTION_REQUIRED"}

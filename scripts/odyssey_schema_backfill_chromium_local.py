@@ -18,8 +18,10 @@ from threading import Thread
 
 from odyssey_core.notes import parse_note
 from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs
+from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
 from odyssey_runtime.server import _handler_for
 from tests.runtime.test_schema_backfill_notes_vertical import fixture
+from tests.runtime.test_schema_semantic_budget import ProfessionGateway
 
 ROOT = Path(__file__).resolve().parents[1]
 BROWSER = ROOT / "scripts/odyssey_schema_backfill_chromium_local.cjs"
@@ -31,12 +33,17 @@ PI_LIBS = Path(
 
 def run() -> dict:
     results: list[dict] = []
+    followup = os.environ.get("ODYSSEY_SYNTH_FOLLOWUP") == "1"
     with tempfile.TemporaryDirectory(prefix="odyssey-schema-chromium-", dir="/tmp") as folder:
         parent = Path(folder)
         for viewport in ("desktop", "mobile"):
             container = parent / viewport
             container.mkdir()
             app, repo, state = fixture(container)
+            gateway = ProfessionGateway() if followup else None
+            if gateway is not None:
+                app.schema_backfill_interpreter = SemanticPropertyInterpreter(gateway)
+                app.schema_backfill_call_limit = 6
             app.schema_scan_factory = lambda actor, state=state, repo=repo: LocalSchemaScanJobs(
                 state_root=state, repository=repo, actor_id=actor
             )
@@ -50,6 +57,8 @@ def run() -> dict:
             try:
                 env = os.environ.copy()
                 env["ODYSSEY_SYNTH_LOCAL_HTTP"] = f"http://127.0.0.1:{server.server_address[1]}/"
+                if followup:
+                    env["ODYSSEY_SYNTH_FOLLOWUP"] = "1"
                 if PI_LIBS.is_dir():
                     env["LD_LIBRARY_PATH"] = str(PI_LIBS) + ":" + env.get("LD_LIBRARY_PATH", "")
                 task = subprocess.run(
@@ -88,10 +97,17 @@ def run() -> dict:
                 )
                 assert notes["0.md"]["profesion"] == "médica"
                 assert notes["0.md"]["revision"] == 2
-                assert "profesion" not in notes["1.md"]
+                if followup:
+                    assert notes["1.md"]["profesion"] == "profesora"
+                    assert notes["1.md"]["revision"] == 2
+                    assert after["1.md"] != before["1.md"]
+                    assert commits == 3
+                    assert gateway.calls == 2
+                else:
+                    assert "profesion" not in notes["1.md"]
+                    assert after["1.md"] == before["1.md"]
+                    assert commits == 2
                 assert after["0.md"] != before["0.md"]
-                assert after["1.md"] == before["1.md"]
-                assert commits == 2
                 journal = next((state / "schema-backfill-jobs").glob("*.json"))
                 assert "médica" not in journal.read_text()
                 assert "profesora" not in journal.read_text()
@@ -103,7 +119,8 @@ def run() -> dict:
                         "coreHttpReal": True,
                         "n8n": False,
                         "updated": 1,
-                        "deferred": 1,
+                        "deferred": 0 if followup else 1,
+                        "fakeProviderCalls": gateway.calls if gateway is not None else 0,
                         "gitCommitCount": commits,
                         "reload": browser.get("reloadPersisted"),
                         "requests": browser.get("requests"),
@@ -115,7 +132,7 @@ def run() -> dict:
                 thread.join(timeout=6)
     return {
         "pass": len(results) == 2,
-        "model": "NONE",
+        "model": "FAKE_STRUCTURED_NO_NETWORK" if followup else "NONE",
         "DEV": "NOT_TESTED",
         "n8n": "NOT_TESTED",
         "results": results,

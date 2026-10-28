@@ -9,7 +9,7 @@ import pytest
 
 from odyssey_core.notes import parse_note
 from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
-from odyssey_runtime.schema_backfill_jobs import LocalBackfillJobError
+from odyssey_runtime.schema_backfill_jobs import LocalBackfillJobError, SemanticProviderDeferred
 from odyssey_runtime.schema_semantic_budget import (
     BudgetedSemanticInterpreter,
     SemanticCallLedger,
@@ -88,7 +88,7 @@ def test_one_failed_sdk_request_remains_charged_and_no_replay(tmp_path):
     run = campaign(state, repo, writer)
     run.stage(campaign_id="all-people", type_id="person", property_id="profesion")
     gateway = ProfessionGateway(fail_on=1)
-    with pytest.raises(RuntimeError, match="timed out"):
+    with pytest.raises(SemanticProviderDeferred, match="safely deferred"):
         step(run, interpreter=limited(run, gateway))
     assert limited(run, gateway).ledger.status()["reserved_calls"] == 1
     assert run.status("all-people")["deferred"] == 1

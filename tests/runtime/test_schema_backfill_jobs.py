@@ -13,7 +13,11 @@ from odyssey_core.notes import Note, parse_note, serialize_note
 from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill
 from odyssey_core.storage import VaultRepository
 from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
-from odyssey_runtime.schema_backfill_jobs import LocalBackfillJob, LocalBackfillJobError
+from odyssey_runtime.schema_backfill_jobs import (
+    LocalBackfillJob,
+    LocalBackfillJobError,
+    SemanticProviderDeferred,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW = "2026-10-26T12:00:00+00:00"
@@ -236,7 +240,7 @@ def test_model_failure_before_write_defers_without_automatic_billable_retry(tmp_
         def _complete(self, **_kwargs):
             raise RuntimeError("model offline")
 
-    with pytest.raises(RuntimeError, match="model offline"):
+    with pytest.raises(SemanticProviderDeferred, match="safely deferred"):
         advance(worker, model=SemanticPropertyInterpreter(BadGateway()))
     restarted = job(state, repo, writer)
     assert restarted.status("historial")["pending"] == 0

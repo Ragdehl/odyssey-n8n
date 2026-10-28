@@ -1880,7 +1880,15 @@ class RuntimeComposition:
             ):
                 raise ValueError("Local schema backfill is unavailable")
             if set(payload) != {"target_type_id", "property_id", "expected_revision", "action"} or (
-                payload["action"] not in {"stage", "status", "advance"}
+                payload["action"]
+                not in {
+                    "stage",
+                    "status",
+                    "advance",
+                    "stage_followup",
+                    "status_followup",
+                    "advance_followup",
+                }
                 or not isinstance(payload["target_type_id"], str)
                 or not isinstance(payload["property_id"], str)
                 or type(payload["expected_revision"]) is not int
@@ -1915,6 +1923,11 @@ class RuntimeComposition:
                     ensure_ascii=False,
                 ).encode("utf-8")
             ).hexdigest()[:48]
+            is_followup = payload["action"].endswith("_followup")
+            followup_id = hashlib.sha256(f"semantic-followup-v1:{job_id}".encode()).hexdigest()[:48]
+            if is_followup and self.schema_backfill_interpreter is None:
+                raise ValueError("Semantic follow-up requires an enabled trusted model")
+            budget_job_id = followup_id if is_followup else job_id
             # Trust only this actor-bound, signed local allowance. This is a
             # request-count ceiling, not a promise of exact provider dollars.
             interpreter = None
@@ -1929,7 +1942,9 @@ class RuntimeComposition:
                 interpreter = BudgetedSemanticInterpreter(
                     interpreter=self.schema_backfill_interpreter,
                     ledger=SemanticCallLedger(
-                        worker=worker, campaign_id=job_id, limit=self.schema_backfill_call_limit
+                        worker=worker,
+                        campaign_id=budget_job_id,
+                        limit=self.schema_backfill_call_limit,
                     ),
                 )
             # Preserve V1 journals already staged before this deployment.
@@ -1947,6 +1962,40 @@ class RuntimeComposition:
             saved_campaign = campaign.status(job_id)
             if legacy is not None and saved_campaign is not None:
                 raise ValueError("Conflicting local backfill campaign and legacy journal")
+            if is_followup:
+                # Explicit user action against the already authenticated,
+                # previously confirmed property; never reopen old signed proof.
+                original = saved_campaign if saved_campaign is not None else legacy
+                if original is None or original["status"] != "awaiting_ai":
+                    raise ValueError("No completed deferred campaign is available")
+                origin_kind = "campaign" if saved_campaign is not None else "legacy"
+                if payload["action"] == "stage_followup":
+                    result = campaign.stage_followup(
+                        campaign_id=followup_id,
+                        original_id=job_id,
+                        origin_kind=origin_kind,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                    )
+                elif payload["action"] == "status_followup":
+                    result = campaign.status(followup_id)
+                    if result is None:
+                        return {"kind": "schema_backfill", "status": "not_started"}
+                else:
+                    result = campaign.advance(
+                        campaign_id=followup_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                        actor={"human": resolved_actor, "app": "odyssey-schema-backfill"},
+                        now=_current_time()["timestamp"],
+                        interpreter=interpreter,
+                    )
+                return {
+                    "kind": "schema_backfill",
+                    **result,
+                    **interpreter.ledger.status(),
+                    "phase": "semantic_followup",
+                }
             use_campaign = saved_campaign is not None or (
                 legacy is None
                 and len(worker.repository.note_version_snapshot()) > scan_limits._MAX_PROGRESS_IDS
@@ -1982,7 +2031,7 @@ class RuntimeComposition:
                         property_id=payload["property_id"],
                         actor=actor,
                         now=now,
-                        interpreter=interpreter,
+                        interpreter=None,  # First pass is always deterministic.
                     )
                     if use_campaign
                     else worker.advance(
@@ -1991,7 +2040,7 @@ class RuntimeComposition:
                         property_id=payload["property_id"],
                         actor=actor,
                         now=now,
-                        interpreter=interpreter,
+                        interpreter=None,  # No charge before explicit follow-up.
                     )
                 )
             return {

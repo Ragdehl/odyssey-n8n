@@ -54,6 +54,10 @@ class SemanticBudgetStopped(LocalBackfillJobError):
     """No more billable calls are authorized for this candidate/campaign."""
 
 
+class SemanticProviderDeferred(LocalBackfillJobError):
+    """Provider failed before any physical write; the source was safely deferred."""
+
+
 class LocalBackfillJob:
     """Actor/vault-bound writer. Requires an explicit foreground advance."""
 
@@ -129,6 +133,7 @@ class LocalBackfillJob:
         expected_identity_hash: str | None,
         expected_eligibility_bitmap: str | None = None,
         verified_completed_paths: frozenset[str] = frozenset(),
+        deferred_sources: dict[str, tuple[str, str, int]] | None = None,
     ) -> tuple[dict[str, Any], str | None, str, str]:
         """Private segment selection; only the signed campaign coordinator calls this.
 
@@ -161,6 +166,7 @@ class LocalBackfillJob:
             expected_identity_hash=expected_identity_hash,
             expected_eligibility_bitmap=expected_eligibility_bitmap,
             verified_completed_paths=verified_completed_paths,
+            deferred_sources=deferred_sources,
             segmented=True,
         )
 
@@ -176,6 +182,7 @@ class LocalBackfillJob:
         expected_eligibility_bitmap: str | None,
         verified_completed_paths: frozenset[str],
         segmented: bool,
+        deferred_sources: dict[str, tuple[str, str, int]] | None = None,
     ) -> tuple[dict[str, Any], str | None, str, str]:
         """Scan and attest all physical IDs; publish one bounded E3/Git journal."""
         # Do not publish a plan that can never write because the property
@@ -265,6 +272,28 @@ class LocalBackfillJob:
                 for position, physical_path in enumerate(physical_page, start=offset):
                     bit = 1 << (position % 8)
                     current_eligible = physical_path in eligible_paths
+                    if deferred_sources is not None:
+                        was_deferred = physical_path in deferred_sources
+                        if was_deferred and physical_path > (after_path or ""):
+                            # The source must still be the identical, missing
+                            # canonical Note that was signed as deferred.
+                            matches = [
+                                item for item in page.eligible_notes if item.path == physical_path
+                            ]
+                            if (
+                                not current_eligible
+                                or len(matches) != 1
+                                or (
+                                    matches[0].note_id,
+                                    matches[0].source_hash,
+                                    matches[0].revision,
+                                )
+                                != deferred_sources[physical_path]
+                            ):
+                                raise LocalBackfillJobError(
+                                    "Follow-up deferred source changed since original receipt"
+                                )
+                        current_eligible = current_eligible and was_deferred
                     # Independently authenticated previous child receipts
                     # identify successful Core/E3 writes. If a person removed
                     # a property after it was written, never silently skip
@@ -293,6 +322,8 @@ class LocalBackfillJob:
                                 "Campaign source eligibility changed across segments"
                             )
                 for note in page.eligible_notes:
+                    if deferred_sources is not None and note.path not in deferred_sources:
+                        continue
                     if segmented and after_path is not None and note.path <= after_path:
                         continue
                     if len(rows) >= max_candidates:
@@ -439,13 +470,15 @@ class LocalBackfillJob:
                             row["status"] = "deferred"
                             self._write(path, record)
                             return self._summary(record)
-                        except Exception:
+                        except Exception as error:
                             # The provider might have charged a request before
-                            # timing out. Preserve an unsigned-data-free pause;
-                            # never silently reissue the same billable call.
+                            # timing out. No canonical write intent exists yet;
+                            # persist an accurate, source-safe deferred receipt.
                             row["status"] = "deferred"
                             self._write(path, record)
-                            raise
+                            raise SemanticProviderDeferred(
+                                "Semantic model failed; source safely deferred before write"
+                            ) from error
                     if reviewed is None:
                         row["status"] = (
                             "deferred"

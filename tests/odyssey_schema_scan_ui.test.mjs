@@ -324,3 +324,98 @@ test("UI continues across a deferred child boundary until campaign parent comple
   assert.match(panel.panel.children[6].textContent,/1 pendientes de IA/);
   assert.equal(panel.panel.children[7].hidden,true);
 });
+
+test("signed semantic follow-up needs a second user click, never runs during initial scan", async () => {
+  const calls=[];
+  const original = {...backfill("awaiting_ai",1,0,1),
+    reserved_calls:0,call_limit:6};
+  const staged = {...backfill("in_progress",0,1,0),segment:0,finished:false,
+    reserved_calls:0,call_limit:6,phase:"semantic_followup"};
+  const finished = {...backfill("complete",1),segment:1,finished:true,
+    reserved_calls:2,call_limit:6,phase:"semantic_followup"};
+  const client=async (x)=>{
+    calls.push(x);
+    if(x.operation==="schema_scan") return x.payload.action==="status"
+      ? {kind:"schema_scan",status:"not_started"} : complete;
+    const action=x.payload.action;
+    if(action==="status") return {kind:"schema_backfill",status:"not_started"};
+    if(action==="stage") return backfill("in_progress",0,2);
+    if(action==="advance") return original;
+    if(action==="status_followup") return {kind:"schema_backfill",status:"not_started"};
+    if(action==="stage_followup") return staged;
+    if(action==="advance_followup") return finished;
+    throw new Error("Unexpected action "+action);
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",propertyId:"profesion",revision:1});
+  await drain();
+  panel.panel.children[3].click();
+  await drain();
+  assert.equal(calls.some(x=>x.payload.action.endsWith("_followup")),false);
+  const action=panel.panel.children[7];
+  assert.equal(action.hidden,false);
+  assert.match(action.textContent,/Interpretar pendientes con IA/);
+  assert.match(panel.panel.children[6].textContent,/0 de 6/);
+  action.click();
+  await drain();
+  assert.deepEqual(calls.filter(x=>x.payload.action.endsWith("_followup"))
+    .map(x=>x.payload.action),["status_followup","stage_followup","advance_followup"]);
+  assert.match(panel.panel.children[6].textContent,/2 de 6/);
+  assert.equal(action.hidden,true);
+});
+
+test("semantic follow-up public receipts validate only capped counts and a declared phase", () => {
+  const good={...backfill("in_progress",1,2),segment:0,finished:false,
+    call_limit:6,reserved_calls:2,phase:"semantic_followup"};
+  assert.deepEqual(validateSchemaOperationResponse("schema_backfill",good),good);
+  const initial={...backfill("awaiting_ai",1,0,1),call_limit:6,reserved_calls:0};
+  assert.deepEqual(validateSchemaOperationResponse("schema_backfill",initial),initial);
+  for (const bad of [
+    {...good,call_limit:0},
+    {...good,call_limit:37},
+    {...good,call_limit:6,reserved_calls:7},
+    {...good,reserved_calls:-1},
+    {...good,phase:"initial"},
+    {...good,actor_id:"other"},
+    {...good,note_ids:["secret"]},
+    {...good,private_quote:"secret"},
+    {...good,call_limit:undefined},
+    {...backfill("in_progress",1,1),phase:"semantic_followup"},
+    {...initial,reserved_calls:undefined},
+  ]) assert.throws(
+    ()=>validateSchemaOperationResponse("schema_backfill",bad),NotesRequestError
+  );
+});
+
+test("provider failure before write has a clear nonretryable pause, not Git uncertainty", async () => {
+  const calls=[];
+  const budget={call_limit:6,reserved_calls:0};
+  const client=async (x)=>{
+    calls.push(x);
+    if(x.operation==="schema_scan") return complete;
+    if(x.payload.action==="status") return {kind:"schema_backfill",status:"not_started"};
+    if(x.payload.action==="stage") return {...backfill("in_progress",0,1),...budget};
+    if(x.payload.action==="advance") return {...backfill("awaiting_ai",0,0,1),...budget};
+    if(x.payload.action==="status_followup") return {kind:"schema_backfill",status:"not_started"};
+    if(x.payload.action==="stage_followup") return {
+      ...backfill("in_progress",0,1),...budget,segment:0,finished:false,
+      phase:"semantic_followup",
+    };
+    if(x.payload.action==="advance_followup") {
+      throw Object.assign(Error("source deferred, no write"),{
+        code:"SCHEMA_BACKFILL_SEMANTIC_PAUSED",
+      });
+    }
+    throw Error("Unexpected operation");
+  };
+  const panel=createSchemaScanPanel({root:new Node("section"),client});
+  panel.show({scanKind:"backfill_property",typeId:"person",propertyId:"profesion",revision:1,autoStart:true});
+  for(let i=0;i<50;i++) await Promise.resolve();
+  assert.match(panel.panel.children[7].textContent,/Interpretar pendientes con IA/);
+  panel.panel.children[7].click();
+  for(let i=0;i<50;i++) await Promise.resolve();
+  assert.match(panel.panel.children[6].textContent,/pausado antes de escribir/);
+  assert.match(panel.panel.children[6].textContent,/no se reintentará automáticamente/i);
+  assert.equal(panel.panel.children[7].hidden,true);
+  assert.equal(calls.filter(x=>x.payload.action==="advance_followup").length,1);
+});

@@ -65,12 +65,21 @@ export function validateSchemaOperationResponse(operation, value) {
     }
     const fields = ["pending", "interpreting", "writing", "updated",
       "no_evidence", "ambiguous", "stale", "already_present", "deferred"];
-    const isLegacy = expected(["kind", "status", "total", ...fields]);
-    const isCampaign = expected(["kind", "status", "total", ...fields, "segment", "finished"]);
+    const hasBudget = Object.hasOwn(value, "reserved_calls") || Object.hasOwn(value, "call_limit");
+    const isFollowup = Object.hasOwn(value, "phase");
+    const budgetFields = hasBudget ? ["reserved_calls", "call_limit"] : [];
+    const phaseFields = isFollowup ? ["phase"] : [];
+    const isLegacy = !isFollowup && expected(["kind", "status", "total", ...fields, ...budgetFields]);
+    const isCampaign = expected(["kind", "status", "total", ...fields, "segment", "finished",
+      ...budgetFields, ...phaseFields]);
     const capacity = isCampaign ? 50000 : 10000;
     if (value.kind === "schema_backfill" &&
         ["in_progress", "complete", "awaiting_ai", "attention"].includes(value.status) &&
         (isLegacy || isCampaign) &&
+        (!hasBudget || (Number.isSafeInteger(value.call_limit) && value.call_limit >= 1 &&
+          value.call_limit <= 36 && Number.isSafeInteger(value.reserved_calls) &&
+          value.reserved_calls >= 0 && value.reserved_calls <= value.call_limit)) &&
+        (!isFollowup || (value.phase === "semantic_followup" && hasBudget && isCampaign)) &&
         Number.isSafeInteger(value.total) && value.total >= 0 && value.total <= capacity &&
         fields.every((name) => Number.isSafeInteger(value[name]) && value[name] >= 0 &&
           value[name] <= value.total) &&
@@ -87,7 +96,9 @@ export function validateSchemaOperationResponse(operation, value) {
              : ["in_progress", "attention"].includes(value.status))))) {
       return {kind: "schema_backfill", status: value.status, total: value.total,
         ...Object.fromEntries(fields.map((field) => [field, value[field]])),
-        ...(isCampaign ? {segment: value.segment, finished: value.finished} : {})};
+        ...(isCampaign ? {segment: value.segment, finished: value.finished} : {}),
+        ...(hasBudget ? {reserved_calls: value.reserved_calls, call_limit: value.call_limit} : {}),
+        ...(isFollowup ? {phase: value.phase} : {})};
     }
   }
   if (operation === "schema_scan") {

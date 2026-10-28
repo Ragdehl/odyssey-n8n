@@ -20,6 +20,10 @@ def test_fixture_is_credential_free_ephemeral_and_never_targets_prod():
     assert "curl" not in browser
     assert "Authorization" not in browser
     assert "process.env.ODYSSEY_SYNTH_LOCAL_HTTP" in browser
+    assert "ODYSSEY_SYNTH_FOLLOWUP" in driver + browser
+    assert "stage_followup" in browser
+    assert "advance_followup" in browser
+    assert "gateway.calls == 2" in driver
     assert "new URL(process.env.ODYSSEY_SYNTH_LOCAL_HTTP" in browser
     assert "tempfile.TemporaryDirectory(" in driver
     assert '"/tmp"' in driver
