@@ -687,3 +687,367 @@ def test_schema_bootstrap_rejects_symlink_root_without_following_it(
     with pytest.raises(ValueError, match="symlink"):
         composition.build_runtime_from_environment()
     assert not (target / "user-schema").exists()
+
+
+def test_confirm_queues_without_changing_active_schema_and_boot_activates_once(
+    tmp_path: Path,
+) -> None:
+    user = registry(tmp_path)
+    change = property_change()
+    proposed = user.preview(change, expected_revision=0)
+    confirmed = confirm(proposed, "explicit-click-id")
+    receipt = user.request_activation(change, confirmed)
+    assert receipt == {
+        "status": "queued",
+        "request_id": "explicit-click-id",
+        "revision": 0,
+        "next_revision": 1,
+    }
+    assert user.snapshot()[0] == 0
+    assert not (tmp_path / "user-schema/current.json").exists()
+    assert user.activation_status("synthetic-actor", "explicit-click-id") == receipt
+    assert user.request_activation(change, confirmed) == receipt
+    with pytest.raises(UserSchemaError, match="ALREADY_PENDING"):
+        user.request_activation(
+            type_change(),
+            SchemaConfirmation(
+                "synthetic-actor",
+                "second",
+                0,
+                user.preview(type_change(), expected_revision=0).proposal_hash,
+            ),
+        )
+    with pytest.raises(UserSchemaError, match="not found"):
+        user.activation_status("another-actor", "explicit-click-id")
+    assert registry(tmp_path).activate_pending_at_boot() is True
+    assert registry(tmp_path).activate_pending_at_boot() is False
+    rev, composed = registry(tmp_path).snapshot()
+    assert rev == 1
+    validate_note(_person_note(), composed)
+    assert user.request_activation(change, confirmed)["status"] == "active"
+    assert user.activation_status("synthetic-actor", "explicit-click-id") == {
+        "status": "active",
+        "request_id": "explicit-click-id",
+        "revision": 1,
+    }
+    assert not (tmp_path / "user-schema/pending-activation.json").exists()
+
+
+def test_activation_crash_after_receipt_and_before_removal_is_idempotent(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    change = type_change()
+    proposed = user.preview(change, expected_revision=0)
+    confirmed = confirm(proposed)
+    user.request_activation(change, confirmed)
+    user.activate_pending_at_boot()
+    # Restore the already-acknowledged, perfectly matching pending record to
+    # simulate process crash between publication and pending cleanup.
+    from odyssey_runtime.user_schema_registry import _atomic_publish
+
+    _atomic_publish(
+        tmp_path / "user-schema/pending-activation.json",
+        {
+            "change": change,
+            "actor_id": confirmed.actor_id,
+            "request_id": confirmed.request_id,
+            "expected_revision": confirmed.expected_revision,
+            "proposal_hash": confirmed.proposal_hash,
+        },
+        immutable=False,
+    )
+    assert registry(tmp_path).activate_pending_at_boot() is False
+    assert user.snapshot()[0] == 1
+    assert len(list((tmp_path / "user-schema/history").glob("*.json"))) == 1
+
+
+def test_actor_bound_schema_confirm_and_status_are_feature_gated(tmp_path: Path) -> None:
+    from odyssey_core.identity_boundary import AuthenticatedActorContext, OdysseyUser
+    from odyssey_runtime.composition import RuntimeComposition
+
+    user = registry(tmp_path)
+    proposal = user.preview(property_change(), expected_revision=0)
+    actor = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
+    payload = {
+        "change": property_change(),
+        "expected_revision": 0,
+        "request_id": "actor-confirmation",
+        "proposal_hash": proposal.proposal_hash,
+    }
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: None,
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=user,
+        schema_activation_enabled=True,
+        user_schema_revision=0,
+    )
+    with pytest.raises(ValueError, match="unavailable"):
+        runtime.notes("schema_confirm", payload)
+    with pytest.raises(ValueError, match="payload"):
+        runtime.notes("schema_confirm", {**payload, "actor_id": "forged"}, actor)
+    result = runtime.notes("schema_confirm", payload, actor)
+    assert result["status"] == "queued"
+    assert (
+        runtime.notes("schema_status", {"request_id": "actor-confirmation"}, actor)["status"]
+        == "queued"
+    )
+    assert runtime.notes("schema_status", {}, actor) == {
+        "revision": 0,
+        "status": "ready",
+        "can_confirm": True,
+    }
+    other = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
+    with pytest.raises(UserSchemaError, match="not found"):
+        runtime.notes("schema_status", {"request_id": "actor-confirmation"}, other)
+    runtime.schema_activation_enabled = False
+    with pytest.raises(ValueError, match="unavailable"):
+        runtime.notes("schema_confirm", payload, actor)
+    assert user.snapshot()[0] == 0
+
+
+def test_schema_approval_rejects_changed_draft_stale_revision_and_duplicate_actor(
+    tmp_path: Path,
+) -> None:
+    user = registry(tmp_path)
+    change = type_change()
+    draft = user.preview(change, expected_revision=0)
+    ack = confirm(draft, "click-one")
+    altered = type_change("Different Book", "book")
+    with pytest.raises(UserSchemaError, match="PROPOSAL_CHANGED"):
+        user.request_activation(altered, ack)
+    with pytest.raises(UserSchemaError, match="REVISION_STALE"):
+        user.request_activation(
+            change, SchemaConfirmation("synthetic-actor", "click-one", 3, draft.proposal_hash)
+        )
+    assert not (tmp_path / "user-schema/pending-activation.json").exists()
+    user.request_activation(change, ack)
+    with pytest.raises(UserSchemaError, match="ALREADY_PENDING"):
+        user.request_activation(
+            change, SchemaConfirmation("other-actor", "click-one", 0, draft.proposal_hash)
+        )
+    assert user.activation_status("synthetic-actor", "click-one")["status"] == "queued"
+    assert user.snapshot()[0] == 0
+
+
+def test_tampered_pending_envelope_fails_closed_before_boot_writes(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    change = type_change()
+    draft = user.preview(change, expected_revision=0)
+    user.request_activation(change, confirm(draft))
+    pending = tmp_path / "user-schema/pending-activation.json"
+    forged = json.loads(pending.read_text(encoding="utf-8"))
+    forged["change"]["type"]["name"] = "Forged title"
+    pending.write_text(json.dumps(forged), encoding="utf-8")
+    with pytest.raises(UserSchemaError, match="proposal changed"):
+        user.activate_pending_at_boot()
+    assert user.snapshot()[0] == 0
+    assert len(list((tmp_path / "user-schema/history").glob("*.json"))) == 0
+
+
+def test_stale_pending_cannot_override_unrelated_published_revision(tmp_path: Path) -> None:
+    user = registry(tmp_path)
+    to_stage = type_change()
+    pending = user.preview(to_stage, expected_revision=0)
+    user.request_activation(to_stage, confirm(pending))
+    other = property_change()
+    preview = user.preview(other, expected_revision=0)
+    with pytest.raises(UserSchemaError, match="ALREADY_PENDING"):
+        user.publish(other, confirm(preview, "independent-publication"))
+    assert user.snapshot()[0] == 0
+    assert user.activate_pending_at_boot() is True
+    assert user.snapshot()[0] == 1
+    assert "book" in ordinary_type_ids(user.snapshot()[1])
+
+
+def test_schema_confirmation_disabled_by_default_on_composed_runtime(tmp_path: Path) -> None:
+    from odyssey_core.identity_boundary import AuthenticatedActorContext, OdysseyUser
+    from odyssey_runtime.composition import RuntimeComposition
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: None,
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry(tmp_path),
+        user_schema_revision=0,
+    )
+    actor = AuthenticatedActorContext(OdysseyUser.new().stable_user_id)
+    assert runtime.notes("schema_status", {}, actor) == {
+        "status": "ready",
+        "revision": 0,
+        "can_confirm": False,
+    }
+    with pytest.raises(ValueError, match="unavailable"):
+        runtime.notes("schema_confirm", {}, actor)
+
+
+def test_confirm_replay_reports_original_revision_after_later_schema_changes(
+    tmp_path: Path,
+) -> None:
+    user = registry(tmp_path)
+    a = property_change()
+    first = user.preview(a, expected_revision=0)
+    user.request_activation(a, confirm(first, "first-ack"))
+    user.activate_pending_at_boot()
+    b = type_change()
+    second = user.preview(b, expected_revision=1)
+    user.request_activation(b, confirm(second, "second-ack"))
+    user.activate_pending_at_boot()
+    assert user.snapshot()[0] == 2
+    assert user.request_activation(a, confirm(first, "first-ack")) == {
+        "status": "active",
+        "request_id": "first-ack",
+        "revision": 1,
+    }
+    assert user.activation_status("synthetic-actor", "second-ack") == {
+        "status": "active",
+        "request_id": "second-ack",
+        "revision": 2,
+    }
+
+
+def test_confirm_prechecks_exact_published_size_before_queuing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A valid but oversized next revision must never strand the managed restart."""
+    import odyssey_runtime.user_schema_registry as schema_mod
+
+    user = registry(tmp_path)
+    proposed = user.preview(type_change(), expected_revision=0)
+    monkeypatch.setattr(schema_mod, "_MAX_BYTES", 160)
+    with pytest.raises(UserSchemaError, match="size limit"):
+        user.request_activation(type_change(), confirm(proposed))
+    assert user.snapshot()[0] == 0
+    assert not (tmp_path / "user-schema/pending-activation.json").exists()
+    assert not list((tmp_path / "user-schema/history").glob("*.json"))
+
+
+def test_completed_ack_replay_requires_original_change_and_base_revision(
+    tmp_path: Path,
+) -> None:
+    user = registry(tmp_path)
+    initial = type_change()
+    proposed = user.preview(initial, expected_revision=0)
+    confirmation = confirm(proposed, "same-click")
+    user.request_activation(initial, confirmation)
+    user.activate_pending_at_boot()
+    with pytest.raises(UserSchemaError, match="ALREADY_PUBLISHED"):
+        user.request_activation(type_change("Other Title", "other_book"), confirmation)
+    with pytest.raises(UserSchemaError, match="ALREADY_PUBLISHED"):
+        user.request_activation(
+            initial,
+            SchemaConfirmation(
+                confirmation.actor_id,
+                confirmation.request_id,
+                1,
+                confirmation.proposal_hash,
+            ),
+        )
+    assert user.request_activation(initial, confirmation) == {
+        "status": "active",
+        "request_id": "same-click",
+        "revision": 1,
+    }
+    assert user.snapshot()[0] == 1
+
+
+def test_notes_type_schema_editability_uses_core_ownership_not_ui_name_lists(
+    tmp_path: Path,
+) -> None:
+    from odyssey_core.note_queries import NotesQueryService
+
+    user = registry(tmp_path)
+    _, schema = user.snapshot()
+    types = {
+        item["id"]: item
+        for item in NotesQueryService(object(), schema, object()).capabilities().types
+    }
+    assert types["person"]["schema_editable"] is True
+    assert "calendar_day" not in types  # Core-managed type is intentionally hidden.
+    for managed_id in ("journal_entry", "task", "event"):
+        assert types[managed_id]["schema_editable"] is False
+    proposal = user.preview(type_change(), expected_revision=0)
+    user.publish(type_change(), confirm(proposal))
+    _, schema = user.snapshot()
+    types = {
+        item["id"]: item
+        for item in NotesQueryService(object(), schema, object()).capabilities().types
+    }
+    assert types["book"]["schema_editable"] is True
+
+
+def test_backfill_approval_follows_last_explicit_property_definition_author(tmp_path):
+    """An old consent must not authorize a field whose meaning someone changed."""
+    user = registry(tmp_path)
+    added = property_change()
+    proposal = user.preview(added, expected_revision=0)
+    user.publish(
+        added,
+        SchemaConfirmation("alice", "approved-original", 0, proposal.proposal_hash),
+    )
+    target = dict(expected_revision=1, type_id="person", property_id="occupation")
+    assert user.confirmed_backfill_property("alice", **target)
+    assert not user.confirmed_backfill_property("bob", **target)
+
+    changed = {
+        "operation": "edit_property_description",
+        "type_id": "person",
+        "property_id": "occupation",
+        "description": "Last professional position, not current occupation.",
+    }
+    preview = user.preview(changed, expected_revision=1)
+    user.publish(
+        changed, SchemaConfirmation("bob", "approved-new-meaning", 1, preview.proposal_hash)
+    )
+    target["expected_revision"] = 2
+    assert not user.confirmed_backfill_property("alice", **target)
+    assert user.confirmed_backfill_property("bob", **target)
+
+    unrelated = {
+        "operation": "edit_type_text",
+        "type_id": "person",
+        "name": "Persona",
+        "description": "A person with durable, local knowledge.",
+    }
+    preview = user.preview(unrelated, expected_revision=2)
+    user.publish(unrelated, SchemaConfirmation("charlie", "rename-type", 2, preview.proposal_hash))
+    target["expected_revision"] = 3
+    assert not user.confirmed_backfill_property("alice", **target)
+    assert user.confirmed_backfill_property("bob", **target)
+    assert not user.confirmed_backfill_property("charlie", **target)
+
+    # A confirmed second semantic edit renews exactly the editor's consent.
+    latest = {**changed, "description": "Only active and currently held positions."}
+    preview = user.preview(latest, expected_revision=3)
+    user.publish(
+        latest, SchemaConfirmation("alice", "new-confirmed-meaning", 3, preview.proposal_hash)
+    )
+    target["expected_revision"] = 4
+    assert user.confirmed_backfill_property("alice", **target)
+    assert not user.confirmed_backfill_property("bob", **target)
+
+
+def test_application_managed_type_never_gains_backfill_authority(tmp_path):
+    """App-owned Task/Event properties are not an ordinary user-schema write target."""
+    user = registry(tmp_path)  # includes real Task and Event application extensions
+    revision, effective = user.snapshot()
+    assert revision == 0
+    for kind in ("task", "event"):
+        assert any(t["id"] == kind and "managed_by" in t for t in effective["types"])
+        attempt = {
+            "operation": "add_property",
+            "type_id": kind,
+            "property": {
+                "id": "manual_test_field",
+                "value_type": "string",
+                "description": "Synthetic field not owned by the user.",
+            },
+        }
+        with pytest.raises(UserSchemaError, match="unavailable"):
+            user.preview(attempt, expected_revision=0)
+        assert not user.confirmed_backfill_property(
+            "synthetic-actor",
+            expected_revision=0,
+            type_id=kind,
+            property_id="manual_test_field",
+        )
+    assert user.snapshot()[0] == 0

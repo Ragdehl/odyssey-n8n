@@ -2666,3 +2666,464 @@ def test_runtime_lease_outlives_an_inflight_http_request_during_shutdown(
     assert receipts == [(200, {"status": "ok"})]
     registry.publish(change, confirmation)
     assert registry.snapshot()[0] == 1
+
+
+def test_http_authenticated_confirmation_drains_server_and_activates_at_next_boot(
+    tmp_path: Path,
+) -> None:
+    """Real local HTTP: one explicit approval -> queued -> restart -> active, no note writes."""
+    import socket
+    from threading import Event
+
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime import server as runtime_server
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    new_type = {
+        "operation": "add_type",
+        "type": {
+            "id": "book",
+            "name": "Book",
+            "description": "A book",
+            "examples": [],
+            "properties": [],
+        },
+    }
+    proposal = registry.preview(new_type, expected_revision=0)
+    actor = OdysseyUser.new().stable_user_id
+    ready = Event()
+    errors = []
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+        user_schema_revision=0,
+        schema_activation_enabled=True,
+    )
+
+    def host():
+        try:
+            ready.set()
+            runtime_server.serve(runtime, host="127.0.0.1", port=port)
+        except runtime_server.SchemaActivationRestartRequested:
+            return
+        except Exception as error:
+            errors.append(error)
+
+    listener = threading.Thread(target=host, daemon=True)
+    listener.start()
+    try:
+        # Probe the actual HTTP entrypoint until its bound port is ready.
+        for _ in range(100):
+            try:
+                connection = HTTPConnection("127.0.0.1", port, timeout=2)
+                connection.request("GET", "/healthz")
+                response = connection.getresponse()
+                assert response.status == 200
+                response.read()
+                connection.close()
+                break
+            except OSError:
+                threading.Event().wait(0.02)
+        else:
+            pytest.fail("Synthetic runtime did not bind")
+        body = {
+            "operation": "schema_confirm",
+            "change": new_type,
+            "expected_revision": 0,
+            "request_id": "click-one",
+            "proposal_hash": proposal.proposal_hash,
+            "authenticated_actor": {"stable_user_id": actor},
+        }
+        connection = HTTPConnection("127.0.0.1", port, timeout=6)
+        connection.request("POST", "/notes", body=json.dumps(body))
+        response = connection.getresponse()
+        outcome = json.loads(response.read())
+        assert response.status == 200
+        assert outcome["status"] == "queued"
+        connection.close()
+    finally:
+        listener.join(timeout=6)
+    assert not listener.is_alive(), "Runtime must stop after queued schema confirmation"
+    assert not errors
+    assert registry.snapshot()[0] == 0
+    assert registry.activation_status(actor, "click-one")["status"] == "queued"
+    # This mirrors systemd's Restart=on-failure -> factory exclusive boot lease.
+    with UserSchemaRegistry.bootstrap_lease(tmp_path):
+        assert registry.activate_pending_at_boot() is True
+        loaded_revision, loaded_schema = registry.snapshot()
+    assert loaded_revision == 1
+    assert any(kind["id"] == "book" for kind in loaded_schema["types"])
+    assert registry.activation_status(actor, "click-one") == {
+        "status": "active",
+        "request_id": "click-one",
+        "revision": 1,
+    }
+    assert not (tmp_path / "user-schema/pending-activation.json").exists()
+
+
+def test_http_schema_missing_activation_has_one_indistinguishable_not_found_code(
+    tmp_path: Path,
+) -> None:
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    registry = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+        user_schema_revision=0,
+        schema_activation_enabled=True,
+    )
+    actor = OdysseyUser.new().stable_user_id
+    server = _test_server(runtime)
+    try:
+        connection = HTTPConnection("127.0.0.1", server.server_port)
+        connection.request(
+            "POST",
+            "/notes",
+            body=json.dumps(
+                {
+                    "operation": "schema_status",
+                    "request_id": "not-here",
+                    "authenticated_actor": {"stable_user_id": actor},
+                }
+            ),
+        )
+        response = connection.getresponse()
+        assert response.status == 404
+        assert json.loads(response.read()) == {"error": "SCHEMA_ACTIVATION_NOT_FOUND"}
+        connection.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_authenticated_http_schema_assistant_readonly_and_separate_activation_gate(
+    tmp_path: Path,
+) -> None:
+    """Real local HTTP: model advice -> Core preview, no mutation or implicit click."""
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime.schema_suggestion import SchemaSuggestionService
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    base = json.loads((Path(__file__).resolve().parents[2] / "config/note-schema.json").read_text())
+    reg = UserSchemaRegistry(tmp_path, base, (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION))
+    provider_calls = []
+
+    class FakeGateway:
+        def _complete(self, **arguments):
+            provider_calls.append(arguments)
+            return {
+                "decision": "ADD_TYPE",
+                "subject_quote": "libros",
+                "type_name": "Libro",
+                "type_id": None,
+                "description": "Libros que conozco",
+                "properties": [],
+                "question": None,
+                "explanation": "Cada libro puede tener datos propios.",
+            }
+
+    service = SchemaSuggestionService(FakeGateway())  # type: ignore[arg-type]
+    user = OdysseyUser.new().stable_user_id
+    runtime = RuntimeComposition(
+        core_execute=lambda *_a, **_kw: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=reg,
+        schema_suggestion_service=service,
+        schema_activation_enabled=False,
+    )
+    server = _test_server(runtime)
+
+    def send(body: dict) -> tuple[int, dict]:
+        connection = HTTPConnection("127.0.0.1", server.server_port, timeout=6)
+        connection.request("POST", "/notes", body=json.dumps(body))
+        response = connection.getresponse()
+        data = response.status, json.loads(response.read())
+        connection.close()
+        return data
+
+    try:
+        message = {
+            "operation": "schema_suggest",
+            "message": "Quiero organizar libros",
+            "expected_revision": 0,
+        }
+        assert send(message) == (400, {"error": "invalid notes request"})
+        status, outcome = send({**message, "authenticated_actor": {"stable_user_id": user}})
+        assert status == 200
+        assert outcome["kind"] == "schema_suggestion"
+        assert outcome["decision"] == "PROPOSE"
+        assert outcome["change"]["type"]["id"] == "libro"
+        assert outcome["preview"]["type_preview"]["name"] == "Libro"
+        assert reg.snapshot()[0] == 0
+        assert not (tmp_path / "user-schema/current.json").exists()
+        assert len(provider_calls) == 1
+        for changed in [
+            {**message, "expected_revision": True},
+            {**message, "approved": True},
+            {**message, "message": " " * 15},
+            {**message, "message": "x" * 1201},
+            {**message, "expected_revision": 1},
+        ]:
+            code, _ = send({**changed, "authenticated_actor": {"stable_user_id": user}})
+            assert code == 400
+        assert len(provider_calls) == 1
+        assert (
+            send(
+                {
+                    "operation": "schema_confirm",
+                    "change": outcome["change"],
+                    "expected_revision": 0,
+                    "proposal_hash": outcome["preview"]["proposal_hash"],
+                    "request_id": "must-never-approve-automatically",
+                    "authenticated_actor": {"stable_user_id": user},
+                }
+            )[0]
+            == 400
+        )
+        assert reg.snapshot()[0] == 0
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_authenticated_http_final_schema_review_is_readonly_and_cas_bound(
+    tmp_path: Path,
+) -> None:
+    from odyssey_apps.events.schema import EVENT_SCHEMA_EXTENSION
+    from odyssey_apps.tasks.schema import TASK_SCHEMA_EXTENSION
+    from odyssey_core.identity_boundary import OdysseyUser
+    from odyssey_runtime.schema_suggestion import SchemaSuggestionService
+    from odyssey_runtime.user_schema_registry import UserSchemaRegistry
+
+    schema_path = Path(__file__).resolve().parents[2] / "config/note-schema.json"
+    registry = UserSchemaRegistry(
+        tmp_path,
+        json.loads(schema_path.read_text()),
+        (TASK_SCHEMA_EXTENSION, EVENT_SCHEMA_EXTENSION),
+    )
+    calls = []
+
+    class ReviewerGateway:
+        def _complete(self, **kw):
+            calls.append(kw)
+            return {
+                "verdict": "CHECK",
+                "message": "Revisa la restricción.",
+                "issues": ["La descripción no ejecuta filtros."],
+            }
+
+    user_id = OdysseyUser.new().stable_user_id
+    service = SchemaSuggestionService(ReviewerGateway())  # type: ignore[arg-type]
+    runtime = RuntimeComposition(
+        core_execute=lambda *_args, **_kwargs: _result(),
+        refresh_indexes=lambda: None,
+        notes_service=object(),  # type: ignore[arg-type]
+        user_schema_registry=registry,
+        schema_suggestion_service=service,
+        schema_activation_enabled=False,
+    )
+    app = _test_server(runtime)
+    draft = {
+        "operation": "add_type",
+        "type": {
+            "id": "planta",
+            "name": "Planta",
+            "description": "Plantas personales",
+            "examples": [],
+            "properties": [
+                {"id": "altura", "description": "Altura conocida", "value_type": "string"},
+            ],
+        },
+    }
+    preview = registry.preview(draft, expected_revision=0)
+    base = {
+        "operation": "schema_review",
+        "message": "Mis plantas, no las del trabajo",
+        "change": draft,
+        "expected_revision": 0,
+        "proposal_hash": preview.proposal_hash,
+    }
+
+    def send(payload: dict) -> tuple[int, dict]:
+        conn = HTTPConnection("127.0.0.1", app.server_port, timeout=6)
+        conn.request("POST", "/notes", body=json.dumps(payload))
+        response = conn.getresponse()
+        result = (response.status, json.loads(response.read()))
+        conn.close()
+        return result
+
+    try:
+        assert send(base)[0] == 400
+        assert calls == []
+        sent = {**base, "authenticated_actor": {"stable_user_id": user_id}}
+        code, outcome = send(sent)
+        assert code == 200 and outcome["kind"] == "schema_review"
+        assert outcome["verdict"] == "CHECK"
+        assert outcome["proposal_hash"] == preview.proposal_hash
+        assert "change" not in outcome and "approved" not in outcome
+        assert len(calls) == 1 and calls[0]["name"] == "odyssey_schema_review_v1"
+        for forged in [
+            {"proposal_hash": "f" * 64},
+            {"approved": True},
+            {"expected_revision": 1},
+            {"message": "a" * 1201},
+            {"change": {"operation": "delete_type"}},
+        ]:
+            assert send({**sent, **forged})[0] == 400
+        assert len(calls) == 1
+        assert registry.snapshot()[0] == 0
+        assert not (tmp_path / "user-schema/current.json").exists()
+        assert (
+            send(
+                {
+                    "operation": "schema_confirm",
+                    "change": draft,
+                    "expected_revision": 0,
+                    "proposal_hash": preview.proposal_hash,
+                    "request_id": "schema-test-review-only",
+                    "authenticated_actor": {"stable_user_id": user_id},
+                }
+            )[0]
+            == 400
+        )
+    finally:
+        app.shutdown()
+        app.server_close()
+
+
+def test_index_backfill_coalesces_commits_without_delaying_ordinary_writes() -> None:
+    """Many committed backfill notes refresh together; normal writes flush at once."""
+    calls: list[tuple[str, ...]] = []
+    refreshed = threading.Event()
+    coordinator = composition.DerivedIndexRefreshCoordinator(
+        lambda ids: (calls.append(tuple(ids)), refreshed.set()),
+        backfill_window_s=0.3,
+        backfill_flush_threshold=4,
+    )
+    for note_id in ("a", "b", "c"):
+        coordinator.schedule_backfill((note_id,))
+    assert not refreshed.wait(0.05)
+    coordinator.schedule_backfill(("d", "b"))
+    assert refreshed.wait(0.6)
+    coordinator.wait_until_clean()
+    assert calls == [("a", "b", "c", "d")]
+
+    refreshed.clear()
+    coordinator.schedule_backfill(("later",))
+    assert not refreshed.wait(0.05)
+    coordinator.schedule(("normal",))
+    assert refreshed.wait(0.3)
+    coordinator.wait_until_clean()
+    assert calls[-1] == ("later", "normal")
+
+
+def test_index_backfill_reader_flushes_immediately_and_waits_for_actual_update() -> None:
+    """The read barrier cannot leak a partially indexed batch before refresh returns."""
+    started = threading.Event()
+    release = threading.Event()
+    completed = threading.Event()
+    calls: list[tuple[str, ...]] = []
+
+    def refresh(ids: tuple[str, ...]) -> None:
+        calls.append(tuple(ids))
+        started.set()
+        assert release.wait(2)
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(refresh, backfill_window_s=2.0)
+    coordinator.schedule_backfill(("a",))
+    coordinator.schedule_backfill(("b",))
+    reader = threading.Thread(
+        target=lambda: (coordinator.wait_until_clean(), completed.set()),
+        daemon=True,
+    )
+    reader.start()
+    assert started.wait(0.5), "A reader must override the batch timer"
+    assert not completed.wait(0.05)
+    release.set()
+    assert completed.wait(1)
+    assert calls == [("a", "b")]
+
+
+def test_index_backfill_first_deadline_is_not_extended_by_more_writes() -> None:
+    """A continuous producer cannot starve the asynchronous index writer."""
+    calls: list[tuple[str, ...]] = []
+    refreshed = threading.Event()
+    coordinator = composition.DerivedIndexRefreshCoordinator(
+        lambda ids: (calls.append(tuple(ids)), refreshed.set()),
+        backfill_window_s=0.12,
+        backfill_flush_threshold=8,
+    )
+    coordinator.schedule_backfill(("a",))
+    assert not refreshed.wait(0.04)
+    coordinator.schedule_backfill(("b",))
+    assert not refreshed.wait(0.04)
+    coordinator.schedule_backfill(("c",))
+    assert refreshed.wait(0.5)
+    coordinator.wait_until_clean()
+    assert calls == [("a", "b", "c")]
+
+
+def test_index_backfill_failure_surfaces_to_reader_without_stale_results() -> None:
+    """Batched refresh exceptions remain fatal to derived-index reads."""
+    refreshed = threading.Event()
+
+    def broken(_ids: tuple[str, ...]) -> None:
+        refreshed.set()
+        raise ValueError("invalid canonical inventory")
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(broken, backfill_window_s=0.2)
+    coordinator.schedule_backfill(("a",))
+    assert not refreshed.wait(0.04)
+    with pytest.raises(RuntimeError, match="derived index refresh failed"):
+        coordinator.wait_until_clean()
+    assert refreshed.is_set()
+
+
+@pytest.mark.parametrize("delay,size", [(0, 8), (12, 8), (0.1, 1), (0.1, 65)])
+def test_index_backfill_window_is_bounded(delay, size) -> None:
+    with pytest.raises(ValueError, match="bounded"):
+        composition.DerivedIndexRefreshCoordinator(
+            lambda _ids: None, backfill_window_s=delay, backfill_flush_threshold=size
+        )
+
+
+def test_index_failure_retries_all_missing_ids_not_just_last_successful_note() -> None:
+    """A later good refresh cannot silently abandon failed canonical changes."""
+    calls: list[tuple[str, ...]] = []
+    refreshed = threading.Event()
+
+    def flaky(ids: tuple[str, ...]) -> None:
+        calls.append(tuple(ids))
+        refreshed.set()
+        if len(calls) == 1:
+            raise ValueError("first refresh failed")
+
+    coordinator = composition.DerivedIndexRefreshCoordinator(flaky)
+    coordinator.schedule(("unindexed",))
+    with pytest.raises(RuntimeError, match="derived index refresh failed"):
+        coordinator.wait_until_clean()
+    assert refreshed.is_set()
+    refreshed.clear()
+    coordinator.schedule(("later",))
+    coordinator.wait_until_clean()
+    assert calls == [("unindexed",), ("later", "unindexed")]

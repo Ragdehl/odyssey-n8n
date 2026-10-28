@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -359,31 +360,67 @@ class NotesTelemetryError(RuntimeError):
 
 
 class DerivedIndexRefreshCoordinator:
-    """Run derived-index maintenance off the response path with a strict read barrier.
+    """Maintain derived indexes asynchronously with a strict reader barrier.
 
-    Mutations publish only stable note IDs. A single daemon worker coalesces IDs that arrive while
-    one refresh is running. Readers call :meth:`wait_until_clean` before consulting derived state;
-    an unrecoverable refresh failure therefore fails closed instead of exposing stale indexes.
+    Ordinary updates refresh immediately. A schema backfill can hold only its
+    *derived* index updates briefly, combining several already-committed Core/Git
+    notes in one verified refresh. The first pending backfill write starts a
+    fixed maximum wait: continuous writes cannot prolong it. A reader or an
+    ordinary mutation flushes pending work immediately. Neither source writes
+    nor local Git history are batched by this coordinator.
     """
 
-    def __init__(self, refresh: Callable[[Sequence[str]], None]) -> None:
+    def __init__(
+        self,
+        refresh: Callable[[Sequence[str]], None],
+        *,
+        backfill_window_s: float = 6.0,
+        backfill_flush_threshold: int = 8,
+    ) -> None:
+        if (
+            not isinstance(backfill_window_s, (int, float))
+            or isinstance(backfill_window_s, bool)
+            or not 0 < backfill_window_s <= 10
+            or type(backfill_flush_threshold) is not int
+            or not 2 <= backfill_flush_threshold <= 64
+        ):
+            raise ValueError("Invalid bounded backfill index refresh window")
         self._refresh = refresh
+        self._backfill_window_s = float(backfill_window_s)
+        self._backfill_flush_threshold = backfill_flush_threshold
         self._condition = Condition()
         self._pending: set[str] = set()
+        # Failed IDs remain unresolved until an actual later refresh includes
+        # them and succeeds. A subsequent unrelated successful refresh must
+        # never turn a partial derived index into a falsely clean one.
+        self._failed_ids: set[str] = set()
+        self._flush_deadline: float | None = None
+        self._flush_requested = False
         self._requested_generation = 0
         self._completed_generation = 0
         self._last_error: Exception | None = None
         self._worker: Thread | None = None
 
     def schedule(self, note_ids: Sequence[str]) -> int:
-        """Queue affected stable IDs and return the generation that now needs reconciliation."""
+        """Schedule ordinary changed IDs without an intentional batching delay."""
+        return self._queue(note_ids, backfill=False)
+
+    def schedule_backfill(self, note_ids: Sequence[str]) -> int:
+        """Coalesce source-committed backfill IDs for a bounded index-only window."""
+        return self._queue(note_ids, backfill=True)
+
+    def _queue(self, note_ids: Sequence[str], *, backfill: bool) -> int:
         bounded = tuple(dict.fromkeys(note_ids))
         if not bounded or any(not isinstance(note_id, str) or not note_id for note_id in bounded):
             raise ValueError("index refresh scheduling requires stable note IDs")
         with self._condition:
+            if backfill and self._flush_deadline is None:
+                self._flush_deadline = perf_counter() + self._backfill_window_s
             self._pending.update(bounded)
             self._requested_generation += 1
             generation = self._requested_generation
+            if not backfill or len(self._pending) >= self._backfill_flush_threshold:
+                self._flush_requested = True
             if self._worker is None or not self._worker.is_alive():
                 self._worker = Thread(
                     target=self._run,
@@ -395,9 +432,12 @@ class DerivedIndexRefreshCoordinator:
             return generation
 
     def wait_until_clean(self) -> None:
-        """Block until all refresh work visible at call time has completed successfully."""
+        """Flush pending backfill promptly, then refuse stale/failed derived reads."""
         with self._condition:
             target = self._requested_generation
+            if self._completed_generation < target and self._pending:
+                self._flush_requested = True
+                self._condition.notify_all()
             while self._completed_generation < target:
                 self._condition.wait()
             if self._last_error is not None:
@@ -406,11 +446,23 @@ class DerivedIndexRefreshCoordinator:
     def _run(self) -> None:
         while True:
             with self._condition:
-                while not self._pending:
-                    self._condition.wait()
-                note_ids = tuple(sorted(self._pending))
+                while True:
+                    if not self._pending:
+                        self._condition.wait()
+                        continue
+                    remaining = (
+                        None
+                        if self._flush_deadline is None
+                        else self._flush_deadline - perf_counter()
+                    )
+                    if self._flush_requested or remaining is not None and remaining <= 0:
+                        break
+                    self._condition.wait(timeout=remaining)
+                note_ids = tuple(sorted(self._pending | self._failed_ids))
                 self._pending.clear()
                 generation = self._requested_generation
+                self._flush_deadline = None
+                self._flush_requested = False
             error: Exception | None = None
             try:
                 self._refresh(note_ids)
@@ -418,7 +470,13 @@ class DerivedIndexRefreshCoordinator:
                 error = caught
             with self._condition:
                 self._completed_generation = max(self._completed_generation, generation)
-                self._last_error = error
+                if error is not None:
+                    self._failed_ids.update(note_ids)
+                    self._last_error = error
+                else:
+                    self._failed_ids.difference_update(note_ids)
+                    if not self._failed_ids:
+                        self._last_error = None
                 self._condition.notify_all()
 
 
@@ -509,6 +567,19 @@ class RuntimeComposition:
     # requires a separate authenticated rollout and consistent schema/index swap.
     user_schema_registry: object | None = None
     user_schema_revision: int | None = None
+    schema_activation_enabled: bool = False
+    # Strictly read-only LLM design hints; activation still needs user click.
+    schema_suggestion_service: object | None = None
+    # Optional local, read-only retrospective scan. Trusted host selects one
+    # profile/vault root and passes authenticated/local-profile identity.
+    schema_scan_factory: Callable[[str], object] | None = None
+    # Private DEV-only property enrichment; each request requires the SAME
+    # authenticated actor's durable approval for this property/revision.
+    schema_backfill_factory: Callable[[str], object] | None = None
+    # Semantic interpretation is an independently gated, trusted runtime
+    # adapter. No browser-supplied provider or value can authorize a write.
+    schema_backfill_interpreter: object | None = None
+    schema_backfill_call_limit: int | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1723,6 +1794,349 @@ class RuntimeComposition:
             and self.await_index_refresh is not None
         ):
             self.await_index_refresh()
+        if operation == "schema_scan":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.schema_scan_factory is None
+                or self.user_schema_registry is None
+                or self.user_schema_revision is None
+                or self.canonical_schema is None
+            ):
+                raise ValueError("Local schema scan is unavailable")
+            if set(payload) != {
+                "scan_kind",
+                "target_type_id",
+                "property_id",
+                "expected_revision",
+                "action",
+            }:
+                raise ValueError("Invalid local schema scan request")
+            if (
+                payload["action"] not in {"advance", "status"}
+                or payload["scan_kind"] not in {"discover_type", "backfill_property"}
+                or not isinstance(payload["target_type_id"], str)
+                or type(payload["expected_revision"]) is not int
+                or payload["expected_revision"] != self.user_schema_revision
+                or (
+                    payload["property_id"] is not None
+                    and not isinstance(payload["property_id"], str)
+                )
+            ):
+                raise ValueError("Invalid local schema scan arguments")
+            from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs
+
+            jobs = self.schema_scan_factory(resolved_actor)
+            if not isinstance(jobs, LocalSchemaScanJobs):
+                raise ValueError("Local schema scan store is unavailable")
+            # Stable per-actor/profile target key; no browser storage, global
+            # queue or server-generated arbitrary task ID to remember.
+            job_id = hashlib.sha256(
+                json.dumps(
+                    {
+                        "revision": payload["expected_revision"],
+                        "kind": payload["scan_kind"],
+                        "target": payload["target_type_id"],
+                        "property": payload["property_id"],
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()[:48]
+            if payload["action"] == "status":
+                progress = jobs.read(job_id)
+                if progress is None:
+                    return {"kind": "schema_scan", "status": "not_started"}
+                if (
+                    progress.kind != payload["scan_kind"]
+                    or progress.target_type_id != payload["target_type_id"]
+                    or progress.property_id != payload["property_id"]
+                ):
+                    raise ValueError("Local schema scan target mismatch")
+            else:
+                progress = jobs.advance(
+                    job_id=job_id,
+                    schema=self.canonical_schema,
+                    kind=payload["scan_kind"],
+                    target_type_id=payload["target_type_id"],
+                    property_id=payload["property_id"],
+                    limit=20,
+                )
+            # A progress receipt contains no source text/names, candidate
+            # identities or authorization to change canonical Notes.
+            return {
+                "kind": "schema_scan",
+                "status": "complete" if progress.complete else "scanning",
+                "scanned_paths": progress.scanned_paths,
+                "eligible_notes": progress.eligible_notes,
+                "skipped_existing_values": progress.skipped_existing_values,
+                "legacy_sources": progress.legacy_sources,
+            }
+        if operation == "schema_backfill":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.user_schema_registry is None
+                or self.user_schema_revision is None
+                or self.schema_backfill_factory is None
+            ):
+                raise ValueError("Local schema backfill is unavailable")
+            if set(payload) != {"target_type_id", "property_id", "expected_revision", "action"} or (
+                payload["action"]
+                not in {
+                    "stage",
+                    "status",
+                    "advance",
+                    "stage_followup",
+                    "status_followup",
+                    "advance_followup",
+                }
+                or not isinstance(payload["target_type_id"], str)
+                or not isinstance(payload["property_id"], str)
+                or type(payload["expected_revision"]) is not int
+                or payload["expected_revision"] != self.user_schema_revision
+            ):
+                raise ValueError("Invalid schema backfill arguments")
+            from .schema_backfill_jobs import LocalBackfillJob
+            from .user_schema_registry import UserSchemaRegistry
+
+            registry = self.user_schema_registry
+            if not isinstance(
+                registry, UserSchemaRegistry
+            ) or not registry.confirmed_backfill_property(
+                resolved_actor,
+                expected_revision=payload["expected_revision"],
+                type_id=payload["target_type_id"],
+                property_id=payload["property_id"],
+            ):
+                raise ValueError("Schema property enrichment was not approved by actor")
+            worker = self.schema_backfill_factory(resolved_actor)
+            if not isinstance(worker, LocalBackfillJob):
+                raise ValueError("Local backfill worker is unavailable")
+            job_id = hashlib.sha256(
+                json.dumps(
+                    {
+                        "revision": payload["expected_revision"],
+                        "type": payload["target_type_id"],
+                        "property": payload["property_id"],
+                        "operation": "local_property_backfill",
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()[:48]
+            is_followup = payload["action"].endswith("_followup")
+            followup_id = hashlib.sha256(f"semantic-followup-v1:{job_id}".encode()).hexdigest()[:48]
+            if is_followup and self.schema_backfill_interpreter is None:
+                raise ValueError("Semantic follow-up requires an enabled trusted model")
+            budget_job_id = followup_id if is_followup else job_id
+            # Trust only this actor-bound, signed local allowance. This is a
+            # request-count ceiling, not a promise of exact provider dollars.
+            interpreter = None
+            if self.schema_backfill_interpreter is not None:
+                if self.schema_backfill_call_limit is None:
+                    raise ValueError("Semantic campaign requires a trusted call cap")
+                from .schema_semantic_budget import (
+                    BudgetedSemanticInterpreter,
+                    SemanticCallLedger,
+                )
+
+                interpreter = BudgetedSemanticInterpreter(
+                    interpreter=self.schema_backfill_interpreter,
+                    ledger=SemanticCallLedger(
+                        worker=worker,
+                        campaign_id=budget_job_id,
+                        limit=self.schema_backfill_call_limit,
+                    ),
+                )
+            # Preserve V1 journals already staged before this deployment.
+            # For NEW campaigns in a >10k-physical-note vault, use a sealed
+            # actor-bound sequence of small V1 journals; never truncate V1.
+            # The same confirmed property is checked above on EVERY action.
+            from odyssey_core import schema_retrospection as scan_limits
+
+            from . import schema_backfill_campaign as campaign_contract
+
+            campaign = campaign_contract.LocalBackfillCampaign(
+                worker=worker, segment_size=campaign_contract._DEFAULT_SEGMENT_SIZE
+            )
+            legacy = worker.status(job_id)
+            saved_campaign = campaign.status(job_id)
+            if legacy is not None and saved_campaign is not None:
+                raise ValueError("Conflicting local backfill campaign and legacy journal")
+            if is_followup:
+                # Explicit user action against the already authenticated,
+                # previously confirmed property; never reopen old signed proof.
+                original = saved_campaign if saved_campaign is not None else legacy
+                if original is None or original["status"] != "awaiting_ai":
+                    raise ValueError("No completed deferred campaign is available")
+                origin_kind = "campaign" if saved_campaign is not None else "legacy"
+                if payload["action"] == "stage_followup":
+                    result = campaign.stage_followup(
+                        campaign_id=followup_id,
+                        original_id=job_id,
+                        origin_kind=origin_kind,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                    )
+                elif payload["action"] == "status_followup":
+                    result = campaign.status(followup_id)
+                    if result is None:
+                        return {"kind": "schema_backfill", "status": "not_started"}
+                else:
+                    result = campaign.advance(
+                        campaign_id=followup_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                        actor={"human": resolved_actor, "app": "odyssey-schema-backfill"},
+                        now=_current_time()["timestamp"],
+                        interpreter=interpreter,
+                    )
+                return {
+                    "kind": "schema_backfill",
+                    **result,
+                    **interpreter.ledger.status(),
+                    "phase": "semantic_followup",
+                }
+            use_campaign = saved_campaign is not None or (
+                legacy is None
+                and len(worker.repository.note_version_snapshot()) > scan_limits._MAX_PROGRESS_IDS
+            )
+            if payload["action"] == "stage":
+                result = (
+                    campaign.stage(
+                        campaign_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                    )
+                    if use_campaign
+                    else worker.stage(
+                        job_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                    )
+                )
+            elif payload["action"] == "status":
+                result = campaign.status(job_id) if use_campaign else legacy
+                if result is None:
+                    return {"kind": "schema_backfill", "status": "not_started"}
+            else:
+                # Deterministic evidence uses Core directly. Source-bound
+                # semantic review is available ONLY under the trusted, separate
+                # DEV flag and the same confirmed actor/property authority.
+                actor = {"human": resolved_actor, "app": "odyssey-schema-backfill"}
+                now = _current_time()["timestamp"]
+                result = (
+                    campaign.advance(
+                        campaign_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                        actor=actor,
+                        now=now,
+                        interpreter=None,  # First pass is always deterministic.
+                    )
+                    if use_campaign
+                    else worker.advance(
+                        job_id=job_id,
+                        type_id=payload["target_type_id"],
+                        property_id=payload["property_id"],
+                        actor=actor,
+                        now=now,
+                        interpreter=None,  # No charge before explicit follow-up.
+                    )
+                )
+            return {
+                "kind": "schema_backfill",
+                **result,
+                **(interpreter.ledger.status() if interpreter is not None else {}),
+            }
+        if operation in {"schema_confirm", "schema_status"}:
+            if (
+                authenticated_actor is None
+                and external_principal is None
+                or self.user_schema_registry is None
+                or (operation == "schema_confirm" and not self.schema_activation_enabled)
+            ):
+                raise ValueError("Schema activation is unavailable")
+            from .user_schema_registry import SchemaConfirmation, UserSchemaRegistry
+
+            registry = self.user_schema_registry
+            if not isinstance(registry, UserSchemaRegistry):
+                raise ValueError("Schema activation registry is unavailable")
+            if operation == "schema_status":
+                if not payload:
+                    return {
+                        "revision": registry.snapshot()[0],
+                        "status": "ready",
+                        "can_confirm": self.schema_activation_enabled,
+                    }
+                if set(payload) != {"request_id"} or not isinstance(payload["request_id"], str):
+                    raise ValueError("Schema activation status request is invalid")
+                return registry.activation_status(resolved_actor, payload["request_id"])
+            if set(payload) != {"change", "expected_revision", "proposal_hash", "request_id"}:
+                raise ValueError("Schema confirmation payload is invalid")
+            if (
+                not isinstance(payload["change"], dict)
+                or not isinstance(payload["expected_revision"], int)
+                or isinstance(payload["expected_revision"], bool)
+                or not isinstance(payload["proposal_hash"], str)
+                or not isinstance(payload["request_id"], str)
+            ):
+                raise ValueError("Schema confirmation payload is invalid")
+            return registry.request_activation(
+                payload["change"],
+                SchemaConfirmation(
+                    actor_id=resolved_actor,
+                    request_id=payload["request_id"],
+                    expected_revision=payload["expected_revision"],
+                    proposal_hash=payload["proposal_hash"],
+                ),
+            )
+        if operation == "schema_review":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.user_schema_registry is None
+                or self.schema_suggestion_service is None
+            ):
+                raise ValueError("Final schema review is unavailable")
+            if set(payload) != {"message", "change", "expected_revision", "proposal_hash"}:
+                raise ValueError("Final schema review payload is invalid")
+            from .schema_suggestion import SchemaSuggestionService, review_schema_change
+            from .user_schema_registry import UserSchemaRegistry
+
+            if not isinstance(
+                self.schema_suggestion_service, SchemaSuggestionService
+            ) or not isinstance(self.user_schema_registry, UserSchemaRegistry):
+                raise ValueError("Final schema review service is invalid")
+            return review_schema_change(
+                self.schema_suggestion_service,
+                source=payload["message"],
+                change=payload["change"],
+                expected_revision=payload["expected_revision"],
+                proposal_hash=payload["proposal_hash"],
+                registry=self.user_schema_registry,
+            )
+        if operation == "schema_suggest":
+            if (
+                (authenticated_actor is None and external_principal is None)
+                or self.user_schema_registry is None
+                or self.schema_suggestion_service is None
+            ):
+                raise ValueError("Conversational schema assistant is unavailable")
+            if set(payload) != {"message", "expected_revision"}:
+                raise ValueError("Schema conversation payload is invalid")
+            from .schema_suggestion import SchemaSuggestionService
+            from .user_schema_registry import UserSchemaRegistry
+
+            if (
+                not isinstance(self.schema_suggestion_service, SchemaSuggestionService)
+                or not isinstance(self.user_schema_registry, UserSchemaRegistry)
+                or not isinstance(payload["message"], str)
+            ):
+                raise ValueError("Schema conversation service is invalid")
+            return self.schema_suggestion_service.suggest(
+                payload["message"],
+                self.user_schema_registry,
+                expected_revision=payload["expected_revision"],
+            )
         if operation == "schema_preview":
             # The runtime's ordinary fallback `odyssey-runtime` is not an
             # authenticated user. Previewing schema changes requires one
@@ -2825,6 +3239,55 @@ def build_runtime_from_environment() -> RuntimeComposition:
     schema_enabled = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
     if schema_enabled not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
+    # A feature rejected for PROD or disabled user schemas must fail BEFORE
+    # the legacy pending-root mkdir, registry lease or any filesystem touch.
+    scan_enabled = os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED", "0")
+    if scan_enabled not in {"0", "1"}:
+        raise ValueError("Local schema scan flag is invalid")
+    if scan_enabled == "1" and (
+        schema_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Local schema scan requires isolated DEV user registry")
+    # Private writes are independent of scan previews; never enable through
+    # a read-only scan flag or a user-supplied browser field.
+    backfill_enabled = os.environ.get("ODYSSEY_SCHEMA_BACKFILL_ENABLED", "0")
+    if backfill_enabled not in {"0", "1"}:
+        raise ValueError("Local schema backfill flag is invalid")
+    if backfill_enabled == "1" and (
+        schema_enabled != "1"
+        or scan_enabled != "1"
+        or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_SCHEMA_CONFIRM_ENABLED") != "1"
+    ):
+        raise ValueError("Local schema backfill requires explicitly confirmed isolated DEV")
+    if backfill_enabled == "1" and _path_env(
+        "ODYSSEY_VAULT_ROOT", "/data/odyssey/vault"
+    ).resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
+        raise ValueError("Local schema backfill cannot target protected PROD storage")
+    semantic_enabled = os.environ.get("ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED", "0")
+    if semantic_enabled not in {"0", "1"}:
+        raise ValueError("Semantic schema backfill flag is invalid")
+    if semantic_enabled == "1" and (
+        backfill_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Semantic schema backfill requires approved isolated DEV backfill")
+    if semantic_enabled == "1" and not os.environ.get("OPENAI_API_KEY"):
+        raise ValueError("Semantic schema backfill provider is unavailable")
+    raw_call_limit = os.environ.get("ODYSSEY_SCHEMA_SEMANTIC_CALL_LIMIT", "")
+    if semantic_enabled == "1" and (
+        not raw_call_limit.isascii()
+        or not raw_call_limit.isdecimal()
+        or not 1 <= int(raw_call_limit) <= 36
+    ):
+        raise ValueError("Semantic schema backfill requires a bounded host call allowance")
+    # Reject an accidental PROD assistant request *before* touching roots.
+    suggestion_enabled = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
+    if suggestion_enabled not in {"0", "1"}:
+        raise ValueError("Schema assistant flag is invalid")
+    if suggestion_enabled == "1" and (
+        schema_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Schema assistant requires isolated DEV user registry")
     if schema_enabled == "0":
         return _build_runtime_from_environment_unlocked()
     if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV":
@@ -2848,14 +3311,34 @@ def build_runtime_from_environment() -> RuntimeComposition:
         raise ValueError("DEV user schema cannot access production storage")
     if state_root.is_symlink():
         raise ValueError("User schema state root must not be a symlink")
+    # Provider import and construction must fail BEFORE local state is touched.
+    # The public Notes API cannot enable this adapter or supply a model.
+    semantic_interpreter = None
+    if semantic_enabled == "1":
+        from .schema_backfill_interpreter import SemanticPropertyInterpreter
+
+        semantic_interpreter = SemanticPropertyInterpreter(
+            OpenAIConversationGateway.from_environment()
+        )
     # Legacy composition creates the pending root later, but the schema lease
     # needs the state parent now on a first DEV boot.
     state_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     with UserSchemaRegistry.bootstrap_lease(state_root):
-        return _build_runtime_from_environment_unlocked()
+        kwargs = (
+            {"schema_backfill_interpreter": semantic_interpreter}
+            if semantic_interpreter is not None
+            else {}
+        )
+        if semantic_interpreter is not None:
+            kwargs["schema_backfill_call_limit"] = int(raw_call_limit)
+        return _build_runtime_from_environment_unlocked(**kwargs)
 
 
-def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
+def _build_runtime_from_environment_unlocked(
+    *,
+    schema_backfill_interpreter: object | None = None,
+    schema_backfill_call_limit: int | None = None,
+) -> RuntimeComposition:
     """Build the production Core composition from environment-owned configuration.
 
     Returns:
@@ -2893,7 +3376,38 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     schema = compose_application_schema(base_schema, application_schema_extensions)
     user_schema_registry = None
     user_schema_revision = None
+    schema_activation_enabled = False
+    schema_suggestion_service = None
+    schema_scan_factory = None
+    schema_backfill_factory = None
+    backfill_flag = os.environ.get("ODYSSEY_SCHEMA_BACKFILL_ENABLED", "0")
+    if backfill_flag not in {"0", "1"}:
+        raise ValueError("Local schema backfill flag is invalid")
+    if backfill_flag == "1" and (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED") != "1"
+        or os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED") != "1"
+        or os.environ.get("ODYSSEY_SCHEMA_CONFIRM_ENABLED") != "1"
+    ):
+        raise ValueError("Local schema backfill requires explicitly confirmed isolated DEV")
+    if backfill_flag == "1" and vault_root.resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
+        raise ValueError("Local schema backfill cannot target protected PROD storage")
+    scan_flag = os.environ.get("ODYSSEY_SCHEMA_SCAN_ENABLED", "0")
+    if scan_flag not in {"0", "1"}:
+        raise ValueError("Local schema scan flag is invalid")
+    if scan_flag == "1" and (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED") != "1"
+    ):
+        raise ValueError("Local schema scan requires isolated DEV user registry")
+    suggestion_flag = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
+    if suggestion_flag not in {"0", "1"}:
+        raise ValueError("Schema assistant feature flag is invalid")
     user_schema_flag = os.environ.get("ODYSSEY_USER_SCHEMA_ENABLED", "0")
+    if suggestion_flag == "1" and (
+        user_schema_flag != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Schema assistant requires isolated DEV user registry")
     if user_schema_flag not in {"0", "1"}:
         raise ValueError("User schema registry flag is invalid")
     if user_schema_flag == "1":
@@ -2904,11 +3418,53 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         user_schema_registry = UserSchemaRegistry(
             state_root, base_schema, application_schema_extensions
         )
+        # The caller holds the exclusive bootstrap generation lease before
+        # any shared indexes are read/written. Recovery also handles a process
+        # failure after the browser's approval was durably accepted.
+        user_schema_registry.activate_pending_at_boot()
         user_schema_revision, schema = user_schema_registry.snapshot()
+        confirmation_flag = os.environ.get("ODYSSEY_SCHEMA_CONFIRM_ENABLED", "0")
+        if confirmation_flag not in {"0", "1"}:
+            raise ValueError("Schema confirmation flag is invalid")
+        schema_activation_enabled = confirmation_flag == "1"
+        if suggestion_flag == "1":
+            from .schema_suggestion import SchemaSuggestionService
+
+            schema_suggestion_service = SchemaSuggestionService(
+                OpenAIConversationGateway.from_environment()
+            )
     # Runtime keeps this per-boot validated snapshot. An authenticated, atomic
     # UI publication/hot-reload boundary is deliberately NOT available yet.
 
     repository = VaultRepository(vault_root)
+    if scan_flag == "1":
+        from odyssey_core.schema_retrospection_jobs import LocalSchemaScanJobs
+
+        def schema_scan_factory(actor_id: str) -> LocalSchemaScanJobs:
+            return LocalSchemaScanJobs(
+                state_root=state_root, repository=repository, actor_id=actor_id
+            )
+
+    if backfill_flag == "1":
+        if vault_root.resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
+            raise ValueError("Local schema backfill cannot touch PROD storage")
+        from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill
+
+        from .schema_backfill_jobs import LocalBackfillJob
+
+        deterministic_writer = AutomaticPropertyBackfill(
+            repository=repository, schema=schema, history=GitHistoryRecorder(vault_root)
+        )
+
+        def schema_backfill_factory(actor_id: str) -> LocalBackfillJob:
+            return LocalBackfillJob(
+                state_root=state_root,
+                repository=repository,
+                writer=deterministic_writer,
+                actor_id=actor_id,
+                on_updated=lambda note_id: index_refresh_coordinator.schedule_backfill((note_id,)),
+            )
+
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
         if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or not light_source_enabled:
             raise ValueError("Isolated embedding experiment requires DEV light source")
@@ -5363,6 +5919,12 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         canonical_schema=schema,
         user_schema_registry=user_schema_registry,
         user_schema_revision=user_schema_revision,
+        schema_activation_enabled=schema_activation_enabled,
+        schema_suggestion_service=schema_suggestion_service,
+        schema_scan_factory=schema_scan_factory,
+        schema_backfill_factory=schema_backfill_factory,
+        schema_backfill_interpreter=schema_backfill_interpreter,
+        schema_backfill_call_limit=schema_backfill_call_limit,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

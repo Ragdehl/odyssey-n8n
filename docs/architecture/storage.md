@@ -17,6 +17,24 @@ Git repository
 
 The Git repository and personal data are intentionally separate. `/home/ragdehl/projects/odyssey` contains code and documentation; `/data/odyssey` contains persistent personal/operational data and is not committed.
 
+## Device-private mobile target versus current Raspberry layout
+
+The paths shown below are the **current Raspberry deployment**, not required paths or a remote backend for a mobile installation. For a phone, the same roles are rooted in the application's own private device storage, **per local profile**:
+
+```text
+private-device-app-data/profile-A/
+  vault/       <- authoritative user Markdown; available offline
+  state/       <- on-device durable non-knowledge records, including scan checkpoints
+  runtime/     <- disposable indexes, never the only copy of Notes
+
+private-device-app-data/profile-B/
+  vault/
+  state/
+  runtime/
+```
+
+All local note operations must be independent of remote login or future sync. An optional online account can select an isolated profile for synchronization without transferring canonical authority to a server. Do not synchronize machine-local SQLite indexes, retrospective cursors, locks, or stat/inode fingerprints as canonical state: they should be re-derived on another device after canonical Markdown synchronization. A device replacement/import may require a fresh scan. The portable Core must be usable through a local embedded host rather than requiring n8n/Cloudflare; deployment packaging and offline UI verification remain future work.
+
 ## Host/container mapping
 
 The Raspberry deployment exposes the approved data root to n8n at `/odyssey`:
@@ -47,6 +65,8 @@ Production semantic writes flow through Core materialization/persistence rather 
 Phase 17B established `state/pending/` for durable incomplete work. Pending records preserve actionable evidence without becoming Markdown notes or a second knowledge source.
 
 Future durable workflow state should use this boundary only when it cannot be rebuilt and when the semantics are clearly non-canonical.
+
+Los diarios de enriquecimiento local en state/schema-backfill-jobs/ conservan solo IDs, rutas, hashes, revisiones y progreso, no el contenido de hechos. Sus JSON incorporan HMAC local para detectar corrupción de estado; una clave de 32 bytes vive en el perfil del dispositivo y no se sincroniza. Las actualizaciones de propiedades vía Core verifican el hash físico justo antes de sustituir Markdown y serializan escritores POSIX cooperantes por directorio; historial Git y readback siguen validando el resultado. Se generan antes de cambiar Markdown y se reanudan mediante Core/E3 y evidencia Git. Son específicos del dispositivo y no se sincronizan. Véase [contrato de diario reanudable](schema-backfill-journal-v1-20261026.md).
 
 UI-0 conversation state is durable presentation/operational state, not factual memory. Each user
 conceptually owns a local vault/state root. In hosted deployments, authenticated identity selects

@@ -1,0 +1,115 @@
+# Odyssey — próximas capacidades propuestas (25-10-2026)
+
+**Estado:** ideas de producto expresamente solicitadas por el usuario, recogidas para las **siguientes fases próximas**, no funcionalidades ya desarrolladas ni permiso para modificar datos reales. Preservar los acuerdos aunque se cambie de chat. Propietario de prioridad: este documento, enlazado desde `functional-roadmap.md`. Las implementaciones deben completar primero su contrato y pruebas de extremo a extremo desde la app, no solo un prompt en pruebas.
+
+## Principio de entrega: móvil local primero (26-10-2026)
+
+El objetivo del producto es una **app instalable que ejecuta Odyssey en el móvil del usuario**, con notas Markdown canónicas y estado del perfil guardados en el almacenamiento privado del dispositivo. Lectura, creación y edición locales básicas deben poder funcionar sin conexión y sin cuenta remota. La aplicación actual de navegador+n8n+Raspberry **no** cumple todavía ese objetivo: es el puente de desarrollo. Adaptación/paquetización Android/iOS, ciclos de vida de procesos, almacenamiento local protegido, backup/exportación y ensayos reales offline son hitos de producto antes de llamarla app móvil lista. Una funcionalidad de IA que necesite proveedor externo se indicará como tal; no afirmar inferencia offline sin modelo embebido validado.
+
+La **sincronización online será una opción posterior, no un prerrequisito**. Un perfil local selecciona `vault/state/runtime` aislados y mantiene Markdown como autoridad; una cuenta autenticada opcional podrá mapear a ese perfil para sincronizar con conflictos explícitos, sin convertir el servidor en base de conocimiento obligatoria. No sincronizar progreso de scans, locks, índices o fingerprints inode/stat locales. Este requisito condiciona las siguientes funcionalidades (incluidos recordatorios), pero no cambia por sí solo el orden funcional acordado. Contrato: [arquitectura local-first](overview.md#mobile-local-first-product-target-approved-26-october-2026).
+
+## Prioridad transversal inmediata — registrar conocimiento general y aclarar destinos ambiguos (27-10-2026)
+
+**Estado:** problema real observado en DEV, propuesto por el usuario y confirmado como
+riesgo arquitectónico por auditoría independiente del commit de Events `bef3191`.
+**NO implementado** como funcionalidad general, ni permiso de migración, cambio de
+esquema, fusión o despliegue. Es deuda de fiabilidad/UX de las capacidades actuales,
+no una nueva App ni sustitución silenciosa del orden Recordatorios → Location → Gantt.
+
+**Principio:** una afirmación útil no deja de ser conocimiento porque el Router no
+encuentre una App específica. Mantener como opción primaria el recorrido genérico de
+hechos Core/Writer/E3 —que ya existe— para afirmaciones que puedan representarse y
+relacionarse sin inventar identidades, propiedades o acciones. Events gestiona
+ocurrencias con semántica de calendario; Tasks, acciones; las Apps no son el único
+modo de escribir Markdown. El Router no puede convertir una simple fecha en
+autorización para calendarizar.
+
+**Si falta una decisión de intención o de destino**, ofrecer una aclaración corta
+y accionable con opciones fundamentadas en la fuente y en notas verificadas, por
+ejemplo «Manu vendrá el 16: ¿lo guardo como dato sobre Manu o como visita en
+Calendario?». No hacer preguntas cuando el hecho y destino estén suficientemente
+claros ni repetir el mismo interrogatorio por cada mensaje. Conservar la frase
+original en estado *pendiente* durable por actor/conversación/entrega, distinguir
+ese estado de «guardado como nota canónica» y continuar tras la selección con
+Core/E3, CAS, idempotencia y lectura posterior; nunca lanzar dos escrituras al
+resolver la aclaración. Si no existe representación segura, decir por qué y
+permitir conservar la fuente sin clasificarla engañosamente; decidir con producto
+si ese último recurso es un borrador explícito o una nota general confirmada.
+
+**Errores con evidencia, no excusas genéricas:** distinguir `no interpretado`,
+`función no disponible`, `destino ambiguo`, `ausencia de escritura
+atestiguada`, `escritura parcial`, `resultado de escritura desconocido` y
+`fallo técnico`. Solo Core/runtime deben afirmar qué se escribió; el mensaje
+del asistente no deriva certeza de la ausencia de IDs ni de un gráfico. El error
+específico Events actual tiene defectos bloqueantes de prueba/estado y debe
+repararse con contrato transversal, no con otra excepción en `workflows`.
+
+**Escenarios mínimos de aceptación:** «me gusta la pintura», «quizá cambie de
+trabajo», «la reunión fue un desastre», «Manu vendrá el 16», «apunta en el
+calendario la visita de Manu», «recuérdame escribirle», dos hechos independientes,
+una fecha negativa o contradictoria, persona homónima y ruta desconocida.
+Verificar con modelo real y la app DEV (móvil/escritorio) los 0/1/N hechos,
+clarificación o registro general correcto, persistencia original/pending,
+lectura y búsqueda, calendario solo si procede, links, gráfico, reload, replay
+sin duplicaciones, mensajes y coste/p95. No añadir una llamada GPT
+incondicional por cada rechazo; usar la señal original del Router y recuperación
+acotada. La decisión sobre el **destino por defecto de una visita futura
+declarativa** requiere validar contrato de producto, no hacer que Events
+absorba silenciosamente todos los hechos fechados.
+
+**Auditoría puntual:** cuatro roles ejecutados sobre `4db42bc..bef3191`:
+Generalidad **FAIL** (calendario sin intención y error específico), Calidad
+**FAIL** (certeza de escritura no atestiguada y fixture inválido), Pruebas
+**BLOCKED** (incluido estado incorrecto sin guía C4 y Access externo no
+verificado), Rendimiento **PASS** solo sin regresión visible en el diff,
+**sin** medición nueva de p50/p95. No son cuatro aprobaciones del cambio ni
+de toda la PR #156. Conservar recibos de auditoría y separar reparaciones
+de código del contrato de producto futuro.
+
+## Orden acordado
+
+**1. Recordatorios (primera nueva funcionalidad) → 2. Ubicación como tipo de propiedad transversal → 3. Proyectos con vista Gantt.** La UX es una línea transversal inmediata para todas esas fases. Concluir el editor/revisión final de esquemas ya en marcha sin convertir perfecciones menores del prompt en un bloqueo indefinido.
+
+## 1. Recordatorios — primera prioridad
+
+**Intención.** Los recordatorios deben ser una **función integrada de Odyssey**, no un plugin o servicio externo. Funcionan como conocimiento estructurado del sistema, próximo a una Note tipada, pero con ciclo de activación/aviso. Pueden estar relacionados con **cero, una o varias** notas/entidades, del **mismo o de distintos tipos**: `Task`, `Person`, `Project`, `Event`, `Document` u otros. No exigir tener una tarea: «Recuérdame preguntarle a Ana por su viaje» es un recordatorio relacionado con una persona; «Recuérdame revisar el contrato del proyecto Atlas» puede enlazar documento + proyecto + tarea.
+
+**Propuesta técnica inicial (validar antes de implementar):** una App nativa `Reminders`, con identidad/representación de recordatorio aprovechando el contrato aditivo de tipos de nota y las relaciones Core/E3 existentes. Programación explícita de cuándo avisar, zona horaria y, más adelante, recurrencia. Estados mínimos pendientes/avisado/pospuesto/cerrado/cancelado, con eventuales nombres finales definidos por el contrato, sin duplicar el ciclo de vida de Task. Tareas con fecha límite y recordatorios son conceptos distintos, aunque pueden vincularse. Las notificaciones o avisos deben ser **reales**, no solamente un campo de fecha almacenado: primero definir mecanismo fiable de entrega en la aplicación y reintentos/idempotencia (también tras reinicios), y decidir posteriormente canal externo/push con consentimiento, no presuponerlo.
+
+**MVP sugerido:** crear por Chat y desde Note, editar/cancelar/posponer, listado «Próximos» y «Pendientes», vincular varias entidades con sus backlinks, disparo único por ocurrencia, vista/acción al abrir el aviso. Historias de prueba: (a) «recuérdame llamar a mi padre el martes» vinculable a Person; (b) «avísame de revisar la tarea y el documento del proyecto» con 3 entidades; (c) al posponer no crear otro recordatorio ni perder relaciones; (d) reinicio/reintento no dispara avisos duplicados; (e) lenguaje ambiguo o fecha sin zona horaria no inventa precisión ni causa alertas inesperadas.
+
+**Límites aún por decidir:** el canal de aviso fuera de la aplicación, permisos del dispositivo y política de repetición; no introducir silenciosamente un servicio cloud. Reutilizar el contrato temporal, Task, Events y Core; evitar nuevo scheduler/infra si ya existe mecanismo fiable reutilizable.
+
+## 2. `location` — tipo de propiedad semántica, **no** tipo de nota obligatorio
+
+**Intención.** Un valor de propiedad reutilizable `location` / `place_ref`, tan genérico como `string`, `date` o `integer`, para personas, viviendas, empresas, eventos y cualquier tipo de nota que tenga propiedades espaciales. No requerir coordenadas GPS: «Barcelona», «Sant Andreu» o «España» son referencias semánticas válidas.
+
+**Propuesta de representación:**
+
+- Un `LocationValue` de Core conserva el **texto original**, una referencia opcional a un **lugar identificado de manera estable**, su granularidad (país, región, provincia, ciudad, distrito/barrio, dirección o lugar concreto), la fuente/evidencia y el estado resuelto/ambiguo/literal. Separar la definición del **tipo de dato** del eventual catálogo de lugares; no obligar a crear una Note por cada ubicación geográfica.
+- Relación espacial verificable `part_of` / `within` como **grafo acíclico dirigido** de lugares con **ancestros** consultables: p. ej. `Sant Andreu (distrito de Barcelona) → Barcelona (ciudad) → Cataluña → España`. No inventar ese árbol solo porque coincida una cadena; podrá nutrirse de fuentes geográficas verificadas, datos explícitos del usuario o catálogos curados, con procedencia. Coordenadas/geocodificación optativas para mapas/distancia, no requisito para consultas semánticas.
+- El rol de una ubicación es otra dimensión: `residence`, `work_location`, `birthplace`, `located_at`, `event_location`, etc. No interpretar cualquier lugar mencionado como «vive allí». Mantener el sujeto de cada afirmación: «mis padres viven en Barcelona» se refiere a **mis padres**, mientras que «yo vivo en Sant Andreu» se refiere a **mí**; no transferir la segunda localización a mis padres.
+- Cuando la ubicación de **la misma persona/casa** se precisa de «Barcelona» a «Sant Andreu (Barcelona)», enlazar/refinar la ubicación **sin perder su inclusión en Barcelona/España**. Guardar historial temporal si se trata de una **mudanza** real, en lugar de borrar una residencia anterior; fechas desconocidas permanecen desconocidas.
+- Filtros de consultas espaciales (`vive en España`, `vive en Barcelona`) expanden a **descendientes de lugares canónicos** para el rol pertinente; no aplican automáticamente a lugares ambiguos o literales, no hacen inferencias globales sin evidencia. Múltiples regiones/hierarquías administrativas posibles requieren modelado no forzado de árbol único; resolver ambigüedades como Barcelona ciudad/provincia, Sant Andreu varios lugares, país y homónimos.
+
+**Ejemplo de consulta esperado:** una persona con residencia validada `Sant Andreu (Barcelona)` satisface búsquedas de residentes en `Barcelona` y en `España`. Una persona con residencia confirmada solo en `Barcelona` también satisface `España`. «Está de vacaciones en Barcelona» **no** la convierte en residente. Opcionalmente la UI podrá mostrar el camino «Sant Andreu › Barcelona › Cataluña › España» y la procedencia de la relación.
+
+**Compatibilidad:** hoy el esquema solo soporta tipos de propiedad registrados y `Project` ya es un tipo Note existente; `location` requerirá **extender la validación, filtros y consultas de Core** con compatibilidad retroactiva, persistencia/versionado y tests generales. No crear ahora un plugin de mapas ni una Note `Place` automática como prerrequisito. Si más adelante se desea guardar datos propios sobre una ciudad, podrá existir una Note referenciada, pero el valor `location` no depende de ella.
+
+## 3. Proyectos — función nativa y vista de planificación
+
+**Estado de partida verificado:** `config/note-schema.json` ya incluye el tipo de nota canónico **`project` (`Project`)**. No duplicar `Project` al construir la UI: convertir la entidad existente en una capacidad nativa con su propia vista, como Task y Event.
+
+**Funcionalidad buscada:** página de proyecto con descripción/progreso, tareas y subtareas relacionadas, responsables enlazados a notas Person, duraciones estimadas (si las hay), fechas planificadas/reales, dependencias entre tareas, hitos y enlaces a documentos/Eventos/Work Sessions. **Vista Gantt** usable, donde se distingan tareas sin estimación o sin fecha de tareas programadas, conexiones de dependencias y responsables; lista/tabla accesible como alternativa cuando el gráfico no sea apropiado.
+
+**Criterios de robustez:** dependencias explícitas con identidad verificada y **detección de ciclos**; ausencia de estimación **no** inventa horas/duración; un responsable desconocido no se asigna por suposición; duraciones de Work Sessions reales no sustituyen silenciosamente las estimaciones; cálculo de ruta crítica o reprogramación automática queda para fases posteriores. Reutilizar Core/E3, relaciones y Task/WorkSession/Calendar existentes, sin crear otro sistema paralelo de tareas.
+
+**Ejemplo:** «Proyecto reformar la cocina; pintar antes de montar los armarios; Juan se ocupa del montaje, calculo dos días» debe mostrar ambas tareas ordenadas por su dependencia, el responsable de la segunda y la estimación de dos días **solo** para montaje, nunca para pintura.
+
+## UX transversal — mejora visual y facilidad de uso
+
+Usar primero las skills oficiales existentes **Anthropic `frontend-design`** (composición, tipografía, paleta y dirección visual) y **Vercel `web-design-guidelines`** (accesibilidad, controles, estados, interacción). La skill local `odyssey-ux` coordina ambas adaptadas al código actual, sin instalar un framework ni rediseñar pantallas a ciegas. Ver [UX skills](../../.codex/skills/odyssey-ux/SKILL.md). En cada feature, probar mediante Chromium real en escritorio y móvil, contraste, teclado/foco, textos, estados vacíos, errores y finalización desde la perspectiva de un usuario sin conocimientos técnicos.
+
+**Primeros hallazgos de auditoría de código (no aceptación visual):** siguiendo las reglas públicas actuales de Vercel, `odyssey_web/schema-model.js:242-247` cierra el diálogo por Escape pero no evidencia una trampa/restauración de foco; verificar Tab y retorno al botón que lo abrió en Chromium real, no declararlo resuelto por ver `aria-modal`. `odyssey_web/styles.css:650-651` usa instrucciones de 0,75 rem y botones de 2,4 rem: probar legibilidad y objetivos táctiles en pantalla estrecha antes de modificar estilos. No son cambios ya aplicados ni bloqueos para desarrollar Recordatorios.
+
+**Prioridad de ejecución:** UX disponible inmediatamente como norma de trabajo; desarrollo funcional **primero recordatorios**, **después location**, **después Projects/Gantt** salvo que nuevas dependencias verificadas justifiquen ajustar la secuencia con conocimiento del usuario. Estas son propuestas guardadas, **no implementaciones entregadas**.

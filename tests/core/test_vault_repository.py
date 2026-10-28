@@ -369,6 +369,23 @@ class BulkPhysicalVersionProofTests(unittest.TestCase):
         (self.repo.root / "deep/b.md").unlink()
         assert len(self.repo.note_version_snapshot()) == 1
 
+    def test_large_physical_snapshot_matches_schema_capacity_and_fails_closed(self):
+        # A small patched limit tests the exact boundary, not a huge fixture
+        # in ordinary pytest. The separate Pi benchmark covers real 50k files.
+        from odyssey_core.schema_retrospection import _MAX_STAGED_SCAN_IDS
+        from odyssey_core.storage import repository as storage_source
+
+        assert storage_source.MAX_PHYSICAL_VERSION_PATHS == _MAX_STAGED_SCAN_IDS == 50_000
+        (self.repo.root / "first.md").write_text("one", encoding="utf-8")
+        (self.repo.root / "second.md").write_text("two", encoding="utf-8")
+        (self.repo.root / "external.md").symlink_to(self.repo.root / "first.md")
+        with patch.object(storage_source, "MAX_PHYSICAL_VERSION_PATHS", 2):
+            assert len(self.repo.note_version_snapshot()) == 2
+            (self.repo.root / "third.md").write_text("three", encoding="utf-8")
+            with self.assertRaisesRegex(VaultAccessError, "bounded capacity"):
+                self.repo.note_version_snapshot()
+        assert len(self.repo.note_version_snapshot()) == 3
+
     def test_bulk_scan_never_follows_external_or_internal_symlink(self):
         self.repo.create_text("a.md", "in")
         external = Path(self.temp.name) / "outside.md"
@@ -377,3 +394,103 @@ class BulkPhysicalVersionProofTests(unittest.TestCase):
         (self.repo.root / "linked-dir").symlink_to(external.parent, target_is_directory=True)
         assert list(self.repo.note_version_snapshot()) == ["a.md"]
         assert list(self.repo.list_markdown_paths()) == ["a.md"]
+
+
+def test_local_git_history_is_not_scanned_as_canonical_markdown(tmp_path):
+    import pytest
+
+    from odyssey_core.storage import InvalidNotePath, VaultRepository
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "note.md").write_text("canonical\n", encoding="utf-8")
+    git = vault / ".git"
+    git.mkdir()
+    (git / "README.md").write_text("not a canonical note\n", encoding="utf-8")
+    (git / "objects").mkdir()
+    (git / "objects" / "internal.md").write_text("still Git metadata\n")
+    repo = VaultRepository(vault)
+    assert repo.list_markdown_paths() == ["note.md"]
+    first = repo.note_version_snapshot()
+    assert set(first) == {"note.md"}
+    # Changing .git internals cannot make the user Note inventory stale.
+    for index in range(10):
+        (git / "objects" / f"temporary-{index}").write_text(str(index))
+        assert repo.note_version_snapshot() == first
+    with pytest.raises(InvalidNotePath):
+        repo.read_text(".git/README.md")
+
+
+def test_conditional_replace_refuses_same_revision_body_change(tmp_path):
+    import hashlib
+
+    import pytest
+
+    from odyssey_core.storage import NoteContentConflictError, VaultRepository
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    path = vault / "same-revision.md"
+    initial = "Revision: 3\nOriginal literal evidence\n"
+    edited = "Revision: 3\nThe user corrected the evidence\n"
+    path.write_text(initial)
+    repo = VaultRepository(vault)
+    expected = hashlib.sha256(initial.encode()).hexdigest()
+    path.write_text(edited)
+    with pytest.raises(NoteContentConflictError):
+        repo.replace_text("same-revision.md", "overwrite\n", expected_source_hash=expected)
+    assert path.read_text() == edited
+    with pytest.raises(ValueError, match="SHA-256"):
+        repo.replace_text("same-revision.md", "overwrite\n", expected_source_hash="bad")
+    current_hash = hashlib.sha256(edited.encode()).hexdigest()
+    repo.replace_text("same-revision.md", "accepted\n", expected_source_hash=current_hash)
+    assert path.read_text() == "accepted\n"
+
+
+def test_conditional_writers_are_serialized_across_repository_instances(tmp_path, monkeypatch):
+    import hashlib
+    import threading
+
+    from odyssey_core.storage import NoteContentConflictError, VaultRepository
+    from odyssey_core.storage import repository as module
+
+    root = tmp_path / "vault"
+    root.mkdir()
+    file = root / "shared.md"
+    file.write_text("old\n")
+    expected = hashlib.sha256(b"old\n").hexdigest()
+    first = VaultRepository(root)
+    second = VaultRepository(root)
+    acquired = threading.Event()
+    release = threading.Event()
+    results = []
+    original_replace = module.os.replace
+
+    def hold_first_replace(src, dst):
+        if threading.current_thread().name == "first_writer":
+            acquired.set()
+            assert release.wait(5), "First writer did not receive release"
+        return original_replace(src, dst)
+
+    monkeypatch.setattr(module.os, "replace", hold_first_replace)
+
+    def write(repository, text):
+        try:
+            repository.replace_text("shared.md", text, expected_source_hash=expected)
+            results.append((text, "written"))
+        except NoteContentConflictError:
+            results.append((text, "stale"))
+
+    t1 = threading.Thread(target=write, args=(first, "first\n"), name="first_writer")
+    t2 = threading.Thread(target=write, args=(second, "second\n"), name="second_writer")
+    t1.start()
+    assert acquired.wait(5)
+    t2.start()
+    t2.join(timeout=0.04)
+    assert t2.is_alive(), "Second writer must block on the common directory lock"
+    release.set()
+    t1.join(5)
+    t2.join(5)
+    assert not t1.is_alive() and not t2.is_alive()
+    assert sorted(results) == [("first\n", "written"), ("second\n", "stale")]
+    assert file.read_text() == "first\n"

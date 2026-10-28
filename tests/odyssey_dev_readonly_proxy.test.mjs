@@ -6,7 +6,7 @@ import {startReadonlyDevProxy} from "../scripts/odyssey_dev_readonly_proxy.mjs";
 test("DEV browser inspection accepts only explicitly read-only API operations",()=>{
  const allowed={
   "/api/conversation":["main","progress"],
-  "/api/notes":["query","capabilities","detail","backlinks"],
+  "/api/notes":["query","capabilities","detail","backlinks","schema_status"],
   "/api/calendar":["month","day","schedule"]
  };
  for(const [endpoint,operations] of Object.entries(allowed)){
@@ -23,6 +23,11 @@ test("DEV browser inspection accepts only explicitly read-only API operations",(
   for(const operation of ops)
     assert.equal(approvedRead(endpoint,"POST",{operation}),false,`${endpoint}/${operation}`);
  }
+ assert.equal(approvedRead("/api/notes","POST",{operation:"schema_status",request_id:"synthetic"}),false);
+ assert.equal(approvedRead("/api/notes","POST",{operation:"schema_status",change:{}}),false);
+ assert.equal(approvedRead("/api/notes","POST",{operation:"schema_confirm"}),false);
+ assert.equal(approvedRead("/api/notes","POST",{operation:"schema_preview"}),false);
+ assert.equal(approvedRead("/api/notes","POST",{operation:"schema_suggest"}),false);
  assert.equal(approvedRead("/api/notes","GET",{operation:"detail"}),false);
  assert.equal(approvedRead("/api/notes","POST",{operation:"detail",write:true}),false);
  assert.equal(approvedRead("/api/notes","POST",{operation:"detail",events:[]}),false);

@@ -239,3 +239,15 @@ def test_gate_create_rejects_a_stale_parent_before_the_executor(tmp_path: Path) 
             should_not_run,  # type: ignore[arg-type]
         )
     assert not called
+
+
+def test_derived_sqlite_inventory_cannot_authorize_mutation_target(tmp_path: Path) -> None:
+    """Only canonical-parse identity proofs may accelerate a mutation gate."""
+    from odyssey_core.verified_metadata_catalog import scoped_verified_metadata_catalog
+
+    repo, schema, raw = _build(tmp_path)
+    repo.create_text("duplicate.md", repo.read_text("person.md"))
+    with scoped_verified_metadata_catalog(index_path=str(tmp_path / "forged.sqlite3")):
+        with pytest.raises(CanonicalMutationError, match="TARGET_UNAVAILABLE"):
+            CanonicalMutationGate(repo, schema, None).prepare(_command(raw))
+    assert repo.read_text("person.md") == raw

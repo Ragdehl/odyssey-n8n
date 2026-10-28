@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
+import hmac
 import os
 import stat
 import tempfile
@@ -14,6 +17,10 @@ from pathlib import Path, PurePosixPath
 _REQUEST_READ_MAX_BYTES = 8 * 1024 * 1024
 _REQUEST_READ_MAX_NOTES = 4096
 _REQUEST_PATH_LIST_MAX_NOTES = 20_000
+# Upper bound for the *physical version inventory*, not the smaller per-request
+# path-list cache or the 10k mutation journal. Schema's large read-only scan
+# must use the same single authoritative finite cap (issue #160).
+MAX_PHYSICAL_VERSION_PATHS = 50_000
 
 
 class InvalidNotePath(ValueError):
@@ -26,6 +33,10 @@ class NoteUnavailableError(OSError):
 
 class NoteAlreadyExistsError(OSError):
     """Indicate that create-only storage refused an existing target."""
+
+
+class NoteContentConflictError(ValueError):
+    """Physical Markdown differs from the expected content at replace time."""
 
 
 class VaultAccessError(OSError):
@@ -95,6 +106,29 @@ class VaultRepository:
             status.st_ctime_ns,
         )
 
+    @staticmethod
+    def _stat_version(entry: os.stat_result) -> tuple[int, int, int, int, int]:
+        """Identify a source without access time, which reads may change."""
+        return (entry.st_dev, entry.st_ino, entry.st_size, entry.st_mtime_ns, entry.st_ctime_ns)
+
+    @staticmethod
+    @contextmanager
+    def _serialize_replacements(parent: Path) -> Iterator[None]:
+        """Serialize cooperating Core writers using the physical directory.
+
+        No extra Markdown, lock file or database is introduced. POSIX file
+        locks cannot arbitrate editors that intentionally ignore the lock;
+        a fresh source-hash compare also runs within this critical section.
+        """
+        descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                raise VaultAccessError("Invalid write directory")
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(descriptor)
+
     def _invalidate_request_hints(self, path: str) -> None:
         """Never allow an internal mutation to reuse older request-local evidence."""
         scope = self._request_reads.get()
@@ -151,7 +185,12 @@ class VaultRepository:
             raise InvalidNotePath("Invalid note path")
 
         normalized = PurePosixPath(path)
-        if not normalized.parts or ".." in normalized.parts or normalized.suffix != ".md":
+        if (
+            not normalized.parts
+            or ".." in normalized.parts
+            or ".git" in normalized.parts
+            or normalized.suffix != ".md"
+        ):
             raise InvalidNotePath("Invalid note path")
         return normalized
 
@@ -192,7 +231,11 @@ class VaultRepository:
                 before_directories.append((folder, self._fingerprint(folder)))
                 with os.scandir(folder) as entries:
                     for entry in entries:
-                        if entry.is_symlink():
+                        # Local Git history is operational metadata, never
+                        # a canonical Note. Git can update it while a scan
+                        # runs; do not treat those internal changes as a
+                        # changing Markdown inventory.
+                        if entry.is_symlink() or entry.name == ".git":
                             continue
                         entry_status = entry.stat(follow_symlinks=False)
                         if stat.S_ISDIR(entry_status.st_mode):
@@ -207,7 +250,7 @@ class VaultRepository:
                                 entry_status.st_mtime_ns,
                                 entry_status.st_ctime_ns,
                             )
-                        if len(paths) > 30_000:
+                        if len(paths) > MAX_PHYSICAL_VERSION_PATHS:
                             raise VaultAccessError("Vault version proof exceeds bounded capacity")
             if any(
                 not stat.S_ISDIR(folder.lstat().st_mode) or self._fingerprint(folder) != previous
@@ -338,8 +381,13 @@ class VaultRepository:
         except OSError:
             raise VaultAccessError("Unable to create note") from None
 
-    def replace_text(self, path: str, content: str) -> None:
+    def replace_text(
+        self, path: str, content: str, *, expected_source_hash: str | None = None
+    ) -> None:
         """Atomically replace one existing contained Markdown file with UTF-8 text.
+
+        When a hash is provided, compare actual file bytes again next to the
+        physical os.replace call, not only earlier during Core planning.
 
         Args:
             path: Vault-relative POSIX Markdown path identifying an existing file.
@@ -357,6 +405,12 @@ class VaultRepository:
         relative_path = self._validate_note_path(path)
         if not isinstance(content, str):
             raise TypeError("Note content must be text")
+        if expected_source_hash is not None and (
+            not isinstance(expected_source_hash, str)
+            or len(expected_source_hash) != 64
+            or any(c not in "0123456789abcdef" for c in expected_source_hash)
+        ):
+            raise ValueError("Expected source hash must be lowercase SHA-256")
         try:
             encoded_content = content.encode("utf-8")
         except UnicodeEncodeError:
@@ -380,28 +434,53 @@ class VaultRepository:
         ):
             raise NoteUnavailableError(f"Note is unavailable: {relative_path.as_posix()}")
 
-        temporary_path: str | None = None
-        try:
-            descriptor, temporary_path = tempfile.mkstemp(
-                prefix=f".{target.name}.", suffix=".tmp", dir=parent
-            )
-            with os.fdopen(descriptor, "wb") as temporary_file:
-                temporary_file.write(encoded_content)
-                temporary_file.flush()
-                os.fsync(temporary_file.fileno())
-            os.replace(temporary_path, target)
-            temporary_path = None
-            self._invalidate_request_hints(relative_path.as_posix())
-        except OSError:
-            raise VaultAccessError("Unable to replace note") from None
-        finally:
-            if temporary_path is not None:
-                try:
-                    os.unlink(temporary_path)
-                except FileNotFoundError:
-                    pass
-                except OSError:
-                    pass
+        with self._serialize_replacements(parent):
+            temporary_path: str | None = None
+            try:
+                descriptor, temporary_path = tempfile.mkstemp(
+                    prefix=f".{target.name}.", suffix=".tmp", dir=parent
+                )
+                with os.fdopen(descriptor, "wb") as temporary_file:
+                    temporary_file.write(encoded_content)
+                    temporary_file.flush()
+                    os.fsync(temporary_file.fileno())
+                if expected_source_hash is not None:
+                    # Source/CAS is revalidated at the actual persistence
+                    # boundary, catching same-revision edits during serialization.
+                    # We also verify the inode after reading to reject a path swap.
+                    digest = hashlib.sha256()
+                    descriptor = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+                    with os.fdopen(descriptor, "rb") as previous:
+                        opened = os.fstat(previous.fileno())
+                        if not stat.S_ISREG(opened.st_mode):
+                            raise NoteContentConflictError("Canonical source became unsafe")
+                        for block in iter(lambda: previous.read(65536), b""):
+                            digest.update(block)
+                        if self._stat_version(os.fstat(previous.fileno())) != self._stat_version(
+                            opened
+                        ):
+                            raise NoteContentConflictError(
+                                "Canonical source changed during compare"
+                            )
+                    if self._stat_version(
+                        os.stat(target, follow_symlinks=False)
+                    ) != self._stat_version(opened) or not hmac.compare_digest(
+                        digest.hexdigest(), expected_source_hash
+                    ):
+                        raise NoteContentConflictError("Canonical source changed before replace")
+                os.replace(temporary_path, target)
+                temporary_path = None
+                self._invalidate_request_hints(relative_path.as_posix())
+            except OSError:
+                raise VaultAccessError("Unable to replace note") from None
+            finally:
+                if temporary_path is not None:
+                    try:
+                        os.unlink(temporary_path)
+                    except FileNotFoundError:
+                        pass
+                    except OSError:
+                        pass
 
     def remove_text(self, path: str) -> None:
         """Remove one existing contained Markdown file without following symlinks.
@@ -472,7 +551,7 @@ class VaultRepository:
                     for entry in entries:
                         # Symlinks are excluded entirely: even an in-vault target could be
                         # replaced between discovery and later access by a caller.
-                        if entry.is_symlink():
+                        if entry.is_symlink() or entry.name == ".git":
                             continue
                         if entry.is_dir(follow_symlinks=False):
                             directories.append(Path(entry.path))

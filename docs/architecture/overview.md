@@ -16,6 +16,17 @@ v0 implementation are **not** to be confused with this approved target.
 Canonical Markdown, identity and Writer authority below are unchanged;
 the target is **not implemented or activated** by documentation changes.
 
+## Mobile local-first product target (approved 26 October 2026)
+
+**Target, not today's deployed capability:** Odyssey will run as an installable app **on the user's phone**. Each local profile owns its device-private `vault/` (canonical Markdown), `state/` (durable non-knowledge progress) and `runtime/` (rebuildable cache/index). Creating, reading and editing local notes and other core non-network operations must remain usable without remote hosting, login or an internet connection. Any AI model requiring network access is a separately disclosed optional dependency for that feature; no claim of offline semantic model inference is made until an actual on-device model is validated. A local/manual fallback must preserve access to the user's notes.
+
+- **Current implementation:** the Raspberry-backed Odyssey Online UI/browser, n8n integration and Python runtime execute on the Pi. This is a development/hosted bridge; the browser itself does **not** yet store the canonical vault on the phone, and cannot be called an offline mobile app.
+- **Portable target:** Core, E3 canonical Markdown contracts, note schema and local profile state must not assume server-specific folders, Cloudflare, n8n, a remote user identity or shared infrastructure. Packaging the runtime/UX on Android/iOS is a separate implementation and end-to-end acceptance phase.
+- **Optional future sync:** explicit opt-in replication between independently usable local vaults, with stable Note IDs, version/CAS checks, provenance, conflict handling and permission isolation. Never sync ephemeral scan cursors, locks or local device indexes as though they were canonical knowledge. A remote copy, if later offered, is not the sole source of truth.
+- **User separation:** on-device isolation starts with a locally selected profile/vault/state pair; online authenticated actor scoping can select an equally isolated pair without becoming a login requirement for local access. A plain actor label is not a replacement for an isolated filesystem root.
+
+See [Local Storage Boundary](storage.md) for physical layout and [read-only scan checkpoints](schema-retrospection-reader-20261025.md).
+
 ## System shape
 
 ```text
@@ -169,7 +180,7 @@ See [Local Storage Boundary](storage.md).
 
 ## External orchestration and Odyssey Online
 
-The current standalone product boundary is intentionally thin:
+**Interim Raspberry-hosted implementation, not the mobile offline target above.** The current standalone online boundary is intentionally thin:
 
 ```text
 phone browser

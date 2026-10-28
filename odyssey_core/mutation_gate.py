@@ -144,16 +144,41 @@ class CanonicalMutationGate:
         # Validate provenance here: callers cannot smuggle arbitrary lifecycle
         # metadata through an otherwise direct operation.
         normalize_actor_provenance(command.actor)
+        from .verified_metadata_catalog import (
+            VerifiedCatalogError,
+            verified_mutation_catalog_if_active,
+        )
+
         matches: list[MutationTarget] = []
-        for path in self.repository.list_markdown_paths():
-            try:
-                raw = self.repository.read_text(path)
-                note = parse_note(raw)
-                validate_note(note, self.schema)
-            except (NoteUnavailableError, NoteFormatError, ValueError) as error:
-                raise CanonicalMutationError("TARGET_UNAVAILABLE") from error
-            if note.metadata.get("id") == command.target_id:
-                matches.append(MutationTarget(command.target_id, path, note, self._hash(raw)))
+        try:
+            catalog = verified_mutation_catalog_if_active(self.repository, self.schema)
+        except VerifiedCatalogError as error:
+            raise CanonicalMutationError("TARGET_UNAVAILABLE") from error
+        if catalog is not None:
+            # A complete, physically reverified inventory is a lookup hint.
+            # The exact chosen canonical Markdown is ALWAYS validated and
+            # hashed before any target is authorized for mutation.
+            candidates = catalog.id_candidates(command.target_id)
+            if len(candidates) == 1:
+                path = candidates[0].path
+                try:
+                    raw = self.repository.read_text(path)
+                    note = parse_note(raw)
+                    validate_note(note, self.schema)
+                except (NoteUnavailableError, NoteFormatError, ValueError) as error:
+                    raise CanonicalMutationError("TARGET_UNAVAILABLE") from error
+                if note.metadata.get("id") == command.target_id:
+                    matches.append(MutationTarget(command.target_id, path, note, self._hash(raw)))
+        else:
+            for path in self.repository.list_markdown_paths():
+                try:
+                    raw = self.repository.read_text(path)
+                    note = parse_note(raw)
+                    validate_note(note, self.schema)
+                except (NoteUnavailableError, NoteFormatError, ValueError) as error:
+                    raise CanonicalMutationError("TARGET_UNAVAILABLE") from error
+                if note.metadata.get("id") == command.target_id:
+                    matches.append(MutationTarget(command.target_id, path, note, self._hash(raw)))
         if len(matches) != 1 or matches[0].note.metadata.get("deleted") is True:
             raise CanonicalMutationError("TARGET_UNAVAILABLE")
         target = matches[0]

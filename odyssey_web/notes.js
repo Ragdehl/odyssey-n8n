@@ -1,5 +1,6 @@
 /** In-memory presentation/state controller for the dependency-free Notes application view. */
 import {NotesRequestError, requestNotes} from "./notes-client.js";
+import {createSchemaModel} from "./schema-model.js";
 
 const ACTION_ICONS = Object.freeze({
   chat: ["M21 12a8 8 0 0 1-8 8H7l-4 2 1.3-4.2A8 8 0 1 1 21 12Z"],
@@ -92,6 +93,9 @@ export function mountNotes(root, {
   const filterSheet = document.querySelector("#notes-filter-sheet");
   const filterForm = document.querySelector("#notes-filter-form");
   const filterFields = document.querySelector("#notes-filter-fields");
+  const schemaModel = createSchemaModel({root, endpoint, storage: sessionStorageImpl, onActive: () => {
+    void loadCapabilities().then(() => load({reset: true, mode: "feed"}));
+  }});
 
   function fieldFormat(field) {
     return state.capabilities.fields.find((candidate) => candidate.id === field)?.format ?? null;
@@ -403,7 +407,7 @@ export function mountNotes(root, {
     const toggle = button("", () => toggleGroup(type.id));
     toggle.className = "notes-type-toggle";
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    toggle.append(typeBadge(type.id), document.createTextNode(typeLabel(type.id)));
+    toggle.append(typeBadge(type.id), document.createTextNode(type.name || typeLabel(type.id)));
     const count = document.createElement("span");
     count.className = "notes-type-count";
     count.textContent = String(group.total ?? 0);
@@ -463,17 +467,18 @@ export function mountNotes(root, {
       }
       details.append(properties);
     }
-    const edit = button("Editar tipo", () => {
-      editMessage.hidden = false;
-      edit.setAttribute("aria-expanded", "true");
-    });
-    edit.className = "notes-type-edit-button";
-    edit.setAttribute("aria-expanded", "false");
-    const editMessage = document.createElement("p");
-    editMessage.className = "notes-type-edit-message";
-    editMessage.textContent = "Próximamente · Podrás explicarle a Odyssey qué deseas cambiar y revisar la propuesta antes de confirmarla.";
-    editMessage.hidden = true;
-    details.append(edit, editMessage);
+    if (type.schema_editable === true) {
+      const edit = button("Personalizar tipo", () => {
+        void schemaModel.open({kind: "add-property", type});
+      });
+      edit.className = "notes-type-edit-button";
+      details.append(edit);
+    } else {
+      details.append(Object.assign(document.createElement("p"), {
+        className: "notes-type-edit-message",
+        textContent: "Este tipo está gestionado por Odyssey y no admite propiedades personalizadas.",
+      }));
+    }
     return details;
   }
 
@@ -488,15 +493,12 @@ export function mountNotes(root, {
     const card = document.createElement("section");
     card.className = "notes-create-type-card";
     const control = button("＋ Crear nuevo tipo", () => {
-      message.hidden = false;
-      control.setAttribute("aria-expanded", "true");
+      void schemaModel.open({kind: "new"});
     });
     control.className = "notes-create-type-button";
-    control.setAttribute("aria-expanded", "false");
     const message = document.createElement("p");
     message.className = "notes-create-type-message";
-    message.textContent = "Un tipo nuevo te ayuda a organizar y consultar cosas que comparten información específica, como libros, recetas o plantas. Próximamente Odyssey te ayudará a crearlo hablando con la IA; primero comprobará si puedes reutilizar un tipo existente.";
-    message.hidden = true;
+    message.textContent = "Organiza tus notas a tu manera. Odyssey validará la propuesta antes de cualquier cambio; el asistente conversacional con IA está en desarrollo.";
     card.append(control, message);
     return card;
   }
@@ -1583,7 +1585,8 @@ export function mountNotes(root, {
     renderFilterFields();
     await load({reset: true});
   })();
-  return {state, refresh: () => refreshCurrentList(), showList: returnToList};
+  return {state, refresh: () => refreshCurrentList(), showList: returnToList,
+    openSchemaModel: (options) => schemaModel.open(options)};
 }
 
 function noteRow(note, action) {

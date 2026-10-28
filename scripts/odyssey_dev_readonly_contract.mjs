@@ -2,7 +2,7 @@
 // No authentication, persistence, product mutation or write endpoints.
 export const OPERATIONS = Object.freeze({
   "/api/conversation": Object.freeze(["main", "progress"]),
-  "/api/notes": Object.freeze(["query", "capabilities", "detail", "backlinks"]),
+  "/api/notes": Object.freeze(["query", "capabilities", "detail", "backlinks", "schema_status"]),
   "/api/calendar": Object.freeze(["month", "day", "schedule"]),
 });
 
@@ -14,6 +14,8 @@ export function approvedRead(pathname, method, payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   if (typeof payload.operation !== "string") return false;
   if (!OPERATIONS[pathname].includes(payload.operation)) return false;
+  // Only the empty-payload status read; never forward an actor/request-id or draft.
+  if (payload.operation === "schema_status" && Object.keys(payload).some(k=>k!=="operation")) return false;
   // Never authorize a second mutation hidden in payload fields.
   if (Object.hasOwn(payload, "mutations") || Object.hasOwn(payload, "write") ||
       Object.hasOwn(payload, "action") || Object.hasOwn(payload, "events")) return false;

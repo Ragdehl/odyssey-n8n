@@ -1,0 +1,456 @@
+"""Completed deterministic backfills must never be reopened to enrich old deferrals."""
+
+from __future__ import annotations
+
+import hashlib
+
+import pytest
+
+from odyssey_core.notes import parse_note
+from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
+from odyssey_runtime.schema_backfill_jobs import LocalBackfillJobError
+from odyssey_runtime.schema_semantic_budget import BudgetedSemanticInterpreter, SemanticCallLedger
+from tests.runtime.test_schema_backfill_campaign import campaign, run_to_end, setup
+from tests.runtime.test_schema_backfill_jobs import ACTOR, NOW, advance, job
+from tests.runtime.test_schema_semantic_budget import ProfessionGateway
+
+TYPE = "person"
+PROP = "profesion"
+
+
+def semantic_followup_id(original: str) -> str:
+    return hashlib.sha256(f"semantic-followup-v1:{original}".encode()).hexdigest()[:48]
+
+
+def budgeted(run, gateway, *, cid: str, cap: int = 12):
+    return BudgetedSemanticInterpreter(
+        interpreter=SemanticPropertyInterpreter(gateway),
+        ledger=SemanticCallLedger(worker=run.worker, campaign_id=cid, limit=cap),
+    )
+
+
+def advance_campaign(run, cid, interpreter):
+    return run.advance(
+        campaign_id=cid,
+        type_id=TYPE,
+        property_id=PROP,
+        actor=ACTOR,
+        now=NOW,
+        interpreter=interpreter,
+    )
+
+
+def test_closed_multichild_followup_only_old_deferred_without_touching_original(tmp_path):
+    state, repo, writer = setup(
+        tmp_path,
+        ["Profesión: médica", "Ana trabaja como profesora."] * 3,
+    )
+    run = campaign(state, repo, writer, segment_size=2)
+    run.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    baseline = run_to_end(run)
+    assert baseline[-1]["status"] == "awaiting_ai"
+    assert baseline[-1]["updated"] == 3 and baseline[-1]["deferred"] == 3
+    original_files = {
+        p.name: p.read_bytes() for p in (state / "schema-backfill-jobs").glob("*.json")
+    }
+    original_git_count = repo.read_text("1.md")
+    cid = semantic_followup_id("all-people")
+    staged = run.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    assert staged["total"] == 2 and staged["updated"] == 0
+    assert repo.read_text("1.md") == original_git_count  # stage never writes
+    gateway = ProfessionGateway()
+    adapter = budgeted(run, gateway, cid=cid)
+    for _ in range(15):
+        result = advance_campaign(run, cid, adapter)
+        if result["finished"]:
+            break
+    else:
+        raise AssertionError("Follow-up never sealed its last child")
+    assert result["status"] == "complete"
+    assert result["updated"] == 3 and result["deferred"] == 0 and result["total"] == 3
+    assert gateway.calls == 6 and adapter.ledger.status()["reserved_calls"] == 6
+    for i in range(6):
+        assert parse_note(repo.read_text(f"{i}.md")).metadata["profesion"] == (
+            "médica" if i % 2 == 0 else "profesora"
+        )
+    original_after = {
+        p.name: p.read_bytes()
+        for p in (state / "schema-backfill-jobs").glob("*.json")
+        if p.name in original_files
+    }
+    assert original_after == original_files
+    assert run.status("all-people") == baseline[-1]
+    assert advance_campaign(campaign(state, repo, writer), cid, adapter) == result
+    assert gateway.calls == 6
+
+
+def test_followup_on_closed_legacy_v1_with_own_approved_journals(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = job(state, repo, writer)
+    original.stage(job_id="historial", type_id=TYPE, property_id=PROP)
+    assert advance(original)["status"] == "awaiting_ai"
+    original_path = original._path("historial")
+    original_bytes = original_path.read_bytes()
+    cid = semantic_followup_id("historial")
+    followup = campaign(state, repo, writer)
+    assert (
+        followup.stage_followup(
+            campaign_id=cid,
+            original_id="historial",
+            origin_kind="legacy",
+            type_id=TYPE,
+            property_id=PROP,
+        )["pending"]
+        == 1
+    )
+    gateway = ProfessionGateway()
+    adapter = budgeted(followup, gateway, cid=cid)
+    for _ in range(6):
+        done = advance_campaign(followup, cid, adapter)
+        if done["finished"]:
+            break
+    assert done["updated"] == 1 and done["status"] == "complete"
+    assert gateway.calls == 2
+    assert original_path.read_bytes() == original_bytes
+    assert original.status("historial")["deferred"] == 1
+
+
+def test_stale_original_deferred_source_blocks_followup_without_writing(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."] * 3)
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["deferred"] == 3
+    # Editing a deferred source after the original receipt invalidates its CAS.
+    old = repo.read_text("1.md")
+    (repo.root / "1.md").write_text(old + "\n")
+    cid = semantic_followup_id("all-people")
+    with pytest.raises(LocalBackfillJobError, match="deferred source changed"):
+        original.stage_followup(
+            campaign_id=cid,
+            original_id="all-people",
+            origin_kind="campaign",
+            type_id=TYPE,
+            property_id=PROP,
+        )
+    assert "profesion" not in parse_note(repo.read_text("0.md")).metadata
+
+
+def test_changed_original_signature_blocks_followup_replay(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["status"] == "awaiting_ai"
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    original_parent = original._path("all-people")
+    original_parent.write_text(
+        original_parent.read_text().replace('"finished":true', '"finished":false')
+    )
+    with pytest.raises(LocalBackfillJobError, match="HMAC|Invalid campaign"):
+        original.status(cid)
+
+
+def test_followup_from_other_actor_cannot_use_original_deferred_receipt(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["finished"]
+    other = campaign(state, repo, writer, actor="another-profile")
+    with pytest.raises(LocalBackfillJobError, match="missing|closed source"):
+        other.stage_followup(
+            campaign_id=semantic_followup_id("all-people"),
+            original_id="all-people",
+            origin_kind="campaign",
+            type_id=TYPE,
+            property_id=PROP,
+        )
+
+
+def test_lost_original_terminal_proof_blocks_followup_even_after_staging(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."] * 3)
+    original = campaign(state, repo, writer, segment_size=2)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["finished"]
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    sealed = original._read("all-people")
+    terminal = original._child_id(
+        original.worker.scope,
+        "all-people",
+        sealed["segment_index"],
+        sealed["generation"],
+    )
+    original.worker._path(terminal).unlink()
+    with pytest.raises(LocalBackfillJobError, match="terminal proof journal missing"):
+        original.status(cid)
+    assert "profesion" not in parse_note(repo.read_text("0.md")).metadata
+
+
+def test_future_deferred_source_changed_between_segments_fails_closed(tmp_path):
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."] * 4)
+    original = campaign(state, repo, writer, segment_size=2)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["deferred"] == 4
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    gateway = ProfessionGateway()
+    interpreter = budgeted(original, gateway, cid=cid, cap=8)
+    assert advance_campaign(original, cid, interpreter)["updated"] == 1
+    assert advance_campaign(original, cid, interpreter)["updated"] == 2
+    assert gateway.calls == 4
+    previous = repo.read_text("2.md")
+    (repo.root / "2.md").write_text(previous + "\n")
+    # The next child must verify the exact original version; no charge/write.
+    with pytest.raises(LocalBackfillJobError, match="deferred source changed"):
+        advance_campaign(original, cid, interpreter)
+    assert gateway.calls == 4
+    assert "profesion" not in parse_note(repo.read_text("2.md")).metadata
+
+
+def test_crash_during_reserved_model_call_restarts_without_rebill_or_stranding(tmp_path):
+    """Power loss after signed pre-call reservation is a deferred, not a retry loop."""
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["deferred"] == 1
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    before = repo.read_text("0.md")
+    orig_parent = original._path("all-people").read_bytes()
+
+    class ExitDuringCall:
+        calls = 0
+
+        def _complete(self, **_kwargs):
+            self.calls += 1
+            raise SystemExit("synthetic process abruptly killed after reservation")
+
+    dead = ExitDuringCall()
+    dying_adapter = budgeted(original, dead, cid=cid, cap=4)
+    with pytest.raises(SystemExit, match="synthetic process"):
+        advance_campaign(original, cid, dying_adapter)
+    assert dead.calls == 1
+    assert dying_adapter.ledger.status()["reserved_calls"] == 1
+    # The HMAC-signed child still contains the interrupted status. _read
+    # safely maps it to pending in memory, so the next advance can pause it.
+    parent = original._read(cid)
+    with original.worker._lock():
+        restarted_row = original.worker._required(
+            original.worker._path(parent["active_segment"]),
+            parent["active_segment"],
+        )["rows"][0]
+    assert restarted_row["status"] == "pending"
+
+    resumed = campaign(state, repo, writer)
+    gateway = ProfessionGateway()
+    adapter = budgeted(resumed, gateway, cid=cid, cap=4)
+    for _ in range(6):
+        done = advance_campaign(resumed, cid, adapter)
+        if done["finished"]:
+            break
+    assert done["finished"] is True
+    assert done["status"] == "awaiting_ai"
+    assert done["deferred"] == 1
+    assert done["updated"] == 0
+    assert adapter.ledger.status()["reserved_calls"] == 1
+    assert gateway.calls == 0  # Never call the provider again for the same ID.
+    assert repo.read_text("0.md") == before
+    assert original._path("all-people").read_bytes() == orig_parent
+    assert advance_campaign(campaign(state, repo, writer), cid, adapter) == done
+
+
+def test_crash_before_reservation_can_safely_use_initial_allowance(tmp_path, monkeypatch):
+    """An uncharged interrupted interpretation can resume with its first call."""
+    from odyssey_runtime.schema_semantic_budget import SemanticCallLedger
+
+    state, repo, writer = setup(tmp_path, ["Ana trabaja como profesora."])
+    original = campaign(state, repo, writer)
+    original.stage(campaign_id="all-people", type_id=TYPE, property_id=PROP)
+    assert run_to_end(original)[-1]["deferred"] == 1
+    cid = semantic_followup_id("all-people")
+    original.stage_followup(
+        campaign_id=cid,
+        original_id="all-people",
+        origin_kind="campaign",
+        type_id=TYPE,
+        property_id=PROP,
+    )
+    actual = SemanticCallLedger.reserve
+
+    def crash_before_reserve(self, note_id, expected_previous_calls):
+        raise SystemExit("pre-reservation synthetic power loss")
+
+    monkeypatch.setattr(SemanticCallLedger, "reserve", crash_before_reserve)
+    with pytest.raises(SystemExit, match="pre-reservation"):
+        advance_campaign(original, cid, budgeted(original, ProfessionGateway(), cid=cid))
+    monkeypatch.setattr(SemanticCallLedger, "reserve", actual)
+
+    resumed = campaign(state, repo, writer)
+    gateway = ProfessionGateway()
+    adapter = budgeted(resumed, gateway, cid=cid)
+    for _ in range(6):
+        done = advance_campaign(resumed, cid, adapter)
+        if done["finished"]:
+            break
+    assert done["updated"] == 1 and done["status"] == "complete"
+    assert gateway.calls == 2 and adapter.ledger.status()["reserved_calls"] == 2
+    assert parse_note(repo.read_text("0.md")).metadata["profesion"] == "profesora"
+
+
+def test_followup_works_for_custom_book_type_and_integer_property(tmp_path):
+    """A user-defined Book's page count must use the same signed Core protocol.
+
+    Do not teach the follow-up anything about the Person/Profession example.
+    """
+    import subprocess
+
+    from odyssey_core.git_history import GitHistoryRecorder
+    from odyssey_core.notes import Note, serialize_note
+    from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill
+    from odyssey_runtime.schema_backfill_campaign import LocalBackfillCampaign
+    from odyssey_runtime.schema_backfill_jobs import LocalBackfillJob
+
+    state, repo, original_writer = setup(
+        tmp_path, ["Ana trabaja como profesora.", "Libro de ejemplo"]
+    )
+    schema = original_writer.schema
+    schema["types"].append(
+        {
+            "id": "book",
+            "name": "Libro",
+            "description": "Libros del usuario",
+            "examples": ["Una novela"],
+            "properties": [
+                {
+                    "id": "paginas",
+                    "value_type": "integer",
+                    "required": False,
+                    "description": "Número exacto de páginas",
+                    "filterable": True,
+                }
+            ],
+        }
+    )
+    old = parse_note(repo.read_text("1.md"))
+    book = Note(
+        {**old.metadata, "type": "book", "id": "libro-1", "name": "Libro de ejemplo"},
+        "# Added 26-10-2026\n- Este libro tiene 384 páginas.\n"
+        "<!-- odyssey:fact request=book1 ordinal=0 -->\n",
+    )
+    (repo.root / "1.md").write_text(serialize_note(book))
+    subprocess.run(["git", "add", "1.md"], cwd=repo.root, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-q",
+            "-m",
+            "synthetic book baseline",
+        ],
+        cwd=repo.root,
+        check=True,
+    )
+    writer = AutomaticPropertyBackfill(
+        repository=repo, schema=schema, history=GitHistoryRecorder(repo.root)
+    )
+    run = LocalBackfillCampaign(
+        worker=LocalBackfillJob(
+            state_root=state, repository=repo, writer=writer, actor_id="profile-a"
+        ),
+        segment_size=2,
+    )
+    assert (
+        run.stage(campaign_id="book-original", type_id="book", property_id="paginas")["pending"]
+        == 1
+    )
+    original = run.advance(
+        campaign_id="book-original",
+        type_id="book",
+        property_id="paginas",
+        actor=ACTOR,
+        now=NOW,
+    )
+    assert original["deferred"] == 1
+    original = run.advance(
+        campaign_id="book-original",
+        type_id="book",
+        property_id="paginas",
+        actor=ACTOR,
+        now=NOW,
+    )
+    assert original["finished"] and original["deferred"] == 1
+    cid = semantic_followup_id("book-original")
+    assert (
+        run.stage_followup(
+            campaign_id=cid,
+            original_id="book-original",
+            origin_kind="campaign",
+            type_id="book",
+            property_id="paginas",
+        )["pending"]
+        == 1
+    )
+
+    class BooksGateway:
+        calls = 0
+
+        def _complete(self, **kwargs):
+            self.calls += 1
+            fact = kwargs["data"]["marked_atomic_facts"][0]
+            reply = {"locator": fact["locator"], "quote": fact["text"], "value": 384}
+            if kwargs["name"] == "odyssey_schema_backfill_interpret_v1":
+                return {"decision": "SET", **reply}
+            return {"verdict": "APPROVE", "reason": "ENTAILED_CURRENT", **reply}
+
+    provider = BooksGateway()
+    interpreter = budgeted(run, provider, cid=cid, cap=4)
+    for _ in range(4):
+        result = run.advance(
+            campaign_id=cid,
+            type_id="book",
+            property_id="paginas",
+            actor=ACTOR,
+            now=NOW,
+            interpreter=interpreter,
+        )
+        if result["finished"]:
+            break
+    assert result["finished"] and result["updated"] == 1
+    assert provider.calls == interpreter.ledger.status()["reserved_calls"] == 2
+    assert parse_note(repo.read_text("1.md")).metadata["paginas"] == 384
+    assert parse_note(repo.read_text("0.md")).metadata.get("paginas") is None
+    assert run.status("book-original") == original

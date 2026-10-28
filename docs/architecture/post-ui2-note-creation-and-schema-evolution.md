@@ -636,6 +636,22 @@ por lote; (F) fecha parcial genérica y prueba `birth_date` si ese sigue siendo
 el primer caso que interesa al usuario. Cada corte se acepta con pruebas
 reales de interfaz y no se solapa con una refactorización general de E6.
 
+### Decisión de producto: autonomía por defecto y excepciones agrupadas (26-10-2026)
+
+**Corrección de criterio del usuario:** Odyssey existe para **quitar trabajo**, no para solicitar autorización sobre cientos de notas. Aprobar el nuevo modelo/propiedad y activar el enriquecimiento de ese tipo es la intención general. Después el asistente **debe seleccionar por sí mismo qué notas y qué propiedades enriquecer** cuando pueda fundamentarlo, de forma local y reanudable. No hay pantalla de confirmación por cada nota, entidad o lote, ni clic por cada página de 20 archivos.
+
+- **Automático:** valor opcional que falta en la nota correcta, fuente canónica y trazabilidad suficientes, temporalidad clara, sin colisión con valor ya presente, identidad de la entidad estable, esquema y revisión compatibles, Core/E3 CAS, readback y versión recuperable. También es admisible vincular una entidad existente cuya identidad sea inequívoca; al crear entidades nuevas, automatizar únicamente cuando el sistema pueda demostrar identidad y ausencia de duplicados bajo reglas verificadas, sin relink/reclassify implícito.
+- **La IA puede elegir y priorizar cientos de notas**, no solo proponer valores para que la persona firme cada uno. Su decisión debe estar basada en fragmentos/localizadores vigentes y pasar validación independiente de estructura, tipos, contradicción, negación, temporidad e identidad. La autoevaluación subjetiva del modelo de «99 % seguro» **no es una prueba** ni una autorización independiente. Evaluar prompts y abstención con proveedores reales antes de habilitar la interpretación general, siguiendo `odyssey-llm-stage`.
+- **Resolver internamente o diferir:** menciones vagas, fuente heredada sin prueba suficiente, valores opuestos, fechas incompletas, coincidencias de nombres, identidades nuevas potencialmente duplicadas. En lugar de interrumpir por cada caso, agruparlos por entidad/tipo y presentar solo una revisión opcional de casos significativos; el resto puede quedar sin valor sin bloquear la aplicación.
+- **Nunca automático de forma destructiva:** borrar hechos o entidades, fusionar identidades existentes sin equivalencia demostrable, sobrescribir un dato que el usuario ya estableció o reclasificar la nota existente.
+- **Resultados:** informar «X propiedades completadas, Y referencias reutilizadas, Z entidades nuevas sin duplicar, W conflictos apartados», con detalle expansible, fuentes y recuperación de las acciones. No presentar un contador de *fuentes examinadas* como si fuera de *cambios escritos*. Priorizar acciones reversibles, idempotencia por fuente/esquema/nota/propiedad y no repetir una escritura tras un crash ambiguo.
+
+**Segundo corte — interpretación semántica acotada en código, no aceptada por proveedor:** odyssey_runtime/schema_backfill_interpreter.py lee hechos marcados de notas preescaneadas, usa el gateway estructurado existente con dos prompts separados (propuesta + revisión de resultado), verifica exactitud de cita/locator/tipo y entrega una decisión vinculada a fuente que Core vuelve a comprobar antes de update_entity. SemanticBatchEnricher agrupa hasta 8 notas por ejecución sin clics individuales y muestra resumen de escrituras/abstenciones. Tiene pruebas verticales sintéticas con vault Git, pero NO está conectado a un job en la app; no constituye evaluación semántica real de GPT. Los dos modelos/pases pueden coincidir equivocadamente: [contrato V1, hashes y matriz](schema-backfill-semantic-v1-20261026.md). Sin campaña viva autorizada y aceptación DEV E2E no puede publicarse como automatización general.
+
+**Primer corte funcional, sin proveedor:** `odyssey_core/schema_auto_backfill.py` acepta un lote de hasta 25 `SourceNote` emitidas tras un escaneo terminado y actualiza **sin confirmaciones por nota** los campos opcionales declarados explícitamente en hechos marcados (`propiedad: valor`). Usa el tipo canónico, elimina diferencias de acentos en los nombres de campos, comprueba tipos, contradicciones incluso en texto legacy, hash/revisión/locator, el gate de mutaciones Core/E3, lectura física posterior y **Git local** recuperable por actualización. Otros textos quedan sin tocar para el futuro intérprete general de IA. Se ha verificado con un repositorio Git temporal y notas sintéticas; **no está aún conectado al orquestador duradero ni habilitado en DEV/PROD**. La implementación final deberá agrupar los commits para grandes corpus sin perder la recuperación por nota y distinguir la fase de lectura (inventario estable) de la fase de mutaciones (que cambia el inventario).
+
+**UX de escaneo ya implementada en fuente:** al activar un cambio de esquema, el panel solicita la revisión de estado y avanza automáticamente en páginas de 20 hasta un máximo de 50 páginas por ejecución en primer plano (1.000 notas) antes de ofrecer continuar. Permite pausar/reanudar y registra su cursor local; no pide pulsar por cada página. En el móvil definitivo se trasladará al ejecutor local del dispositivo, de modo que no dependa de mantener la pantalla abierta. Este escaneo **sigue siendo de solo lectura** hasta terminar el orquestador del autocompletado.
+
 ### Primera entrega técnica: registro compatible (24-10-2026, rama de desarrollo)
 
 El módulo interno `odyssey_runtime/user_schema_registry.py` reutiliza
@@ -722,25 +738,216 @@ cuando una configuración DEV es rechazada; pruebas sobre raíces sintéticas
 cubren `ODYSSEY_LIGHT_SOURCE_V1` activo/inactivo, un primer arranque y un
 estado enlazado por symlink. No se ejecutaron pruebas sobre datos PROD.
 
-**Límite operativo todavía pendiente:** esto es una *primitiva de seguridad*,
-**no** una activación UX automática. Una confirmación desde la interfaz no puede
-llamar `publish` con el servidor activo; deberá quedar validada y encolada en
-estado duradero (idempotencia y permiso explícito), mientras el coordinador
-realiza arranque/reconstrucción de la nueva generación y publica un estado
-consistente. La frontera operativa debe preservar chat y navegación tanto como
-sea posible y evitar detener un proceso con escrituras en curso. Aún no existe
-el flujo de orquestación, por lo que no habilitar `schema_confirm` o simular
-«creado» antes de un recibo activo y leído de vuelta. No declarar sin pruebas
-que un reinicio es invisible para el usuario. No altera el contrato de notas
-físicas v3 ni las escrituras E3.
+**Cuarto corte — confirmación autorizada + reactivación gestionada (25-10-2026,
+source-only, por probar en DEV):** `schema_confirm` desde el circuito
+Notes/n8n existente recibe un **clic explícito** sobre la propuesta ya
+previsualizada: `change`, revisión, hash SHA256 de esa propuesta y
+`request_id`, asociado al actor autenticado que n8n inyecta. Una puerta
+adicional `ODYSSEY_SCHEMA_CONFIRM_ENABLED=1`, solo con
+`ODYSSEY_USER_SCHEMA_ENABLED=1` y entorno `DEV`, impide habilitarlo en un
+despliegue accidental. El servidor confirma **«queued»**, guardando una única
+petición de activación en el directorio privado versionado (registro
+`pending-activation.json`). No cambia de esquema ni de índices en caliente.
+Una propuesta distinta, otra identidad, un hash modificado, la revisión vieja
+o dos aprobaciones paralelas no pasan el CAS; reintentar el mismo `request_id`
+exige además **el mismo cambio y revisión**, incluso después de activarse:
+no genera otra publicación ni falsea qué se aprobó. La confirmación calcula
+**antes del ACK** el estado publicado exacto y comprueba el límite físico de
+tamaño: no acepta una propuesta que dejaría el reinicio inservible.
+Ambos requisitos proceden de defectos P1/P2 hallados en la primera revisión
+independiente del PR #156 y reparados con regresiones específicas. La
+segunda revisión focalizada del commit reparado no señaló regresiones; su
+entorno no disponía de pytest, por lo que la evidencia ejecutable es el
+gate oficial independiente de esa revisión (**2.123 Python + 204 JS PASS**).
+
+Tras entregar la respuesta HTTP, el runtime inicia **apagado ordenado** por
+un hilo distinto: termina nuevas esperas, drena los handlers HTTP activos
+(incluidos E3/Git), suelta el lease de generación y sale con código 75.
+El `Restart=on-failure` que **ya existe** en la unidad systemd DEV ejecuta un
+nuevo proceso; no se añade servicio ni permiso. Durante el próximo bootstrap,
+con lock exclusivo, Core valida de nuevo la solicitud, la publica a través
+del registro versionado/recibos y reconstruye los índices y todas las
+composiciones con esa revisión. Si el proceso cae tras aceptar el clic y antes
+del cierre ordenado, ese mismo bootstrap también encuentra la solicitud
+persistida. `schema_status` ofrece la revisión actual (sin identificador) o
+el estado de **ese** `request_id` solo a su actor: `queued`/`active`.
+«active» no equivale a que el posterior rellenado retrospectivo haya
+terminado; esa etapa tendrá estados y contadores propios.
+
+**Límites de seguridad y producto:** el servidor debe estar ejecutándose bajo
+el supervisor configurado (`Restart=on-failure`); el API está desactivado por
+defecto y aún NO hay botón conectado ni la conversación de IA. La validación
+actual comprueba la estructura del esquema, filtros compatibles, identidad y
+revisión, **no hace todavía un backfill ni un examen completo del corpus
+antes del clic**. No se promete cero interrupción: el reinicio puede hacer
+que una consulta próxima observe indisponibilidad temporal; el cliente debe
+consultar `schema_status` por `request_id` y esperar la generación activa.
+Una caída entre el recibo histórico nuevo y el cambio de puntero mantiene
+el mecanismo existente de **fallo cerrado** y exige recuperación explícita;
+no se debe afirmar recuperación automática de cualquier punto de fallo.
+El endpoint de confirmación solo se puede conectar al diálogo visual después
+de una prueba real desde la app DEV, con usuario sintético, aceptación
+visible y lectura de notas/índices tras recargar. Nunca activar en PROD.
+
+**Quinto corte, interfaz fuente guiada (25-10-2026, NO interfaz final de IA).**
+Se incorpora un panel `Modelo de notas` bajo el botón «Crear nuevo tipo» y
+«Personalizar tipo», con acceso también por el evento de navegación de Chat.
+Formula preguntas sencillas de nombre, finalidad y datos deseados (o añade
+una propiedad a un tipo ordinario); el navegador genera un **borrador
+explícito** y se lo envía al `schema_preview` autenticado. El backend valida
+la propuesta y devuelve una tarjeta visible antes de habilitar el único botón
+«Confirmar este cambio». Todos los campos son consultables por construcción;
+el usuario no configura `filterable`. Los tipos App-owned no ofrecen editor.
+La respuesta de Notas cruza un validador JS por operación que rechaza estados
+inesperados, hash ausente, propiedades mal formadas o autoridad adicional.
+La confirmación solo se habilita si `schema_status` anuncia un opt-in DEV
+explícito; por defecto se muestra la vista previa **sin mutación**. Una
+respuesta incierta no se reenvía automáticamente: se conserva el `request_id`
+en sesión y se consulta `schema_status`, incluso después de recargar.
+Tras una revisión independiente de la UI se identificaron tres P2: un
+seguimiento atascado si el POST no llegó al servidor, botones de edición
+incorrectos para ciertos tipos de Core y ausencia de nueva propuesta tras
+completar. La solución es no interpretar un 400 genérico como ausencia
+segura: solo el status autenticado con error acotado
+`SCHEMA_ACTIVATION_NOT_FOUND` permite ofrecer **por elección explícita**
+«Descartar seguimiento»; fallos de red conservan el identificador. La
+capacidad `schema_editable` procede de la propiedad `managed_by`/
+`planner_writable` canónica del tipo, no de nombres especiales. Al activarse
+un cambio, se ofrece «Preparar otra propuesta». Pruebas HTTP locales y
+JS cubren los tres casos; puerta transversal tras reparación
+**2.125 Python + 217 JS PASS**. Un
+`status=active` actualiza las capacidades/índices de Notas, **no significa
+que haya terminado un análisis retrospectivo**. El módulo está registrado en
+el inventario/ruta estática real de n8n (evita el fallo de módulo ES ausente).
+
+**No confundir este corte con conversación IA completada:** la guía es
+provisional y no interpreta todavía un relato libre, infiere tipos de dato
+semánticamente ni valida solapamientos conceptuales mediante un modelo. Un
+campo de texto libre se almacena como `string` salvo elección explícita de
+número/fecha completa en la vista de propiedad. Se indica en la pantalla de
+manera honesta; no se ha habilitado ni desplegado en DEV. Antes de aceptación
+final: integrar el prompt y proveedor aprobados con evaluación real de
+modelo, reajustar la propuesta desde lenguaje natural, completar el backfill
+E3 y descubrir entidades mencionadas solo tras crear un tipo nuevo; después
+hacer pruebas reales desde la app DEV, navegación/recarga y readback físico.
+
+**Sexto corte, conversación de modelo de notas — fuente opt-in (25-10-2026).**
+Se añade `odyssey_runtime/schema_suggestion.py`, una especialización de
+interpretación **sin escritura** que reutiliza la llamada estricta
+`OpenAIConversationGateway._complete` (mismo `gpt-6-luna`, reasoning `low`,
+`store=False`, SDK con retry 0/timeout 30 s). No añade proveedor, agente ni
+servicio propios. Solicita **una sola respuesta JSON cerrada** por mensaje
+(≤1.200 caracteres, catálogo consultable ≤18,5 KB, salida ≤1.200 tokens),
+con decisión `ADD_TYPE`, `ADD_PROPERTY`, `REUSE`, `CLARIFY` o `ABSTAIN`, cita
+exacta de intención original, cita única por atributo deseado, tipo existente
+para añadir/reutilizar y una explicación humana. Todas las citas y tipos
+reales se validan determinísticamente. Los nuevos nombres se transforman a
+identificadores controlados, sin heurísticas de alias ni creación de entidades
+canónicas. Solo si pasa toda la evidencia se ejecuta
+`UserSchemaRegistry.preview()` por CAS contra la revisión actual, y se
+retorna **solo** una propuesta más su hash. Nunca confirmación ni escritura.
+Un resultado inválido falla cerrado, sin «best effort» que invente campos.
+Las fechas incompletas NO se reinterpretan como fechas completas: el
+contrato instruye `CLARIFY` hasta contar con soporte real.
+
+Se añade la ruta autenticada Notes/n8n `schema_suggest(message,
+expected_revision)`, cliente JS validado y área «Explícaselo a Odyssey»
+en el panel existente. La conversación soporta una aclaración corta anclada
+al mensaje anterior; `REUSE`, `CLARIFY` y `ABSTAIN` son de solo lectura.
+`PROPOSE` muestra la misma tarjeta de Core y **no hace clic** en el botón
+«Confirmar». El botón sigue detrás de su bandera independiente. El nuevo
+`ODYSSEY_SCHEMA_ASSISTANT_ENABLED=1` es **DEV-only** y requiere
+`ODYSSEY_USER_SCHEMA_ENABLED=1`; por defecto permanece apagado y se rechaza
+antes de cualquier acceso al almacenamiento PROD. Una respuesta de modelo
+no puede habilitar esas banderas. Los tipos App-owned siguen protegidos.
+
+**Validación V1, V2 y V3 reales NO aprobadas; habilitación BLOQUEADA.**
+El informe reproducible está en
+[schema-conversation-live-eval-20261025.md](schema-conversation-live-eval-20261025.md):
+24 llamadas reales a `gpt-6-luna` low, 17 decisiones esperadas, 5 rechazos
+de validador, 2 elecciones semánticas incorrectas, 36.224 tokens. Ninguna
+nota fue modificada: hubo registros de esquema temporales y acceso al
+proveedor mediante transient systemd con EnvironmentFile protegido.
+El antiguo prompt V1 no está aprobado. La V2 revisa la granularidad de tipos
+frente a categorías generales y hace que `ADD_PROPERTY` tenga `description`
+**de tipo** nula, conservando la descripción de la propiedad. La matriz
+original no se retoca; también hay un holdout de 12 casos sin evaluar.
+Prompt V2 SHA256 `c0322c9bbaa6fb234c54ab67cdd97f54532fe61280ec10079bd96a9f11ef06c2`.
+La V2 se evaluó con el proveedor real y logró **20/24 coincidencias de
+operación, no éxitos semánticos certificados**. Quedan cuatro discrepancias,
+una de ellas incompatible con el contrato de fechas parciales: detalle en
+[schema-conversation-v2-eval-20261025.md](schema-conversation-v2-eval-20261025.md).
+La V3 fue evaluada con **40 llamadas reales sintéticas**: 22/24 etiquetas
+de regresión, 9/12 holdout, 2/4 repeticiones; **33/40 etiquetas, NO
+33 éxitos semánticos**. Persisten dos bloqueos: ISBN inferido sobre el
+tipo genérico `document` y exclusión de plantas laborales que no puede
+hacerse cumplir con una mera descripción. Informe íntegro en
+[schema-conversation-v3-live-eval-20261025.md](schema-conversation-v3-live-eval-20261025.md).
+Queda prohibido activar el asistente hasta validar la semántica y probarlo
+desde la app usando vault sintético. **La fuente V4 está preparada, pero NO
+evaluada con modelo real**: [contrato y matriz nueva](schema-conversation-v4-contract-20261025.md).
+El nuevo prompt exige comprobar granularidad/identidad del tipo destino y
+aclarar filtros que no pueden ejecutarse por una mera descripción. La vista
+previa deja visible el alcance real de `add_property` y la falta de filtros
+automáticos en `add_type`. Estas advertencias y pruebas de contrato no
+certifican uncertifican una garantía semántica que el validador estructural no posee.
+**V4 fue evaluada posteriormente** con otras 40 llamadas reales (16 holdout,
+24 regresión): **39/40 etiquetas** con **0 rechazos**, pero tres desajustes
+de idioma y preguntas mejorables. Informe detallado en
+[schema-conversation-v4-live-eval-20261025.md](schema-conversation-v4-live-eval-20261025.md).
+Su hash es `b52def8fca2037d1260aac595b8b10d9fd8db756b254c3c0a7369e26dad5bd2a`.
+No activar aún ni convertir un acierto de etiqueta en certificación semántica.
+Se ha preparado V5 **solo en fuente** para corregir fidelidad de idioma,
+reutilización sin atributos nuevos e hipótesis temporales; ver
+[schema-conversation-v5-contract-20261025.md](schema-conversation-v5-contract-20261025.md).
+Su prompt tiene hash `c34023593fb021384013e77c862afee580e8dc04795f4b65b46b8ae423bb3ca4`.
+**0 llamadas reales V5**, contrato semántico todavía sin validar. Ambas
+banderas de activación continúan apagadas. **Actualización posterior:** la
+V5 fue evaluada mediante 24 llamadas reales, 22/24 coincidencias de etiqueta,
+pero no superó semántica de propiedades/idioma; véase
+[schema-conversation-v5-live-eval-20261025.md](schema-conversation-v5-live-eval-20261025.md).
+La V6 se ha preparado sin llamadas reales, con reglas generales de atributo
+posesivo, recuentos enteros, fecha parcial e idioma y 12 casos nuevos;
+[contrato V6](schema-conversation-v6-contract-20261025.md). Continúan las
+banderas desactivadas. La puerta transversal de fuente V2 ahora
+incluye también `tests/runtime/test_schema_suggestion.py` y pasa
+**2.148 Python + 226 JS** tras corregir también el evaluador; antes de añadirlo ese grupo no
+estaba cubierto en el gate. Este recuento sigue sin ser puntuación semántica.
+
+**Estado histórico antes de la evaluación real:** el contrato del prompt tiene
+matriz versionada `tests/fixtures/schema_suggestion/evaluation_v1.json`
+con **24 casos ES/FR/EN**, negaciones, correcciones, tipos existentes,
+propiedades, ausencia de intención, fechas parciales y prompt injection.
+Prompt SHA256 `229a3f2e2072bb6c20a198ffc38318406218f7a4057b9d7b833898fc358ce085`,
+esquema estricto SHA256 `19acba3f55c8b73eaf823a94bd1400e8510de83d1507e7a538ef46b5744ccc50`.
+Los tests SDK simulados / HTTP local / navegador DOM son evidencia de
+contrato **NO evidencia de comportamiento de GPT real**. No se ha gastado
+presupuesto ni realizado ninguna llamada a modelos de producción para este
+prompt, que sigue sin un hash/modelo aceptado semánticamente. La puerta transversal del
+corte fuente pasa **2.126 Python + 226 JavaScript** (12 grupos), tras corregir tres
+hallazgos P2 de auditoría: la vista «Modificar» conserva tipos
+`integer`/`date`/`array[string]` existentes y bloquea cambios de nombre
+que degradarían esos tipos, pero sí deja quitar explícitamente propiedades
+no deseadas sin alterar las restantes; la aclaración envía texto escrito por
+el usuario como evidencia, **nunca la pregunta de la IA**. Tres regresiones
+JS nuevas demuestran las fronteras; es prueba
+funcional/contractual local, no evaluación del comportamiento de GPT. Para desbloquear
+el opt-in hay que ejecutar una campaña de validación con modelo real,
+presupuesto finito previamente autorizado, publicar outcomes y errores por
+caso, corregir y reevaluar fallos semánticos, y completar una aceptación
+Chromium→n8n→runtime→estado/aprobación con vault sintético. No desplegar ni
+fusionar como feature operativa ni afirmar «IA validada» todavía. El backfill
+E3 y el descubrimiento retrospectivo siguen en etapas separadas.
 
 **Pequeña corrección de UI:** la pantalla de Notas deja de mostrar al usuario
 el atributo técnico «filtrable» en las descripciones de propiedades y explica
 el beneficio real de un tipo nuevo con ejemplos; sus botones permanecen
 informativos («Próximamente»), no simulan una operación de IA publicada.
 
-**No se ha implementado todavía:** IA/contrato de prompt, interfaz y vista
-previa conectadas, publicación caliente con barrera de índices, migración de
+**Nota histórica (previa al sexto corte):** aún no había IA/contrato,
+interfaz ni vista previa conectadas. Actualmente sí están en fuente pero
+siguen apagadas y semánticamente no aceptadas. Sigue pendiente aceptación
+real desde Chromium en DEV, migración de
 esquema incompatible, trabajo retrospectivo, descubrimiento de entidades,
 confirmación por lotes, fecha parcial o aceptación E2E del navegador en DEV.
 No debe presentarse esta entrega de infraestructura como una función utilizable
@@ -780,6 +987,125 @@ Desired contract:
 - The original fact-oriented view must always remain available.
 
 This should remain a presentation/cache capability, not a second personal-knowledge authority.
+
+## D. Human-edited proposals and one final AI review — source-only, after V6
+
+**Product correction from user feedback:** Stop tuning the initial model until
+it gets every cosmetic name/property right. The assistant proposes a schema
+change; **the user owns the draft**. The Notes editor can now edit the type
+name/description and individual property name, description and value type
+(`string`, `integer`, `date`, `array[string]`), add or remove properties and
+rerun the trusted Core `schema_preview` without another suggestion call. The
+editor enforces bounded rows, unique canonical property IDs and supported
+value types, and Core validates the full effective schema. There is no hidden
+property renaming/type coercion or reclassification of historical notes.
+
+A separate authenticated operation `schema_review` accepts the original user
+request (or empty when no assistant was used), **the exact human-edited
+change**, expected revision and `proposal_hash`. The service re-runs the
+Core preview/CAS and refuses a stale or mismatched hash *before* a bounded
+**single read-only** strict-JSON review via the existing conversation gateway.
+The reviewer returns only `READY`/`CHECK`, a short explanation and at most
+three issues. It cannot return changes, approval, writes, migration plans or
+assert that a non-executable description enforces a filter. Material concerns
+are advice the user can review/correct or explicitly choose to proceed with;
+Core still controls hard schema invariants.
+
+For assistant-generated drafts the **UI requires the final review** of the
+current proposal hash before its `Confirmar` button is enabled; editing or
+re-preview invalidates the earlier review, and a late/mismatched response
+cannot enable confirmation. For manual proposals Core's canonical preview
+remains sufficient, with an optional AI review. Confirmation always requires
+a separate explicit user click and existing activation flag/receipts; AI
+never confirms automatically. The feature remains opt-in/off and this is a
+**source-only** implementation, not a claim of deployed app/real-model E2E.
+No new background backfill or retrospective discovery is implemented by
+this UI change: those post-activation stages remain separate.
+
+**Interacción Chromium local (25-10-2026, fuente `38445eb`):**
+`scripts/odyssey_schema_editor_chromium_synthetic.cjs` carga los módulos
+reales `schema-model.js` y `notes-client.js` en Chromium arm64, interactúa
+mediante clicks/tecleo en 1280×920 y 390×844: propone, entra en edición,
+conserva y corrige tipo numérico, elimina/agrega atributos, pide revisión
+final y confirma **solo tras la revisión** con el hash actual, una vez por
+usuario, sin errores JS ni scroll horizontal en ambos perfiles. Resultado
+**PASS/PASS**. Servidor/modelo/recibos **simulados** exclusivamente en
+`127.0.0.1`: NO es el DEV desplegado, autenticación n8n, proveedor GPT real,
+mutación física ni E2E aceptado. Reutiliza las bibliotecas Chromium ya
+cacheadas, sin instalar dependencias del sistema; `odyssey-dev-e2e` sigue
+requiriendo app real y vault sintético para la aceptación posterior.
+
+**Comprobación posterior antes de desplegar (25-10-2026, fuente `de2b370`):**
+la prueba de Chromium móvil y escritorio se reprodujo **PASS/PASS** con
+interacciones visibles `click/type/select` en lugar de escribir valores
+mediante `evaluate()` en el DOM. Para lanzarla en Pi se necesitó reusar el
+bundle de bibliotecas locales ya auditadas y ajustar `LD_LIBRARY_PATH` **solo
+en el proceso de prueba**; no se modificó el sistema operativo.
+Las pruebas del runtime autenticado real / revisión final (63 Python) y de
+transporte/UI (34 JS) pasaron; la skill `odyssey-skill-steward` superó el
+`quick_validate.py` oficial y el docs guard. El test browser-only sigue
+usando **proveedor y servicio simulados**, aunque sí ejecuta el módulo JS
+real. El navegador sobre el DEV actualmente desplegado en `050f26f` pasó
+una regresión **solo de lectura** (17 detalles/17 SVG, recarga, sin errores)
+pero no contiene esta funcionalidad.
+
+**Bloqueo actual de adopción:** `python scripts/odyssey_dev_public_routes.py
+status --machine` señala `DRIFT`, ya que la configuración pública de
+Cloudflare DEV carece de `/api/schema-model.js` presente en el inventario
+de rutas de la nueva fuente. Su actualización está expresamente protegida
+por `--authorized-dev-change`, una autorización aparte, y **no se ejecutó**
+solo con una orden genérica de probar. No ha habido despliegue, cambio de
+Cloudflare, llamada GPT, aprobación real, escritura física ni prueba
+Chromium→n8n→Core de la nueva funcionalidad. App E2E = **NO VERIFICADO**.
+
+**Aceptación posterior desde DEV auténtico, con usuario sintético (25-10-2026; SHA `5e340da`):**
+El usuario autorizó la **actualización de Cloudflare DEV** que había quedado
+bloqueada. Se hizo copia verificable de la configuración compartida y se
+reconcilió **exclusivamente** `/api/schema-model.js` (versión de túnel
+13 → 14): inspección antes/después confirmó **regla PROD idéntica**, misma
+política de Access y `status --machine = MATCH`. Los datos DEV y el volumen
+n8n se respaldaron y verificaron con SHA256 antes de publicar un único SHA
+`5e340dad8a0495c8b84e66da56845ca2d0891f15` mediante el comando oficial
+`odyssey-dev deploy`; runtime, n8n y assets entraron en servicio y el marker
+corresponde a ese commit. PROD no fue desplegado.
+
+Una regresión Chromium de **solo lectura** contra n8n DEV nuevo pasó en
+móvil y escritorio (42 turnos, 17 paneles/17 SVG, recarga, cero errores JS).
+Para la prueba de editor se activaron **temporalmente solo en DEV** el
+registro y la confirmación de esquema; el asistente de IA permaneció OFF.
+Desde Chromium real se navegó a Notas, se creó **manual** la propuesta
+sintética `Ficha tarjetas E2E 251025`, se revisaron dos previews, se cambió
+`cantidad` de texto a entero, se quitó `categoría`, se añadió `nivel` (texto)
+y se hizo **un** clic de confirmación. La petición llegó a **n8n DEV real →
+Core**, devolvió `queued`, produjo reinicio gestionado y se leyó revisión 1
+con `cantidad: integer` y `nivel: string` tras reabrir Notas. **PASS** de
+navegador→n8n→Core→persistencia del esquema→recarga, con modelo/proveedor
+**NO ejecutados**. La verificación independiente de los **1.275 archivos**
+del vault DEV contra el backup, byte a byte, dio **0 cambios y 0 altas**.
+
+**Incidencia y corrección de procedimiento:** abrir la app por HTTP interno
+`172.18.0.1` permite edición/preview pero desactiva `crypto.randomUUID()`
+en Chromium por origen no seguro: se rechazó la confirmación sin emitir ninguna
+petición. Se repitió con un **proxy loopback local y restringido** que
+reenvía operaciones sin sustituir al servidor n8n; Chromium considera
+`127.0.0.1` un contexto seguro, y la confirmación completó. No se alteró
+la generación segura de IDs, la API ni el código de producto. No se ha
+probado una sesión externa autenticada de Cloudflare Access.
+
+Al finalizar se eliminaron las flags temporales, el runtime quedó otra vez
+sano y el esquema **solo sintético** de revisión 1 se archivó fuera del
+estado activo DEV, conservando evidencias y backups bajo permisos privados.
+El assistant conversacional + revisión final con **GPT real** siguen sin
+aceptación E2E ni nuevas llamadas autorizadas; tampoco están implementados
+el backfill de propiedades y el descubrimiento retrospectivo. La skill
+`odyssey-dev-e2e` se actualizó para no repetir el error de origen/seguridad.
+
+Operational learning: added `.codex/skills/odyssey-skill-steward` and its
+minimal always-on routing in `AGENTS.md`, built against the already installed
+first-party Codex `skill-creator`. It notices recurrent agent mistakes or
+manual patterns **during work**; it first improves an existing skill rather
+than creating another for every bug. Skills do not work autonomously between
+chats or substitute for code/tests.
 
 ## E. Product questions to observe rather than decide now
 
@@ -823,3 +1149,20 @@ only then decide implementation slices and resume broader application roadmap
 ```
 
 This document records the intended immediate follow-up only. It does not authorize schema mutation, production changes, provider/model changes, planner fast paths, relation inference, unrestricted boolean filtering, or generated-readable-note persistence as personal knowledge by itself.
+
+**Smoke adicional autorizado, V6 real (25-10-2026; sin desplegar):**
+Se confirmó que el cambio de ruta Cloudflare DEV y la prueba Chromium manual
+ya se habían completado previamente; no se repitieron. Se ejecutaron
+**2 llamadas reales** sintéticas a `gpt-6-luna` (`low`, strict JSON,
+`store=False`, sin herramientas/reintentos) con el hash V6 de fuente,
+mediante unidad efímera y entorno de credenciales protegido. Resultado:
+`en_devices_and_batteries` → `ADD_TYPE` «Flashlight», propiedad
+«Battery type» `string`; `fr_cameras_and_manufacturer` → `ADD_TYPE`
+«Appareil photo», propiedad «Fabricant» `string`. Ambos casos validados por
+el contrato y correctos en idioma/granularidad. Coste observado: 2 llamadas,
+4.910 tokens entrada + 416 salida. Evidencia privada 0600 en
+`/tmp/schema-v6-two-synthetic-smoke-20261025.json` del Pi.
+Sin escritura de notas, cambio de esquemas, despliegue o confirmación.
+**No equivale** a evaluación integral de V6, sesión real autenticada por
+Cloudflare Access, ni revisión final de esquema con GPT real. La app DEV
+sigue sana y PROD intacto. No se ha activado el assistant ni su flag.

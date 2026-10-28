@@ -13,7 +13,7 @@ export class NotesRequestError extends Error {
 /** Request one typed Notes operation without granting browser-side semantic authority. */
 export async function requestNotes({endpoint = "/api/notes", operation, payload = {}, fetchImpl = globalThis.fetch,
   monotonicImpl = globalThis.performance?.now?.bind(globalThis.performance)}) {
-  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete"].includes(operation)) {
+  if (!["capabilities", "query", "intelligent", "detail", "backlinks", "delete_fact", "delete_note", "task_status", "task_subtask_create", "work_session_start", "work_session_stop", "work_session_edit", "work_session_delete", "work_session_activity_add", "work_session_activity_edit", "work_session_activity_delete", "schema_status", "schema_preview", "schema_confirm", "schema_suggest", "schema_review", "schema_scan", "schema_backfill"].includes(operation)) {
     throw new NotesRequestError("Operación de notas no compatible.");
   }
   let response;
@@ -33,13 +33,169 @@ export async function requestNotes({endpoint = "/api/notes", operation, payload 
   if (!response.ok || responseError) {
     throw new NotesRequestError("No se ha podido completar la consulta.", responseError);
   }
-  const result = validateNotesResponse(value);
+  const result = operation.startsWith("schema_")
+    ? validateSchemaOperationResponse(operation, value)
+    : validateNotesResponse(value);
   const finished = typeof monotonicImpl === "function" ? monotonicImpl() : null;
   if (result.operational && typeof started === "number" && Number.isFinite(started) &&
       typeof finished === "number" && Number.isFinite(finished) && finished >= started) {
     result.operational.browser_product_duration_ms = finished - started;
   }
   return result;
+}
+
+/** Validate actor-bound schema responses before any UI can display or confirm them.
+ *
+ * The private runtime intentionally returns no kind tag for these operations;
+ * classify by the operation the browser actually sent, not untrusted content.
+ */
+export function validateSchemaOperationResponse(operation, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) ||
+      operation === "schema_confirm" && value.status !== "queued" && value.status !== "active") {
+    throw new NotesRequestError("Respuesta de modelo de notas inválida.");
+  }
+  const keys = Object.keys(value);
+  const expected = (names) => keys.length === names.length && keys.every((key) => names.includes(key));
+  const validRevision = (revision) => Number.isSafeInteger(revision) && revision >= 0 && revision <= 100;
+  const validId = (id) => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id);
+  if (operation === "schema_backfill") {
+    if (value.kind === "schema_backfill" && value.status === "not_started" &&
+        expected(["kind", "status"])) {
+      return {kind: "schema_backfill", status: "not_started"};
+    }
+    const fields = ["pending", "interpreting", "writing", "updated",
+      "no_evidence", "ambiguous", "stale", "already_present", "deferred"];
+    const hasBudget = Object.hasOwn(value, "reserved_calls") || Object.hasOwn(value, "call_limit");
+    const isFollowup = Object.hasOwn(value, "phase");
+    const budgetFields = hasBudget ? ["reserved_calls", "call_limit"] : [];
+    const phaseFields = isFollowup ? ["phase"] : [];
+    const isLegacy = !isFollowup && expected(["kind", "status", "total", ...fields, ...budgetFields]);
+    const isCampaign = expected(["kind", "status", "total", ...fields, "segment", "finished",
+      ...budgetFields, ...phaseFields]);
+    const capacity = isCampaign ? 50000 : 10000;
+    if (value.kind === "schema_backfill" &&
+        ["in_progress", "complete", "awaiting_ai", "attention"].includes(value.status) &&
+        (isLegacy || isCampaign) &&
+        (!hasBudget || (Number.isSafeInteger(value.call_limit) && value.call_limit >= 1 &&
+          value.call_limit <= 36 && Number.isSafeInteger(value.reserved_calls) &&
+          value.reserved_calls >= 0 && value.reserved_calls <= value.call_limit)) &&
+        (!isFollowup || (value.phase === "semantic_followup" && hasBudget && isCampaign)) &&
+        Number.isSafeInteger(value.total) && value.total >= 0 && value.total <= capacity &&
+        fields.every((name) => Number.isSafeInteger(value[name]) && value[name] >= 0 &&
+          value[name] <= value.total) &&
+        fields.reduce((count, name) => count + value[name], 0) === value.total &&
+        (value.status !== "attention" || value.writing === 1) &&
+        (value.status !== "complete" || value.pending + value.interpreting +
+          value.writing + value.deferred === 0) &&
+        (value.status !== "awaiting_ai" || value.deferred > 0) &&
+        (!isCampaign ||
+          (Number.isSafeInteger(value.segment) && value.segment >= 0 && value.segment <= 50002 &&
+           typeof value.finished === "boolean" &&
+           (value.finished
+             ? ["complete", "awaiting_ai"].includes(value.status)
+             : ["in_progress", "attention"].includes(value.status))))) {
+      return {kind: "schema_backfill", status: value.status, total: value.total,
+        ...Object.fromEntries(fields.map((field) => [field, value[field]])),
+        ...(isCampaign ? {segment: value.segment, finished: value.finished} : {}),
+        ...(hasBudget ? {reserved_calls: value.reserved_calls, call_limit: value.call_limit} : {}),
+        ...(isFollowup ? {phase: value.phase} : {})};
+    }
+  }
+  if (operation === "schema_scan") {
+    if (value.kind === "schema_scan" && value.status === "not_started" &&
+        expected(["kind", "status"])) {
+      return {kind: "schema_scan", status: "not_started"};
+    }
+    if (value.kind === "schema_scan" && ["scanning", "complete"].includes(value.status) &&
+        expected(["kind", "status", "scanned_paths", "eligible_notes",
+          "skipped_existing_values", "legacy_sources"]) &&
+        ["scanned_paths", "eligible_notes", "skipped_existing_values", "legacy_sources"]
+          .every((field) => Number.isSafeInteger(value[field]) && value[field] >= 0) &&
+        value.scanned_paths >= value.eligible_notes + value.skipped_existing_values &&
+        value.legacy_sources <= value.eligible_notes) {
+      return {kind: "schema_scan", status: value.status,
+        scanned_paths: value.scanned_paths, eligible_notes: value.eligible_notes,
+        skipped_existing_values: value.skipped_existing_values,
+        legacy_sources: value.legacy_sources};
+    }
+  }
+  if (operation === "schema_status") {
+    if (value.status === "ready" && expected(["revision", "status", "can_confirm"]) &&
+        validRevision(value.revision) && typeof value.can_confirm === "boolean") {
+      return {kind: "schema_status", status: "ready", revision: value.revision, can_confirm: value.can_confirm};
+    }
+    if (["queued", "active"].includes(value.status) &&
+        expected(value.status === "queued" ? ["status", "request_id", "revision", "next_revision"] :
+          ["status", "request_id", "revision"]) && validId(value.request_id) && validRevision(value.revision) &&
+        (value.status !== "queued" || value.next_revision === value.revision + 1)) {
+      return {kind: "schema_status", ...value};
+    }
+  }
+  if (operation === "schema_preview" && expected([
+    "revision", "next_revision", "proposal_hash", "operation", "affected_type_id", "type_preview",
+  ]) && validRevision(value.revision) && value.next_revision === value.revision + 1 &&
+      /^[a-f0-9]{64}$/.test(value.proposal_hash) &&
+      ["add_type", "add_property", "edit_type_text", "edit_property_description"].includes(value.operation) &&
+      typeof value.affected_type_id === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value.affected_type_id)) {
+    const type = value.type_preview;
+    if (type && typeof type === "object" && !Array.isArray(type) &&
+        typeof type.id === "string" && type.id === value.affected_type_id &&
+        isText(type.name) && type.name.length <= 240 &&
+        isText(type.description) && type.description.length <= 2000 &&
+        Array.isArray(type.properties) && type.properties.length <= 40 &&
+        type.properties.every((property) => property && typeof property === "object" &&
+          /^[a-z][a-z0-9_]{0,63}$/.test(property.id ?? "") &&
+          isText(property.description) && isText(property.value_type) &&
+          typeof property.required === "boolean")) {
+      return {kind: "schema_preview", revision: value.revision,
+        next_revision: value.next_revision, proposal_hash: value.proposal_hash,
+        operation: value.operation, affected_type_id: value.affected_type_id,
+        type_preview: {id: type.id, name: type.name, description: type.description,
+          properties: type.properties.map((property) => ({id: property.id,
+            description: property.description, value_type: property.value_type,
+            required: property.required}))}};
+    }
+  }
+  if (operation === "schema_suggest" && value.kind === "schema_suggestion" &&
+      typeof value.message === "string" && value.message.trim() && value.message.length <= 500) {
+    if (value.decision === "PROPOSE" && expected(["kind", "decision", "message", "change", "preview"]) &&
+        value.change && typeof value.change === "object" && !Array.isArray(value.change)) {
+      const preview = validateSchemaOperationResponse("schema_preview", value.preview);
+      const change = value.change;
+      if (["add_type", "add_property"].includes(change.operation) &&
+          change.operation === preview.operation &&
+          (change.operation !== "add_type" || change.type?.id === preview.affected_type_id) &&
+          (change.operation !== "add_property" || change.type_id === preview.affected_type_id)) {
+        return {kind: "schema_suggestion", decision: "PROPOSE", message: value.message,
+          change, preview};
+      }
+    }
+    if (["REUSE", "CLARIFY", "ABSTAIN"].includes(value.decision) &&
+        expected(["kind", "decision", "message", "reuse_type_id"]) &&
+        (value.decision === "REUSE" ? /^[a-z][a-z0-9_]{0,63}$/.test(value.reuse_type_id ?? "") :
+          value.reuse_type_id === null)) {
+      return {kind: "schema_suggestion", decision: value.decision, message: value.message,
+        reuse_type_id: value.reuse_type_id};
+    }
+  }
+  if (operation === "schema_review" && expected(["kind", "proposal_hash", "verdict", "message", "issues"]) &&
+      value.kind === "schema_review" && /^[a-f0-9]{64}$/.test(value.proposal_hash ?? "") &&
+      ["READY", "CHECK"].includes(value.verdict) && typeof value.message === "string" &&
+      value.message.trim() && value.message.length <= 500 && Array.isArray(value.issues) &&
+      value.issues.length <= 3 && value.issues.every((item) => typeof item === "string" &&
+        item.trim() && item.length <= 300) &&
+      (value.verdict === "READY" ? value.issues.length === 0 : value.issues.length > 0)) {
+    return {kind: "schema_review", proposal_hash: value.proposal_hash,
+      verdict: value.verdict, message: value.message, issues: [...value.issues]};
+  }
+  if (operation === "schema_confirm" && expected(
+    value.status === "queued" ? ["status", "request_id", "revision", "next_revision"] :
+      ["status", "request_id", "revision"],
+  ) && validId(value.request_id) && validRevision(value.revision) &&
+      (value.status !== "queued" || value.next_revision === value.revision + 1)) {
+    return {kind: "schema_confirm", ...value};
+  }
+  throw new NotesRequestError("Respuesta de modelo de notas inválida.");
 }
 
 /** Validate the small public Notes response union before it reaches rendering code. */
@@ -105,13 +261,17 @@ function validatePage(value) {
 }
 function validateSummary(value) { if (!value || typeof value !== "object" || !isText(value.id) || !isText(value.name) || !isText(value.type) || !Array.isArray(value.tags) || !isText(value.created_at) || !isText(value.updated_at) || !value.properties || typeof value.properties !== "object" || Array.isArray(value.properties)) throw new NotesRequestError("Nota inválida."); return {id: value.id, name: value.name, type: value.type, tags: value.tags.filter(isText), created_at: value.created_at, updated_at: value.updated_at, properties: value.properties}; }
 function validateType(value) {
-  const allowed = new Set(["id", "name", "description", "properties"]);
+  const allowed = new Set(["id", "name", "description", "properties", "schema_editable"]);
   if (!value || typeof value !== "object" || Array.isArray(value) ||
       Object.keys(value).some((key) => !allowed.has(key)) || !isText(value.id) ||
       !isText(value.name) || !isText(value.description) || !Array.isArray(value.properties)) {
     throw new NotesRequestError("Tipo inválido.");
   }
+  if (value.schema_editable !== undefined && typeof value.schema_editable !== "boolean") {
+    throw new NotesRequestError("Permisos del tipo inválidos.");
+  }
   return {id: value.id, name: value.name, description: value.description,
+    schema_editable: value.schema_editable === true,
     properties: value.properties.map(validateTypeProperty)};
 }
 function validateTypeProperty(value) {

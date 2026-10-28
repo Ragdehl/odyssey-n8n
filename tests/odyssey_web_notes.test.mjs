@@ -170,11 +170,18 @@ async function mountNotes({requestNotes, confirmImpl = () => true, sessionStorag
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
   };
   globalThis.__odysseyTestNotesClient = {NotesRequestError, requestNotes};
+  globalThis.__odysseySchemaOpenCalls = [];
+  globalThis.__odysseyTestSchemaModel = {
+    createSchemaModel: () => ({open: async (options) => { globalThis.__odysseySchemaOpenCalls.push(options); }}),
+  };
   const source = await readFile(new URL("../odyssey_web/notes.js", import.meta.url), "utf8");
   const testable = source
     .replace(
       'import {NotesRequestError, requestNotes} from "./notes-client.js";',
       "const {NotesRequestError, requestNotes} = globalThis.__odysseyTestNotesClient;",
+    ).replace(
+      'import {createSchemaModel} from "./schema-model.js";',
+      'const {createSchemaModel} = globalThis.__odysseyTestSchemaModel;',
     );
   const {mountNotes: mount} = await import(
     `data:text/javascript;base64,${Buffer.from(`${testable}\n// fixture ${fixtureNumber += 1}`).toString("base64")}`,
@@ -266,14 +273,14 @@ test("generic open-note event opens the stable note ID through the existing deta
 });
 
 function capabilities() {
-  return {types: [{id: "person", name: "Person", description: "A person with stable identity.", properties: []}], fields: []};
+  return {types: [{id: "person", name: "Person", description: "A person with stable identity.", schema_editable: true, properties: []}], fields: []};
 }
 
 function groupedCapabilities() {
   return {
     types: [
-      {id: "person", name: "Person", description: "A person with stable identity.", properties: []},
-      {id: "task", name: "Task", description: "An actionable item.", properties: [{
+      {id: "person", name: "Person", description: "A person with stable identity.", schema_editable: true, properties: []},
+      {id: "task", name: "Task", description: "An actionable item.", schema_editable: false, properties: [{
         id: "status", description: "Current lifecycle state.", value_type: "string",
         required: true, filterable: true,
       }]},
@@ -445,12 +452,15 @@ test("type information is localized and future authoring controls are presentati
   assert.equal(task.textContent.includes("Estado: Estado actual de la tarea."), true);
   assert.equal(task.textContent.includes("Current lifecycle state"), false);
 
-  task.querySelector(".notes-type-edit-button").click();
-  assert.equal(task.textContent.includes("Podrás explicarle a Odyssey qué deseas cambiar"), true);
+  assert.equal(task.querySelector(".notes-type-edit-button"), null);
+  assert.equal(task.textContent.includes("no admite propiedades personalizadas"), true);
   assert.equal(task.textContent.includes("filtrable"), false);
 
   task.querySelector(".notes-type-create-button").click();
   assert.equal(task.textContent.includes("Podrás crear una nota de tipo Tarea desde aquí"), true);
+  const addType = mounted.elements.list.querySelector(".notes-create-type-button");
+  addType.click();
+  assert.equal(globalThis.__odysseySchemaOpenCalls.at(-1)?.kind, "new");
   assert.equal(calls.length, before);
 });
 

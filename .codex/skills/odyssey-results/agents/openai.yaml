@@ -1,0 +1,4 @@
+interface:
+  display_name: "Odyssey Results"
+  short_description: "Report tangible progress, examples, proof and next stages"
+  default_prompt: "Use $odyssey-results to summarize what changed, real examples, tests/audit status and next Odyssey stages."

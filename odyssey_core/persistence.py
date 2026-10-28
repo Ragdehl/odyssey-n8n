@@ -174,6 +174,7 @@ def update_entity(
     path: str,
     expected_id: str,
     expected_revision: int | None = None,
+    expected_source_hash: str | None = None,
     set_metadata: Mapping[str, Any],
     remove_metadata: Sequence[str] = (),
     content: str | None = None,
@@ -226,7 +227,9 @@ def update_entity(
     )
     updated = Note(metadata=metadata, content=resulting_content)
     validate_note(updated, schema)
-    repository.replace_text(path, serialize_note(updated))
+    repository.replace_text(
+        path, serialize_note(updated), expected_source_hash=expected_source_hash
+    )
     return EntityPersistenceResult(
         PersistenceOperation.UPDATED, expected_id, path, updated.metadata["revision"]
     )
