@@ -15,6 +15,7 @@ from odyssey_core.notes import Note, parse_note, serialize_note
 from odyssey_core.schema_auto_backfill import AutomaticPropertyBackfill
 from odyssey_core.storage import VaultRepository
 from odyssey_runtime.composition import RuntimeComposition, build_runtime_from_environment
+from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
 from odyssey_runtime.schema_backfill_jobs import LocalBackfillJob
 from odyssey_runtime.user_schema_registry import SchemaConfirmation, UserSchemaRegistry
 
@@ -130,6 +131,57 @@ def test_approved_actor_auto_enriches_one_note_and_reports_deferred_without_llm(
     assert "médica" not in stored and "profesora" not in stored
 
 
+def test_approved_semantic_evidence_uses_same_core_writer_and_git(tmp_path):
+    """Model-backed path remains actor-approved; provider never writes Markdown."""
+    app, repo, state = fixture(tmp_path)
+
+    class ReviewedGateway:
+        def __init__(self):
+            self.calls = []
+
+        def _complete(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return {
+                    "decision": "SET",
+                    "locator": "req1:0",
+                    "quote": "Ana trabaja como profesora.",
+                    "value": "profesora",
+                }
+            return {
+                "verdict": "APPROVE",
+                "reason": "ENTAILED_CURRENT",
+                "locator": "req1:0",
+                "quote": "Ana trabaja como profesora.",
+                "value": "profesora",
+            }
+
+    provider = ReviewedGateway()
+    app.schema_backfill_interpreter = SemanticPropertyInterpreter(provider)
+    before = repo.read_text("1.md")
+    with pytest.raises(ValueError, match="approved"):
+        app.notes("schema_backfill", request("stage"), BOB)
+    assert not provider.calls and repo.read_text("1.md") == before
+
+    assert app.notes("schema_backfill", request("stage"), ALICE)["pending"] == 2
+    assert app.notes("schema_backfill", request("advance"), ALICE)["updated"] == 1
+    assert provider.calls == []  # Explicit values use no extra model call.
+    finished = app.notes("schema_backfill", request("advance"), ALICE)
+    assert finished["updated"] == 2 and finished["status"] == "complete"
+    assert len(provider.calls) == 2
+    assert [call["name"] for call in provider.calls] == [
+        "odyssey_schema_backfill_interpret_v1",
+        "odyssey_schema_backfill_review_v1",
+    ]
+    assert parse_note(repo.read_text("1.md")).metadata["profesion"] == "profesora"
+    assert app.notes("schema_backfill", request("advance"), ALICE) == finished
+    assert len(provider.calls) == 2  # Replay never reissues paid model calls.
+    assert (
+        sum("profesora" in p.read_text() for p in (state / "schema-backfill-jobs").glob("*.json"))
+        == 0
+    )
+
+
 def test_cannot_write_using_other_actor_revision_or_browser_authority(tmp_path):
     app, repo, _ = fixture(tmp_path)
     before = [repo.read_text(path) for path in repo.list_markdown_paths()]
@@ -161,12 +213,22 @@ def test_backfill_requires_explicit_dev_and_is_rejected_before_touching_roots(
         {"ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1", "ODYSSEY_SCHEMA_SCAN_ENABLED": "0"},
         {"ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1", "ODYSSEY_SCHEMA_CONFIRM_ENABLED": "0"},
         {"ODYSSEY_SCHEMA_BACKFILL_ENABLED": "maybe"},
+        {"ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "maybe"},
+        {"ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "1"},
+        {"ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "1", "ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1"},
+        {
+            "ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "1",
+            "ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1",
+            "ODYSSEY_DEPLOYMENT_ENV": "PROD",
+        },
         {"ODYSSEY_SCHEMA_BACKFILL_ENABLED": "1", "ODYSSEY_VAULT_ROOT": "/data/odyssey/vault"},
     ]
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     for i, extras in enumerate(combos):
         root = tmp_path / f"isolated{i}"
         defaults = {
             "ODYSSEY_SCHEMA_BACKFILL_ENABLED": "0",
+            "ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED": "0",
             "ODYSSEY_DEPLOYMENT_ENV": "DEV",
             "ODYSSEY_USER_SCHEMA_ENABLED": "1",
             "ODYSSEY_SCHEMA_SCAN_ENABLED": "1",

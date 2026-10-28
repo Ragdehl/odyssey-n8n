@@ -573,9 +573,12 @@ class RuntimeComposition:
     # Optional local, read-only retrospective scan. Trusted host selects one
     # profile/vault root and passes authenticated/local-profile identity.
     schema_scan_factory: Callable[[str], object] | None = None
-    # Private DEV-only deterministic property enrichment, after the SAME
-    # actor approved the specific property. No provider/LLM authorization.
+    # Private DEV-only property enrichment; each request requires the SAME
+    # authenticated actor's durable approval for this property/revision.
     schema_backfill_factory: Callable[[str], object] | None = None
+    # Semantic interpretation is an independently gated, trusted runtime
+    # adapter. No browser-supplied provider or value can authorize a write.
+    schema_backfill_interpreter: object | None = None
     clarification_classifier: ClarificationClassifier | None = None
     intelligent_notes_execute: (
         Callable[[str, Sequence[object]], NotePage | tuple[NotePage, OperationalEvidence]] | None
@@ -1949,8 +1952,9 @@ class RuntimeComposition:
                 if result is None:
                     return {"kind": "schema_backfill", "status": "not_started"}
             else:
-                # Source-only rollout: explicit deterministic facts can write.
-                # NO provider is injected here before live-model acceptance.
+                # Deterministic evidence uses Core directly. Source-bound
+                # semantic review is available ONLY under the trusted, separate
+                # DEV flag and the same confirmed actor/property authority.
                 actor = {"human": resolved_actor, "app": "odyssey-schema-backfill"}
                 now = _current_time()["timestamp"]
                 result = (
@@ -1960,7 +1964,7 @@ class RuntimeComposition:
                         property_id=payload["property_id"],
                         actor=actor,
                         now=now,
-                        interpreter=None,
+                        interpreter=self.schema_backfill_interpreter,
                     )
                     if use_campaign
                     else worker.advance(
@@ -1969,7 +1973,7 @@ class RuntimeComposition:
                         property_id=payload["property_id"],
                         actor=actor,
                         now=now,
-                        interpreter=None,
+                        interpreter=self.schema_backfill_interpreter,
                     )
                 )
             return {"kind": "schema_backfill", **result}
@@ -3189,6 +3193,15 @@ def build_runtime_from_environment() -> RuntimeComposition:
         "ODYSSEY_VAULT_ROOT", "/data/odyssey/vault"
     ).resolve().is_relative_to(_USER_SCHEMA_PROTECTED_ROOT):
         raise ValueError("Local schema backfill cannot target protected PROD storage")
+    semantic_enabled = os.environ.get("ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED", "0")
+    if semantic_enabled not in {"0", "1"}:
+        raise ValueError("Semantic schema backfill flag is invalid")
+    if semantic_enabled == "1" and (
+        backfill_enabled != "1" or os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+    ):
+        raise ValueError("Semantic schema backfill requires approved isolated DEV backfill")
+    if semantic_enabled == "1" and not os.environ.get("OPENAI_API_KEY"):
+        raise ValueError("Semantic schema backfill provider is unavailable")
     # Reject an accidental PROD assistant request *before* touching roots.
     suggestion_enabled = os.environ.get("ODYSSEY_SCHEMA_ASSISTANT_ENABLED", "0")
     if suggestion_enabled not in {"0", "1"}:
@@ -3269,6 +3282,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
     schema_suggestion_service = None
     schema_scan_factory = None
     schema_backfill_factory = None
+    schema_backfill_interpreter = None
     backfill_flag = os.environ.get("ODYSSEY_SCHEMA_BACKFILL_ENABLED", "0")
     if backfill_flag not in {"0", "1"}:
         raise ValueError("Local schema backfill flag is invalid")
@@ -3353,6 +3367,15 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
                 actor_id=actor_id,
                 on_updated=lambda note_id: index_refresh_coordinator.schedule_backfill((note_id,)),
             )
+
+    if os.environ.get("ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED", "0") == "1":
+        # Only the trusted runtime can connect the two-pass model gateway.
+        # The public Notes API supplies no prompt, value, evidence, or model.
+        from .schema_backfill_interpreter import SemanticPropertyInterpreter
+
+        schema_backfill_interpreter = SemanticPropertyInterpreter(
+            OpenAIConversationGateway.from_environment()
+        )
 
     if os.environ.get("ODYSSEY_EMBEDDING_SUBPROCESS") == "1":
         if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or not light_source_enabled:
@@ -5812,6 +5835,7 @@ def _build_runtime_from_environment_unlocked() -> RuntimeComposition:
         schema_suggestion_service=schema_suggestion_service,
         schema_scan_factory=schema_scan_factory,
         schema_backfill_factory=schema_backfill_factory,
+        schema_backfill_interpreter=schema_backfill_interpreter,
         clarification_classifier=OpenAILunaClarificationClassifier(),
         intelligent_notes_execute=intelligent_notes,
         direct_notes_mutations=DirectNoteMutationService(

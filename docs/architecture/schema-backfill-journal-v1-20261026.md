@@ -1,6 +1,6 @@
 # Diario local de enriquecimiento y recuperación — V1 (26-10-2026)
 
-**Estado:** circuito de aplicación implementado en fuente y probado con vault Git sintético. No desplegado todavía en DEV, sin worker móvil continuo ni autorizado para datos reales o PROD.
+**Estado actual (28-10-2026):** enriquecimiento determinista y panel desplegados en DEV en `e748afe`, con banderas de escritura desactivadas; circuito semántico nuevo conectado solo en fuente de PR #156 y sin adopción real. Vaults Git sintéticos probados, sin worker móvil continuo, sin permiso de escritura sobre datos reales o PROD.
 
 ## Por qué
 
@@ -290,10 +290,20 @@ Antes se mezclaban tres presupuestos distintos: **10.000 identidades** del recib
 
 **Límites presentes:** cada E3/Git sigue ejecutándose individualmente y su autorización canónica verifica las identidades físicas completas; aún hay coste O(N) por nota a grandes escalas. La huella entre segmentos cubre rutas e IDs, pero no convierte una campaña multidiario en una transacción global frente a ediciones concurrentes de contenido; los source hashes/CAS se aplican por nota. Los valores diferidos no se reintentan automáticamente en esta fase determinista. No hay worker duradero nativo, ni prueba sobre PROD, GPT real, Cloudflare Access externo ni aceptación DEV del nuevo SHA. Para merge faltan revisión independiente de cuatro roles y cierre de puertas de integración autorizadas.
 
+## Puerta semántica opt-in de la campaña — 28-10-2026 (rama PR #156)
+
+**Circuito conectado en fuente, NO activado en DEV ni PROD:** `RuntimeComposition.notes(schema_backfill.advance)` inyecta el intérprete semántico existente únicamente cuando el host construye la composición con `ODYSSEY_SCHEMA_SEMANTIC_BACKFILL_ENABLED=1`. Esta segunda bandera exige también `ODYSSEY_SCHEMA_BACKFILL_ENABLED=1`, la confirmación de esquema por el mismo actor, el escaneo permitido y un DEV aislado (fuera de `/data/odyssey`). La ausencia de proveedor se rechaza antes de crear carpetas; el navegador nunca aporta valores, candidatos, prompts ni clave. **Ambas banderas de enriquecimiento siguen apagadas en el DEV real**, y no hay llamadas GPT no autorizadas.
+
+Sin intérprete, el comportamiento V1 no cambia: hechos explícitos se actualizan y los semánticos quedan diferidos. Con intérprete, las fuentes no explícitas pasan por propuesta y revisión existentes (máximo dos llamadas por nota), y **solo el Core/E3 de siempre** puede hacer la mutación tras locators, citas y CAS. La repetición de un avance completado no debe llamar otra vez al proveedor. Pruebas con proveedor simulado y vault Git temporal cubren la Notes API aprobada, actor ajeno, texto explícito sin llamadas, revisión semántica, recuperabilidad, y dos diarios firmados con 4 notas. **No se ha habilitado a un usuario ni se han hecho nuevas llamadas pagadas por esta conexión**.
+
+El ensayo GPT previo con 18 casos ES/FR/EN permanece **16/18 coincidencias exactas**, 24 llamadas; sus dos desacuerdos eran expresiones de profesión más específicas, sostenidas por la fuente, y NO se cambiaron los gold. Para campos `string` libres se conserva la precisión respaldada; las categorías normalizadas requieren una restricción explícita (`constraints.enum`) y no una heurística por profesión. No afirmar 18/18 exacto ni normalización automática.
+
+**Límites de aceptación todavía abiertos:** sesión externa autenticada Cloudflare Access y app desplegada usando un actor/vault realmente desechable, prueba real de IA con flag activada y presupuesto autorizado, exposición de costes y fallos al usuario, y recuperación de valores semánticos diferidos por una campaña >10k ya finalizada (los diarios cerrados no se reabren unilateralmente). El futuro worker autónomo duradero Android/iOS sigue fuera de esta entrega. No mezclar estos límites con la incidencia separada de Router/Journal #157.
+
 ## No implementado / siguiente puerta
 
 - El contrato y la pantalla están desplegados en DEV con autocompletado de escritura desactivado tras la prueba; sigue faltando un scheduler/background real para Android/iOS. PROD no lo ejecuta.
-- No hay campaña nueva de modelo real: los 18 casos ES/FR/EN del intérprete están congelados pero no evaluados en proveedor. No habilitar escritura semántica antes de comprobar falsos positivos, abstenciones y coste autorizado.
+- La evaluación real autorizada ya cubrió los 18 casos ES/FR/EN: 16/18 valores exactos y dos más específicos sustentados por las citas; el presupuesto fue 24 llamadas, coste estimado 0,0017 USD. No habilitar la escritura semántica sobre notas del usuario sin aceptación autenticada y presupuesto de campaña separado.
 - El mecanismo actual guarda un commit por nota; para corpus enormes necesita optimización sin perder la recuperación. El plan de un máximo de 10.000 candidatas no sustituye los ensayos de rendimiento en hardware móvil.
 - Pendientes identidad/deduplicación de entidades nuevas, UX de excepciones y deshacer, sesión externa Cloudflare Access y auditoría Codex de cuatro roles sobre commit aprobado.
 

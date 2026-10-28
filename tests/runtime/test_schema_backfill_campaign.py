@@ -42,6 +42,51 @@ def run_to_end(item, max_steps=40):
     raise AssertionError("Campaign did not terminate")
 
 
+def test_semantic_provider_is_reviewed_across_two_signed_children(tmp_path):
+    """A single approved campaign can mix explicit and reviewed semantic values."""
+    from odyssey_runtime.schema_backfill_interpreter import SemanticPropertyInterpreter
+
+    state, repo, writer = setup(tmp_path, ["Profesión: médica", "Ana trabaja como profesora."] * 2)
+    run = campaign(state, repo, writer, segment_size=2)
+
+    class ReviewedGateway:
+        calls = 0
+
+        def _complete(self, **kwargs):
+            self.calls += 1
+            original = kwargs["data"]["marked_atomic_facts"][0]
+            if kwargs["name"] == "odyssey_schema_backfill_interpret_v1":
+                return {
+                    "decision": "SET",
+                    "locator": original["locator"],
+                    "quote": original["text"],
+                    "value": "profesora",
+                }
+            return {
+                "verdict": "APPROVE",
+                "reason": "ENTAILED_CURRENT",
+                "locator": original["locator"],
+                "quote": original["text"],
+                "value": "profesora",
+            }
+
+    provider = ReviewedGateway()
+    interpreter = SemanticPropertyInterpreter(provider)
+    run.stage(campaign_id="all-people", type_id="person", property_id="profesion")
+    for _ in range(12):
+        receipt = step(run, interpreter=interpreter)
+        if receipt["finished"]:
+            break
+    else:
+        raise AssertionError("Campaign did not finish")
+    assert receipt["updated"] == receipt["total"] == 4
+    assert provider.calls == 4  # Only two natural-language rows, two passes each.
+    assert parse_note(repo.read_text("1.md")).metadata["profesion"] == "profesora"
+    assert parse_note(repo.read_text("3.md")).metadata["profesion"] == "profesora"
+    assert step(run, interpreter=interpreter) == receipt
+    assert provider.calls == 4  # Signed replay cannot incur model costs.
+
+
 def test_campaign_seals_multiple_independently_undoable_git_journals(tmp_path):
     state, repo, writer = setup(tmp_path, ["Profesión: médica"] * 6)
     worker = campaign(state, repo, writer)
