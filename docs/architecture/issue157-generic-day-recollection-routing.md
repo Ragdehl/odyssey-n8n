@@ -40,6 +40,49 @@ The contract now requests minimal distinct references (singular or plural),
 each verbatim and in source order. The next fresh gate must not relabel those
 two failed outcomes as successes.
 
+### Actual bounded fresh provider evaluation — completed
+
+The user explicitly authorized **up to 12 real paid GPT calls**. The
+Raspberry executed **exactly 12** against the actual Events-enabled strict
+JSON contract, GPT-6 Luna, low effort, with no SDK retries and 1,700
+max-output tokens per call. All inputs were synthetic; the protected
+EnvironmentFile was loaded by two transient systemd user units, whose
+sandbox hid DEV and PROD directories. Signed reservation receipts in
+`.odyssey-agent-runs/issue157-live-20261028/` remain private and are
+separately anchored to source/prompt/schema SHA-256 fingerprints.
+
+| Prompt/source | Calls | Required primary route and exact relation spans |
+| --- | ---: | ---: |
+| Initial PR #161 `b48c179`, prompt `cd0eb5f67a9f` | 6 | **4/6** |
+| Corrected `fb137fa`, prompt `88bc44e513d2` | 6 | **6/6** |
+| Entire authorized campaign, never resetting prior failures | **12/12** | **10/12** |
+
+The two initial failures were **Spanish coordinated relations merged into
+one span** and **French singular partner missing**. The corrected prompt
+then passed both exact multi-relation cases plus one unknown-destination
+recollection, a future scheduled Event, an Event reschedule and a real Task
+obligation. Total measured SDK usage: 16,710 input and 2,793 output tokens;
+no exact billing cost inferred. **No additional GPT calls are authorized.**
+
+**Scope caveat:** One corrected unknown-destination route returned a lone
+Core `app_scope` with `depends_on_another_scope=true` while describing
+Temporal as its dependency. This is inconsistent as an independent
+*user operation* scope; the current Core-only executor ignores that
+non-authoritative app_scopes hint and still performs independent
+whole-source coverage before writing. The **6/6 score is strictly for the
+predeclared primary capability and exact relation-span checks**, not full
+semantic endorsement of every optional model field. Keep this warning
+visible for independent reviewers; do not rewrite expected results.
+
+A genuine GPT Router response from the corrected Spanish multi-relation
+case has been frozen in
+`tests/fixtures/issue157_recorded_live_router_v2.json`. Its
+`test_saved_real_gpt_router_v2_does_real_core_e3_day_and_family_readback`
+fixture is a genuine **Router replay + fake downstream model review +
+real Core/E3/physical Markdown** test with two facts, existing family
+links and idempotence. It is **not** a fresh complete-model public browser
+test and must not be described as one.
+
 The Event-capable Router prompt is also clarified at the **general intent
 boundary**: a completed dated recollection is durable Core/day knowledge;
 a schedule, future occurrence or Event lifecycle command remains Events.
@@ -87,11 +130,10 @@ notes, authenticated fake SELF and fixed local clock; no use of private source.
   over-capacity, stale member evidence, model hiding attested members,
   inappropriate Events route, no invented participants.
 - Full offline Python, JS and workflow contract gate + independent reviewers.
-- **Still required:** bounded, explicitly authorized fresh GPT evaluation
-  of the new prompt/strict schema; no golden edits to mask failures. A passing
-  fake model test only proves deterministic enforcement, not real model
-  behavior. If misroutes remain, diagnose the model decision, temporal/date
-  ownership and pending clarification separately before further changes.
+- **Completed:** a budget-bounded fresh GPT Router evaluation, with exact
+  12/12 budget and separate first/second prompt versions above. The
+  optional app-scope inconsistency must be reviewed independently; do not
+  conflate this with end-to-end integration.
 - **Still required before DEV promotion:** authenticated browser → real n8n →
   real model → Core/E3 → synthetic Markdown → Notes/Day readback and
   replay on the exact release SHA. Do not mutate shared DEV/PROD personal

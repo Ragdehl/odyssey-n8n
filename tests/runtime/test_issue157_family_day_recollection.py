@@ -253,3 +253,48 @@ def test_router_must_not_invent_family_names_when_relation_evidence_is_absent(tm
     outcome = runtime.execute_product(SOURCE, "issue157-no-relations", "main", actor)
     assert outcome["status"] == "needs_attention", outcome
     assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+
+
+def test_saved_real_gpt_router_v2_does_real_core_e3_day_and_family_readback(tmp_path, monkeypatch):
+    """Real GPT ROUTER reply; remaining model phases frozen, E3/Markdown real."""
+    import json
+    import sys
+    from pathlib import Path
+
+    receipt = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "tests/fixtures/issue157_recorded_live_router_v2.json"
+        ).read_text()
+    )
+    assert receipt["production_model"] == "gpt-6-luna"
+    assert receipt["observed_source_sha"] == "fb137fabc80056fe827af7c2255cf2acdaed5b75"
+    source = receipt["source"]
+    route = receipt["recorded_immutable_router_output"]
+    assert route["self_relation_spans"] == ["mis hijos", "mi pareja"]
+    # Reuse the existing model-independent Core test harness without changing
+    # its global source constants beyond this temporary isolated test.
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "SOURCE", source)
+    monkeypatch.setattr(
+        module,
+        "FACTS",
+        (
+            "Hoy hemos ido al jardín con mis hijos y mi pareja.",
+            "Después hemos visitado el museo.",
+        ),
+    )
+    repo, actor, service, runtime = _family(tmp_path)
+    _suggested_router, *remaining_model_fakes = _model_responses()
+    service.client = RecordedClient([route, *remaining_model_fakes])
+    response = runtime.execute_product(source, "issue157-live-router-readback", "main", actor)
+    assert response["status"] == "completed", response
+    day = parse_note(repo.read_text(f"calendar/days/{DAY}.md"))
+    assert day.content.count("odyssey:fact request=issue157-live-router-readback-") == 2
+    assert all(f"[[{name}" in day.content for name in PEOPLE)
+    assert "jardín" in day.content and "museo" in day.content
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    assert runtime.execute_product(source, "issue157-live-router-readback", "main", actor)[
+        "delivery_replayed"
+    ]
+    assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
