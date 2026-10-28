@@ -94,11 +94,10 @@ def _model_responses():
                 "source_quote": text,
                 "kind": "record",
                 "reviewed_text": (
-                    "{{ref:0}}, {{ref:1}} y {{ref:2}} visitamos "
-                    + ("un jardín." if i == 0 else "un museo.")
+                    "{{ref:0}}, {{ref:1}} y {{ref:2}} visitamos un jardín." if i == 0 else text
                 ),
                 "date": DAY,
-                "reference_names": list(PEOPLE),
+                "reference_names": list(PEOPLE) if i == 0 else [],
                 "supported": True,
             }
             for i, text in enumerate(FACTS)

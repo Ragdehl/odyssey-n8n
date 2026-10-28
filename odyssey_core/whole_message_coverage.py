@@ -241,20 +241,13 @@ def validate_whole_message_coverage(
             ):
                 raise WholeMessageCoverageError("Participant absent from original source")
         if groups:
-            # A quote with its own group phrase authorizes only THAT phrase's
-            # members, never the union of all SELF relations in the message.
-            # A later elliptical continuation can inherit a combined group
-            # only when a preceding single fact literally introduced every
-            # one of the groups together. Separate source facts cannot be
-            # silently pooled into a fabricated joint subject.
+            # Only the atomic fact's own literal SELF-relation phrase can
+            # authorize that group's names. An elliptical continuation may
+            # still be saved as a literal Day fact, but cannot inherit a
+            # person's canonical identity solely from a preceding sentence.
+            # Without independently verified fact-to-fact group continuity,
+            # even "Ella" after a collective reference is ambiguous.
             direct = {name for phrase, members in groups if phrase in quote for name in members}
-            if not direct:
-                if any(
-                    all(phrase in prior.source_quote for phrase, _members in groups)
-                    and prior.source_spans[-1][1] <= span[0]
-                    for prior in output
-                ):
-                    direct = {name for _phrase, members in groups for name in members}
             for name in names:
                 if (
                     name in verified

@@ -117,13 +117,39 @@ This verdict remains immutable in private
 The new source candidate introduces an **optional original-source group
 provenance map** to the existing Core coverage validator. A person verified
 by a SELF group must belong to a relationship phrase literally supporting
-the specific atomic fact. A continuation may inherit the exact same
-previously proven group only after a preceding atomic fact explicitly
-introduced **all** groups together. Independent facts with distinct groups
-cannot borrow one another's members. Explicit literal source name evidence
-is still checked separately. Tests cover valid distinct facts, three
-cross-assignments that must fail, a multi-group continuation and a valid
-single-group continuation.
+the specific atomic fact. Independent facts with distinct groups cannot
+borrow one another's members. Explicit literal source name evidence remains
+a separate checked source. A later elliptical source statement can still be
+recorded **literally** in the canonical Day, but no individual identity link
+may be inferred from earlier collective membership without an additional
+reviewable source-bound cross-fact semantic proof.
+
+### Second independent Generality review — source SHA 0547e62
+
+A fresh Sol read-only review returned **FAIL** despite the successful
+source-only mixed Event+Task repair. It independently reproduced two unsafe
+or incomplete edge cases in the old *implicit ellipsis inheritance* clause:
+
+- The source "Mis hijos y mi pareja salieron. Ella cocinó." could give
+  every known group member a link in the second, singular fact.
+- The source "Mis hijos jugaron. Después descansaron. Mi pareja cocinó."
+  could refuse a continuation belonging only to the earlier children,
+  because the later unrelated partner group was also mentioned.
+
+The revision removes automatic cross-sentence group inference, rather than
+hardcoding singular/plural grammar for individual languages. The confirmed
+first fact retains its exact canonical Person links; a second elliptical
+fact remains durable literal Day content, **without unproven individual
+links**. The negative source now fails safely, and legitimate continuations
+with ambiguous membership are recorded without an invented relationship.
+A later full-featured solution requires a separately reviewed, typed
+fact-to-fact membership handoff with independent source evidence and model
+testing. This source-only partial safeguard must not be marketed as complete
+automatic attribution of every unnamed participant in all continuations.
+
+The prior Generality FAIL on `0547e62` is retained; this revision is not
+a retroactive PASS or an authenticated browser release gate. Private JSON:
+`.odyssey-agent-runs/issue157-live-20261028/review-generality-sha054.json`.
 
 The Event+Task independent partition now permits already verified SELF
 spans, requires each span to map to **exactly one** byte-exact reviewed

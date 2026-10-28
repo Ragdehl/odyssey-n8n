@@ -136,7 +136,7 @@ def test_later_ellipsis_cannot_inherit_a_set_from_two_different_fact_sources():
         )
 
 
-def test_one_verified_group_carries_to_subsequent_elliptical_same_day_fact():
+def test_one_verified_group_does_not_invent_links_in_elliptical_day_fact():
     continuation = "Después visitamos el museo."
     source = CHILDREN + " " + continuation
     statements = (CHILDREN, continuation)
@@ -150,7 +150,7 @@ def test_one_verified_group_carries_to_subsequent_elliptical_same_day_fact():
                 "meaning": text,
                 "date": "2026-10-29",
                 "daypart": None,
-                "participants": ["Nora", "Ivo"],
+                "participants": ["Nora", "Ivo"] if text == CHILDREN else [],
                 "source_evidence": text,
                 "dependent_on_fact_index": None,
                 "needs_clarification": False,
@@ -167,9 +167,11 @@ def test_one_verified_group_carries_to_subsequent_elliptical_same_day_fact():
                 "ordinal": i,
                 "source_quote": text,
                 "kind": "record",
-                "reviewed_text": "{{ref:0}} y {{ref:1}} visitaron un lugar.",
+                "reviewed_text": (
+                    "{{ref:0}} y {{ref:1}} visitaron el jardín." if text == CHILDREN else text
+                ),
                 "date": "2026-10-29",
-                "reference_names": ["Nora", "Ivo"],
+                "reference_names": ["Nora", "Ivo"] if text == CHILDREN else [],
                 "supported": True,
             }
             for i, text in enumerate(statements)
@@ -184,3 +186,61 @@ def test_one_verified_group_carries_to_subsequent_elliptical_same_day_fact():
         verified_relationship_groups=(("mis hijos", ("Nora", "Ivo")),),
     )
     assert len(result.reviewed_facts) == 2
+    assert result.reviewed_facts[0].reference_names == ("Nora", "Ivo")
+    assert result.reviewed_facts[1].reference_names == ()
+
+
+def test_singular_ellipsis_never_inherits_entire_prior_collective():
+    first = "Mis hijos y mi pareja salieron."
+    second = "Ella cocinó."
+    source = first + " " + second
+    proposed = {
+        "entities": [],
+        "unresolved": [],
+        "facts": [
+            {
+                "meaning": statement,
+                "kind": "record",
+                "subject": "family",
+                "date": "2026-10-29",
+                "daypart": None,
+                "participants": list(ALL_PEOPLE),
+                "source_evidence": statement,
+                "dependent_on_fact_index": None,
+                "needs_clarification": False,
+            }
+            for statement in (first, second)
+        ],
+    }
+    review = {
+        "approved": True,
+        "complete": True,
+        "reason": None,
+        "facts": [
+            {
+                "ordinal": index,
+                "source_quote": statement,
+                "kind": "record",
+                "reviewed_text": "{{ref:0}} {{ref:1}} {{ref:2}} participaron.",
+                "date": "2026-10-29",
+                "reference_names": list(ALL_PEOPLE),
+                "supported": True,
+            }
+            for index, statement in enumerate((first, second))
+        ],
+    }
+    with pytest.raises(
+        WholeMessageCoverageError,
+        match="Verified group member unsupported by this atomic source fact",
+    ):
+        validate_whole_message_coverage(
+            source,
+            proposed,
+            review,
+            ["core", "temporal"],
+            verified_relationship_members=ALL_PEOPLE,
+            verified_relationship_groups=(
+                ("Mis hijos", ("Nora", "Ivo")),
+                ("mi pareja", ("Vera",)),
+            ),
+        )
