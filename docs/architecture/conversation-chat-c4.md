@@ -305,6 +305,18 @@ identity stage ran. Synthetic source-only test cases were updated to
 supply the same positive prewrite proof that the real source executor
 would attest, without altering the recorded historical 14-call outcome.
 
+**Focused independent review of initial `cfde254`: FAIL preserved.**
+It detected two newly unclosed boundaries: C4 provider outage fixture was
+represented as flat sibling stages instead of real nested E2 spans; and n8n
+could accept a failed parent from the separate checkpoint-event fallback
+despite its failed child. Subsequent source-only correction now constructs
+real `OperationalSpan` descendants for parent/source-provider cases in the
+synthetic evaluation and rejects the parent from **both** E2 stage and
+checkpoint-event paths when a failed child is observed. Tests cover an
+explicit parent failure event, valid child, and real nested fixture.
+Focused Python/JS PASS; original FAIL remains for the first SHA, and the
+follow-up SHA still needs its own validation before promotion.
+
 **Limits:** the old 14-call FAIL still stands; new prompt has a different
 hash and has **not** been evaluated against GPT real. Two correct writer
 explanations were rejected by an overbroad lexical write-claim filter,

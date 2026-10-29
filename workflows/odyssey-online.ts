@@ -326,6 +326,8 @@ const gd = r.error_diagnosis;
 const graphStage = (stage, routeIndex) => !!verifiedLedger &&
   verifiedLedger.status === r.status &&
   (routeIndex === null || (Number.isInteger(routeIndex) && routeIndex >= 0 && routeIndex < verifiedLedger.routes.length)) &&
+  !verifiedLedger.stages.some(child => child.parent_stage === stage &&
+    child.route_index === routeIndex && ['failed','unavailable'].includes(child.outcome)) &&
   ((stage === 'unattributed' && routeIndex === null) ||
     verifiedLedger.stages.some(st => st.name === stage && st.route_index === routeIndex &&
       ['failed','unavailable'].includes(st.outcome) &&

@@ -20,7 +20,12 @@ from types import SimpleNamespace
 from typing import Any
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
-from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
+from odyssey_core.observability import (
+    OperationalEvidence,
+    OperationalOutcome,
+    OperationalSpan,
+    OperationalStage,
+)
 from odyssey_runtime.conversation_error import diagnose_trusted_execution_graph
 from odyssey_runtime.conversation_gateway import (
     GRAPH_DIAGNOSIS_INSTRUCTIONS,
@@ -226,6 +231,36 @@ def evidence_for(
         )
         for name, outcome, index in case.stages
     )
+    # Model an observed failed provider as a child of source processing,
+    # matching actual P4 SpanRecorder/E2 projection rather than inventing
+    # parallel root stages. Other cases keep their explicit original order.
+    if (
+        len(case.stages) >= 2
+        and case.stages[0][0] == "application.source_processing"
+        and all(name.startswith("provider.") and idx is None for name, _, idx in case.stages[1:])
+    ):
+        first = stages[0]
+        stages = (
+            OperationalStage(
+                first.name,
+                first.outcome,
+                first.duration_ms,
+                error_category=first.error_category,
+                route_index=None,
+                substeps=tuple(
+                    OperationalSpan(
+                        name,
+                        outcome,
+                        0,
+                        1,
+                        error_category=case.reason
+                        if outcome is OperationalOutcome.FAILED
+                        else None,
+                    )
+                    for name, outcome, _ in case.stages[1:]
+                ),
+            ),
+        )
     flow = (
         {
             "version": 1,
