@@ -222,6 +222,40 @@ calls. A new independent verdict on the patched SHA and a complete matching
 source gate are still required; DEV app acceptance and durable actionable
 clarification remain separate unresolved gates.
 
+### Fourth independent Generality review — SHA 55a1372, FAIL (29 October)
+
+The independent Sol source reviewer reproduced **two residual identity
+provenance defects** after the first repair. A Planner fact could cite the
+entire source as its *primary* evidence, subsuming a narrower independent
+fact's person reference. And in the legacy mode, an explicit person's name
+from a later assertion could be borrowed through the reviewer's broad quote.
+Both were accepted by the previous validator despite a misleading fact link.
+The same reviewer warned that the strict model prompt's unbounded wording
+does not reflect the existing eight-group maximum, and that the executor's
+scalar/list compatibility validation was looser than the stated prompt.
+The FAIL is retained, not reclassified.
+
+The next source-only repair makes Core compare original-source **primary
+occurrence offsets for every atomic fact** when verified relationships are
+involved. A relationship phrase or explicitly named person can authorize a
+fact only when its occurrence lies in that fact's primary source anchor and
+not in any *different overlapping fact's* primary anchor. Multiple distinct
+relationship groups cannot be attached across two facts with identical broad
+primary evidence. Shared or supporting context is never an implicit identity
+handoff. This is a deliberately conservative abstention where source ownership
+cannot be independently established; it may defer legitimate co-references
+until a typed, reviewed fact-to-fact handoff exists. New adversarial cases
+cover broad Planner and Reviewer citations in both modes, explicit names,
+and equal overlapping anchors. The Router also requires its legacy scalar
+to agree with exactly one list entry when present; scalar-only pre-Events
+compatibility remains intact.
+
+**No model prompt/schema or authorized provider budget was changed.** The
+existing eight-group prompt mismatch is a known non-release warning; a
+model-facing change needs a new authorized GPT gate. This patch needs an exact
+SHA full regression, new independent audit, actual isolated app/browser E2E,
+and pending-clarification durability before merge/deployment acceptance.
+
 ## Bounded model evaluation matrix (must be run on production GPT before enabling)
 
 Each model test must inspect the **actual strict JSON schema** and record the

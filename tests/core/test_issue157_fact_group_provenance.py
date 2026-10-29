@@ -276,3 +276,98 @@ def test_broad_review_quote_cannot_launder_other_fact_group(core_anchored):
             verified_relationship_groups=GROUPS,
             core_anchored_evidence=core_anchored,
         )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_broad_planner_primary_cannot_steal_nested_other_fact_relation(core_anchored):
+    """Model-owned broad primary does not overrule narrower atomic ownership."""
+    proposed, reviewed = _review(ALL_PEOPLE, ("Vera",))
+    proposed["facts"][0]["source_evidence"] = SOURCE
+    if core_anchored:
+        for fact in proposed["facts"]:
+            fact.update(
+                source_evidence_fragments=[],
+                source_evidence_context=None,
+                source_evidence_fragment_contexts=[],
+            )
+        for claim in reviewed["facts"]:
+            del claim["source_quote"]
+    else:
+        reviewed["facts"][0]["source_quote"] = SOURCE
+    with pytest.raises(
+        WholeMessageCoverageError,
+        match="Verified group member unsupported by this atomic source fact",
+    ):
+        validate_whole_message_coverage(
+            SOURCE,
+            proposed,
+            reviewed,
+            ["core", "temporal"],
+            verified_relationship_members=ALL_PEOPLE,
+            verified_relationship_groups=GROUPS,
+            core_anchored_evidence=core_anchored,
+        )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_explicit_person_name_only_in_other_fact_cannot_be_borrowed(core_anchored):
+    """A broadened reviewer quote must never authorize a different name."""
+    second = "Vera visitó el museo."
+    source = CHILDREN + " " + second
+    proposed, reviewed = _review(ALL_PEOPLE, ("Vera",))
+    proposed["facts"][1]["source_evidence"] = second
+    reviewed["facts"][1]["source_quote"] = second
+    if core_anchored:
+        for fact in proposed["facts"]:
+            fact.update(
+                source_evidence_fragments=[],
+                source_evidence_context=None,
+                source_evidence_fragment_contexts=[],
+            )
+        for claim in reviewed["facts"]:
+            del claim["source_quote"]
+    else:
+        reviewed["facts"][0]["source_quote"] = source
+    with pytest.raises(
+        WholeMessageCoverageError,
+        match="Verified group member unsupported by this atomic source fact",
+    ):
+        validate_whole_message_coverage(
+            source,
+            proposed,
+            reviewed,
+            ["core", "temporal"],
+            verified_relationship_members=ALL_PEOPLE,
+            verified_relationship_groups=(GROUPS[0],),
+            core_anchored_evidence=core_anchored,
+        )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_shared_all_source_primary_with_different_groups_fails_closed(core_anchored):
+    proposed, reviewed = _review(ALL_PEOPLE, ALL_PEOPLE)
+    for fact in proposed["facts"]:
+        fact["source_evidence"] = SOURCE
+        if core_anchored:
+            fact.update(
+                source_evidence_fragments=[],
+                source_evidence_context=None,
+                source_evidence_fragment_contexts=[],
+            )
+    for claim in reviewed["facts"]:
+        if core_anchored:
+            del claim["source_quote"]
+        else:
+            claim["source_quote"] = SOURCE
+    with pytest.raises(
+        WholeMessageCoverageError, match="Shared primary relationship evidence ambiguous"
+    ):
+        validate_whole_message_coverage(
+            SOURCE,
+            proposed,
+            reviewed,
+            ["core", "temporal"],
+            verified_relationship_members=ALL_PEOPLE,
+            verified_relationship_groups=GROUPS,
+            core_anchored_evidence=core_anchored,
+        )

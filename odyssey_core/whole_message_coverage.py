@@ -166,6 +166,49 @@ def validate_whole_message_coverage(
     output: list[ReviewedFullSourceFact] = []
     evidence_spans: list[tuple[int, int]] = []
     anchored = anchor_planned_source_evidence(source, proposal) if core_anchored_evidence else ()
+    # A model may cite an entire message as ONE fact while also planning a
+    # narrower, independently asserted fact inside it. Literal containment
+    # alone then cannot assign a person to either atomic fact. Build original
+    # primary occurrence offsets (not reviewer-controlled broad quote spans)
+    # before deciding which source mentions each fact can safely claim.
+    primary_spans: tuple[tuple[int, int], ...] = ()
+    if groups:
+        try:
+            primary_spans = tuple(
+                (e.primary.start, e.primary.end)
+                for e in (
+                    anchored
+                    if core_anchored_evidence
+                    else tuple(
+                        anchor_literal_evidence(source, f.get("source_evidence")) for f in facts
+                    )
+                )
+            )
+        except (SourceEvidenceError, TypeError, AttributeError) as error:
+            raise WholeMessageCoverageError("Ambiguous atomic identity evidence") from error
+
+    def owned_mention(literal: str, index: int, *, insensitive: bool = False) -> bool:
+        """Recognize source mentions exclusive to this fact's primary anchor.
+
+        Overlapping evidence owned by another independently planned fact is
+        not authority to borrow that fact's people. Equal primary anchors
+        with multiple different groups are separately rejected as ambiguous.
+        """
+        owner = primary_spans[index]
+        expression = r"(?<!\w)" + re.escape(literal) + r"(?!\w)"
+        for match in re.finditer(expression, source, re.IGNORECASE if insensitive else 0):
+            start, end = match.span()
+            if (
+                owner[0] <= start
+                and end <= owner[1]
+                and not any(
+                    other != owner and start < other[1] and other[0] < end
+                    for position, other in enumerate(primary_spans)
+                    if position != index
+                )
+            ):
+                return True
+        return False
 
     for index, (fact, claim) in enumerate(zip(facts, judgments, strict=True)):
         if not isinstance(fact, Mapping) or not isinstance(claim, Mapping):
@@ -241,19 +284,33 @@ def validate_whole_message_coverage(
             ):
                 raise WholeMessageCoverageError("Participant absent from original source")
         if groups:
-            # Relationship membership must be evidenced by THIS atomic fact's
-            # planner-anchored primary assertion, never by a broader quote
-            # selected by the second (untrusted) reviewer. Supporting context
-            # and prior sentences are not a fact-to-fact identity handoff.
-            # Elliptical continuations can be saved literally without links.
-            direct = {name for phrase, members in groups if phrase in requested for name in members}
+            # Multiple group memberships inside the very same primary source
+            # excerpt cannot be independently assigned to two different facts.
+            # The source may still be saved literally without unsafe links.
+            if (
+                names
+                and len({phrase for phrase, _members in groups}) > 1
+                and any(
+                    other == primary_spans[index]
+                    for position, other in enumerate(primary_spans)
+                    if position != index
+                )
+            ):
+                raise WholeMessageCoverageError("Shared primary relationship evidence ambiguous")
+            # Neither a broad Reviewer quote, a broad Planner primary, nor an
+            # auxiliary context may transfer identities between atomic facts.
+            # Literal personal names obey the SAME occurrence ownership rule.
+            direct = {
+                name
+                for phrase, members in groups
+                if owned_mention(phrase, index)
+                for name in members
+            }
             for name in names:
                 if (
                     name in verified
                     and name not in direct
-                    and not re.search(
-                        r"(?<!\w)" + re.escape(name) + r"(?!\w)", quote, re.IGNORECASE
-                    )
+                    and not owned_mention(name, index, insensitive=True)
                 ):
                     raise WholeMessageCoverageError(
                         "Verified group member unsupported by this atomic source fact"

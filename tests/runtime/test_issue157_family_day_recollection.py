@@ -386,3 +386,14 @@ def test_repeated_relationship_phrase_in_two_facts_persists_and_replays(tmp_path
         "delivery_replayed"
     ]
     assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+
+
+def test_router_scalar_claim_cannot_disagree_with_multiple_verified_groups(tmp_path):
+    repo, actor, service, runtime = _family(tmp_path)
+    rows = _model_responses()
+    rows[0]["self_relation_span"] = "mis hijos"
+    service.client = RecordedClient(rows[:1])
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    outcome = runtime.execute_product(SOURCE, "issue157-scalar-mismatch", "main", actor)
+    assert outcome["status"] == "needs_attention"
+    assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}

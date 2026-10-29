@@ -887,8 +887,8 @@ class WholeSourceLightExecutor:
                 legacy_relation_span is not None
                 and (
                     not isinstance(legacy_relation_span, str)
-                    or not proposed_relation_spans
-                    or legacy_relation_span not in proposed_relation_spans
+                    or len(proposed_relation_spans) != 1
+                    or legacy_relation_span != proposed_relation_spans[0]
                 )
             )
         ):
