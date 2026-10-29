@@ -23,6 +23,8 @@ class FakeElement {
     this.scrollTop = 0;
     this._listeners = new Map();
     this._textContent = "";
+    // An inserted message is connected within the synthetic Chat tree.
+    Object.defineProperty(this, "isConnected", {get: () => this.parentNode !== null});
     this.classList = {
       add: (...names) => {
         this.className = [...new Set([...this.className.split(" "), ...names])]
@@ -193,12 +195,18 @@ function createPage() {
   return {document, elements};
 }
 
-async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission, progressThrows = false}) {
+async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission,
+  progressThrows = false, deferredDiagnosisMock}) {
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
   let notesHomeCalls = 0;
   let calendarHomeCalls = 0;
+  const deferredCalls = [];
+  globalThis.__odysseyTestDeferredPoll = async options => {
+    deferredCalls.push(options);
+    return deferredDiagnosisMock?.(options);
+  };
   globalThis.document = document;
   globalThis.CustomEvent = class CustomEvent {
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
@@ -264,7 +272,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace('import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling, renderExecutionFlow} = globalThis.__odysseyTestProgress;")
-    .replace('import {pollDeferredDiagnosis} from "./deferred_diagnosis.js";', "async function pollDeferredDiagnosis() {}")
+    .replace('import {pollDeferredDiagnosis} from "./deferred_diagnosis.js";', "const pollDeferredDiagnosis = globalThis.__odysseyTestDeferredPoll;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
@@ -274,6 +282,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     renderedWithoutRecovery: () => renderedWithoutRecovery,
     notesHomeCalls: () => notesHomeCalls,
     calendarHomeCalls: () => calendarHomeCalls,
+    deferredCalls,
   };
 }
 
@@ -749,4 +758,31 @@ test("recoverable history warns only that its assistant turn is missing, not its
   const control = page.elements.conversation.querySelector(".recovery-control");
   assert.match(control.textContent, /La respuesta no figura en el historial/);
   assert.doesNotMatch(control.textContent, /no tiene una respuesta guardada/);
+});
+
+
+test("persisted deferred diagnosis attaches on reload and paginated assistant messages", async () => {
+  const failure = request_id => ({
+    request_id, role: "assistant", text: "La operación necesita revisión.",
+    status: "needs_attention", request_detail: {
+      request_id, operational: {total_duration_ms: 50, stages: []},
+      // The E2 ledger is intentionally NOT in persisted ConversationStore detail.
+    },
+  });
+  const page = await mountApp({
+    turns: [{request_id: "recent-demo", role: "user", text: "Recordatorio de ayer"},
+      failure("recent-demo")],
+    olderTurns: [{request_id: "old-demo", role: "user", text: "Visita antigua"},
+      failure("old-demo")],
+    deferredDiagnosisMock: ({onResult}) => onResult("Consejo fundamentado en E3."),
+  });
+  assert.equal(page.deferredCalls.length, 1, "rehydrated recent reply has a lookup");
+  assert.equal(page.deferredCalls[0].ledger, undefined, "no invented E2 metadata");
+  assert.match(page.elements.conversation.textContent, /Consejo fundamentado en E3/);
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+  assert.equal(page.deferredCalls.length, 2, "paginated reply also has a lookup");
+  assert.equal(page.deferredCalls[1].requestId, "old-demo");
+  assert.match(page.elements.conversation.textContent, /Diagnóstico posterior/);
 });

@@ -9,7 +9,10 @@ from threading import Event
 
 import pytest
 
-from odyssey_runtime.deferred_diagnostics import DeferredDiagnosticStore
+from odyssey_runtime.deferred_diagnostics import (
+    DeferredDiagnosticStore,
+    project_receipt_diagnostic_evidence,
+)
 from odyssey_runtime.delivery_results import DeliveryResultError, LocalDeliveryResultStore
 
 REQUEST_ID = "deferred-c4-demo"
@@ -130,3 +133,36 @@ def test_racing_claimers_never_read_a_partially_published_claim(tmp_path, monkey
         proceed.set()
         assert first.result(timeout=4) is False
     assert state.read(REQUEST_ID, FINGERPRINT, "b" * 64) == {"status": "pending"}
+
+
+def test_receipt_stage_evidence_rejects_false_status_and_write_claims():
+    stage = {
+        "name": "candidate.source_boundary_review",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": None,
+        "stage_view": {"version": 1, "label": "Core · revisión", "icon": "core"},
+    }
+    response = {
+        "request_id": REQUEST_ID,
+        "status": "needs_attention",
+        "product_reason": "SOURCE_UNVERIFIED",
+        "affected_stable_note_ids": [],
+        "execution_ledger": {
+            "version": 1,
+            "request_id": REQUEST_ID,
+            "status": "needs_attention",
+            "affected_stable_note_ids": [],
+            "stages": [stage],
+        },
+    }
+    evidence = project_receipt_diagnostic_evidence(response)
+    assert evidence["write_evidence"] == "UNKNOWN"
+    assert evidence["stages"] == [stage]
+    assert not any("note" in key for key in evidence)
+    mismatch = json.loads(json.dumps(response))
+    mismatch["affected_stable_note_ids"] = ["invented-note"]
+    assert project_receipt_diagnostic_evidence(mismatch) is None
+    mismatch = json.loads(json.dumps(response))
+    mismatch["execution_ledger"]["status"] = "failed"
+    assert project_receipt_diagnostic_evidence(mismatch) is None

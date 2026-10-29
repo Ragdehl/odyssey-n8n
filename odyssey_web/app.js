@@ -317,6 +317,7 @@ async function loadOlderConversation() {
     const data = await requestConversation({endpoint: conversationEndpoint, operation: "main", payload: {limit: 40, before: cursor}});
     if (cursor !== olderCursor) return;
     const olderNodes = [];
+    const olderDiagnosticCandidates = [];
     for (const turn of data.turns ?? []) {
       if (turn.role === "user" && typeof turn.request_id === "string" && typeof turn.text === "string") {
         userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
@@ -340,6 +341,7 @@ async function loadOlderConversation() {
         restorePersistedAcknowledgement(message, turn);
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
+        olderDiagnosticCandidates.push({message, turn});
       }
       olderNodes.push(message);
     }
@@ -353,6 +355,9 @@ async function loadOlderConversation() {
       duplicate?.remove();
     }
     if (olderNodes.length) conversation.prepend(...olderNodes);
+    for (const {message, turn} of olderDiagnosticCandidates.slice(-4)) {
+      attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
+    }
     olderCursor = data.before ?? null;
     hasOlder = data.has_older === true;
     conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight;

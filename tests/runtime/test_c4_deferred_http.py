@@ -56,6 +56,13 @@ def test_deferred_http_rejects_unauthenticated_and_other_actor(tmp_path):
         assert correct[1]["status"] == "completed"
         assert correct[1]["diagnosis"]["verified_stage_only"] is True
         assert "explanation" not in correct[1]["diagnosis"]
+        proof = correct[1]["receipt_evidence"]
+        assert proof["status"] == original["status"]
+        assert proof["write_evidence"] == "UNKNOWN"
+        assert proof["stages"]
+        assert all("stable_note_id" not in stage for stage in proof["stages"])
+        assert "source_text" not in proof
+        assert "affected_stable_note_ids" not in proof
         other = AuthenticatedActorContext(str(uuid4()))
         forbidden = post({**base, "authenticated_actor": {"stable_user_id": other.stable_user_id}})
         assert forbidden == (200, {"version": 1, "request_id": reqid, "status": "unavailable"})

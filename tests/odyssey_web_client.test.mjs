@@ -1007,3 +1007,32 @@ test("browser preserves every reviewed parent of a multi-target dependency", () 
   invalid.routes[2].dependency_indices = [0, 0];
   assert.throws(() => validateExecutionFlow(invalid, stages), ProductRequestError);
 });
+
+
+test("browser product projection keeps receipt-backed stage labels without inventing stages", () => {
+  const label = {version: 1, label: "Core · revisión de la división", icon: "core"};
+  const failure = {
+    request_id: "web-c4-ledger-projection", status: "needs_attention",
+    kind: "cannot_answer", message: "Hace falta revisar.",
+    request_detail: {
+      request_id: "web-c4-ledger-projection",
+      operational: {total_duration_ms: 40, stages: []},
+      execution_ledger: {
+        version: 1, request_id: "web-c4-ledger-projection", status: "needs_attention",
+        events: [], event_sequence: null, events_truncated: false, routes: [],
+        affected_stable_note_ids: [], write_receipts: [],
+        stages: [{name: "candidate.source_boundary_review", outcome: "failed",
+          duration_ms: null, start_offset_ms: null, error_category: null,
+          provider_call_count: 0, route_index: null, parent_stage: null, stage_view: label}],
+      },
+    },
+  };
+  const projected = validateProductResponse(failure);
+  assert.deepEqual(projected.request_detail.execution_ledger.stages[0].stage_view, label);
+  const invalid = structuredClone(failure);
+  invalid.request_detail.execution_ledger.stages[0].stage_view = {
+    version: 1, label: "Forged", icon: "totally-untrusted",
+  };
+  const safe = validateProductResponse(invalid);
+  assert.equal(safe.request_detail.execution_ledger.stages[0].stage_view, undefined);
+});

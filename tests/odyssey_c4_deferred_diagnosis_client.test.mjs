@@ -5,13 +5,22 @@ import {validatedDeferredDiagnosis, pollDeferredDiagnosis} from "../odyssey_web/
 const id = "c4-deferred-test";
 const stage = "candidate.source_boundary_review";
 const view = {version: 1, label: "Core · revisión de la división", icon: "core"};
-const ledger = {stages: [{name: stage, outcome: "failed", route_index: null, stage_view: view}]};
+const ledger = {
+  status: "needs_attention", affected_stable_note_ids: [], write_receipts: [],
+  stages: [{name: stage, outcome: "failed", route_index: null, stage_view: view}],
+};
 const diagnosis = {
   evidence_stage: stage, next_step: "CHECK_SYSTEM", reason_code: "SOURCE_UNVERIFIED",
   route_index: null, stage_view: view, status: "needs_attention",
   verified_stage_only: true, write_evidence: "UNKNOWN",
 };
-const ready = {version: 1, request_id: id, status: "completed", diagnosis};
+const receipt_evidence = {
+  version: 1, status: "needs_attention", reason_code: "SOURCE_UNVERIFIED",
+  write_evidence: "UNKNOWN", stages: [{
+    name: stage, outcome: "failed", parent_stage: null, route_index: null, stage_view: view,
+  }],
+};
+const ready = {version: 1, request_id: id, status: "completed", diagnosis, receipt_evidence};
 
 test("deferred C4 attaches only an evidence-bound typed explanation", () => {
   const message = validatedDeferredDiagnosis(ready, id, "needs_attention", ledger);
@@ -55,4 +64,30 @@ test("poll never invokes replay and stops on completed or unavailable", async ()
     delay: async () => {}, onResult: () => assert.fail("unexpected advice"),
   });
   assert.equal(calls, 1);
+});
+
+test("deferred receipt evidence survives history without an E2 ledger", () => {
+  assert.match(validatedDeferredDiagnosis(ready, id, "needs_attention", undefined), /Core/);
+  assert.equal(validatedDeferredDiagnosis(
+    {...ready, receipt_evidence: {...receipt_evidence, status: "failed"}},
+    id, "needs_attention", undefined), null);
+  assert.equal(validatedDeferredDiagnosis(
+    {...ready, receipt_evidence: {...receipt_evidence, stages: []}},
+    id, "needs_attention", undefined), null);
+});
+
+test("never invent a confirmed write without matching immutable receipt evidence", () => {
+  const falseSome = {...ready, diagnosis: {...diagnosis, write_evidence: "SOME"}};
+  assert.equal(validatedDeferredDiagnosis(falseSome, id, "needs_attention", ledger), null);
+  assert.equal(validatedDeferredDiagnosis(falseSome, id, "needs_attention", undefined), null);
+  const trueSome = {
+    ...falseSome,
+    receipt_evidence: {...receipt_evidence, write_evidence: "SOME"},
+  };
+  assert.equal(validatedDeferredDiagnosis(trueSome, id, "needs_attention", ledger), null);
+  const actualWrites = {
+    ...ledger, affected_stable_note_ids: ["synthetic-note-1"],
+  };
+  assert.match(validatedDeferredDiagnosis(trueSome, id, "needs_attention", actualWrites),
+    /Algunos cambios están confirmados/);
 });

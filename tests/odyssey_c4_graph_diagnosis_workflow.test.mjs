@@ -226,3 +226,15 @@ test("reviewed stage_view requires failed owner route even with repeated stage n
     error_diagnosis: {...reviewed, stage_view: {...reviewed.stage_view, label: "Otro resultado"}}});
   assert.doesNotMatch(wrongLabel.message, /Otro resultado/);
 });
+
+
+test("CANNOT_ANSWER without synchronous advisory preserves Core needs_attention status", () => {
+  const result = render({
+    product_outcome: "CANNOT_ANSWER",
+    error_diagnosis: undefined,
+    clarification: undefined,
+  });
+  assert.equal(result.kind, "cannot_answer");
+  assert.equal(result.status, "needs_attention");
+  assert.equal(validateProductResponse(result).status, "needs_attention");
+});

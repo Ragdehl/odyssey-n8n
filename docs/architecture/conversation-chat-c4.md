@@ -439,6 +439,48 @@ escritura y reintentos ejecutables no forman parte del sidecar. Las últimas
 respuestas fallidas pueden recuperar su añadido tras recargar, sin nueva
 petición al proveedor.
 
+**Correcciones tras auditoría de cuatro roles, fuente aún sin reauditar:**
+Generalidad, Calidad y Pruebas reprodujeron defectos de integración
+reales en el SHA `51151b0`: el browser eliminaba `stage_view`; el
+sidecar aceptaba `SOME` sin prueba de notas afectadas; n8n reescribía
+`needs_attention` como `failed`; el historial deliberadamente omitía E2
+y la paginación antigua no consultaba el sidecar. El runtime ahora recupera
+una proyección mínima de etapas fallidas, razón, estado y presencia/ausencia
+de escrituras **desde el recibo original E3 verificado por SHA256 y actor**.
+Se omiten fuente, nombres de notas e IDs de notas; el navegador cruza esta
+prueba con el diagnóstico C4 y, para respuestas inmediatas, también con
+el ledger E2 validado. Las respuestas históricas no vuelven a consultar
+a GPT ni necesitan añadir E2 al schema persistente. n8n conserva el estado
+Core y la UI recupera el añadido en las páginas antiguas. Se incluyen
+regresiones positivas/negativas de proyección, confirmaciones falsas,
+recarga, paginación y lectura HTTP autenticada. En `CANNOT_ANSWER` n8n
+conserva `partial` o `needs_attention` exactamente como Core: las respuestas
+sin efectos confirmados siguen siendo `cannot_answer`, sin snapshot, sin
+afirmar éxito parcial. Las dos expectativas históricas que convertían
+artificialmente estos estados en `failed` se ajustaron con comprobaciones
+positivas de ausencia de éxito/snapshot. **Estos arreglos no convierten
+los dictámenes previos FAIL en PASS:** requieren nueva auditoría en otro SHA.
+Rendimiento quedó BLOCKED por falta de medición Pi de latencias/recursos.
+
+**Medición específica en Raspberry (fuente reparada, proveedor simulado):**
+`PYTHONPATH=. python scripts/odyssey_c4_deferred_perf_pi.py`
+usa 8 entregas por modo, 2 respuestas `FakeClient` con retardo fijo
+de 180 ms cada una, notas/actores descartables y comparación física antes y
+después. El modo síncrono observó respuesta p50 **367,6 ms**, p95
+**368,5 ms**; el modo diferido p50 **11,1 ms**, p95 **11,2 ms**, y
+diagnóstico final p50 **380,1 ms**, p95 **388,4 ms**. Memoria RSS del
+proceso ~78,5–82,2 MiB; swap del proceso 0; temperatura observada
+45,75–47,95 °C; sin cambios de Markdown sintético; valores de MemAvailable
+2,29 GiB en esa ejecución. En una sonda adicional
+`PYTHONPATH=. python scripts/odyssey_c4_deferred_concurrency_pi.py`,
+tres entregas iniciales tardaron 8,65/7,35/6,81 ms: máximo dos
+llamadas falsas concurrentes, dos diagnósticos `completed` y uno
+`unavailable` por límite de slots, preservando el fallback y cero notas
+modificadas. **No** se extrapolan a proveedor GPT real, cola de navegador,
+uso bajo carga sostenida, red o rendimiento de móvil. La auditoría de
+Rendimiento original sigue BLOCKED hasta nueva comprobación de esta
+evidencia y aceptación del proveedor real.
+
 **Alcance y cautelas:** source-only, *flags OFF en DEV*, sin llamadas GPT
 reales de Odyssey ni despliegue. La decisión de recuperación prewrite sigue
 potencialmente en el camino crítico cuando se activa por separado.

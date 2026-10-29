@@ -10,7 +10,7 @@ const ICONS = new Set(["router","temporal","planner","tasks","core","git","index
 
 export function validatedDeferredDiagnosis(value, requestId, originalStatus, ledger) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
-      Object.keys(value).sort().join(",") !== "diagnosis,request_id,status,version" ||
+      Object.keys(value).sort().join(",") !== "diagnosis,receipt_evidence,request_id,status,version" ||
       value.version !== 1 || value.request_id !== requestId || value.status !== "completed" ||
       !["failed","partial","needs_attention"].includes(originalStatus)) return null;
   const d = value.diagnosis;
@@ -27,14 +27,46 @@ export function validatedDeferredDiagnosis(value, requestId, originalStatus, led
       view.version !== 1 || typeof view.label !== "string" ||
       view.label.length < 1 || view.label.length > 80 ||
       /[\r\n<>]/.test(view.label) || !ICONS.has(view.icon)) return null;
-  const stages = ledger?.stages;
-  if (!Array.isArray(stages) ||
-      !stages.some(st => st?.name === d.evidence_stage && st.route_index === d.route_index &&
-        ["failed","unavailable"].includes(st.outcome) &&
+  // Actor-scoped evidence is reconstructed server-side from the immutable E3
+  // receipt, so it remains available after ConversationStore strips live E2
+  // details from history. The model cannot choose its own grounding.
+  const proof = value.receipt_evidence;
+  if (!proof || typeof proof !== "object" || Array.isArray(proof) ||
+      Object.keys(proof).sort().join(",") !== "reason_code,stages,status,version,write_evidence" ||
+      proof.version !== 1 || proof.status !== originalStatus ||
+      proof.reason_code !== d.reason_code || proof.write_evidence !== d.write_evidence ||
+      !Array.isArray(proof.stages) || proof.stages.length < 1 || proof.stages.length > 64 ||
+      !proof.stages.every(st => st && typeof st === "object" && !Array.isArray(st) &&
+        Object.keys(st).sort().join(",") === "name,outcome,parent_stage,route_index,stage_view" &&
+        typeof st.name === "string" && st.name.length > 0 && st.name.length <= 80 &&
+        ["failed", "unavailable"].includes(st.outcome) &&
+        (st.route_index === null || Number.isInteger(st.route_index) &&
+          st.route_index >= 0 && st.route_index <= 31) &&
+        (st.parent_stage === null || typeof st.parent_stage === "string" &&
+          st.parent_stage.length > 0 && st.parent_stage.length <= 80) &&
+        st.stage_view && typeof st.stage_view === "object" &&
+        !Array.isArray(st.stage_view) &&
+        Object.keys(st.stage_view).sort().join(",") === "icon,label,version" &&
+        st.stage_view.version === 1 &&
+        typeof st.stage_view.label === "string" && st.stage_view.label.length > 0 &&
+        st.stage_view.label.length <= 80 && !/[\r\n<>]/.test(st.stage_view.label) &&
+        ICONS.has(st.stage_view.icon))) return null;
+  const stages = proof.stages;
+  if (!stages.some(st => st.name === d.evidence_stage && st.route_index === d.route_index &&
+        st.stage_view.label === view.label && st.stage_view.icon === view.icon &&
+        st.stage_view.version === view.version) ||
+      stages.some(st => st.parent_stage === d.evidence_stage &&
+        st.route_index === d.route_index)) return null;
+  // When the current response includes E2, it must agree independently with
+  // the reconstructed E3 proof. The server projection alone covers reloads.
+  if (ledger && (!Array.isArray(ledger.stages) ||
+      ledger.status !== originalStatus ||
+      !Array.isArray(ledger.affected_stable_note_ids) ||
+      (ledger.affected_stable_note_ids.length > 0 ? "SOME" : "UNKNOWN") !== d.write_evidence ||
+      !ledger.stages.some(st => st?.name === d.evidence_stage &&
+        st.route_index === d.route_index && ["failed", "unavailable"].includes(st.outcome) &&
         st.stage_view?.label === view.label && st.stage_view?.icon === view.icon &&
-        st.stage_view?.version === view.version) ||
-      stages.some(st => st?.parent_stage === d.evidence_stage &&
-        st.route_index === d.route_index && ["failed","unavailable"].includes(st.outcome))) return null;
+        st.stage_view?.version === view.version))) return null;
   const summary = d.write_evidence === "SOME"
     ? "Algunos cambios están confirmados, pero el resultado completo no."
     : "No se ha podido confirmar si hubo cambios.";

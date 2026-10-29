@@ -153,3 +153,75 @@ class DeferredDiagnosticStore:
         if result["diagnosis"] is None:
             return {"status": "unavailable"}
         return {"status": "completed", "diagnosis": result["diagnosis"]}
+
+
+def project_receipt_diagnostic_evidence(response: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project only receipt-proven diagnosis facts; never publish note IDs or source.
+
+    The caller must load an actor's immutable, SHA-verified E3 delivery.
+    A missing or malformed E2 ledger cannot be replaced with model claims.
+    """
+    if not isinstance(response, Mapping):
+        return None
+    ledger = response.get("execution_ledger")
+    status = response.get("status")
+    if (
+        not isinstance(ledger, dict)
+        or ledger.get("version") != 1
+        or ledger.get("request_id") != response.get("request_id")
+        or status not in ("failed", "partial", "needs_attention")
+        or ledger.get("status") != status
+        or not isinstance(ledger.get("stages"), list)
+        or len(ledger["stages"]) > 64
+        or not isinstance(ledger.get("affected_stable_note_ids"), list)
+        or len(ledger["affected_stable_note_ids"]) > 64
+        or ledger["affected_stable_note_ids"] != response.get("affected_stable_note_ids")
+    ):
+        return None
+    reason = (
+        response.get("product_reason") or response.get("clarification_code") or "UNKNOWN_FAILURE"
+    )
+    if not isinstance(reason, str) or not 1 <= len(reason) <= 120:
+        return None
+    stages = []
+    icons = {"router", "temporal", "planner", "tasks", "core", "git", "index", "pending", "result"}
+    for item in ledger["stages"]:
+        if not isinstance(item, dict) or item.get("outcome") not in ("failed", "unavailable"):
+            continue
+        stage = item.get("name")
+        route = item.get("route_index")
+        parent = item.get("parent_stage")
+        view = item.get("stage_view")
+        if (
+            not isinstance(stage, str)
+            or not 1 <= len(stage) <= 80
+            or not isinstance(view, dict)
+            or set(view) != {"version", "label", "icon"}
+            or view["version"] != 1
+            or not isinstance(view["label"], str)
+            or not 1 <= len(view["label"]) <= 80
+            or any(ch in view["label"] for ch in "\r\n<>")
+            or not isinstance(view["icon"], str)
+            or view["icon"] not in icons
+            or not (route is None or type(route) is int and 0 <= route <= 31)
+            or not (parent is None or isinstance(parent, str) and 1 <= len(parent) <= 80)
+        ):
+            return None
+        stages.append(
+            {
+                "name": stage,
+                "outcome": item["outcome"],
+                "route_index": route,
+                "parent_stage": parent,
+                "stage_view": view,
+            }
+        )
+    if not stages:
+        return None
+    return {
+        "version": 1,
+        "status": status,
+        "reason_code": reason,
+        "write_evidence": "SOME" if ledger["affected_stable_note_ids"] else "UNKNOWN",
+        "stages": stages,
+    }

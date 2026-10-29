@@ -171,7 +171,7 @@ from .conversation_chat import deployed_chat_help_capabilities
 from .conversation_entry import evaluate_conversation_entry
 from .conversation_error import diagnose_trusted_execution_graph, explain_trusted_product_failure
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
-from .deferred_diagnostics import DeferredDiagnosticStore
+from .deferred_diagnostics import DeferredDiagnosticStore, project_receipt_diagnostic_evidence
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .dev_hot_path_diagnostics import timed_dev_hot_path
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
@@ -1043,13 +1043,34 @@ class RuntimeComposition:
         if self.conversation_root_resolver is None:
             return {"version": 1, "request_id": request_id, "status": "unavailable"}
         root = self.conversation_root_resolver.resolve(actor)
-        binding = LocalDeliveryResultStore(root / "delivery-results").read_diagnostic_binding(
-            request_id
-        )
+        delivery = LocalDeliveryResultStore(root / "delivery-results")
+        binding = delivery.read_diagnostic_binding(request_id)
         diagnostic = self._deferred_diagnostic_store(actor)
+        unavailable = {"version": 1, "request_id": request_id, "status": "unavailable"}
         if binding is None or diagnostic is None:
-            return {"version": 1, "request_id": request_id, "status": "unavailable"}
-        return {"version": 1, "request_id": request_id, **diagnostic.read(request_id, *binding)}
+            return unavailable
+        result = diagnostic.read(request_id, *binding)
+        if result["status"] != "completed":
+            return {"version": 1, "request_id": request_id, **result}
+        # Recover minimal E2 evidence from the original SHA-checked E3 receipt;
+        # the transcript deliberately omits execution_ledger for privacy/size.
+        saved = delivery.load(request_id, binding[0])
+        evidence = project_receipt_diagnostic_evidence(saved) if saved is not None else None
+        diagnosis = result["diagnosis"]
+        if (
+            evidence is None
+            or not isinstance(diagnosis, dict)
+            or diagnosis.get("status") != evidence["status"]
+            or diagnosis.get("reason_code") != evidence["reason_code"]
+            or diagnosis.get("write_evidence") != evidence["write_evidence"]
+        ):
+            return unavailable
+        return {
+            "version": 1,
+            "request_id": request_id,
+            **result,
+            "receipt_evidence": evidence,
+        }
 
     def _maybe_retry_verified_prewrite_interpretation(
         self,
