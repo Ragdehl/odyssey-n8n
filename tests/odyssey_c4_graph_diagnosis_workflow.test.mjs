@@ -139,3 +139,35 @@ test("verified AI diagnosis preserves a noncompleted Core status", () => {
   assert.equal(original.status, "needs_attention");
   assert.match(original.message, /revisión no pudo confirmar/);
 });
+
+test("specific observed provider failure takes precedence over failed parent in n8n", () => {
+  const parent = {...ledger.stages[0], name: "application.source_processing", parent_stage: null};
+  const child = {...ledger.stages[0], name: "provider.semantic_review", parent_stage: parent.name};
+  const nested = {...ledger, stages: [parent, child]};
+  const wrong = render({execution_ledger: nested,
+    error_diagnosis: {...diagnostic, evidence_stage: parent.name}});
+  assert.doesNotMatch(wrong.message, /revisión no pudo confirmar/);
+  const right = render({execution_ledger: nested,
+    error_diagnosis: {...diagnostic, evidence_stage: child.name}});
+  assert.match(right.message, /revisión no pudo confirmar/);
+  // Successful child stage cannot be treated as the root of a failed parent.
+  const childCompleted = {...nested, stages: [parent, {...child, outcome: "completed"}]};
+  const permittedParent = render({execution_ledger: childCompleted,
+    error_diagnosis: {...diagnostic, evidence_stage: parent.name}});
+  assert.match(permittedParent.message, /revisión no pudo confirmar/);
+});
+
+test("invalid cross-route parent provenance fails closed rather than hiding a failure", () => {
+  const twoRoutes = [
+    {route_index: 0, capability: "core", status: "failed", depends_on: null},
+    {route_index: 1, capability: "tasks", status: "failed", depends_on: null},
+  ];
+  const parent = {...ledger.stages[0], name: "application.source_processing", route_index: 0};
+  const child = {...ledger.stages[0], name: "provider.semantic_review", parent_stage: parent.name,
+    route_index: 1};
+  const response = render({
+    execution_ledger: {...ledger, routes: twoRoutes, stages: [parent, child]},
+    error_diagnosis: {...diagnostic, evidence_stage: child.name, route_index: 1},
+  });
+  assert.doesNotMatch(response.message, /revisión no pudo confirmar/);
+});

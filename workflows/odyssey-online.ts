@@ -244,6 +244,8 @@ const safeLedger = value => {
       (st.start_offset_ms === null || (typeof st.start_offset_ms === 'number' && Number.isFinite(st.start_offset_ms) && st.start_offset_ms >= 0)) &&
       (st.error_category === null || (typeof st.error_category === 'string' && st.error_category.length <= 120)) &&
       Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
+      (st.parent_stage == null || (safeId(st.parent_stage) && st.parent_stage !== st.name &&
+        value.stages.some(parent => parent.name === st.parent_stage && parent.route_index === st.route_index))) &&
       (st.route_index === null || (Number.isInteger(st.route_index) &&
         st.route_index >= 0 && st.route_index < value.routes.length)))) return undefined;
   if (!value.routes.every((route,i) => route && route.route_index === i &&
@@ -261,7 +263,8 @@ const safeLedger = value => {
     event_sequence:seq, events_truncated:value.events_truncated,
     stages:value.stages.map(st => ({name:st.name,outcome:st.outcome,duration_ms:st.duration_ms,
       start_offset_ms:st.start_offset_ms,error_category:st.error_category,
-      provider_call_count:st.provider_call_count,route_index:st.route_index})),
+      provider_call_count:st.provider_call_count,route_index:st.route_index,
+      parent_stage:st.parent_stage == null ? null : st.parent_stage})),
     routes:value.routes.map(rt => ({route_index:rt.route_index,capability:rt.capability,status:rt.status,depends_on:rt.depends_on})),
     write_receipts:value.write_receipts.map(item => ({action_index:item.action_index,unit_index:item.unit_index,
       stable_note_id:item.stable_note_id,operation:item.operation,status:item.status})),
@@ -321,6 +324,9 @@ const c4Message = c4Verified ?
 const gd = r.error_diagnosis;
 const graphStage = (stage, routeIndex) => !!verifiedLedger &&
   verifiedLedger.status === r.status &&
+  // Observed failed child stages are more precise than their failed parent.
+  !verifiedLedger.stages.some(st => st.parent_stage === stage && st.route_index === routeIndex &&
+    ['failed','unavailable'].includes(st.outcome)) &&
   (routeIndex === null || (Number.isInteger(routeIndex) && routeIndex >= 0 && routeIndex < verifiedLedger.routes.length)) &&
   ((stage === 'unattributed' && routeIndex === null) ||
     verifiedLedger.stages.some(st => st.name === stage && st.route_index === routeIndex &&
