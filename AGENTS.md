@@ -38,6 +38,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 ## Skill directory and canonical references
 
 - `odyssey-start-work`: every task/continuation, Git/worktrees/deployment state.
+- `odyssey-diagnose-first`: every reported bug, missing expected behavior or early refusal; trace existing owners, active flags and real failure before proposing implementation.
 - `odyssey-generality`: Router/Temporal/Core/Apps, future extensibility.
 - `odyssey-llm-stage`: creating/editing prompts, models, validators/reviewers.
 - `odyssey-live-provider`: OpenAI EnvironmentFile, authorized real-model cost.

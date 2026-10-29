@@ -54,7 +54,6 @@ let hasOlder = false;
 let loadingOlder = false;
 let recoveryControl = null;
 const userTextByRequestId = new Map();
-const pendingSourceRevisionCards = new Map();
 
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
@@ -139,7 +138,6 @@ async function loadMainConversation() {
   if (clarificationStatus) clarificationStatus.hidden = true;
   recoveryControl = null;
   userTextByRequestId.clear();
-  pendingSourceRevisionCards.clear();
   for (const turn of data.turns ?? []) {
     if (turn.role === "user" && typeof turn.request_id === "string" && typeof turn.text === "string") {
       userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
@@ -167,7 +165,6 @@ async function loadMainConversation() {
       restorePersistedAcknowledgement(message, turn);
       appendDetailButton(message, turn.request_detail);
       appendNoteSetAffordance(message, turn.note_result_snapshot);
-      appendSourceRevisionControl(message, turn.request_id, turn.text, turn.status);
     }
   }
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
@@ -319,14 +316,6 @@ async function loadOlderConversation() {
         userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
       }
     }
-    // A 40-turn page may contain the assistant refusal but not its user turn.
-    // Join them only when the actual older user message has been loaded.
-    for (const [id, pending] of pendingSourceRevisionCards) {
-      if (userTextByRequestId.has(id)) {
-        pendingSourceRevisionCards.delete(id);
-        appendSourceRevisionControl(pending.article, id, pending.text, pending.status);
-      }
-    }
     let olderDay = null;
     for (const turn of data.turns ?? []) {
       const createdAt = validTurnTime(turn.created_at);
@@ -345,7 +334,6 @@ async function loadOlderConversation() {
         restorePersistedAcknowledgement(message, turn);
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
-        appendSourceRevisionControl(message, turn.request_id, turn.text, turn.status);
       }
       olderNodes.push(message);
     }
@@ -372,47 +360,6 @@ async function loadOlderConversation() {
 conversation.addEventListener("scroll", () => {
   if (conversation.scrollTop <= 80) void loadOlderConversation();
 });
-
-// A fail-closed full-source abstention can be revised as a new draft.
-// This never consumes a pending candidate choice or resends a delivery.
-const sourceRevisionPrefix = "No he podido verificar todas las personas o los hechos de este mensaje.";
-function appendSourceRevisionControl(article, requestId, text, status) {
-  if (status !== "needs_attention" || typeof text !== "string" ||
-      !text.startsWith(sourceRevisionPrefix) || typeof requestId !== "string" ||
-      article.querySelector(".source-revision-button")) return;
-  const original = userTextByRequestId.get(requestId);
-  if (original === undefined) {
-    // The original may be on a still-unloaded older conversation page.
-    // Never invent it from the assistant's suggestion or an unrelated turn.
-    pendingSourceRevisionCards.set(requestId, {article, text, status});
-    return;
-  }
-  pendingSourceRevisionCards.delete(requestId);
-  // User text is capped at 4096 chars in the existing history cache.
-  // At the bound, completeness cannot be demonstrated: never offer a
-  // misleading "original" draft that might silently omit a trailing fact.
-  if (typeof original !== "string" || !original.trim() || original.length >= 4096) return;
-  const action = document.createElement("button");
-  action.type = "button";
-  action.className = "source-revision-button";
-  action.textContent = "Editar mensaje original";
-  action.addEventListener("click", () => {
-    // Draft only. A typed message must not be discarded without an
-    // additional deliberate confirmation click on THIS same button.
-    if (input.disabled) return;
-    if ((input.value || "").trim() && input.value !== original &&
-        action.dataset.confirmOverwrite !== "true") {
-      action.dataset.confirmOverwrite = "true";
-      action.textContent = "Sustituir borrador y editar";
-      return;
-    }
-    action.dataset.confirmOverwrite = "false";
-    action.textContent = "Editar mensaje original";
-    input.value = original;
-    input.focus();
-  });
-  article.querySelector(".message-actions")?.append(action);
-}
 
 function appendDetailButton(article, detail) {
   if (!detail || !requestDetailSheet || article.querySelector(".detail-button")) return;
@@ -632,7 +579,6 @@ function renderProductResult(result) {
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
   appendClarificationCard(message, result.clarification);
-  appendSourceRevisionControl(message, result.request_id, result.message, result.status);
   if (clarificationStatus) {
     clarificationStatus.hidden = !(
       result.kind === "clarification"

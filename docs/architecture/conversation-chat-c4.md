@@ -8,6 +8,86 @@ DEV; PROD no se ha modificado. **APP E2E NOT VERIFIED** globalmente:
 la orientación de identidad sí pasó browser real, pero falta un parcial C4
 natural desde el servicio desplegado y autenticación externa completa.
 
+## Nueva corrección candidata: C4 interpretando el gráfico con IA (29-10-2026)
+
+**Contrato de producto solicitado:** una IA debe analizar los hitos y etapas
+reales de la petición, deducir de las pruebas observadas qué etapa fue la que
+falló, explicar la razón específica en el idioma del usuario y sugerir una
+corrección. No convertir un rechazo del Router en «no encuentro a tus hijos»,
+ni reemplazar el selector Core ya existente de candidatos verificados. Ante
+falta de información o un error persistente, formular una pregunta precisa;
+si puede solucionar un problema, volver a pasar por Router, pero **solo después
+de acreditar la ausencia de escrituras inciertas y una recuperación segura en
+E3**. La IA no recibe autoridad de ejecución por sí misma.
+
+**Diagnóstico inicial del código anterior:** C4 `explain_trusted_product_failure`
+solo aceptaba `product_outcome=CANNOT_ANSWER`; los rechazos tempranos de
+`WholeSourceLightExecutor._abstain` devuelven `CLARIFY`, por lo que C4
+**ni siquiera se llamaba**. La antigua `explain_error` Luna recibía únicamente
+`status`, `reason_code` y `write_evidence`, y un enum discrepante se
+descartaba. En DEV el modo de modelo estaba desactivado y el resultado
+público era una plantilla, aunque E2 ya tenía un grafo verdadero. La
+resolución de identidades Core/clarificación existente no estaba averiada
+por esas abstenciones y no debe rehacerse.
+
+**Cambio source-only de PR #161, no adoptado en DEV ni auditado con GPT real:**
+se revierte el editor de mensaje original añadido específicamente para
+`FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED` en commits `186412e`/`3dac820`.
+Para evitar un diagnóstico basado solo en `application.source_processing`
+incorrectamente marcado como `completed`, ese stage ahora conserva el
+resultado realmente incompleto y el código de la abstención; el proyector E2
+expone los **subpasos de modelo realmente medidos** como entradas hijas de
+solo lectura sin atribuirles un índice de ruta falso ni inventar offsets
+globales. Hay una regresión vertical con el P4 real y un fallo sintético del
+planificador antes de Core, incluyendo recibo E3 replay estable y cero
+cambios en el vault temporal.
+
+`RuntimeComposition` usa la misma clase de gateway C4 pero con una sesión
+diagnóstica independiente de Chat C3, y le pasa el `ApplicationResult`
+validado + libro E2 real (`project_execution_ledger`) + texto original del
+actor ya autenticado. Acepta tanto `CLARIFY` sin alternativas como
+`CANNOT_ANSWER`; **no** intercepta aclaraciones Core con opciones verificadas.
+La IA produce un esquema cerrado con etapa observada, explicación redactada
+por el modelo, tipo de siguiente paso y pregunta concreta. Se verifica la
+coincidencia del SHA/recibo a través del mismo `request_id`, el estado,
+el código y la pertenencia de la etapa a los hitos del grafo. Una etapa no
+observada u otra escritura falsa invalidan el consejo; las escrituras solo
+se describen desde el recibo E3 (SOME/UNKNOWN). El workflow n8n vuelve a
+validar esos campos antes de presentar el texto libre como consejo. El
+modelo **nunca** puede escoger una persona, autorizar mutaciones ni ejecutar
+una segunda entrega. La misma petición replay E3 conserva la primera
+respuesta y no repite el diagnóstico ni el writer.
+
+**Activación candidata:** el gateway C4 de diagnóstico se conecta en la
+fábrica cuando `ODYSSEY_CHAT_C4_ENABLED=1` y entorno DEV, sin depender de
+activar C3. Esto añade **una llamada de modelo en una solicitud fallida**,
+y si no hay credenciales/proveedor configurado el runtime conserva la
+respuesta de Core y el fallback anterior, sin bloquear su arranque.
+Por lo tanto no debe desplegarse hasta aprobar una campaña sintética de modelo
+real, medir coste/latencia y fijar un presupuesto; PROD permanece fuera.
+Si el proveedor falla o la explicación contradice las evidencias, se conserva
+el resultado de Core y el fallback anterior, sin reprocesarlo.
+
+**Matriz de aceptación de IA pendiente de evaluación real:** pre-Core Router
+incomprensible, revisión de cobertura sin vínculo familiar, ambigüedad real
+Core con dos candidatos (selector tiene prioridad), fecha imposible, etapa
+Tasks inexistente, proveedor no disponible, escritura parcial comprobada,
+`UNKNOWN` por crash, texto largo/inglés/francés y mensaje con inyección de
+instrucciones. Para cada caso: etapa correcta o `unattributed`, causa y
+pregunta fundamentadas, modelo/effort/hash, llamadas y coste, y ausencia de
+falsas certezas de escritura. Los tests de modelo simulado y JS n8n son
+**contrato de seguridad, no prueba de interpretación con IA real**.
+
+**Recuperación automática:** todavía NO incorporada. Reenvío automático con
+nuevo request ID después de una ejecución incierta podría repetir acciones.
+La recuperación exige prueba independiente de que no hay escrituras, decisión
+de si la interpretación puede corregirse sin alterar el texto fuente,
+solicitud nueva o un replay planificado E3 con actor y revisión protegidos,
+un solo intento acotado y una salida humana si no se puede garantizar. Nunca
+convertir `affected_ids=[]` en `ZERO_CONFIRMED` ni reusar el mismo ID como si
+fueran nuevas instrucciones (solo devuelve el recibo inmutable). Este punto
+sigue siendo un **bloqueador de la aceptación completa** solicitada.
+
 ## Problema y límites
 
 C1 ya incluía `VerifiedFailure`, el prompt `ERROR_INSTRUCTIONS`, Luna

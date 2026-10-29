@@ -631,10 +631,20 @@ class WholeSourceLightExecutor:
         # One true source wall-clock stage with bounded model-only substeps.
         # The Core Writers/Task services continue to own their own stages;
         # overlaps here describe nested work, not additional operations.
+        # A safe early abstention is not a successful source interpretation.
+        # Preserve its original verified reason in the actual E2 stage so C4
+        # can distinguish a Router/reviewer failure from Core identity matching.
+        # This is observed status, not a speculative diagnosis or retry grant.
+        source_reason = result.clarification_code or result.planning_error
         source_stage = OperationalStage(
             "application.source_processing",
-            OperationalOutcome.COMPLETED,
+            OperationalOutcome.COMPLETED
+            if result.status is ApplicationStatus.COMPLETED
+            else OperationalOutcome.FAILED,
             elapsed_ms,
+            error_category=source_reason
+            if isinstance(source_reason, str) and len(source_reason) <= 120
+            else None,
             substeps=recorder.spans[:64],
         )
         flow = result.execution_flow

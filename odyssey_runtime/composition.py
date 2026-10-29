@@ -169,7 +169,7 @@ from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
 from .conversation_chat import deployed_chat_help_capabilities
 from .conversation_entry import evaluate_conversation_entry
-from .conversation_error import explain_trusted_product_failure
+from .conversation_error import diagnose_trusted_execution_graph, explain_trusted_product_failure
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .dev_hot_path_diagnostics import timed_dev_hot_path
@@ -327,6 +327,25 @@ def _chat_c4_model_advisory_enabled() -> bool:
         and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
         and os.environ.get("ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED") == "1"
     )
+
+
+def _c4_graph_gateway_from_environment() -> OpenAIConversationGateway | None:
+    """Enable C4 AI only for DEV C4; lack of a provider must not stop Core.
+
+    C4 has its own gateway so a DEV runtime with C3 disabled does not
+    inadvertently activate conversational classification on every request.
+    """
+    if (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_CHAT_C4_ENABLED") != "1"
+    ):
+        return None
+    try:
+        return OpenAIConversationGateway.from_environment()
+    except ConversationGateError:
+        # Provider unavailable: the immutable Core result and existing
+        # evidence-grounded fallback still work, with no speculative retry.
+        return None
 
 
 # Preserve the existing runtime composition injection seam while changing its production target.
@@ -614,6 +633,9 @@ class RuntimeComposition:
     # Optional live-model advisory remains available for bounded diagnostics
     # but must be explicitly requested and never changes canonical authority.
     conversation_error_model_advisory_enabled: bool = False
+    # C4 diagnosis reuses the existing OpenAI gateway but is independent of
+    # the C3 conversational router. A model explanation is never write authority.
+    conversation_graph_gateway: OpenAIConversationGateway | None = None
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -789,6 +811,7 @@ class RuntimeComposition:
                         force_replay=True,
                         actor=actor,
                         conversation_id=conversation_id,
+                        source_text=pending.original_request,
                     )
                     self._record_terminal_checkpoint(
                         checkpoint_store,
@@ -859,6 +882,7 @@ class RuntimeComposition:
                     clarification_store,
                     actor=actor,
                     conversation_id=conversation_id,
+                    source_text=user_request,
                 )
             if self.full_source_mutation_guard:
                 assert store is not None and request_id is not None
@@ -1136,6 +1160,7 @@ class RuntimeComposition:
         force_replay: bool = False,
         actor: str | None = None,
         conversation_id: str | None = None,
+        source_text: str = "",
     ) -> dict[str, object]:
         """Persist one safely completed delivery and replay it without re-execution.
 
@@ -1204,6 +1229,33 @@ class RuntimeComposition:
                     # A choice with no bounded safe options cannot be resumed in this v1.
                     # Keep the specific product reason so the UI can explain what was unresolved.
                     response["product_outcome"] = "CANNOT_ANSWER"
+        # The old C4 reason map remains a fallback. The AI reads the observed
+        # E2 ledger (including early Router/refusal stages) and explains it.
+        # Existing verified Core choice lists have precedence: never invent
+        # a competing model-driven identity dialogue.
+        if (
+            self.conversation_graph_gateway is not None
+            and isinstance(response.get("execution_ledger"), dict)
+            and not (
+                isinstance(response.get("clarification"), dict)
+                and isinstance(response["clarification"].get("options"), list)
+                and len(response["clarification"]["options"]) >= 2
+            )
+        ):
+            try:
+                diagnosis = diagnose_trusted_execution_graph(
+                    result,
+                    response,
+                    response["execution_ledger"],
+                    self.conversation_graph_gateway,
+                    original_message=source_text,
+                )
+                if diagnosis is not None:
+                    response["error_diagnosis"] = diagnosis
+            except Exception:
+                # A failed optional diagnosis cannot invalidate the original
+                # immutable Core response or permit a fresh write.
+                pass
         if (
             store is not None
             and fingerprint is not None
@@ -5965,6 +6017,7 @@ def _build_runtime_from_environment_unlocked(
             and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
         ),
         conversation_error_model_advisory_enabled=_chat_c4_model_advisory_enabled(),
+        conversation_graph_gateway=_c4_graph_gateway_from_environment(),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,
             notes_available=notes_service is not None,

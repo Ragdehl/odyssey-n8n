@@ -49,6 +49,151 @@ _HINT: dict[GuidanceKind, RecoveryHint] = {
 }
 
 
+def diagnose_trusted_execution_graph(
+    result: ApplicationResult,
+    response: Mapping[str, Any],
+    ledger: Mapping[str, Any],
+    gateway: OpenAIConversationGateway,
+    *,
+    original_message: str = "",
+) -> dict[str, object] | None:
+    """Let C4 AI interpret the existing observed graph, with no execution authority.
+
+    Source is actor-bound through the existing request, E3 and checkpoint
+    contract. A model may explain observed failure evidence but cannot infer
+    unobserved stages, physical write absence, canonical identities or retries.
+    """
+    if (
+        not isinstance(result, ApplicationResult)
+        or not isinstance(response, Mapping)
+        or not isinstance(ledger, Mapping)
+        or not isinstance(gateway, OpenAIConversationGateway)
+        or response.get("request_id") != result.request_id
+        or response.get("status") != result.status.value
+        or response.get("product_outcome") not in {"CLARIFY", "CANNOT_ANSWER"}
+        or result.status.value not in {"failed", "partial", "needs_attention"}
+        or ledger.get("request_id") != result.request_id
+        or ledger.get("status") != result.status.value
+    ):
+        return None
+    code = response.get("product_reason") or response.get("clarification_code")
+    if not isinstance(code, str) or not _CODE.fullmatch(code):
+        code = "UNKNOWN_FAILURE"
+    raw_stages = ledger.get("stages")
+    raw_events = ledger.get("events")
+    raw_routes = ledger.get("routes")
+    if not all(isinstance(data, list) for data in (raw_stages, raw_events, raw_routes)):
+        return None
+    stages: list[dict[str, object]] = []
+    events: list[dict[str, object]] = []
+    routes: list[dict[str, object]] = []
+    known_stages = {"unattributed"}
+    for item in raw_stages[:32]:
+        if not isinstance(item, Mapping):
+            continue
+        name, outcome, error = (item.get("name"), item.get("outcome"), item.get("error_category"))
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,79}", name):
+            continue
+        if outcome not in {"completed", "failed", "skipped", "not_called", "unavailable"}:
+            continue
+        if error is not None and (not isinstance(error, str) or len(error) > 120):
+            continue
+        known_stages.add(name)
+        stages.append({"name": name, "outcome": outcome, "error_category": error})
+    for item in raw_events[-32:]:
+        if not isinstance(item, Mapping):
+            continue
+        name, outcome = item.get("stage"), item.get("outcome")
+        if (
+            isinstance(name, str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,79}", name)
+            and outcome
+            in {
+                "milestone_observed",
+                "result_persisted",
+                "processing_returned",
+                "failed_or_unknown",
+            }
+        ):
+            known_stages.add(name)
+            events.append({"stage": name, "outcome": outcome})
+    for item in raw_routes[:16]:
+        if not isinstance(item, Mapping):
+            continue
+        capability, status = item.get("capability"), item.get("status")
+        if (
+            isinstance(capability, str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", capability)
+            and isinstance(status, str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", status)
+        ):
+            routes.append({"capability": capability, "status": status})
+    write_evidence = "SOME" if result.affected_stable_note_ids else "UNKNOWN"
+    evidence = {
+        "status": result.status.value,
+        "reason_code": code,
+        "write_evidence": write_evidence,
+        "original_message": original_message[:2048] if isinstance(original_message, str) else "",
+        "events": events,
+        "stages": stages,
+        "routes": routes,
+    }
+    try:
+        proposal = gateway.diagnose_execution_graph(evidence)
+    except (ConversationGateError, OSError, ValueError, TypeError):
+        return None
+    stage = proposal.get("evidence_stage")
+    explanation = proposal.get("explanation")
+    question = proposal.get("user_question")
+    next_step = proposal.get("next_step")
+    if (
+        not isinstance(stage, str)
+        or stage not in known_stages
+        or not isinstance(explanation, str)
+        or not 12 <= len(explanation.strip()) <= 420
+        or not isinstance(question, str)
+        or len(question) > 240
+        or next_step not in {"ASK_USER", "REVIEW_SAFE_RETRY", "CHECK_SYSTEM", "INSPECT_RESULT"}
+        or (next_step == "ASK_USER") != bool(question.strip())
+        or any("\n" in text or "\r" in text for text in (explanation, question))
+    ):
+        return None
+    # MODEL-OWNED text is a diagnostic possibility, not evidence that data were
+    # written or not written. Keep that outside the model's textual authority.
+    if any(
+        fragment in (explanation + " " + question).casefold()
+        for fragment in (
+            "guard",
+            "escri",
+            "salvad",
+            "modific",
+            "actualiz",
+            "cread",
+            "elimin",
+            "borrad",
+            "añad",
+            "persist",
+            "enregistr",
+            "écri",
+            "save",
+            "writ",
+            "delet",
+            "updat",
+        )
+    ):
+        return None
+    return {
+        "status": result.status.value,
+        "reason_code": code,
+        "write_evidence": write_evidence,
+        "evidence_stage": stage,
+        "explanation": explanation.strip(),
+        "next_step": next_step,
+        "user_question": question.strip(),
+        # Only validated write receipts, not model output, control retries.
+    }
+
+
 def explain_trusted_product_failure(
     result: ApplicationResult,
     response: Mapping[str, Any],
