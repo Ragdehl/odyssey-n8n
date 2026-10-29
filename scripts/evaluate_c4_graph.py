@@ -279,10 +279,13 @@ class _UsageProbe:
     def __init__(self, responses: Any):
         self._responses = responses
         self.usage: list[dict[str, int] | None] = []
+        self.output_texts: list[str | None] = []
 
     def create(self, **kwargs: Any) -> Any:
         response = self._responses.create(**kwargs)
         raw = getattr(response, "usage", None)
+        output = getattr(response, "output_text", None)
+        self.output_texts.append(output[:4096] if isinstance(output, str) else None)
         fields = ("input_tokens", "output_tokens", "total_tokens")
         self.usage.append(
             {
@@ -295,21 +298,98 @@ class _UsageProbe:
         return response
 
 
-def evaluate_live(*, max_calls: int) -> dict[str, Any]:
+def _read_resume(path: Path) -> dict[str, Any]:
+    """Never replay calls already recorded in an authenticated evaluation."""
+    old = json.loads(path.read_text(encoding="utf-8"))
+    if (
+        not isinstance(old, dict)
+        or old.get("mode") != "live"
+        or (
+            old.get("prompt_sha256") != prompt_fingerprint()
+            or old.get("requested_calls") != len(CASES)
+        )
+    ):
+        raise ValueError("Resume report does not match authorized prompt and 14-call budget")
+    rows = old.get("cases")
+    count = old.get("executed_calls")
+    if (
+        not isinstance(rows, list)
+        or type(count) is not int
+        or count != len(rows)
+        or not 0 < count < 14
+    ):
+        raise ValueError("Resume report has an invalid call count")
+    if any(
+        not isinstance(row, dict) or row.get("case") != CASES[i].name for i, row in enumerate(rows)
+    ):
+        raise ValueError("Resume report does not match the case order")
+    return old
+
+
+def _save_report(path: Path, report: dict[str, Any]) -> None:
+    # Written only by the protected transient user unit, with UMask=0077.
+    # A completed call is recorded before the next provider request.
+    temp = path.with_suffix(path.suffix + ".partial")
+    temp.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temp.replace(path)
+
+
+def evaluate_live(
+    *,
+    max_calls: int,
+    resume_report: Path | None = None,
+    continue_after_rejection: bool = False,
+    checkpoint_path: Path | None = None,
+) -> dict[str, Any]:
     if (
         os.environ.get("ODYSSEY_C4_LIVE_EVAL_AUTHORIZED") != "1"
         or max_calls != len(CASES)
         or not 1 <= max_calls <= 16
+        or (continue_after_rejection and resume_report is None)
     ):
         raise ValueError(
             "Live C4 evaluation requires an explicitly authorized exact 14-call budget"
         )
+    old = _read_resume(resume_report) if resume_report is not None else None
+    rows: list[dict[str, Any]] = list(old["cases"]) if old else []
     original_gateway = OpenAIConversationGateway.from_environment(timeout_seconds=12)
     usage_probe = _UsageProbe(original_gateway.client.responses)
     gateway = OpenAIConversationGateway(SimpleNamespace(responses=usage_probe))
-    rows = []
+    if old is not None and (
+        old["model"] != gateway.model or old["effort"] != gateway.reasoning_effort
+    ):
+        raise ValueError("Resume report model/effort differ from active production provider")
     started = time.monotonic()
-    for i, case in enumerate(CASES):
+    baseline_seconds = float(old["elapsed_seconds"]) if old else 0.0
+    prior_input = int(old.get("reported_input_tokens", 0)) if old else 0
+    prior_output = int(old.get("reported_output_tokens", 0)) if old else 0
+    prior_missing = int(old.get("usage_missing", 0)) if old else 0
+
+    def report() -> dict[str, Any]:
+        return {
+            "mode": "live",
+            "model": gateway.model,
+            "effort": gateway.reasoning_effort,
+            "prompt_sha256": prompt_fingerprint(),
+            "requested_calls": max_calls,
+            "executed_calls": len(rows),
+            "remaining_call_budget": max_calls - len(rows),
+            "elapsed_seconds": round(baseline_seconds + time.monotonic() - started, 2),
+            "stage_correct": sum(r["stage_correct"] for r in rows),
+            "step_acceptable": sum(r["step_acceptable"] for r in rows),
+            "reported_input_tokens": prior_input
+            + sum((u or {}).get("input_tokens", 0) for u in usage_probe.usage),
+            "reported_output_tokens": prior_output
+            + sum((u or {}).get("output_tokens", 0) for u in usage_probe.usage),
+            "usage_missing": prior_missing + sum(u is None for u in usage_probe.usage),
+            "semantic_acceptance": "PENDING_INDEPENDENT_REVIEW",
+            "cases": rows,
+        }
+
+    if checkpoint_path is not None:
+        _save_report(checkpoint_path, report())
+    for i in range(len(rows), len(CASES)):
+        case = CASES[i]
         result, response, ledger = evidence_for(case, f"c4-live-{i:02}")
         t0 = time.monotonic()
         diagnosis = diagnose_trusted_execution_graph(
@@ -331,32 +411,23 @@ def evaluate_live(*, max_calls: int) -> dict[str, Any]:
             "expected_acceptable_steps": case.accepted_steps,
             "actual_stage": diagnosis["evidence_stage"] if diagnosis else None,
             "actual_step": diagnosis["next_step"] if diagnosis else None,
+            "rejected_raw_synthetic_model_output": (
+                usage_probe.output_texts[-1]
+                if diagnosis is None and usage_probe.output_texts
+                else None
+            ),
             "provider_usage": usage_probe.usage[-1] if usage_probe.usage else None,
             "elapsed_seconds": round(time.monotonic() - t0, 2),
-            # Write-fidelity, language and overstatements require an independent
-            # semantic review, NEVER inferred by these syntactic checks.
             "human_semantic_review_pending": True,
         }
         rows.append(row)
-        # Fail closed on structural invalidity; no point spending remaining calls.
-        if diagnosis is None:
+        if checkpoint_path is not None:
+            _save_report(checkpoint_path, report())
+        # Default mode still stops on structural rejection. Resume may opt
+        # to characterize the remaining distinct cases without repeating any.
+        if diagnosis is None and not continue_after_rejection:
             break
-    return {
-        "mode": "live",
-        "model": gateway.model,
-        "effort": gateway.reasoning_effort,
-        "prompt_sha256": prompt_fingerprint(),
-        "requested_calls": max_calls,
-        "executed_calls": len(rows),
-        "elapsed_seconds": round(time.monotonic() - started, 2),
-        "stage_correct": sum(r["stage_correct"] for r in rows),
-        "step_acceptable": sum(r["step_acceptable"] for r in rows),
-        "reported_input_tokens": sum((u or {}).get("input_tokens", 0) for u in usage_probe.usage),
-        "reported_output_tokens": sum((u or {}).get("output_tokens", 0) for u in usage_probe.usage),
-        "usage_missing": sum(u is None for u in usage_probe.usage),
-        "semantic_acceptance": "PENDING_INDEPENDENT_REVIEW",
-        "cases": rows,
-    }
+    return report()
 
 
 def main() -> int:
@@ -364,13 +435,20 @@ def main() -> int:
     parser.add_argument("--mode", choices=("dry-run", "live"), default="dry-run")
     parser.add_argument("--max-calls", type=int, default=0)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--resume-report", type=Path)
+    parser.add_argument("--continue-after-rejection", action="store_true")
     options = parser.parse_args()
     try:
         if options.mode == "live":
-            report = evaluate_live(max_calls=options.max_calls)
+            report = evaluate_live(
+                max_calls=options.max_calls,
+                resume_report=options.resume_report,
+                continue_after_rejection=options.continue_after_rejection,
+                checkpoint_path=options.output,
+            )
         else:
-            if options.max_calls:
-                raise ValueError("Dry-run requires zero model calls")
+            if options.max_calls or options.resume_report or options.continue_after_rejection:
+                raise ValueError("Dry-run requires zero model calls and no resume arguments")
             report = dry_run()
         serialized = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
         if options.output:

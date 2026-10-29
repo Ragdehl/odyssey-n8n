@@ -117,3 +117,59 @@ def test_graph_diagnosis_perf_probe_runs_actual_c4_with_delayed_fake():
     assert result["notes_written"] == 0
     assert result["real_provider"] is False
     assert result["replay_core_extra_calls"] == 0
+
+
+def test_live_evaluation_resumes_after_three_calls_and_never_repeats_cases(tmp_path, monkeypatch):
+    replies = [
+        {
+            "evidence_stage": case.expected_stage,
+            "route_index": case.expected_route,
+            "explanation": "La etapa observada falló durante la interpretación y requiere revisión.",
+            "next_step": case.accepted_steps[0],
+            "user_question": "¿Puedes aclarar el dato pendiente?"
+            if case.accepted_steps[0] == "ASK_USER"
+            else "",
+        }
+        for case in CASES
+    ]
+    monkeypatch.setenv("ODYSSEY_C4_LIVE_EVAL_AUTHORIZED", "1")
+    first_provider = FakeClient(replies)
+    monkeypatch.setattr(
+        OpenAIConversationGateway,
+        "from_environment",
+        classmethod(lambda cls, **kw: OpenAIConversationGateway(first_provider)),
+    )
+    complete = evaluate_live(max_calls=14)
+    prior = {
+        **complete,
+        "executed_calls": 3,
+        "cases": complete["cases"][:3],
+        "reported_input_tokens": 0,
+        "reported_output_tokens": 0,
+        "usage_missing": 3,
+    }
+    prior_path = tmp_path / "prior.json"
+    prior_path.write_text(json.dumps(prior), encoding="utf-8")
+    last_provider = FakeClient(replies[3:])
+    monkeypatch.setattr(
+        OpenAIConversationGateway,
+        "from_environment",
+        classmethod(lambda cls, **kw: OpenAIConversationGateway(last_provider)),
+    )
+    checkpoint = tmp_path / "resume.json"
+    report = evaluate_live(
+        max_calls=14,
+        resume_report=prior_path,
+        continue_after_rejection=True,
+        checkpoint_path=checkpoint,
+    )
+    assert report["executed_calls"] == 14
+    assert report["remaining_call_budget"] == 0
+    assert [r["case"] for r in report["cases"]] == [case.name for case in CASES]
+    assert len(last_provider.responses.calls) == 11
+    assert json.loads(checkpoint.read_text())["executed_calls"] == 14
+    tampered = {**prior, "prompt_sha256": "altered"}
+    prior_path.write_text(json.dumps(tampered), encoding="utf-8")
+    with pytest.raises(ValueError, match="Resume report does not match"):
+        evaluate_live(max_calls=14, resume_report=prior_path, continue_after_rejection=True)
+    assert len(last_provider.responses.calls) == 11

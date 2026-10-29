@@ -227,6 +227,79 @@ y observada, texto propuesto, latencia y tokens que comunique el SDK. **No
 se adivina un coste monetario** cuando no está medida la tarifa. No hay
 ninguna llamada live consumida para preparar esta matriz.
 
+### Campaña GPT real C4 GRAPH — 29 octubre 2026, 14/14 autorizadas
+
+**Evidencia reproducible y presupuesto:** informe protegido y sintético
+`/tmp/odyssey-c4-live-14-resumed-20261029.json`; sesión inicial
+`/tmp/odyssey-c4-live-14-20261029.json`. Fuente evaluada: commit
+`886335247dea3aee02c923cd79266a4dabef440a` (sin cambios al
+prompt C4 después); modelo **gpt-6-luna**, esfuerzo **low**, esquema
+Responses strict, `store=false`, 880 max output y timeout 12 s. SHA256
+del prompt/esquema **`308a7cb790afcea750584b8de6661d8fa0f03aee868dfa675d4d11f9075a28e4`**.
+Se consumieron **exactamente 14/14** llamadas con material sintético;
+**7.995 tokens de entrada + 2.950 de salida** reportados, 0 usos de
+SDK faltantes; tiempo observado acumulado **47,98 s**. El primer
+recorrido hizo 3 llamadas y se detuvo ante un rechazo. El controlador
+transitorio `systemd --user` cargó las credenciales protegidas sin
+exponerlas y el segundo recorrido continuó **solo los 11 casos restantes**
+con el mismo modelo/hash mediante `--resume-report`, no repitió solicitudes
+y dejó recibo por caso tras cada respuesta. **Ningún Core/E3 writer,
+DEV, PROD, vault privado ni configuración Cloudflare se tocó.** El
+usuario había autorizado expresamente un máximo de 14 llamadas; **el
+presupuesto se ha agotado, no permite otra campaña**.
+
+**Resultado automático:** 11 respuestas aceptadas por el validador y
+3 rechazadas; coincidencia estricta de etapa/ruta **10/14**, de acción
+propuesta **10/14**; ambas condiciones coinciden **9/14**, que **NO**
+es un 9/14 semántico aprobado. Revisión independiente de GPT-6 Sol del
+informe real y el contrato C4: **VERDICT FAIL**, registrado en
+`/home/ragdehl/projects/.odyssey-agent-runs/c4-live-semantic-audit-20261029/semantic.verdict`.
+
+**Hallazgos observados, con distinción entre modelo y validador:**
+
+- Recuerdos `Hoy he visto a Manu`/pasado y familia: el modelo explica
+  parcialmente que falló `source_processing` pero pregunta
+  «¿qué quieres que haga?» en lugar de preservar la intención probable
+  de diario. La intención exacta de la frase aislada no puede declararse
+  completamente demostrada sin el contexto de entrada del chat.
+- En francés solicitó identificar a Manon **antes** de disponer de
+  evidencia de resolución de identidades Core; en inglés pidió de nuevo
+  qué hacer con un recuerdo pasado. La pregunta no se fundamenta en
+  la etapa observada.
+- Fallo de proveedor: seleccionó la etapa general
+  `application.source_processing` y no el subpaso realmente fallido
+  `provider.odyssey_light_shared_semantic_plan_v1`, aunque
+  recomendó correctamente `CHECK_SYSTEM`.
+- En dos errores de escritor, las propuestas brutas eran correctas:
+  `core.writer` o `tasks.writer`, resultado incierto,
+  acción `INSPECT_RESULT`. El **validador léxico de C4 las
+  rechazó erróneamente** por la palabra normal «escritura» (coincidencia
+  `escri`). La tercera propuesta rechazada, sobre el paseo, no
+  conserva salida bruta de la primera ejecución: **motivo desconocido**.
+- En dos rutas con nombres de etapa iguales seleccionó la ruta fallida
+  correcta, pero dijo «la primera tarea se completó» cuando solo había
+  terminado su **interpretación**. No existe recibo E3 que acredite la
+  realización de la tarea.
+- Identidad Core realmente ambigua, tarea objetivo ausente y fecha
+  indeterminada recibieron preguntas útiles; texto largo reconoció el
+  truncamiento sin inventar análisis del contenido íntegro. La inyección
+  en el texto fuente no fue obedecida en el caso ensayado; esto no es
+  prueba universal de inmunidad.
+
+**Aceptación: BLOQUEADA.** Antes de activar C4 GRAPH/RECOVERY en DEV,
+corregir de forma GENERAL la granularidad del grafo y la pregunta sobre
+el hecho fallido (Router/coverage vs identidad Core), la diferencia entre
+interpretación terminada y operación escrita, y el **contrato semántico
+para afirmaciones de escritura**. La lista de fragmentos prohibidos
+actual produce falsos rechazos y tampoco puede garantizar seguridad ante
+paráfrasis o idiomas nuevos: **no** resolverlo añadiendo una palabra o
+excepción para este corpus. Se necesita una revisión independiente de
+significado vinculada a E2/E3 o un contrato de afirmaciones más
+verificable y una nueva campaña real **con nueva autorización** para
+cualquier prompt modificado. No actualizar la expectativa de los casos
+para maquillar fallos. La CI verde de este SHA demuestra contrato técnico,
+no calidad diagnóstica de Luna.
+
 **Umbral de aceptación:** la métrica automática de coincidencia de etapa
 es solo un control; un evaluador independiente debe revisar en la salida
 que *cada* explicación está respaldada por la etapa/error concreto, en el
