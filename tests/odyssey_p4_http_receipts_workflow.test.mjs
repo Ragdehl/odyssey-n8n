@@ -66,7 +66,7 @@ test("existing n8n mapping would render the three true completions", () => {
   }
 });
 
-test("known P4 blocker: existing n8n fallback for Ana and pronoun ambiguity is generic", () => {
+test("no-option FULL_SOURCE blocker now explains how to safely correct the original request", () => {
   for (const row of receipts.cases.filter((r) => r.expected_safe_abstention)) {
     assert.equal(row.safe_no_write, true);
     assert.equal(row.notes.length, 0);
@@ -74,8 +74,26 @@ test("known P4 blocker: existing n8n fallback for Ana and pronoun ambiguity is g
     assert.equal(converted.status, "needs_attention");
     assert.equal(converted.kind, "clarification");
     assert.equal(converted.clarification.options.length, 0);
-    assert.match(converted.message, /Necesito que precises/);
-    // This passing characterization is NOT UX acceptance. An actual valid
-    // choice-based continuation has yet to be integrated with P4 and n8n.
+    assert.match(converted.message, /No he podido verificar todas las personas o los hechos/);
+    assert.match(converted.message, /editar el mensaje original/);
+    assert.match(converted.message, /No he guardado ninguna nota/);
+    // No invented candidate options, identities or automatic re-execution.
   }
+});
+
+test("FULL_SOURCE no-option guidance does not claim zero writes for a partial result", () => {
+  const id = "partial-with-same-abstention-code";
+  const result = route(
+    {first: () => ({json: {
+      request_id: id, status: "partial", product_outcome: "CLARIFY",
+      clarification_code: "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+      affected_stable_note_ids: ["date:2026-10-16"], actions: [{status: "completed"}],
+      operational: {total_duration_ms: 1, stages: []},
+    }})},
+    (label) => {
+      assert.equal(label, "Odyssey product request");
+      return {item: {json: {body: {request_id: id}}}};
+    },
+  )[0].json;
+  assert.doesNotMatch(result.message, /No he guardado ninguna nota/);
 });

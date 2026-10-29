@@ -407,6 +407,43 @@ is **29 October 2026 15:41 UTC**; verify its current validity before use.
 The historical #158 public E3 proof is not an Issue #157 Router/Planner proof
 and the independent final four-role audit is not yet complete.
 
+### Fail-closed no-options source revision (29 October, after `8245ed0`)
+
+The product already persists the **original user message** in the actor-owned
+conversation transcript and the immutable delivery receipt. Only a true
+Core-owned ambiguity with 2–4 independently validated candidates can enter
+`LocalClarificationStore` and resume its guarded planned write. For an earlier
+whole-source/identity review refusal, inventing options or treating a later
+user answer as write authority would be unsafe.
+
+The existing n8n product renderer now recognizes **only**
+`FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED` with status `needs_attention`,
+**no actions** and **zero affected note IDs** and returns a specific
+no-write explanation: Odyssey could not verify all the people/facts, and the
+user can clarify their original complete message. It does not claim zero
+writes for partial/unknown results, and leaves real Core-owned option lists
+and their continuation untouched. The web UI adds a bounded **«Editar
+mensaje original»** action only to this exact response. The button obtains
+the previously authenticated user's text from the already restored
+conversation history (including paginated history), fills the draft and
+focuses the input **only when the original is shorter than the 4096-character
+history-cache bound**; a potentially truncated long original is never offered
+as a complete editable original; **it neither submits nor modifies the original request**.
+Submitting the edited source creates a new delivery with ordinary Router →
+Core/E3 identity proof and still cannot inherit the prior abstention as an
+authorization. On reload the same UI action is reconstructed from durable
+user/assistant turns, with no new identity database, candidate selector,
+model call or canonical write.
+
+Node tests execute the actual n8n renderer and the actual web script: verified
+no-option guidance, no false zero-write claim on partial, visible draft
+recovery, browser-load reconstruction and no source editor for existing
+Core options. **This is an actionable manual correction path, NOT automatic
+continuation of a pending source interpretation**. A future automatic
+clarification of unknown family members must include validated user reply,
+source/fact-level identity proof, actor/version guards and replay-safe plan
+before any resumed write. Keep that acceptance item open.
+
 ## Verification and release gates
 
 - Deterministic synthetic Core/E3 test: two original facts on one Day,

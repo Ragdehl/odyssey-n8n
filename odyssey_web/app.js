@@ -165,6 +165,7 @@ async function loadMainConversation() {
       restorePersistedAcknowledgement(message, turn);
       appendDetailButton(message, turn.request_detail);
       appendNoteSetAffordance(message, turn.note_result_snapshot);
+      appendSourceRevisionControl(message, turn.request_id, turn.text, turn.status);
     }
   }
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
@@ -334,6 +335,7 @@ async function loadOlderConversation() {
         restorePersistedAcknowledgement(message, turn);
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
+      appendSourceRevisionControl(message, turn.request_id, turn.text, turn.status);
       }
       olderNodes.push(message);
     }
@@ -360,6 +362,31 @@ async function loadOlderConversation() {
 conversation.addEventListener("scroll", () => {
   if (conversation.scrollTop <= 80) void loadOlderConversation();
 });
+
+// A fail-closed full-source abstention can be revised as a new draft.
+// This never consumes a pending candidate choice or resends a delivery.
+const sourceRevisionPrefix = "No he podido verificar todas las personas o los hechos de este mensaje.";
+function appendSourceRevisionControl(article, requestId, text, status) {
+  if (status !== "needs_attention" || typeof text !== "string" ||
+      !text.startsWith(sourceRevisionPrefix) || typeof requestId !== "string" ||
+      article.querySelector(".source-revision-button")) return;
+  const original = userTextByRequestId.get(requestId);
+  // User text is capped at 4096 chars in the existing history cache.
+  // At the bound, completeness cannot be demonstrated: never offer a
+  // misleading "original" draft that might silently omit a trailing fact.
+  if (typeof original !== "string" || !original.trim() || original.length >= 4096) return;
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "source-revision-button";
+  action.textContent = "Editar mensaje original";
+  action.addEventListener("click", () => {
+    // Draft only. User must consciously submit a NEW delivery after editing.
+    if (input.disabled) return;
+    input.value = original;
+    input.focus();
+  });
+  article.querySelector(".message-actions")?.append(action);
+}
 
 function appendDetailButton(article, detail) {
   if (!detail || !requestDetailSheet || article.querySelector(".detail-button")) return;
@@ -579,6 +606,7 @@ function renderProductResult(result) {
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
   appendClarificationCard(message, result.clarification);
+  appendSourceRevisionControl(message, result.request_id, result.message, result.status);
   if (clarificationStatus) {
     clarificationStatus.hidden = !(
       result.kind === "clarification"

@@ -749,3 +749,69 @@ test("recoverable history warns only that its assistant turn is missing, not its
   assert.match(control.textContent, /La respuesta no figura en el historial/);
   assert.doesNotMatch(control.textContent, /no tiene una respuesta guardada/);
 });
+
+const sourceRevisionMessage = "No he podido verificar todas las personas o los hechos de este mensaje. No he guardado ninguna nota. Puedes editar el mensaje original, aclarar quién participó y volver a enviarlo completo; no seleccionaré personas por mi cuenta.";
+
+test("no-option full-source refusal restores the original as a draft, never silently resubmits", async () => {
+  const original = "Hoy mis hijos, mi pareja y yo estuvimos en un jardín. Después fuimos al museo.";
+  let sent = 0;
+  const page = await mountApp({
+    turns: [],
+    createSubmission: (request) => ({request, requestId: "source-unverified-1"}),
+    requestProductResult: async () => {
+      sent += 1;
+      return {request_id: "source-unverified-1", status: "needs_attention", kind: "clarification",
+        message: sourceRevisionMessage,
+        clarification: {request_id: "source-unverified-1", options: []}};
+    },
+  });
+  page.elements.input.value = original;
+  page.elements.form.emit("submit", {preventDefault() {}});
+  await flush();
+  assert.equal(sent, 1);
+  assert.equal(page.elements.clarificationStatus.hidden, true);
+  const control = conversationMessages(page.elements.conversation).at(-1)
+    .querySelector(".source-revision-button");
+  assert.ok(control);
+  assert.equal(control.textContent, "Editar mensaje original");
+  control.click();
+  assert.equal(page.elements.input.value, original);
+  assert.equal(sent, 1);
+  assert.equal(page.document.events.filter((event) => event.type === "odyssey:knowledge-changed").length, 0);
+});
+
+test("no-option source editor survives a conversation reload without storing extra identity state", async () => {
+  const original = "Ayer mis hijos fueron al museo; mi pareja se quedó en casa.";
+  let sent = 0;
+  const page = await mountApp({
+    turns: [
+      {request_id: "old-source-refusal", role: "user", text: original},
+      {request_id: "old-source-refusal", role: "assistant", text: sourceRevisionMessage,
+        status: "needs_attention"},
+    ],
+    requestProductResult: async () => {sent += 1; return {};},
+  });
+  const action = conversationMessages(page.elements.conversation).at(-1)
+    .querySelector(".source-revision-button");
+  assert.ok(action);
+  action.click();
+  assert.equal(page.elements.input.value, original);
+  assert.equal(sent, 0);
+});
+
+test("a real choice-based clarification never becomes an unrestricted source-revision button", async () => {
+  const page = await mountApp({turns: [
+    {request_id: "choice-1", role: "user", text: "Él fue al cine"},
+    {request_id: "choice-1", role: "assistant", status: "needs_attention",
+      text: "No he podido elegir entre Ana y Vera."},
+  ]});
+  assert.equal(page.elements.conversation.querySelector(".source-revision-button"), null);
+});
+
+test("source edit affordance refuses a possibly truncated long original", async () => {
+  const page = await mountApp({turns: [
+    {request_id: "long-original", role: "user", text: "A".repeat(5000)},
+    {request_id: "long-original", role: "assistant", status: "needs_attention", text: sourceRevisionMessage},
+  ]});
+  assert.equal(page.elements.conversation.querySelector(".source-revision-button"), null);
+});
