@@ -22,6 +22,7 @@ SOURCE = "Ayer mis hijos y mi pareja visitaron el jardín; después fuimos al mu
 REASON = "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED"
 AI_REPLY = {
     "evidence_stage": "candidate.source_boundary_review",
+    "route_index": None,
     "explanation": "La revisión de cobertura del texto no pudo comprobar la separación de los recuerdos.",
     "next_step": "ASK_USER",
     "user_question": "¿Puedes confirmar si fueron dos visitas diferentes?",
@@ -85,6 +86,8 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
         {"evidence_stage": "core.identity_resolution"},  # did not run
         {"explanation": "No he guardado nada. Puedes volver a pedirlo."},
         {"explanation": "No se modificó ningún archivo, puedes repetirlo."},
+        {"explanation": "No hay notas nuevas. Repite la solicitud."},
+        {"evidence_stage": "application.router"},
         {"next_step": "AUTO_RETRY"},
         {"user_question": ""},
         {"free_write_command": "CREATE"},
@@ -185,6 +188,7 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
         [
             {
                 "evidence_stage": "application.source_processing",
+                "route_index": None,
                 "explanation": "El procesamiento se interrumpió al consultar el planificador, antes de verificar entidades en Core.",
                 "next_step": "CHECK_SYSTEM",
                 "user_question": "",
@@ -219,24 +223,67 @@ def test_c4_graph_gateway_is_independent_from_chat_and_gracefully_handles_missin
 
     monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
     monkeypatch.setenv("ODYSSEY_CHAT_C4_ENABLED", "1")
+    monkeypatch.delenv("ODYSSEY_CHAT_C4_GRAPH_ENABLED", raising=False)
+    assert _c4_graph_gateway_from_environment() is None
+    monkeypatch.setenv("ODYSSEY_CHAT_C4_GRAPH_ENABLED", "1")
     monkeypatch.delenv("ODYSSEY_CHAT_C3_ENABLED", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert _c4_graph_gateway_from_environment() is None
 
     gateway = OpenAIConversationGateway(FakeClient([]))
     monkeypatch.setattr(
-        OpenAIConversationGateway, "from_environment", classmethod(lambda cls: gateway)
+        OpenAIConversationGateway, "from_environment", classmethod(lambda cls, **kwargs: gateway)
     )
     assert _c4_graph_gateway_from_environment() is gateway
     monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "PROD")
     assert _c4_graph_gateway_from_environment() is None
     monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+    monkeypatch.setenv("ODYSSEY_CHAT_C4_GRAPH_ENABLED", "0")
+    assert _c4_graph_gateway_from_environment() is None
+    monkeypatch.setenv("ODYSSEY_CHAT_C4_GRAPH_ENABLED", "1")
     monkeypatch.setenv("ODYSSEY_CHAT_C4_ENABLED", "0")
     assert _c4_graph_gateway_from_environment() is None
     monkeypatch.setenv("ODYSSEY_CHAT_C4_ENABLED", "1")
     monkeypatch.setattr(
         OpenAIConversationGateway,
         "from_environment",
-        classmethod(lambda cls: (_ for _ in ()).throw(ConversationGateError("offline"))),
+        classmethod(lambda cls, **kwargs: (_ for _ in ()).throw(ConversationGateError("offline"))),
     )
     assert _c4_graph_gateway_from_environment() is None
+
+
+def test_graph_ai_rejects_mismatched_route_owner_and_marks_source_truncation():
+    typed = rejected()
+    source = SOURCE + " y otro hecho posiblemente omitido" * 100
+    route_ledger = project_execution_ledger(typed)
+    route_ledger["routes"] = [
+        {"route_index": 0, "capability": "core", "status": "completed", "depends_on": None},
+        {"route_index": 1, "capability": "tasks", "status": "failed", "depends_on": None},
+    ]
+    route_ledger["stages"] = [
+        {**route_ledger["stages"][1], "route_index": 0, "outcome": "completed"},
+        {**route_ledger["stages"][1], "route_index": 1, "outcome": "failed"},
+    ]
+    bad = FakeClient([{**AI_REPLY, "route_index": 0}])
+    denied = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        route_ledger,
+        OpenAIConversationGateway(bad),
+        original_message=source,
+    )
+    assert denied is None
+    good = FakeClient([{**AI_REPLY, "route_index": 1}])
+    accepted = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        route_ledger,
+        OpenAIConversationGateway(good),
+        original_message=source,
+    )
+    assert accepted is not None and accepted["route_index"] == 1
+    observed = json.loads(good.responses.calls[0]["input"][1]["content"])
+    assert observed["source_truncated"] is True
+    assert observed["original_message"] == source[:2048]
+    assert [stage["route_index"] for stage in observed["stages"]] == [0, 1]
+    assert observed["routes"][1]["capability"] == "tasks"

@@ -20,7 +20,7 @@ const ID = "c4-graph-synthetic";
 const stage = "candidate.source_boundary_review";
 const diagnostic = {
   status: "needs_attention", reason_code: "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
-  write_evidence: "UNKNOWN", evidence_stage: stage,
+  write_evidence: "UNKNOWN", evidence_stage: stage, route_index: null,
   explanation: "La revisión no pudo confirmar que se conservaran todas las partes de la frase.",
   next_step: "ASK_USER", user_question: "¿Puedes aclarar la relación entre las dos actividades?",
 };
@@ -64,6 +64,7 @@ test("model hallucination of stages, writes, commands and source is discarded", 
     {error_diagnosis: {...diagnostic, evidence_stage: "core.identity_resolution"}},
     {error_diagnosis: {...diagnostic, explanation: "No he guardado nada; reintentar."}},
     {error_diagnosis: {...diagnostic, explanation: "No se actualizó ninguna nota, prueba otra vez."}},
+    {error_diagnosis: {...diagnostic, explanation: "No hay notas nuevas. Puedes probar otra vez."}},
     {error_diagnosis: {...diagnostic, next_step: "AUTO_RETRY", user_question: ""}},
     {error_diagnosis: {...diagnostic, retry_authorized: true}},
     {error_diagnosis: {...diagnostic, reason_code: "ANOTHER_FAILURE"}},
@@ -87,4 +88,42 @@ test("Core-verified entity alternatives still win over AI diagnosis", () => {
   }});
   assert.equal(result.message, "¿A cuál de las dos personas te refieres?");
   assert.equal(result.clarification.options.length, 2);
+});
+
+
+test("AI cannot blame the completed Router or claim absence of new notes from an unproven result", () => {
+  const result = render({
+    execution_ledger: {...ledger, stages: [{...ledger.stages[0], name: "application.router",
+      outcome: "completed", error_category: null}]},
+    error_diagnosis: {...diagnostic, evidence_stage: "application.router",
+      explanation: "El módulo de identidad falló. No hay notas nuevas."},
+  });
+  assert.equal(result.kind, "clarification");
+  assert.doesNotMatch(result.message, /El módulo de identidad falló|No hay notas nuevas/);
+});
+
+test("valid AI graph diagnosis takes precedence over a fixed known CLARIFY fallback", () => {
+  const result = render({
+    clarification_code: "ROUTER_CLARIFY", product_reason: "ROUTER_CLARIFY",
+    error_diagnosis: {...diagnostic, reason_code: "ROUTER_CLARIFY"},
+  });
+  assert.match(result.message, /revisión no pudo confirmar/);
+  assert.doesNotMatch(result.message, /No puedo decidir con seguridad qué aplicación/);
+});
+
+
+test("repeated stage names across routes require the right failed route index", () => {
+  const routes = [
+    {route_index: 0, capability: "core", status: "completed", depends_on: null},
+    {route_index: 1, capability: "tasks", status: "failed", depends_on: null},
+  ];
+  const duplicated = [
+    {...ledger.stages[0], route_index: 0, outcome: "completed"},
+    {...ledger.stages[0], route_index: 1, outcome: "failed"},
+  ];
+  const common = {execution_ledger: {...ledger, routes, stages: duplicated}};
+  const wrong = render({...common, error_diagnosis: {...diagnostic, route_index: 0}});
+  assert.doesNotMatch(wrong.message, /revisión no pudo confirmar/);
+  const correct = render({...common, error_diagnosis: {...diagnostic, route_index: 1}});
+  assert.match(correct.message, /revisión no pudo confirmar/);
 });

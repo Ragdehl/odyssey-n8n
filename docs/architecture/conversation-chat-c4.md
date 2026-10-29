@@ -59,8 +59,10 @@ una segunda entrega. La misma petición replay E3 conserva la primera
 respuesta y no repite el diagnóstico ni el writer.
 
 **Activación candidata:** el gateway C4 de diagnóstico se conecta en la
-fábrica cuando `ODYSSEY_CHAT_C4_ENABLED=1` y entorno DEV, sin depender de
-activar C3. Esto añade **una llamada de modelo en una solicitud fallida**,
+fábrica cuando `ODYSSEY_CHAT_C4_ENABLED=1`,
+`ODYSSEY_CHAT_C4_GRAPH_ENABLED=1` y entorno DEV, sin depender de
+activar C3. El nuevo flag empieza apagado incluso si C4 antiguo ya está activo,
+para preservar el comportamiento desplegado hasta que el modelo real se evalúe. Esto añade **una llamada de modelo en una solicitud fallida**,
 y si no hay credenciales/proveedor configurado el runtime conserva la
 respuesta de Core y el fallback anterior, sin bloquear su arranque.
 Por lo tanto no debe desplegarse hasta aprobar una campaña sintética de modelo
@@ -77,6 +79,24 @@ instrucciones. Para cada caso: etapa correcta o `unattributed`, causa y
 pregunta fundamentadas, modelo/effort/hash, llamadas y coste, y ausencia de
 falsas certezas de escritura. Los tests de modelo simulado y JS n8n son
 **contrato de seguridad, no prueba de interpretación con IA real**.
+
+**Auditoría puntual independiente de Calidad (source `8511e98`): FAIL.**
+Sol detectó cinco problemas: atribución de etapa completada, afirmación libre
+«No hay notas nuevas» sin prueba E3, diagnóstico ocultado por fallbacks de
+`CLARIFY` conocidos, pérdida de `route_index` y ocultación del truncado
+2048, y hasta 30 s bajo el bloqueo de petición antes del recibo con doble
+llamada de C4 y coste no reflejado. Los cuatro primeros tienen ahora
+correcciones y regresiones Python/JS: admitir como causa solo etapa fallida
+o hito `failed_or_unknown`, rechazar afirmaciones modelo sobre existencia o
+cambios de notas, preferir explicación AI validada tras priorizar opciones
+Core, exigir `(stage, route_index)` y marcar `source_truncated` al modelo.
+Se limita el gateway de C4 gráfico a un timeout de 12 segundos y se evita la
+doble llamada con el advisory anterior cuando está habilitado. Esto no elimina
+todavía el coste de la llamada dentro del bloqueo de ejecución ni añade
+medición de tokens/coste al ledger; queda un **bloqueador de rendimiento y
+trazabilidad** de esta fuente. El FAIL de `8511e98` no se convierte en PASS:
+hace falta nueva revisión del SHA corregido. La IA no se activa automáticamente
+en la instancia DEV que ya tiene C4: requiere el flag adicional de adopción.
 
 **Recuperación automática:** todavía NO incorporada. Reenvío automático con
 nuevo request ID después de una ejecución incierta podría repetir acciones.

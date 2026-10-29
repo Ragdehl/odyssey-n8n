@@ -87,7 +87,7 @@ def diagnose_trusted_execution_graph(
     stages: list[dict[str, object]] = []
     events: list[dict[str, object]] = []
     routes: list[dict[str, object]] = []
-    known_stages = {"unattributed"}
+    known_stages = {("unattributed", None)}
     for item in raw_stages[:32]:
         if not isinstance(item, Mapping):
             continue
@@ -98,8 +98,19 @@ def diagnose_trusted_execution_graph(
             continue
         if error is not None and (not isinstance(error, str) or len(error) > 120):
             continue
-        known_stages.add(name)
-        stages.append({"name": name, "outcome": outcome, "error_category": error})
+        index = item.get("route_index")
+        if index is not None and (type(index) is not int or index < 0 or index >= len(raw_routes)):
+            continue
+        if outcome in {"failed", "unavailable"}:
+            known_stages.add((name, index))
+        stages.append(
+            {
+                "name": name,
+                "outcome": outcome,
+                "error_category": error,
+                "route_index": index,
+            }
+        )
     for item in raw_events[-32:]:
         if not isinstance(item, Mapping):
             continue
@@ -115,7 +126,8 @@ def diagnose_trusted_execution_graph(
                 "failed_or_unknown",
             }
         ):
-            known_stages.add(name)
+            if outcome == "failed_or_unknown":
+                known_stages.add((name, None))
             events.append({"stage": name, "outcome": outcome})
     for item in raw_routes[:16]:
         if not isinstance(item, Mapping):
@@ -127,13 +139,21 @@ def diagnose_trusted_execution_graph(
             and isinstance(status, str)
             and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", status)
         ):
-            routes.append({"capability": capability, "status": status})
+            routes.append(
+                {
+                    "route_index": item.get("route_index"),
+                    "depends_on": item.get("depends_on"),
+                    "capability": capability,
+                    "status": status,
+                }
+            )
     write_evidence = "SOME" if result.affected_stable_note_ids else "UNKNOWN"
     evidence = {
         "status": result.status.value,
         "reason_code": code,
         "write_evidence": write_evidence,
         "original_message": original_message[:2048] if isinstance(original_message, str) else "",
+        "source_truncated": isinstance(original_message, str) and len(original_message) > 2048,
         "events": events,
         "stages": stages,
         "routes": routes,
@@ -143,12 +163,14 @@ def diagnose_trusted_execution_graph(
     except (ConversationGateError, OSError, ValueError, TypeError):
         return None
     stage = proposal.get("evidence_stage")
+    route_index = proposal.get("route_index")
     explanation = proposal.get("explanation")
     question = proposal.get("user_question")
     next_step = proposal.get("next_step")
     if (
         not isinstance(stage, str)
-        or stage not in known_stages
+        or (route_index is not None and (type(route_index) is not int or route_index < 0))
+        or (stage, route_index) not in known_stages
         or not isinstance(explanation, str)
         or not 12 <= len(explanation.strip()) <= 420
         or not isinstance(question, str)
@@ -163,6 +185,19 @@ def diagnose_trusted_execution_graph(
     if any(
         fragment in (explanation + " " + question).casefold()
         for fragment in (
+            "nota",
+            "file",
+            "archivo",
+            "ficher",
+            "register",
+            "registro",
+            "dossier",
+            "intact",
+            "unchang",
+            "no hay",
+            "sin cambios",
+            "ninguna nueva",
+            "no new",
             "guard",
             "escri",
             "salvad",
@@ -187,6 +222,7 @@ def diagnose_trusted_execution_graph(
         "reason_code": code,
         "write_evidence": write_evidence,
         "evidence_stage": stage,
+        "route_index": route_index,
         "explanation": explanation.strip(),
         "next_step": next_step,
         "user_question": question.strip(),

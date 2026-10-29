@@ -338,10 +338,11 @@ def _c4_graph_gateway_from_environment() -> OpenAIConversationGateway | None:
     if (
         os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
         or os.environ.get("ODYSSEY_CHAT_C4_ENABLED") != "1"
+        or os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") != "1"
     ):
         return None
     try:
-        return OpenAIConversationGateway.from_environment()
+        return OpenAIConversationGateway.from_environment(timeout_seconds=12.0)
     except ConversationGateError:
         # Provider unavailable: the immutable Core result and existing
         # evidence-grounded fallback still work, with no speculative retry.
@@ -1181,6 +1182,7 @@ class RuntimeComposition:
                     (
                         self.conversation_gateway
                         if self.conversation_error_model_advisory_enabled
+                        and self.conversation_graph_gateway is None
                         else None
                     ),
                 )
