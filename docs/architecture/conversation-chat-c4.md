@@ -198,6 +198,64 @@ model evaluation, independently reviewed write-boundary coverage, full
 browser/E3 replay and latency/cost measurements. No model verdict bypasses
 human/Core identity selection, source completeness checks or E3.
 
+### Preparación de aceptación semántica real (fuente; 29-10-2026)
+
+Hay una matriz independiente de **14 pruebas sintéticas, no personales**
+en `scripts/evaluate_c4_graph.py`. Esta batería reutiliza
+**el prompt + esquema strict Responses + modelo/effort reales de C4**, y
+forma los `ApplicationResult` tipados, las etapas y los libros E2 con el
+proyector de producción. Incluye: recuerdos de familia con dos hechos,
+encuentro con Manu/paseo que deben ir al diario, identidad Core realmente
+ambigua, Tasks sin objetivo, fecha no identificada, proveedor no disponible,
+escrituras `PARTIAL` y `UNKNOWN` tras un Writer, francés, inglés, inyección
+de instrucciones incrustada en la fuente, dos rutas con etapas del mismo
+nombre, y entrada original truncada. Un fallo anterior a Core nunca se
+atribuye a identidades de Core. Un fallo tras Writer nunca autoriza reintento
+simple, aunque no haya IDs afectados.
+
+Invocación sin modelo: `python -m scripts.evaluate_c4_graph --mode dry-run`.
+El ejecutable por defecto es **`--mode dry-run`**, comprueba estructura,
+SHA-256 de prompt/esquema y los 14 libros tipados sin conectar con ningún
+proveedor ni hacer escrituras. El modo `--mode live --max-calls 14` se niega
+a ejecutarse sin la bandera `ODYSSEY_C4_LIVE_EVAL_AUTHORIZED=1` (solo tras
+**autorización humana explícita de 14 llamadas GPT**), proveedor protegido
+por el método systemd de `odyssey-live-provider`, modelo exacto,
+`store=false`, `max_output_tokens=880`, timeout 12 s, máximo 14 casos y
+parada temprana tras salida estructuralmente inválida. El formato de informe
+incluye prompt hash, modelo/effort, decisiones por caso, etapa/ruta esperada
+y observada, texto propuesto, latencia y tokens que comunique el SDK. **No
+se adivina un coste monetario** cuando no está medida la tarifa. No hay
+ninguna llamada live consumida para preparar esta matriz.
+
+**Umbral de aceptación:** la métrica automática de coincidencia de etapa
+es solo un control; un evaluador independiente debe revisar en la salida
+que *cada* explicación está respaldada por la etapa/error concreto, en el
+idioma pertinente, que ninguna presenta identidades/fechas/escrituras sin
+prueba, que una pregunta pide solo la información realmente faltante y que
+no se recomienda reintentar después de cruzar un Writer. Cualquier
+falsa certeza de escritura, reintento inseguro o pérdida de la intención de
+guardar es **bloqueante**, aunque una decisión JSON sea válida. Los casos
+inestables necesitan repetición autorizada con presupuesto aparte. Mientras
+no exista este recibo real y la revisión de significado, **C4 GRAPH y
+C4 RECOVERY siguen apagados en DEV**.
+
+**Sonda de rendimiento de diagnóstico gráfico (29-10, fuente):** se ha
+ampliado la herramienta **ya existente**
+`python -m scripts.odyssey_chat_c4_perf_gate --graph-diagnosis`, sin crear
+un segundo benchmark. Ejecuta el **gateway y validador C4 reales** sobre
+siete solicitudes sintéticas con 180 ms de latencia artificial del
+proveedor, tres concurrentes y actor/E3/replay aislados. Raspberry: p50
+**182,4 ms**; p95 por nearest-rank **546,3 ms**, 7/7 llamadas C4 y 0
+escrituras; swap observado 0 KiB. La demora de tres concurrentes es
+esperable porque el `execute_product` actual serializa entregas.
+Se ejecutaron también los dos modos antiguos de la sonda y siguen en PASS:
+7 solicitudes sin advisory (0 llamadas) y 7 con advisory antiguo (7).
+Este benchmark **NO** mide una llamada OpenAI real: latencias y coste
+modelos permanecen pendientes; un C4 bajo el lock con timeout 12 s puede
+acumular demoras relevantes. La sonda nueva está controlada por una
+regresión en la CI.
+
+
 **Recuperación automática:** aún NO incorporada como corrección semántica completa. Reenvío automático con
 nuevo request ID después de una ejecución incierta podría repetir acciones.
 La recuperación exige prueba independiente de que no hay escrituras, decisión

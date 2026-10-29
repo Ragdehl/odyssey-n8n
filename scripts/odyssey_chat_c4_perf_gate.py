@@ -17,11 +17,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from math import ceil
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver
+from odyssey_core.observability import OperationalEvidence, OperationalOutcome, OperationalStage
 from odyssey_runtime.composition import RuntimeComposition
 from odyssey_runtime.conversation_gateway import (
     ContextScope,
@@ -89,12 +91,46 @@ class DelayedFakeGateway(OpenAIConversationGateway):
         return ErrorAdvice(GuidanceKind.RETRY_LATER, RecoveryHint.REVIEW_RETRY)
 
 
+class GraphDelayedFakeGateway(OpenAIConversationGateway):
+    """Run C4's ACTUAL strict schema and validator over a delayed fake provider."""
+
+    def __init__(self, delay: float) -> None:
+        self.calls = 0
+        self.delay = delay
+        self.lock = threading.Lock()
+        self.client = SimpleNamespace(responses=self)
+        self.model = "DELAYED_FAKE_NOT_REAL_PROVIDER"
+        self.reasoning_effort = "synthetic"
+
+    def create(self, **kwargs):
+        assert kwargs["text"]["format"]["name"] == "odyssey_execution_graph_diagnosis"
+        assert kwargs["store"] is False
+        with self.lock:
+            self.calls += 1
+        time.sleep(self.delay)
+        return SimpleNamespace(
+            status="completed",
+            output_text=json.dumps(
+                {
+                    "evidence_stage": "application.source_processing",
+                    "route_index": None,
+                    "explanation": "La etapa observada falló en la revisión de la ruta original.",
+                    "next_step": "CHECK_SYSTEM",
+                    "user_question": "",
+                }
+            ),
+        )
+
+
 def main() -> None:
-    if sys.argv[1:] not in ([], ["--model-advisory"]):
-        raise SystemExit("Usage: python -m scripts.odyssey_chat_c4_perf_gate [--model-advisory]")
+    if sys.argv[1:] not in ([], ["--model-advisory"], ["--graph-diagnosis"]):
+        raise SystemExit(
+            "Usage: python -m scripts.odyssey_chat_c4_perf_gate [--model-advisory|--graph-diagnosis]"
+        )
     advisory = sys.argv[1:] == ["--model-advisory"]
+    graph_mode = sys.argv[1:] == ["--graph-diagnosis"]
     delay = 0.18
-    gateway = DelayedFakeGateway(delay)
+    gateway = GraphDelayedFakeGateway(delay) if graph_mode else DelayedFakeGateway(delay)
     samples = []
     measurements = []
     stop = threading.Event()
@@ -113,6 +149,25 @@ def main() -> None:
         def hybrid(source, rid, actor, cid):
             with lock:
                 calls.append(rid)
+            if graph_mode:
+                return ApplicationResult(
+                    rid,
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    clarification_code="FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+                    operational=OperationalEvidence(
+                        2,
+                        (
+                            OperationalStage(
+                                "application.source_processing",
+                                OperationalOutcome.FAILED,
+                                2,
+                                error_category="FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+                            ),
+                        ),
+                    ),
+                )
             return ApplicationResult(
                 request_id=rid,
                 status=ApplicationStatus.FAILED,
@@ -127,7 +182,8 @@ def main() -> None:
             full_source_mutation_guard=True,
             refresh_indexes=lambda: None,
             conversation_root_resolver=ConversationRootResolver(Path(d) / "state"),
-            conversation_gateway=gateway,  # fake, synthetic, deliberately 180ms
+            conversation_gateway=None if graph_mode else gateway,
+            conversation_graph_gateway=gateway if graph_mode else None,
             conversation_error_guidance_enabled=True,
             conversation_error_model_advisory_enabled=advisory,
         )
@@ -138,8 +194,15 @@ def main() -> None:
             before = time.monotonic()
             response = runtime.execute_product(name, rid, "main", actor)
             elapsed = (time.monotonic() - before) * 1000
-            assert response["error_guidance"]["write_evidence"] == "UNKNOWN"
-            assert response["error_guidance"]["guidance_kind"] == "RETRY_LATER"
+            if graph_mode:
+                assert (
+                    response["error_diagnosis"]["evidence_stage"] == "application.source_processing"
+                )
+                assert response["error_diagnosis"]["next_step"] == "CHECK_SYSTEM"
+                assert response["error_diagnosis"]["write_evidence"] == "UNKNOWN"
+            else:
+                assert response["error_guidance"]["write_evidence"] == "UNKNOWN"
+                assert response["error_guidance"]["guidance_kind"] == "RETRY_LATER"
             again = runtime.execute_product(name, rid, "main", actor)
             assert again["delivery_replayed"] is True
             return {"id": rid, "latency_ms": round(elapsed, 1), "replay_verified": True}
@@ -151,7 +214,7 @@ def main() -> None:
             futs = [pool.submit(invoke, f"synthetic-parallel-{i}") for i in range(3)]
             measurements += [{"scope": "3-overlapping", **f.result()} for f in futs]
         assert len(calls) == len(measurements) == 7
-        assert gateway.calls == (7 if advisory else 0)
+        assert gateway.calls == (7 if advisory or graph_mode else 0)
     stop.set()
     monitor.join(1)
     last = snapshot()
@@ -162,6 +225,7 @@ def main() -> None:
         "calls": len(measurements),
         "model": "DELAYED_FAKE_NOT_REAL_PROVIDER",
         "model_advisory_enabled": advisory,
+        "graph_diagnosis_enabled": graph_mode,
         "C4_advisory_calls": gateway.calls,
         "synthetic_provider_delay_ms": int(delay * 1000),
         "worker_concurrency": 3,
