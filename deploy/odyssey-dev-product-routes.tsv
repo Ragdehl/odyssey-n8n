@@ -11,6 +11,7 @@ GET	/api/schema-scan.js	static
 GET	/api/calendar.js	static
 GET	/api/calendar-client.js	static
 GET	/api/progress.js	static
+GET	/api/deferred_diagnosis.js	static
 GET	/api/presence.js	static
 POST	/api/request	api
 POST	/api/conversation	api

@@ -236,6 +236,27 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                         HTTPStatus.BAD_REQUEST, {"error": "invalid conversation request"}
                     )
                 return
+            if parsed.path == "/conversation/diagnosis":
+                try:
+                    payload = self._read_payload()
+                    if (
+                        set(payload)
+                        - {"operation", "request_id", "authenticated_actor", "external_principal"}
+                        or ("authenticated_actor" in payload) == ("external_principal" in payload)
+                        or payload.get("operation") != "diagnosis"
+                        or not isinstance(payload.get("request_id"), str)
+                        or _REQUEST_ID_PATTERN.fullmatch(payload["request_id"]) is None
+                    ):
+                        raise ValueError("invalid diagnostic lookup")
+                    self._write_json(
+                        HTTPStatus.OK,
+                        runtime.deferred_diagnosis(
+                            payload["request_id"], *self._identity_from_payload(payload)
+                        ),
+                    )
+                except (DeliveryResultError, IdentityBoundaryError, TypeError, ValueError):
+                    self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid diagnosis request"})
+                return
             if parsed.path == "/conversation/assistant-response":
                 try:
                     payload = self._read_payload()

@@ -9,6 +9,7 @@ import {
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
 import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";
+import {pollDeferredDiagnosis} from "./deferred_diagnosis.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -144,6 +145,7 @@ async function loadMainConversation() {
     }
   }
   const userMessages = new Map();
+  const diagnosticCandidates = [];
   let visibleDay = null;
   for (const turn of data.turns ?? []) {
     const createdAt = validTurnTime(turn.created_at);
@@ -165,7 +167,11 @@ async function loadMainConversation() {
       restorePersistedAcknowledgement(message, turn);
       appendDetailButton(message, turn.request_detail);
       appendNoteSetAffordance(message, turn.note_result_snapshot);
+      diagnosticCandidates.push({message, turn});
     }
+  }
+  for (const {message, turn} of diagnosticCandidates.slice(-4)) {
+    attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
   }
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
   if (recoverable) {
@@ -570,6 +576,26 @@ function restorePersistedAcknowledgement(message, turn) {
   }
 }
 
+const deferredDiagnosisMessages = new WeakSet();
+function attachDeferredDiagnosis(article, requestId, status, detail) {
+  if (!article || typeof requestId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(requestId) ||
+      !["needs_attention", "failed", "partial"].includes(status) ||
+      deferredDiagnosisMessages.has(article)) return;
+  deferredDiagnosisMessages.add(article);
+  void pollDeferredDiagnosis({
+    requestId, originalStatus: status, ledger: detail?.execution_ledger,
+    request: id => requestConversation({endpoint: conversationEndpoint,
+      operation: "diagnosis", payload: {request_id: id}}),
+    onResult: explanation => {
+      if (!article.isConnected) return;
+      const paragraph = document.createElement("p");
+      paragraph.className = "continuity-warning deferred-diagnosis";
+      paragraph.textContent = "Diagnóstico posterior: " + explanation;
+      article.append(paragraph);
+    },
+  });
+}
+
 function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
   if (result.status === "completed" && result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
@@ -579,6 +605,7 @@ function renderProductResult(result) {
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
   appendClarificationCard(message, result.clarification);
+  attachDeferredDiagnosis(message, result.request_id, result.status, result.request_detail);
   if (clarificationStatus) {
     clarificationStatus.hidden = !(
       result.kind === "clarification"

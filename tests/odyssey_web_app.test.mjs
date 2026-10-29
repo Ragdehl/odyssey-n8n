@@ -264,6 +264,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace('import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling, renderExecutionFlow} = globalThis.__odysseyTestProgress;")
+    .replace('import {pollDeferredDiagnosis} from "./deferred_diagnosis.js";', "async function pollDeferredDiagnosis() {}")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);

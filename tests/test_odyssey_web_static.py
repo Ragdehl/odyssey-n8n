@@ -349,6 +349,7 @@ def test_every_reachable_local_browser_module_has_a_static_workflow_route() -> N
         "calendar.js",
         "calendar-client.js",
         "progress.js",
+        "deferred_diagnosis.js",
     }
     # Presence is an optional DEV optimization: failure to fetch it must no
     # longer prevent the entire app's static module graph from evaluating.

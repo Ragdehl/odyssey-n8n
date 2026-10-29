@@ -303,10 +303,11 @@ def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> N
     """Expose only the one actor-owned main conversation through the existing boundary."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "path: 'conversation'" in source
-    assert "['main', 'turn', 'progress', 'presence']" in source
+    assert "['main', 'turn', 'progress', 'diagnosis', 'presence']" in source
     assert "'active', 'heartbeat', 'inactive'" in source
     assert "operation === 'presence' ? { session_id, state }" in source
-    assert "operation === 'progress' && !request_id" in source
+    assert "['progress', 'diagnosis'].includes(operation)" in source
+    assert "operation === 'diagnosis' && Object.keys(body).some" in source
     assert "Execute conversation operation" in source
     assert "runtimeBaseUrl}/conversation/{{ $json.operation }}" in source
     assert "...(operation === 'turn' ? { conversation_id: 'main' } : {})" in source

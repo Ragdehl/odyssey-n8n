@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from threading import Condition, RLock, Thread
+from threading import BoundedSemaphore, Condition, RLock, Thread
 from time import perf_counter, thread_time
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -171,6 +171,7 @@ from .conversation_chat import deployed_chat_help_capabilities
 from .conversation_entry import evaluate_conversation_entry
 from .conversation_error import diagnose_trusted_execution_graph, explain_trusted_product_failure
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
+from .deferred_diagnostics import DeferredDiagnosticStore
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .dev_hot_path_diagnostics import timed_dev_hot_path
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
@@ -346,6 +347,14 @@ def _chat_c4_semantic_review_enabled() -> bool:
         and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
         and os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") == "1"
         and os.environ.get("ODYSSEY_CHAT_C4_SEMANTIC_REVIEW_ENABLED") == "1"
+    )
+
+
+def _chat_c4_deferred_enabled() -> bool:
+    """An independent DEV opt-in requiring vetted, typed C4 explanations."""
+    return (
+        _chat_c4_semantic_review_enabled()
+        and os.environ.get("ODYSSEY_CHAT_C4_DEFERRED_ENABLED") == "1"
     )
 
 
@@ -660,11 +669,17 @@ class RuntimeComposition:
     # Optional second AI read-only pass. Off until live-model semantic/latency
     # gate; a rejected or unavailable verdict never unlocks free text/retry.
     conversation_graph_semantic_review_enabled: bool = False
+    # Optional background post-receipt advice. The saved E3 delivery never
+    # changes; failures leave an ordinary, usable Core fallback response.
+    conversation_graph_deferred_enabled: bool = False
     # Explicit DEV-only opt-in. One C4-advised prewrite reinterpretation may
     # re-enter the ORIGINAL Router, but never a post-delegate/mutated request.
     conversation_prewrite_recovery_enabled: bool = False
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+    _deferred_slots: BoundedSemaphore = field(
+        default_factory=lambda: BoundedSemaphore(2), init=False, repr=False
+    )
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def execute_product(
@@ -933,7 +948,108 @@ class RuntimeComposition:
             self._record_terminal_checkpoint(
                 checkpoint_store, request_id, response, store, fingerprint
             )
+            if not diagnosis_checked:
+                self._schedule_deferred_diagnosis(actor, result, response, user_request, store)
             return response
+
+    def _schedule_deferred_diagnosis(
+        self,
+        actor: str,
+        result: ApplicationResult,
+        response: dict[str, object],
+        source_text: str,
+        store: LocalDeliveryResultStore | None,
+    ) -> None:
+        """Schedule only after E3 is immutable; optional failure never affects it."""
+        if not (
+            self.conversation_graph_deferred_enabled
+            and self.conversation_graph_semantic_review_enabled
+            and self.conversation_graph_gateway is not None
+            and store is not None
+            and result.status
+            in (
+                ApplicationStatus.NEEDS_ATTENTION,
+                ApplicationStatus.FAILED,
+                ApplicationStatus.PARTIAL,
+            )
+            and "error_diagnosis" not in response
+            and isinstance(response.get("execution_ledger"), dict)
+        ):
+            return
+        options = response.get("clarification")
+        if isinstance(options, dict) and len(options.get("options", [])) >= 2:
+            return  # Core already verified the human choice list.
+        if not self._deferred_slots.acquire(blocking=False):
+            return
+        try:
+            diagnostic = self._deferred_diagnostic_store(actor)
+            binding = store.read_diagnostic_binding(result.request_id)
+            if (
+                diagnostic is None
+                or binding is None
+                or not diagnostic.claim(result.request_id, *binding)
+            ):
+                self._deferred_slots.release()
+                return
+        except (DeliveryResultError, OSError, ValueError):
+            self._deferred_slots.release()
+            return
+
+        def run() -> None:
+            diagnosis = None
+            try:
+                diagnosis = diagnose_trusted_execution_graph(
+                    result,
+                    response,
+                    response["execution_ledger"],
+                    self.conversation_graph_gateway,
+                    original_message=source_text,
+                    semantic_review=True,
+                )
+                if diagnosis is not None and diagnosis.get("verified_stage_only") is not True:
+                    diagnosis = None
+            except Exception:
+                diagnosis = None
+            finally:
+                try:
+                    diagnostic.finish(result.request_id, *binding, diagnosis)
+                except (DeliveryResultError, OSError, ValueError):
+                    pass  # Uncertain outcome stays unavailable, never retried.
+                self._deferred_slots.release()
+
+        try:
+            Thread(target=run, daemon=True, name="odyssey-c4-diagnostic").start()
+        except RuntimeError:
+            # Claim is already durable; do not retry an uncertain schedule.
+            self._deferred_slots.release()
+
+    def _deferred_diagnostic_store(self, actor: str) -> DeferredDiagnosticStore | None:
+        if self.conversation_root_resolver is None:
+            return None
+        return DeferredDiagnosticStore(
+            self.conversation_root_resolver.resolve(actor) / "c4-diagnostics"
+        )
+
+    def deferred_diagnosis(
+        self,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Actor-authenticated, read-only lookup; never re-enters the Router."""
+        if authenticated_actor is None and external_principal is None:
+            raise ValueError("C4 diagnostic read requires a verified actor")
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        if self.conversation_root_resolver is None:
+            return {"version": 1, "request_id": request_id, "status": "unavailable"}
+        root = self.conversation_root_resolver.resolve(actor)
+        binding = LocalDeliveryResultStore(root / "delivery-results").read_diagnostic_binding(
+            request_id
+        )
+        diagnostic = self._deferred_diagnostic_store(actor)
+        if binding is None or diagnostic is None:
+            return {"version": 1, "request_id": request_id, "status": "unavailable"}
+        return {"version": 1, "request_id": request_id, **diagnostic.read(request_id, *binding)}
 
     def _maybe_retry_verified_prewrite_interpretation(
         self,
@@ -1364,6 +1480,7 @@ class RuntimeComposition:
             response["error_diagnosis"] = precomputed_graph_diagnosis
         if (
             not graph_diagnosis_checked
+            and not self.conversation_graph_deferred_enabled
             and self.conversation_graph_gateway is not None
             and isinstance(response.get("execution_ledger"), dict)
             and not (
@@ -6150,6 +6267,7 @@ def _build_runtime_from_environment_unlocked(
         conversation_error_model_advisory_enabled=_chat_c4_model_advisory_enabled(),
         conversation_graph_gateway=_c4_graph_gateway_from_environment(),
         conversation_graph_semantic_review_enabled=_chat_c4_semantic_review_enabled(),
+        conversation_graph_deferred_enabled=_chat_c4_deferred_enabled(),
         conversation_prewrite_recovery_enabled=_chat_c4_prewrite_recovery_enabled(),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,

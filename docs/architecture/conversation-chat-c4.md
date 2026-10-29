@@ -405,6 +405,50 @@ under the delivery lock; its critical-path overhead needs an actor-scoped,
 receipt-safe background/presentation redesign before DEV acceptance.
 
 
+### Diagnóstico posterior al recibo: prototipo local acotado (29-10-2026)
+
+**Comportamiento aprobado por el usuario:** el resultado y el recibo E3 se
+entregan primero; el consejo adicional de C4 puede aparecer después en el
+chat, sin editar la respuesta ni el turno de conversación persistido. La
+recuperación PRE-write que puede decidir una segunda interpretación sigue
+sincronizada con el mismo claim antes del recibo; NO se delega a este worker.
+
+Con el nuevo flag `ODYSSEY_CHAT_C4_DEFERRED_ENABLED=1`, que además exige
+C4 GRAPH + SEMANTIC_REVIEW y entorno DEV, `_finish_product_result` guarda
+el resultado base sin esperar al diagnóstico post-write. Después de finalizar
+el claim y registrar el checkpoint, un hilo local daemon limitado a dos
+llamadas simultáneas consulta a C4 **sin ejecutar Router/Core ni escritores**.
+La reserva duradera se prepara en un fichero temporal completo y se
+publica atómicamente con enlace+fsync del directorio, evitando que dos
+solicitudes concurrentes observen una reserva a medio escribir. Se crea
+previamente en el estado local del mismo actor, con un vínculo a fingerprint
+y SHA256 del recibo inmutable. No contiene el
+texto fuente. Un reinicio entre reserva y respuesta conserva `pending` y
+**no repite la llamada**: es *at most once*, no una garantía de entrega del
+consejo. El proveedor rechazado o una falta de capacidad dejan visible el
+fallback original. No se añaden servicios, SQLite ni cambios NoteSchema.
+
+`POST /conversation/diagnosis`, a través del endpoint n8n ya autenticado
+`operation=diagnosis`, lee solamente el diagnóstico vinculado al actor y
+al recibo final. La web consulta de manera limitada y muestra la explicación
+como añadido, nunca como reemplazo del turno guardado. El formato transporta
+únicamente la interpretación C4 **tipada y revisada**; la etiqueta se
+comprueba contra el gráfico E2 de la misma solicitud y se construye con
+`textContent`. Preguntas o texto libre del modelo, IDs de notas, órdenes de
+escritura y reintentos ejecutables no forman parte del sidecar. Las últimas
+respuestas fallidas pueden recuperar su añadido tras recargar, sin nueva
+petición al proveedor.
+
+**Alcance y cautelas:** source-only, *flags OFF en DEV*, sin llamadas GPT
+reales de Odyssey ni despliegue. La decisión de recuperación prewrite sigue
+potencialmente en el camino crítico cuando se activa por separado.
+Una caída tras una reserva puede dejar consejo `pending` indefinidamente;
+la UI deja de consultar tras un límite y conserva la respuesta base. El
+modelo revisado no tiene aún un PASS semántico real. Faltan auditoría
+independiente del nuevo diseño, prueba Chromium/n8n aislada con consulta
+posterior y medición de latencia/concurrencia con proveedor real bajo nueva
+autorización.
+
 **Aceptación: BLOQUEADA.** Antes de activar C4 GRAPH/RECOVERY en DEV,
 corregir de forma GENERAL la granularidad del grafo y la pregunta sobre
 el hecho fallido (Router/coverage vs identidad Core), la diferencia entre

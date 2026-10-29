@@ -469,6 +469,17 @@ class LocalDeliveryResultStore:
             raise DeliveryResultError("request ID is already bound to another delivery")
         return dict(record["response"])
 
+    def read_diagnostic_binding(self, request_id: str) -> tuple[str, str] | None:
+        """Read a validated immutable receipt's fingerprint and digest.
+
+        Only an authenticated actor-local store is allowed to call this.
+        """
+        path = self._path(request_id)
+        if not path.exists():
+            return None
+        record = self._read(path)
+        return record["request_fingerprint"], record["response_sha256"]
+
     def save(
         self, request_id: str, fingerprint: str, response: Mapping[str, Any], completed_at: str
     ) -> None:
