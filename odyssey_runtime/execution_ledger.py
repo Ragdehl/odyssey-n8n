@@ -50,6 +50,7 @@ def project_execution_ledger(
                 "provider_call_count": len(stage.provider_calls),
                 "stage_view": stage_view_for(stage.name).to_response(),
                 "route_index": stage.route_index,
+                "parent_stage": None,
             }
         )
         # Only the standalone source-processing stage owns provider subspans
@@ -71,6 +72,7 @@ def project_execution_ledger(
                     "provider_call_count": 0,
                     "stage_view": stage_view_for(span.name).to_response(),
                     "route_index": stage.route_index,
+                    "parent_stage": stage.name,
                 }
             )
     routes = []

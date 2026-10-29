@@ -77,7 +77,7 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
     ]
     assert evidence["stages"][1]["error_category"] == "COVERAGE_UNVERIFIED"
     assert evidence["write_evidence"] == "UNKNOWN"
-    assert evidence["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert evidence["entry_route"] == "PRODUCT_ROUTER"
     assert evidence["prewrite_recovery_proven"] is False
     assert evidence["specific_provider_failures"] == []
     assert "request_id" not in call["input"][1]["content"]
@@ -191,9 +191,9 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
     gateway = FakeClient(
         [
             {
-                "evidence_stage": "application.source_processing",
+                "evidence_stage": "provider.gpt-5.6-luna.odyssey_light_shared_semantic_plan_v1",
                 "route_index": None,
-                "explanation": "El procesamiento se interrumpió al consultar el planificador, antes de verificar entidades en Core.",
+                "explanation": "La llamada al planificador falló antes de la interpretación Core.",
                 "next_step": "CHECK_SYSTEM",
                 "user_question": "",
             }
@@ -204,10 +204,10 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
     actual = runtime.execute_product(source, "real-router-prewrite", "main", actor)
     assert actual["status"] == "needs_attention"
     assert actual["clarification_code"] == "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE"
-    assert actual["error_diagnosis"]["evidence_stage"] == "application.source_processing"
+    assert actual["error_diagnosis"]["evidence_stage"].startswith("provider.")
     assert actual["error_diagnosis"]["next_step"] == "CHECK_SYSTEM"
     sent = json.loads(gateway.responses.calls[0]["input"][1]["content"])
-    assert sent["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert sent["entry_route"] == "PRODUCT_ROUTER"
     assert sent["prewrite_recovery_proven"] is True
     assert len(sent["specific_provider_failures"]) == 1
     provider = sent["specific_provider_failures"][0]
@@ -301,3 +301,54 @@ def test_graph_ai_rejects_mismatched_route_owner_and_marks_source_truncation():
     assert observed["original_message"] == source[:2048]
     assert [stage["route_index"] for stage in observed["stages"]] == [0, 1]
     assert observed["routes"][1]["capability"] == "tasks"
+
+
+def test_parent_source_failure_rejected_only_if_a_real_failed_child_exists():
+    typed = rejected()
+    ledger = project_execution_ledger(typed)
+    parent = {
+        "name": "application.source_processing",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": None,
+        "error_category": "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE",
+    }
+    child = {
+        "name": "provider.plan",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": parent["name"],
+        "error_category": "OpenAIError",
+    }
+    ledger["stages"] = [parent, child]
+    parent_reply = {**AI_REPLY, "evidence_stage": parent["name"]}
+    assert (
+        diagnose_trusted_execution_graph(
+            typed,
+            application_result_to_response(typed),
+            ledger,
+            OpenAIConversationGateway(FakeClient([parent_reply])),
+            original_message=SOURCE,
+        )
+        is None
+    )
+    child_reply = {**AI_REPLY, "evidence_stage": child["name"]}
+    actual = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        ledger,
+        OpenAIConversationGateway(FakeClient([child_reply])),
+        original_message=SOURCE,
+    )
+    assert actual is not None and actual["evidence_stage"] == child["name"]
+    ledger["stages"][1]["outcome"] = "completed"
+    assert (
+        diagnose_trusted_execution_graph(
+            typed,
+            application_result_to_response(typed),
+            ledger,
+            OpenAIConversationGateway(FakeClient([parent_reply])),
+            original_message=SOURCE,
+        )
+        is not None
+    )

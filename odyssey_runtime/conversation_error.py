@@ -88,6 +88,7 @@ def diagnose_trusted_execution_graph(
     events: list[dict[str, object]] = []
     routes: list[dict[str, object]] = []
     known_stages = {("unattributed", None)}
+    failed_children: set[tuple[str, int | None]] = set()
     for item in raw_routes[:32]:
         if not isinstance(item, Mapping):
             continue
@@ -119,14 +120,24 @@ def diagnose_trusted_execution_graph(
         index = item.get("route_index")
         if index is not None and (type(index) is not int or index < 0 or index >= len(routes)):
             continue
+        parent = item.get("parent_stage")
+        if parent is not None and (
+            not isinstance(parent, str)
+            or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,79}", parent)
+            or parent == name
+        ):
+            continue
         if outcome in {"failed", "unavailable"}:
             known_stages.add((name, index))
+            if parent is not None:
+                failed_children.add((parent, index))
         stages.append(
             {
                 "name": name,
                 "outcome": outcome,
                 "error_category": error,
                 "route_index": index,
+                "parent_stage": parent,
             }
         )
     for item in raw_events[-32:]:
@@ -148,9 +159,8 @@ def diagnose_trusted_execution_graph(
                 known_stages.add((name, None))
             events.append({"stage": name, "outcome": outcome})
     write_evidence = "SOME" if result.affected_stable_note_ids else "UNKNOWN"
-    # The caller has already routed this as knowledge/operation. Its source
-    # interpretation can fail before Core, but that is not new proof of a
-    # missing person or an instruction to write anything.
+    # The caller used the PRODUCT Router, which also handles read-only
+    # questions. Routing is not proof of save intent, identities or writes.
     specific_provider_failures = [
         {"name": st["name"], "route_index": st["route_index"]}
         for st in stages
@@ -160,7 +170,7 @@ def diagnose_trusted_execution_graph(
         "status": result.status.value,
         "reason_code": code,
         "write_evidence": write_evidence,
-        "entry_intent": "ROUTED_PERSONAL_INFORMATION_OR_OPERATION",
+        "entry_route": "PRODUCT_ROUTER",
         "prewrite_recovery_proven": result.prewrite_recovery_proven is True,
         "specific_provider_failures": specific_provider_failures,
         "original_message": original_message[:2048] if isinstance(original_message, str) else "",
@@ -182,6 +192,7 @@ def diagnose_trusted_execution_graph(
         not isinstance(stage, str)
         or (route_index is not None and (type(route_index) is not int or route_index < 0))
         or (stage, route_index) not in known_stages
+        or (stage, route_index) in failed_children
         or not isinstance(explanation, str)
         or not 12 <= len(explanation.strip()) <= 420
         or not isinstance(question, str)

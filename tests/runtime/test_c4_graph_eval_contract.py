@@ -181,7 +181,7 @@ def test_live_evaluation_resumes_after_three_calls_and_never_repeats_cases(tmp_p
 def test_c4_prompt_preserves_graph_provenance_and_journal_intent_without_names():
     prompt = GRAPH_DIAGNOSIS_INSTRUCTIONS
     for concept in (
-        "entry_intent",
+        "entry_route",
         "Day journal",
         "prewrite_recovery_proven",
         "specific_provider_failures",

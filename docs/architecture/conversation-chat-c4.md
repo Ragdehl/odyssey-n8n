@@ -1230,16 +1230,25 @@ para reabrir Tasks o bloquear el diseño de la siguiente fase de notas.
 
 La primera mejora a evaluar reutiliza el gateway y el grafo C4 originales;
 no introduce decisiones por nombres, idiomas o frases de los casos de prueba.
-El runtime presenta a la IA la **intención ya enrutada de conservar
-información o gestionar una operación** (sin certificar una escritura), el
-`prewrite_recovery_proven` **tipado y guardado por el ejecutor** (sin conceder
-permiso de reintentar) y la lista de subpasos de proveedor efectivamente
-fallidos de E2. El prompt general recuerda que una actividad pasada puede
+El runtime presenta a la IA únicamente que el texto ha pasado por el
+**PRODUCT Router**, que también sirve consultas: **esto no demuestra
+intención de guardar**. Incluye el `prewrite_recovery_proven` tipado y
+guardado por el ejecutor (sin conceder permiso de reintentar), los fallos
+de proveedor realmente observados y la relación padre-hijo entre etapas
+medidas por E2. El intérprete debe decidir por el mensaje si se trata de
+una consulta, una instrucción o un recuerdo potencialmente archivado. El prompt general recuerda que una actividad pasada puede
 ser un diario, que un error previo a Core no demuestra una ambigüedad de
 Person, que un proveedor fallido es más específico que el parent genérico,
 y que `interpretation=completed` no significa que el usuario haya completado
 su tarea ni que haya habido escritura física. El truncado corresponde a la
 vista diagnóstica, no necesariamente al mensaje entregado por el usuario.
+
+El runtime y n8n ahora comprueban además que, si una etapa fallida contiene
+un **subpaso que también falló**, la explicación se atribuya al hijo
+específico, no solo al padre. El libro E2 transmite `parent_stage` con
+validación, sin inventar etapas ni inferir resultados de escrituras.
+Este cambio general resuelve el defecto de atribución observado en la
+primera campaña, pero sigue pendiente una nueva evaluación semántica real.
 
 El validador léxico heredado de C4 **sigue siendo bloqueante e incompleto**:
 rechaza algunas explicaciones inocuas sobre la etapa de escritura y no
@@ -1252,5 +1261,8 @@ Los 14/14 de la primera campaña siguen consumidos, su veredicto FAIL no se
 convierte en PASS y C4 GRAPH/RECOVERY permanecen OFF en DEV. La solución
 completa de afirmaciones libres deberá establecer un revisor semántico
 anclado a E2/E3 (o contrato equivalente) y medir coste/latencia antes de
-aceptación. Tampoco sustituye el trabajo concurrente de procedencia
-padre-hijo de etapas que está sin integrar en la PR.
+aceptación. La modificación se ha preparado en un worktree limpio separado porque
+el checkout compartido contenía cambios aún no confirmados que también
+trataban `parent_stage`; no se ha sobrescrito, reordenado ni descartado
+ese trabajo. Reconciliar las dos ramas antes de mover el HEAD de PR #161
+es parte de la integración, no una excusa para fusionar a ciegas.

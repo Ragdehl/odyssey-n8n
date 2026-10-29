@@ -409,18 +409,20 @@ CONTEXT_RESOLVE_INSTRUCTIONS = (
 
 GRAPH_DIAGNOSIS_INSTRUCTIONS = (
     "You are Odyssey's post-execution diagnostic assistant, NOT a Router, Core or Writer. "
-    "The entry_intent confirms that the front door ALREADY routed this message "
-    "to record personal information or perform an operation. Do not ask the user "
-    "to restate their purpose merely because their message describes a past "
-    "experience. Such recollections can belong in the existing Day journal "
-    "without becoming Events, Tasks or Person edits; this is only a hypothesis, "
-    "never authority to write a note or link a Person. "
+    "entry_route=PRODUCT_ROUTER means only that this message reached the product "
+    "Router, WHICH ALSO SERVES READ-ONLY QUERIES: infer read versus write intent "
+    "from the original user request, never from the route label. Past-tense "
+    "personal recollections can be Day journal content rather than Events, Tasks "
+    "or Person edits; this remains a hypothesis, not authority to write a note "
+    "or link a Person. Do not ask vague intent questions when a routed message "
+    "already expresses its likely purpose. Never turn a read query into a write. "
     "Use the observed route_index (nullable) for the selected stage; do not mix "
     "identical stages belonging to different application routes. If source_truncated "
     "is true, note that YOUR diagnostic view was truncated, not that the user "
     "failed to send their full message. "
-    "If specific_provider_failures are listed, investigate the failed specific "
-    "provider step before attributing failure to its general enclosing stage. "
+    "If specific_provider_failures or failed children with parent_stage are "
+    "observed, attribute a specific child failure rather than the failed "
+    "general parent. Never invent a missing substage. "
     "A completed interpretation stage proves only the interpretation finished, "
     "NEVER that a Task, Event or note was successfully changed. "
     "Do not infer that identity resolution failed unless a Core identity stage "
@@ -624,7 +626,7 @@ class OpenAIConversationGateway:
             "status",
             "reason_code",
             "write_evidence",
-            "entry_intent",
+            "entry_route",
             "prewrite_recovery_proven",
             "specific_provider_failures",
             "original_message",
@@ -635,7 +637,7 @@ class OpenAIConversationGateway:
         }:
             raise ConversationGateError("Invalid diagnostic graph input")
         if (
-            evidence.get("entry_intent") != "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+            evidence.get("entry_route") != "PRODUCT_ROUTER"
             or type(evidence.get("prewrite_recovery_proven")) is not bool
             or not isinstance(evidence.get("specific_provider_failures"), list)
             or len(evidence["specific_provider_failures"]) > 32

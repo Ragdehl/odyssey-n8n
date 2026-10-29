@@ -60,7 +60,7 @@ def test_one_c4_advised_retry_reuses_original_id_and_real_core_day_writer(tmp_pa
     assert len(model.responses.calls) == 1
     evidence = json.loads(model.responses.calls[0]["input"][1]["content"])
     assert evidence["prewrite_recovery_proven"] is True
-    assert evidence["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert evidence["entry_route"] == "PRODUCT_ROUTER"
     assert "error_diagnosis" not in first  # final status success, not a prior failure
     graph_events = first["execution_ledger"]["events"]
     assert sum(e["stage"] == "diagnostic.prewrite_reinterpretation" for e in graph_events) == 1

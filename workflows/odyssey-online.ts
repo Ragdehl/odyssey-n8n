@@ -243,6 +243,7 @@ const safeLedger = value => {
       (st.duration_ms === null || (typeof st.duration_ms === 'number' && Number.isFinite(st.duration_ms) && st.duration_ms >= 0)) &&
       (st.start_offset_ms === null || (typeof st.start_offset_ms === 'number' && Number.isFinite(st.start_offset_ms) && st.start_offset_ms >= 0)) &&
       (st.error_category === null || (typeof st.error_category === 'string' && st.error_category.length <= 120)) &&
+      (st.parent_stage == null || (safeId(st.parent_stage) && st.parent_stage !== st.name)) &&
       Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
       (st.route_index === null || (Number.isInteger(st.route_index) &&
         st.route_index >= 0 && st.route_index < value.routes.length)))) return undefined;
@@ -261,7 +262,8 @@ const safeLedger = value => {
     event_sequence:seq, events_truncated:value.events_truncated,
     stages:value.stages.map(st => ({name:st.name,outcome:st.outcome,duration_ms:st.duration_ms,
       start_offset_ms:st.start_offset_ms,error_category:st.error_category,
-      provider_call_count:st.provider_call_count,route_index:st.route_index})),
+      provider_call_count:st.provider_call_count,route_index:st.route_index,
+      parent_stage:st.parent_stage == null ? null : st.parent_stage})),
     routes:value.routes.map(rt => ({route_index:rt.route_index,capability:rt.capability,status:rt.status,depends_on:rt.depends_on})),
     write_receipts:value.write_receipts.map(item => ({action_index:item.action_index,unit_index:item.unit_index,
       stable_note_id:item.stable_note_id,operation:item.operation,status:item.status})),
@@ -323,8 +325,10 @@ const graphStage = (stage, routeIndex) => !!verifiedLedger &&
   verifiedLedger.status === r.status &&
   (routeIndex === null || (Number.isInteger(routeIndex) && routeIndex >= 0 && routeIndex < verifiedLedger.routes.length)) &&
   ((stage === 'unattributed' && routeIndex === null) ||
-    verifiedLedger.stages.some(st => st.name === stage && st.route_index === routeIndex &&
-      ['failed','unavailable'].includes(st.outcome)) ||
+    (verifiedLedger.stages.some(st => st.name === stage && st.route_index === routeIndex &&
+      ['failed','unavailable'].includes(st.outcome)) &&
+     !verifiedLedger.stages.some(st => st.parent_stage === stage &&
+       st.route_index === routeIndex && ['failed','unavailable'].includes(st.outcome))) ||
     verifiedLedger.events.some(ev => ev.stage === stage && routeIndex === null &&
       ev.outcome === 'failed_or_unknown'));
 const graphTextSafe = value => typeof value === 'string' &&
