@@ -151,6 +151,18 @@ PLANNER_MODEL = "gpt-5.6-luna"
 _P4_PROVIDER_SPANS: ContextVar[SpanRecorder | None] = ContextVar(
     "odyssey_p4_provider_spans", default=None
 )
+# A request-local positive prewrite proof. Set only while the actual source
+# executor runs; flip irreversibly before ANY app/writer or durable operation
+# manifest. A successful E3 write can still return zero affected IDs after a
+# downstream failure, so a missing write receipt never substitutes for this.
+_P4_WRITE_BOUNDARY_CROSSED: ContextVar[bool | None] = ContextVar(
+    "odyssey_p4_write_boundary_crossed", default=None
+)
+
+
+def _cross_p4_write_boundary() -> None:
+    if _P4_WRITE_BOUNDARY_CROSSED.get() is not None:
+        _P4_WRITE_BOUNDARY_CROSSED.set(True)
 
 
 class WholeSourceLightError(ValueError):
@@ -609,6 +621,7 @@ class WholeSourceLightExecutor:
         started = perf_counter()
         recorder = SpanRecorder(started, perf_counter)
         token = _P4_PROVIDER_SPANS.set(recorder)
+        write_boundary_token = _P4_WRITE_BOUNDARY_CROSSED.set(False)
         try:
             with (
                 scoped_note_decode_cache(),
@@ -624,7 +637,12 @@ class WholeSourceLightExecutor:
                     # own typed failures, which must still propagate and retain
                     # the E3 claim if a physical write may have happened.
                     result = self._abstain(delivery, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+                # Even a delegated ApplicationResult claiming positive proof
+                # cannot override the outer observed writer/manifest boundary.
+                if _P4_WRITE_BOUNDARY_CROSSED.get() is True and result.prewrite_recovery_proven:
+                    result = replace(result, prewrite_recovery_proven=False)
         finally:
+            _P4_WRITE_BOUNDARY_CROSSED.reset(write_boundary_token)
             _P4_PROVIDER_SPANS.reset(token)
         elapsed_ms = max(0.0, (perf_counter() - started) * 1000)
         stages = result.operational.stages
@@ -1007,6 +1025,7 @@ class WholeSourceLightExecutor:
                         )
                 except (WholeSourceRelationshipError, ValueError):
                     return self._abstain(delivery)
+            _cross_p4_write_boundary()
             result = self.event_delegate(source, delivery, actor)
             if result.request_id != delivery:
                 raise WholeSourceLightError("Events route broke delivery correlation")
@@ -1208,6 +1227,7 @@ class WholeSourceLightExecutor:
                 if self.progress is not None:
                     self.progress("action.delegate.started", {})
                 with timed_dev_hot_path(delivery, "tasks.delegate"):
+                    _cross_p4_write_boundary()
                     return self.task_delegate(source, delivery, actor)
             if not self.task_create_batch_enabled:
                 self._observe_prewrite(delivery, "task_scope_rejected")
@@ -1458,6 +1478,7 @@ class WholeSourceLightExecutor:
             planner = SimpleNamespace(plan=lambda *_args, _plan=plan: _plan)
             # The P4 compiler is Core-owned. The Task App contributes only
             # its lifecycle preflight, never restructures a Core RequestPlan.
+            _cross_p4_write_boundary()
             return execute_request(
                 source,
                 planner=planner,
@@ -1771,6 +1792,7 @@ class WholeSourceLightExecutor:
         if max(len(core_locator), len(task_locator)) > 110:
             return self._abstain(delivery)
         if self.operation_manifest_begin is not None:
+            _cross_p4_write_boundary()
             self.operation_manifest_begin(
                 delivery,
                 source,
@@ -1785,6 +1807,7 @@ class WholeSourceLightExecutor:
             self.progress("action.write.started", {})
         # Standard Core planner/Writer performs the first write and MUST prove
         # a physical Task backlink. Provider and identity failures stay safe.
+        _cross_p4_write_boundary()
         core = self.dependent_core_delegate(
             scope.antecedent.strip(), core_locator, actor, delivery_instant
         )
@@ -2369,6 +2392,7 @@ class WholeSourceLightExecutor:
         except TaskBatchPreflightError:
             return self._abstain(delivery, "DEPENDENT_N_TASK_BATCH_INCOMPATIBLE")
         if self.operation_manifest_begin is not None:
+            _cross_p4_write_boundary()
             self.operation_manifest_begin(
                 delivery,
                 source,
@@ -2410,6 +2434,7 @@ class WholeSourceLightExecutor:
                 pending_index_ids.clear()
             if part.capability == "core":
                 # Ordinary Core Planner/Writer, not a second custom writer.
+                _cross_p4_write_boundary()
                 outcome = self.dependent_core_delegate(
                     part.source.strip(), locator, actor, delivery_instant
                 )
@@ -2420,6 +2445,7 @@ class WholeSourceLightExecutor:
                     assert self.independent_task_delegate is not None
                     if self.progress is not None:
                         self.progress("action.delegate.started", {})
+                    _cross_p4_write_boundary()
                     outcome = self.independent_task_delegate(
                         part.source.strip(),
                         locator,
@@ -2775,6 +2801,7 @@ class WholeSourceLightExecutor:
             except (WholeSourceRelationshipError, ValueError):
                 return self._abstain(delivery, "INDEPENDENT_SELF_RELATION_STALE")
         if self.operation_manifest_begin is not None:
+            _cross_p4_write_boundary()
             self.operation_manifest_begin(
                 delivery,
                 source,
@@ -2816,6 +2843,7 @@ class WholeSourceLightExecutor:
             try:
                 if part.capability == "tasks" and self.independent_task_delegate is not None:
                     task, temporal = prepared_tasks[part.index]
+                    _cross_p4_write_boundary()
                     outcome = self.independent_task_delegate(
                         part.source.strip(),
                         locator,
@@ -2826,6 +2854,7 @@ class WholeSourceLightExecutor:
                     )
                 elif part.capability == "events" and self.independent_event_delegate is not None:
                     event_candidate, event_temporal = prepared_events[part.index]
+                    _cross_p4_write_boundary()
                     outcome = self.independent_event_delegate(
                         part.source.strip(),
                         locator,
@@ -2932,6 +2961,7 @@ class WholeSourceLightExecutor:
             (),
             (),
             clarification_code=code,
+            prewrite_recovery_proven=_P4_WRITE_BOUNDARY_CROSSED.get() is False,
         )
 
     @staticmethod

@@ -329,6 +329,16 @@ def _chat_c4_model_advisory_enabled() -> bool:
     )
 
 
+def _chat_c4_prewrite_recovery_enabled() -> bool:
+    """An independent DEV-only opt-in; existing C4 must stay unchanged."""
+    return (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_RECOVERY_ENABLED") == "1"
+    )
+
+
 def _c4_graph_gateway_from_environment() -> OpenAIConversationGateway | None:
     """Enable C4 AI only for DEV C4; lack of a provider must not stop Core.
 
@@ -637,6 +647,9 @@ class RuntimeComposition:
     # C4 diagnosis reuses the existing OpenAI gateway but is independent of
     # the C3 conversational router. A model explanation is never write authority.
     conversation_graph_gateway: OpenAIConversationGateway | None = None
+    # Explicit DEV-only opt-in. One C4-advised prewrite reinterpretation may
+    # re-enter the ORIGINAL Router, but never a post-delegate/mutated request.
+    conversation_prewrite_recovery_enabled: bool = False
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -875,6 +888,18 @@ class RuntimeComposition:
                 else None,
                 None,
             )
+            result, checked_diagnosis, diagnosis_checked = (
+                self._maybe_retry_verified_prewrite_interpretation(
+                    result,
+                    actor=actor,
+                    user_request=user_request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    authenticated_actor=authenticated_actor,
+                    external_principal=external_principal,
+                    checkpoint_store=checkpoint_store,
+                )
+            )
             with timed_dev_hot_path(request_id or "", "runtime.finish_product"):
                 response = self._finish_product_result(
                     result,
@@ -884,6 +909,8 @@ class RuntimeComposition:
                     actor=actor,
                     conversation_id=conversation_id,
                     source_text=user_request,
+                    precomputed_graph_diagnosis=checked_diagnosis,
+                    graph_diagnosis_checked=diagnosis_checked,
                 )
             if self.full_source_mutation_guard:
                 assert store is not None and request_id is not None
@@ -894,6 +921,88 @@ class RuntimeComposition:
                 checkpoint_store, request_id, response, store, fingerprint
             )
             return response
+
+    def _maybe_retry_verified_prewrite_interpretation(
+        self,
+        result: ApplicationResult,
+        *,
+        actor: str,
+        user_request: str,
+        request_id: str | None,
+        conversation_id: str | None,
+        authenticated_actor: AuthenticatedActorContext | None,
+        external_principal: ExternalPrincipal | None,
+        checkpoint_store: LocalExecutionCheckpointStore | None,
+    ) -> tuple[ApplicationResult, dict[str, object] | None, bool]:
+        """One C4-advised re-read of the ORIGINAL source before any app writer.
+
+        An empty affected-ID list is NEVER evidence that Core/E3 did not try
+        to write. Only the request-local proof from the source executor,
+        irreversibly invalidated before every Core/Task/Event/manifest call,
+        allows re-entering the Router under the same actor and delivery claim.
+        This is NOT a semantic override, plan/identity choice or new delivery.
+        """
+        if not (
+            self.conversation_prewrite_recovery_enabled
+            and self.conversation_graph_gateway is not None
+            and self.full_source_mutation_guard
+            and self.hybrid_candidate_execute is not None
+            and request_id is not None
+            and conversation_id == MAIN_CONVERSATION_ID
+            and isinstance(user_request, str)
+            and result.request_id == request_id
+            and result.status is ApplicationStatus.NEEDS_ATTENTION
+            and result.prewrite_recovery_proven is True
+            and not result.action_results
+            and not result.affected_stable_note_ids
+            and result.planning_error is None
+            and result.pending_work.record_id is None
+        ):
+            return result, None, False
+        # The only evidence source is the typed Core result + actor-owned
+        # checkpoint. AI text can suggest trying again, but never prove that
+        # the first attempt was prewrite or permit changing the user's source.
+        from .execution_ledger import project_execution_ledger
+
+        try:
+            checkpoint = checkpoint_store.load(request_id) if checkpoint_store else None
+            observed = project_execution_ledger(result, checkpoint)
+            response = application_result_to_response(result)
+            diagnosis = diagnose_trusted_execution_graph(
+                result,
+                response,
+                observed,
+                self.conversation_graph_gateway,
+                original_message=user_request,
+            )
+        except Exception:
+            # Diagnostic model failures (including transport/SDK exceptions)
+            # must not strand a prewrite, no-mutation delivery as an uncertain
+            # E3 claim. Only the actual SECOND execution propagates errors.
+            return result, None, True
+        if diagnosis is None or diagnosis.get("next_step") != "REVIEW_SAFE_RETRY":
+            return result, diagnosis, True
+        # The very same request ID/fingerprint/claim stays active in the
+        # outer execute_product lock. There is NO second claim or extra ID,
+        # and the E3 result is still saved once at the end of this call.
+        self._record_checkpoint(
+            checkpoint_store,
+            request_id,
+            "diagnostic.prewrite_reinterpretation",
+            CheckpointOutcome.MILESTONE_OBSERVED,
+        )
+        retried = self._execute_with_progress(
+            actor,
+            request_id,
+            user_request,
+            request_id,
+            conversation_id,
+            AuthenticatedActorContext(actor)
+            if authenticated_actor is not None or external_principal is not None
+            else None,
+            None,
+        )
+        return retried, None, False
 
     def _conversation_product_reply(
         self,
@@ -1162,6 +1271,8 @@ class RuntimeComposition:
         actor: str | None = None,
         conversation_id: str | None = None,
         source_text: str = "",
+        precomputed_graph_diagnosis: dict[str, object] | None = None,
+        graph_diagnosis_checked: bool = False,
     ) -> dict[str, object]:
         """Persist one safely completed delivery and replay it without re-execution.
 
@@ -1235,8 +1346,11 @@ class RuntimeComposition:
         # E2 ledger (including early Router/refusal stages) and explains it.
         # Existing verified Core choice lists have precedence: never invent
         # a competing model-driven identity dialogue.
+        if precomputed_graph_diagnosis is not None:
+            response["error_diagnosis"] = precomputed_graph_diagnosis
         if (
-            self.conversation_graph_gateway is not None
+            not graph_diagnosis_checked
+            and self.conversation_graph_gateway is not None
             and isinstance(response.get("execution_ledger"), dict)
             and not (
                 isinstance(response.get("clarification"), dict)
@@ -6020,6 +6134,7 @@ def _build_runtime_from_environment_unlocked(
         ),
         conversation_error_model_advisory_enabled=_chat_c4_model_advisory_enabled(),
         conversation_graph_gateway=_c4_graph_gateway_from_environment(),
+        conversation_prewrite_recovery_enabled=_chat_c4_prewrite_recovery_enabled(),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,
             notes_available=notes_service is not None,

@@ -407,6 +407,9 @@ class ApplicationResult:
     canonical_reference_evidence: tuple[CanonicalReferenceEvidence, ...] = ()
     # Core-private exact planner input binding for cross-route handoffs.
     core_source_digest: str | None = None
+    # Core-private evidence from a guarded source executor; does NOT grant
+    # mutation authority and must never be inferred from zero affected IDs.
+    prewrite_recovery_proven: bool = False
 
 
 def allocate_request_id() -> str:

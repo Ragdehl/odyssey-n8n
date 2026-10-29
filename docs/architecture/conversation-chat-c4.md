@@ -127,7 +127,52 @@ El costo/tokens y la llamada bajo bloqueo previos al recibo todavía
 están sin cerrar. **Los dos FAIL se conservan** sobre sus SHAs, no se
 autoconvierten en PASS por superar regresiones posteriores.
 
-**Recuperación automática:** todavía NO incorporada. Reenvío automático con
+**Prewrite recovery candidate (source `04788d4` successor, feature flag OFF):**
+The existing P4 execution now emits an **internal, typed**
+`prewrite_recovery_proven` marker only for safe abstention while the
+request-local source executor has **not crossed ANY** Core/Task/Event Writer
+or operation-manifest boundary. All seven existing delegate/Writer entry
+points and three durable manifest entry points flip this one-way proof
+*before* calling into an app. The enclosing executor **revokes even a
+forged prewrite marker from a delegated child** once any write boundary has
+been crossed. An empty `affected_stable_note_ids` array is not enough. The marker is not transported to n8n, cannot itself authorize a
+write and is false on all other executor outcomes by default.
+
+With **all** `ODYSSEY_CHAT_C4_ENABLED=1`,
+`ODYSSEY_CHAT_C4_GRAPH_ENABLED=1` and
+`ODYSSEY_CHAT_C4_RECOVERY_ENABLED=1` in a DEV instance, after the first
+prewrite-abstained execution C4 may recommend `REVIEW_SAFE_RETRY`. If its
+stage and evidence are valid **and** the typed prewrite proof remains true,
+`RuntimeComposition` permits **at most one** new *interpretation of the
+byte-identical user source* through the original Router and entire Core/E3
+pipeline, **under the same authenticated actor, delivery request ID,
+mutation claim and execution lock**, before the single immutable result
+receipt is saved. The first rejected pass has no write authority. A bad
+second pass is not run a third time, and a crash retains the unresolved
+E3 claim. C4 diagnosis is memoized for the no-retry case, avoiding duplicate
+provider calls; successful reclassification clears any historical refusal.
+The corresponding stage `diagnostic.prewrite_reinterpretation` is allowed by
+and persisted in the already-existing actor-scoped E2 checkpoint store;
+the immutable result's graph exposes exactly one matching observed event,
+not a fake successful Core write. Regression covers the same-ID immutable
+replay, one successful recovered Day fact set, Event-delegate no-write claim,
+forged prewrite proof, malformed/ASK_USER C4 advice, provider crash, hard
+one-retry cap, and separate DEV/PROD feature flags.
+
+**This is a bounded *reinterpretation* of the unchanged source, NOT a
+validated intelligent rewrite of the Router prompt or the user's content.**
+The C4 model can recommend retry, but this implementation passes no new
+corrective instruction to the Router; therefore repeated identical wrong
+route predictions may simply fail again. It uses **existing C4 and Router
+model contracts unchanged**. Future evidence-bound semantic repair/Router
+feedback requires a new bounded live provider evaluation and acceptance.
+Feature flag remains **OFF by default**; no paid model calls are authorized
+by this source patch, DEV and PROD remain unchanged. Accept only with real
+model evaluation, independently reviewed write-boundary coverage, full
+browser/E3 replay and latency/cost measurements. No model verdict bypasses
+human/Core identity selection, source completeness checks or E3.
+
+**Recuperación automática:** aún NO incorporada como corrección semántica completa. Reenvío automático con
 nuevo request ID después de una ejecución incierta podría repetir acciones.
 La recuperación exige prueba independiente de que no hay escrituras, decisión
 de si la interpretación puede corregirse sin alterar el texto fuente,
