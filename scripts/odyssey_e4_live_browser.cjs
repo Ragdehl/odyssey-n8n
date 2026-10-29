@@ -138,7 +138,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     {timeout:10000});
   await page.waitForFunction(()=>document.querySelector("#notes-list")?.children.length>0,
     {timeout:11000});
-  if(["issue157_day","generic_day"].includes(process.env.ODYSSEY_E4_RECORDED_CASE)) {
+  if(["issue157_day","generic_day","recovery_day"].includes(process.env.ODYSSEY_E4_RECORDED_CASE)) {
     checkpoint="verify_family_day_ui";
     // The note-set snapshot is flat (one affected Day), unlike the
     // grouped full Notes browser. Test what the user actually sees.

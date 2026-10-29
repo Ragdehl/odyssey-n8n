@@ -166,6 +166,32 @@ corrective instruction to the Router; therefore repeated identical wrong
 route predictions may simply fail again. It uses **existing C4 and Router
 model contracts unchanged**. Future evidence-bound semantic repair/Router
 feedback requires a new bounded live provider evaluation and acceptance.
+A further disposable **real Chromium mobile → authenticated local cookie
+→ real isolated n8n Docker (no network) → C4/Router/real Core/E3 → physical
+Markdown → Notes UI/reload → immutable replay** E2E was executed with
+pre-recorded synthetic model outputs, source case `recovery_day`. It returned
+**PASS**: first Router hypothesis `events+core` refused before
+writing, exactly one verified C4 `REVIEW_SAFE_RETRY`, second Router
+hypothesis `core+temporal`, exactly one
+`diagnostic.prewrite_reinterpretation` E2 checkpoint, two canonical
+Day facts, three pre-existing family links, 0 Events/Tasks, one physical
+write, no duplicate on replay, no JS exceptions, refusal without cookie,
+UI Note detail present after reload. The first harness run reached the
+correct UI/Markdown but failed a test-only checkpoint lookup because it
+passed the actor object rather than its stable ID; fixed before the second
+PASS. Evidence: `/tmp/odyssey-c4-recovery-day-browser-9a1a41a-v2.log`.
+No real LLM was called; real *semantic* recovery is unproven.
+
+Independent read-only security/Generality review of the **runtime diff**
+`04788d4..9a1a41a`: **PASS on this narrowly scoped DEV-only
+feature**, with no unmarked writer/manifest boundary found. It explicitly
+does not replace the four final product audits, prove model semantics,
+latency/cost or deployed public HTTPS. The independent reviewer could not
+run pytest inside its restricted shell; exact candidate source passed the
+full local cross-surface gate and GitHub CI, in addition to separate
+physical E2E receipts. The browser extension is test-only and does not
+change the independently reviewed runtime diff.
+
 Feature flag remains **OFF by default**; no paid model calls are authorized
 by this source patch, DEV and PROD remain unchanged. Accept only with real
 model evaluation, independently reviewed write-boundary coverage, full

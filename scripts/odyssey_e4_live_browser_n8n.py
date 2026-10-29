@@ -53,14 +53,14 @@ BROWSER = ROOT / "scripts/odyssey_e4_live_browser.cjs"
 CLOCK = "2026-10-20T10:30:00+02:00"
 # Entirely disposable test-run selection; cannot modify the deployed product.
 RECORDED_CASE = os.environ.get("ODYSSEY_E4_RECORDED_CASE", "person_task")
-if RECORDED_CASE not in {"person_task", "issue157_day", "generic_day"}:
+if RECORDED_CASE not in {"person_task", "issue157_day", "generic_day", "recovery_day"}:
     raise RuntimeError("Unsupported isolated browser fixture")
 if (
-    RECORDED_CASE in {"issue157_day", "generic_day"}
+    RECORDED_CASE in {"issue157_day", "generic_day", "recovery_day"}
     and os.environ.get("ODYSSEY_E4_RECORDED") != "1"
 ):
     raise RuntimeError("Family fixture requires recorded model responses")
-if RECORDED_CASE == "issue157_day":
+if RECORDED_CASE in {"issue157_day", "recovery_day"}:
     from tests.runtime.test_issue157_family_day_recollection import SOURCE as FAMILY_SOURCE
 else:
     FAMILY_SOURCE = None
@@ -84,7 +84,7 @@ if (
     or any(
         not isinstance(name, str)
         or not name.strip()
-        or (RECORDED_CASE != "issue157_day" and name not in E4_SOURCE)
+        or (RECORDED_CASE not in {"issue157_day", "recovery_day"} and name not in E4_SOURCE)
         for name in EXPECTED_PERSON_NAMES
     )
 ):
@@ -334,7 +334,7 @@ def selected_product(root: Path):
         runtime.notes_service = NotesQueryService(repo, SCHEMA, executor.context_index)
         runtime.vault_repository = repo
         yield repo, actor, runtime
-    elif RECORDED_CASE == "issue157_day":
+    elif RECORDED_CASE in {"issue157_day", "recovery_day"}:
         from tests.runtime.test_issue157_family_day_recollection import (
             _family,
             _model_responses,
@@ -343,7 +343,20 @@ def selected_product(root: Path):
 
         root.mkdir(parents=True)
         repo, actor, executor, runtime = _family(root)
-        executor.client = RecordedClient(_model_responses())
+        if RECORDED_CASE == "recovery_day":
+            from odyssey_runtime.conversation_gateway import OpenAIConversationGateway
+            from odyssey_runtime.execution_checkpoints import LocalExecutionCheckpointStore
+            from tests.runtime.test_c4_safe_prewrite_recovery import RETRY_ADVICE, _bad_route
+            from tests.runtime.test_conversation_gateway import FakeClient
+
+            executor.client = RecordedClient([_bad_route(), *_model_responses()])
+            runtime.conversation_graph_gateway = OpenAIConversationGateway(
+                FakeClient([RETRY_ADVICE])
+            )
+            runtime.conversation_prewrite_recovery_enabled = True
+            runtime.execution_checkpoint_store_factory = LocalExecutionCheckpointStore
+        else:
+            executor.client = RecordedClient(_model_responses())
         runtime.notes_service = NotesQueryService(repo, SCHEMA, executor.context_index)
         runtime.vault_repository = repo
         yield repo, actor, runtime
@@ -638,7 +651,8 @@ def run() -> dict:
                                 else "0",
                                 "ODYSSEY_E4_EXPECTED_WRITES": str(
                                     1
-                                    if RECORDED_CASE in {"issue157_day", "generic_day"}
+                                    if RECORDED_CASE
+                                    in {"issue157_day", "generic_day", "recovery_day"}
                                     else len(EXPECTED_PERSON_NAMES)
                                     + (1 if os.environ.get("ODYSSEY_E4_RECORDED") == "1" else 2)
                                 ),
@@ -731,7 +745,7 @@ def run() -> dict:
                                     "cloudflare_access_tested": False,
                                     "dev_prod_untouched": True,
                                 }
-                            if RECORDED_CASE == "issue157_day":
+                            if RECORDED_CASE in {"issue157_day", "recovery_day"}:
                                 from tests.runtime.test_issue157_family_day_recollection import (
                                     DAY,
                                     PEOPLE,
@@ -766,6 +780,23 @@ def run() -> dict:
                                     stats["assistant_persisted"] == 1 and stats["notes_read"] >= 1
                                 )
                                 assert stats["denied"] >= 1
+                                if RECORDED_CASE == "recovery_day":
+                                    checkpoint = product._checkpoint_store(actor.stable_user_id)
+                                    assert checkpoint is not None
+                                    events = checkpoint.load(captured_ids[0])["events"]
+                                    assert (
+                                        sum(
+                                            event["stage"] == "diagnostic.prewrite_reinterpretation"
+                                            for event in events
+                                        )
+                                        == 1
+                                    )
+                                    assert (
+                                        product.hybrid_candidate_execute.client.calls.count(
+                                            "odyssey_light_capability_route_events_v1"
+                                        )
+                                        == 2
+                                    )
                                 return {
                                     "passed": True,
                                     "source_case": RECORDED_CASE,
