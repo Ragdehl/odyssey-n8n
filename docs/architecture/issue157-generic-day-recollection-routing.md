@@ -363,6 +363,50 @@ source-note label, and the rerun passed in 38.86 seconds. No app production
 code, user authentication, Cloudflare policy or canonical private vault was
 changed. The test environment and temporary n8n container were ephemeral.
 
+### Same family recollection through real isolated n8n (29 October)
+
+The established reusable `scripts/odyssey_e4_live_browser_n8n.py` test runner
+now accepts an **explicitly test-only** `ODYSSEY_E4_RECORDED_CASE=issue157_day`
+option, restricted to `ODYSSEY_E4_RECORDED=1`. It reuses the exact family
+synthetic fixture rather than duplicating the Core execution path: an actor
+bound to a disposable SELF/Person Git vault, existing child/partner Markdown
+relations, prerecorded typed model responses and the production Core/E3
+writer. The n8n engine is real (`docker run` with `--network none`, read-only,
+no host DEV/PROD mounts, only the ephemeral workflow and Unix bridge); the
+Chromium browser is real with a legitimate *local fixture cookie*, and the
+unauthenticated request is denied. The same source/actor is checked on replay.
+
+**Observed `PASS` in both mobile 390×844 and desktop 1280×960
+at the source working-tree checkpoint after `e87ea88`:** actual user input
+through Chromium → allowlisted local authenticated browser
+bridge → real offline n8n webhook → Core/E3 → physical Git/Markdown → real
+Notes API and visible note details. One `calendar_day` holds **two source facts**
+(`jardín`, `museo`) and existing links to **Nora, Ivo, Vera**. Four Person notes
+(including SELF), **zero** invented Persons, Tasks or Events. The route graph
+renders with **one** write receipt, the assistant conversation persists through
+browser reload, and a second n8n delivery using the same request ID performs
+**zero** additional Markdown changes. The recorded run's evidence receipt
+reported 1 first write / 1 replay, 1 persisted assistant response, 17 Notes
+reads and an unauthenticated 403. Source-only test harness extension, not a
+model prompt or production runtime change.
+
+The pre-existing `person_task` recorded test remains the control for this
+shared harness and was repeated PASS after the family-mode addition. Two
+provider-free security unit checks enforce that the family mode *refuses*
+anything other than prerecorded model replies, and that the n8n Docker
+command carries exactly two temporary read-only mounts, `--network none`,
+read-only root and dropped privileges. This is a regression of the disposable
+harness, not a claim of cloud multi-account isolation. **This is not the
+public Cloudflare Access path or a live GPT
+call**, so the exact release-SHA external authentication + real provider E2E
+is still missing. Issue #158 *already has* a separately rooted and
+Cloudflare-authenticated public test stack pinned to a historical source SHA
+(`29f5719`) with provider-free schema/E3/backfill browser receipts; do **not**
+recreate or broaden that Access policy. Existing token expiry recorded there
+is **29 October 2026 15:41 UTC**; verify its current validity before use.
+The historical #158 public E3 proof is not an Issue #157 Router/Planner proof
+and the independent final four-role audit is not yet complete.
+
 ## Verification and release gates
 
 - Deterministic synthetic Core/E3 test: two original facts on one Day,

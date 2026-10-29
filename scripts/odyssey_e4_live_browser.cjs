@@ -138,6 +138,46 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     {timeout:10000});
   await page.waitForFunction(()=>document.querySelector("#notes-list")?.children.length>0,
     {timeout:11000});
+  if(process.env.ODYSSEY_E4_RECORDED_CASE==="issue157_day") {
+    checkpoint="verify_family_day_ui";
+    // The note-set snapshot is flat (one affected Day), unlike the
+    // grouped full Notes browser. Test what the user actually sees.
+    await page.waitForFunction(()=>Array.from(document.querySelectorAll(
+      '#notes-list .note-row')).filter(row=>row.textContent.includes('2026-10-16')).length===1,
+      {timeout:12000});
+    await page.evaluate(()=>Array.from(document.querySelectorAll(
+      '#notes-list .note-row')).find(row=>row.textContent.includes('2026-10-16')).click());
+    await page.waitForFunction(()=>{
+      const view=document.querySelector('#note-detail');
+      const text=view?.textContent||"";
+      return !view?.hidden && text.includes("jardín") && text.includes("museo") &&
+        ["Nora","Ivo","Vera"].every(name=>text.includes(name));
+    },{timeout:12000});
+    const dayDetail=await page.evaluate(()=>({
+      garden:document.querySelector('#note-detail')?.textContent.includes("jardín"),
+      museum:document.querySelector('#note-detail')?.textContent.includes("museo"),
+      linkedNames:["Nora","Ivo","Vera"].filter(name=>
+        document.querySelector('#note-detail')?.textContent.includes(name)),
+    }));
+    const receipt=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
+    const recordedFixture=process.env.ODYSSEY_E4_RECORDED==="1";
+    const output={
+      pass:recordedFixture && receipt===1 && progressDonut.present && progressDonut.valid &&
+        progressTrace.monotonic && before.userMessages===1 && before.acknowledgements===1 &&
+        before.details===after.details && before.noteButtons===after.noteButtons &&
+        before.confirmationVisible && after.confirmationVisible &&
+        detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===receipt &&
+        reloadedDetail.svgCount>0 && reloadedDetail.writeReceipts===receipt &&
+        !detail.diagnosticRejected && !reloadedDetail.diagnosticRejected &&
+        dayDetail.garden && dayDetail.museum && dayDetail.linkedNames.length===3 &&
+        jsErrors.length===0,
+      before,after,detail,reloadedDetail,dayDetail,progressDonut,progressTrace,
+      actor:"synthetic_only",jsErrorsCount:jsErrors.length,messages_sent:1,
+    };
+    console.log(JSON.stringify(output));
+    if(!output.pass)process.exitCode=2;
+    return;
+  }
   const expectedNames=JSON.parse(process.env.ODYSSEY_E4_EXPECTED_PERSONS||"[]");
   if(!Array.isArray(expectedNames)||!expectedNames.length||
      expectedNames.some(name=>typeof name!=="string"||!name.trim()))

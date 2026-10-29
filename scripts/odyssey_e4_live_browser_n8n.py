@@ -51,8 +51,18 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "odyssey_web"
 BROWSER = ROOT / "scripts/odyssey_e4_live_browser.cjs"
 CLOCK = "2026-10-20T10:30:00+02:00"
+# Entirely disposable test-run selection; cannot modify the deployed product.
+RECORDED_CASE = os.environ.get("ODYSSEY_E4_RECORDED_CASE", "person_task")
+if RECORDED_CASE not in {"person_task", "issue157_day"}:
+    raise RuntimeError("Unsupported isolated browser fixture")
+if RECORDED_CASE == "issue157_day" and os.environ.get("ODYSSEY_E4_RECORDED") != "1":
+    raise RuntimeError("Family fixture requires recorded model responses")
+if RECORDED_CASE == "issue157_day":
+    from tests.runtime.test_issue157_family_day_recollection import SOURCE as FAMILY_SOURCE
+else:
+    FAMILY_SOURCE = None
 # Source and expected physical targets are test inputs, never production routing.
-E4_SOURCE = os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
+E4_SOURCE = FAMILY_SOURCE or os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
 EXPECTED_PERSON_NAMES = tuple(
     json.loads(os.environ.get("ODYSSEY_E4_SYNTHETIC_PERSONS", '["Marta"]'))
 )
@@ -62,7 +72,9 @@ if (
     or not 1 <= len(EXPECTED_PERSON_NAMES) <= 8
     or len(set(EXPECTED_PERSON_NAMES)) != len(EXPECTED_PERSON_NAMES)
     or any(
-        not isinstance(name, str) or not name.strip() or name not in E4_SOURCE
+        not isinstance(name, str)
+        or not name.strip()
+        or (RECORDED_CASE != "issue157_day" and name not in E4_SOURCE)
         for name in EXPECTED_PERSON_NAMES
     )
 ):
@@ -295,7 +307,20 @@ exec n8n start"""
 
 @contextmanager
 def selected_product(root: Path):
-    if os.environ.get("ODYSSEY_E4_RECORDED") == "1":
+    if RECORDED_CASE == "issue157_day":
+        from tests.runtime.test_issue157_family_day_recollection import (
+            _family,
+            _model_responses,
+        )
+        from tests.runtime.test_whole_source_light_product_p4 import SCHEMA, RecordedClient
+
+        root.mkdir(parents=True)
+        repo, actor, executor, runtime = _family(root)
+        executor.client = RecordedClient(_model_responses())
+        runtime.notes_service = NotesQueryService(repo, SCHEMA, executor.context_index)
+        runtime.vault_repository = repo
+        yield repo, actor, runtime
+    elif os.environ.get("ODYSSEY_E4_RECORDED") == "1":
         from tests.runtime.test_p4_fresh_person_task import _physical
         from tests.runtime.test_whole_source_light_product_p4 import SCHEMA
 
@@ -580,11 +605,14 @@ def run() -> dict:
                                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public.server_port}/",
                                 "ODYSSEY_SYNTHETIC_SOURCE": E4_SOURCE,
                                 "ODYSSEY_E4_EXPECTED_PERSONS": json.dumps(EXPECTED_PERSON_NAMES),
+                                "ODYSSEY_E4_RECORDED_CASE": RECORDED_CASE,
                                 "ODYSSEY_E4_RECORDED": "1"
                                 if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
                                 else "0",
                                 "ODYSSEY_E4_EXPECTED_WRITES": str(
-                                    len(EXPECTED_PERSON_NAMES)
+                                    1
+                                    if RECORDED_CASE == "issue157_day"
+                                    else len(EXPECTED_PERSON_NAMES)
                                     + (1 if os.environ.get("ODYSSEY_E4_RECORDED") == "1" else 2)
                                 ),
                                 "ODYSSEY_SYNTHETIC_AUTH": token,
@@ -627,6 +655,63 @@ def run() -> dict:
                             notes = {
                                 p: parse_note(repo.read_text(p)) for p in repo.list_markdown_paths()
                             }
+                            if RECORDED_CASE == "issue157_day":
+                                from tests.runtime.test_issue157_family_day_recollection import (
+                                    DAY,
+                                    PEOPLE,
+                                )
+
+                                family_people = [
+                                    note.metadata.get("name")
+                                    for note in notes.values()
+                                    if note.metadata.get("type") == "person"
+                                ]
+                                assert len(family_people) == 4
+                                assert set(family_people) == {"Persona autenticada", *PEOPLE}, (
+                                    "Unexpected or duplicated synthetic identity"
+                                )
+                                day_notes = [
+                                    n
+                                    for n in notes.values()
+                                    if n.metadata.get("type") == "calendar_day"
+                                    and n.metadata.get("id") == f"date:{DAY}"
+                                ]
+                                assert len(day_notes) == 1
+                                body = day_notes[0].content
+                                assert body.count("odyssey:fact request=") == 2
+                                assert "jardín" in body and "museo" in body
+                                assert all("[[" + person in body for person in PEOPLE)
+                                assert not any(
+                                    n.metadata.get("type") in {"task", "event"}
+                                    for n in notes.values()
+                                )
+                                assert stats["replay"] == stats["first_writes"] == 1
+                                assert (
+                                    stats["assistant_persisted"] == 1 and stats["notes_read"] >= 1
+                                )
+                                assert stats["denied"] >= 1
+                                return {
+                                    "passed": True,
+                                    "source_case": RECORDED_CASE,
+                                    "seconds": round(time.monotonic() - started, 2),
+                                    "gpt": "recorded",
+                                    "n8n": "real_offline_docker",
+                                    "browser": "Chromium real",
+                                    "authentication": "synthetic_local_cookie_gate",
+                                    "unauth_denied": True,
+                                    "physical_persons": len(family_people),
+                                    "physical_days": len(day_notes),
+                                    "physical_day_facts": 2,
+                                    "physical_tasks": 0,
+                                    "physical_events": 0,
+                                    "family_links": len(PEOPLE),
+                                    "markdown_e3_replay_unchanged": True,
+                                    "notes_after": len(notes),
+                                    "statistics": stats,
+                                    "browser_gate": browser["pass"],
+                                    "cloudflare_access_tested": False,
+                                    "dev_prod_untouched": True,
+                                }
                             assert_person_inventory(
                                 notes,
                                 EXPECTED_PERSON_NAMES,
