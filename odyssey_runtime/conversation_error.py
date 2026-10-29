@@ -107,7 +107,26 @@ def diagnose_trusted_execution_graph(
                     "status": status,
                 }
             )
-    for item in raw_stages[:32]:
+    # E2 retains at most 64 observed stages; never silently drop a later
+    # failed provider child to save model tokens. Keep every failed/unavailable
+    # stage first, then bounded context in source order. If even the failures
+    # cannot fit, abstain rather than assign blame from an incomplete graph.
+    if len(raw_stages) > 64:
+        return None
+    failure_indices = [
+        index
+        for index, item in enumerate(raw_stages)
+        if isinstance(item, Mapping) and item.get("outcome") in {"failed", "unavailable"}
+    ]
+    if len(failure_indices) > 32:
+        return None
+    selected_indices = set(failure_indices)
+    for index in range(len(raw_stages)):
+        if len(selected_indices) >= 32:
+            break
+        selected_indices.add(index)
+    for index in sorted(selected_indices):
+        item = raw_stages[index]
         if not isinstance(item, Mapping):
             continue
         name, outcome, error = (item.get("name"), item.get("outcome"), item.get("error_category"))

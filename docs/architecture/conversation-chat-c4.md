@@ -1247,6 +1247,13 @@ El runtime y n8n ahora comprueban además que, si una etapa fallida contiene
 un **subpaso que también falló**, la explicación se atribuya al hijo
 específico, no solo al padre. El libro E2 transmite `parent_stage` con
 validación, sin inventar etapas ni inferir resultados de escrituras.
+La selección del contexto del gráfico conserva **todas las etapas fallidas**
+dentro del máximo de 32 que llega al modelo y completa con contexto
+observado; no oculta una subetapa de proveedor que aparece después de las
+primeras 32. Si hay más de 32 fallos o un libro fuera del límite de E2,
+abstiene sin gastar una llamada de GPT. Se comprueba el caso del hijo en
+la posición 33 (índice 32), la atribución del padre rechazada, el hijo
+aceptado y el exceso fallando cerrado.
 Este cambio general resuelve el defecto de atribución observado en la
 primera campaña, pero sigue pendiente una nueva evaluación semántica real.
 

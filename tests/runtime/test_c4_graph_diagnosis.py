@@ -352,3 +352,82 @@ def test_parent_source_failure_rejected_only_if_a_real_failed_child_exists():
         )
         is not None
     )
+
+
+def test_provider_child_after_thirty_two_stages_cannot_be_lost_or_ignored():
+    typed = rejected()
+    parent = {
+        "name": "application.source_processing",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": None,
+        "error_category": "SOURCE_FAILURE",
+    }
+    child = {
+        "name": "provider.review",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": parent["name"],
+        "error_category": "PROVIDER_FAILURE",
+    }
+    completed = [
+        {
+            "name": f"context.stage_{i}",
+            "outcome": "completed",
+            "route_index": None,
+            "parent_stage": None,
+        }
+        for i in range(31)
+    ]
+    ledger = project_execution_ledger(typed)
+    ledger["stages"] = [parent, *completed, child]
+    parent_reply = {**AI_REPLY, "evidence_stage": parent["name"]}
+    model_bad = FakeClient([parent_reply])
+    assert (
+        diagnose_trusted_execution_graph(
+            typed,
+            application_result_to_response(typed),
+            ledger,
+            OpenAIConversationGateway(model_bad),
+            original_message=SOURCE,
+        )
+        is None
+    )
+    sent = json.loads(model_bad.responses.calls[0]["input"][1]["content"])
+    assert len(sent["stages"]) == 32
+    assert parent["name"] in {st["name"] for st in sent["stages"]}
+    assert child["name"] in {st["name"] for st in sent["stages"]}
+    assert sent["specific_provider_failures"] == [{"name": child["name"], "route_index": None}]
+    model_good = FakeClient([{**AI_REPLY, "evidence_stage": child["name"]}])
+    accepted = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        ledger,
+        OpenAIConversationGateway(model_good),
+        original_message=SOURCE,
+    )
+    assert accepted is not None and accepted["evidence_stage"] == child["name"]
+    overflow = {
+        **ledger,
+        "stages": [
+            {
+                "name": f"provider.failed_{i}",
+                "outcome": "failed",
+                "route_index": None,
+                "parent_stage": None,
+            }
+            for i in range(33)
+        ],
+    }
+    no_call = FakeClient([])
+    assert (
+        diagnose_trusted_execution_graph(
+            typed,
+            application_result_to_response(typed),
+            overflow,
+            OpenAIConversationGateway(no_call),
+            original_message=SOURCE,
+        )
+        is None
+    )
+    assert not no_call.responses.calls
