@@ -815,3 +815,39 @@ test("source edit affordance refuses a possibly truncated long original", async 
   ]});
   assert.equal(page.elements.conversation.querySelector(".source-revision-button"), null);
 });
+
+
+test("source editor joins a refusal to its source on the next older page", async () => {
+  const original = "Mis hijos y mi pareja visitaron el jardín.";
+  const page = await mountApp({
+    turns: [{request_id: "cross-page-1", role: "assistant", status: "needs_attention",
+      text: sourceRevisionMessage}],
+    olderTurns: [{request_id: "cross-page-1", role: "user", text: original}],
+  });
+  assert.equal(page.elements.conversation.querySelector(".source-revision-button"), null);
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+  const edit = page.elements.conversation.querySelector(".source-revision-button");
+  assert.ok(edit, "loading the older original must enable the existing assistant reply");
+  edit.click();
+  assert.equal(page.elements.input.value, original);
+});
+
+test("source revision requires two explicit clicks to replace a different unsent draft", async () => {
+  const original = "Visitamos un jardín y después un museo.";
+  const page = await mountApp({turns: [
+    {request_id: "source-confirm-1", role: "user", text: original},
+    {request_id: "source-confirm-1", role: "assistant", status: "needs_attention",
+      text: sourceRevisionMessage},
+  ]});
+  const edit = page.elements.conversation.querySelector(".source-revision-button");
+  assert.ok(edit);
+  page.elements.input.value = "Quiero recordar otra cosa importante";
+  edit.click();
+  assert.equal(page.elements.input.value, "Quiero recordar otra cosa importante");
+  assert.equal(edit.textContent, "Sustituir borrador y editar");
+  edit.click();
+  assert.equal(page.elements.input.value, original);
+  assert.equal(edit.textContent, "Editar mensaje original");
+});

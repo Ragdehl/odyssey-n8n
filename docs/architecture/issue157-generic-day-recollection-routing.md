@@ -444,6 +444,34 @@ clarification of unknown family members must include validated user reply,
 source/fact-level identity proof, actor/version guards and replay-safe plan
 before any resumed write. Keep that acceptance item open.
 
+### Narrow independent Quality review of no-option editor — SHA 186412e, FAIL
+
+A fresh read-only GPT-6 Sol / medium source review of only
+`8245ed0..186412e` returned **FAIL** with two reproducible UI bugs:
+(1) an assistant refusal at the beginning of the latest 40-turn conversation
+page did not acquire an editor when the matching user message lay in the
+next older page, and (2) clicking «Editar mensaje original» silently
+replaced a different unsent input draft. These were not abstract design
+concerns: the reviewer inspected the actual rendered history and input
+callbacks. Its verdict remains historically **FAIL**, not an audit PASS.
+
+The next source patch retains actor-local, request-ID-keyed pending editor
+cards only for matching refusals whose source turn has not yet been loaded;
+when the normal paginated `main` conversation fetch supplies the matching
+user turn, the button is attached without inventing source text. To preserve
+an existing unsent draft, a first click changes the action to **«Sustituir
+borrador y editar»**; only a second deliberate click replaces its contents,
+without submitting a request. Two added UI regression tests reproduce the
+cross-page split and draft-overwrite cases; normal reload/long-source safety
+and existing candidate-choice controls continue to be tested. The rest of
+the product's identity authorization and canonical mutation path is unchanged.
+
+This narrowly repaired UX still needs the branch-level deterministic gate
+and review of the eventual SHA. The independently audited source SHA is
+**not** accepted merely because newly added tests pass. Full four-role
+product acceptance, public DEV user E2E and fresh real GPT semantics remain
+separate blocked gates.
+
 ## Verification and release gates
 
 - Deterministic synthetic Core/E3 test: two original facts on one Day,

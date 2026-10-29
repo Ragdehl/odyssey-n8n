@@ -54,6 +54,7 @@ let hasOlder = false;
 let loadingOlder = false;
 let recoveryControl = null;
 const userTextByRequestId = new Map();
+const pendingSourceRevisionCards = new Map();
 
 function showDeploymentMarker() {
   const deployment = globalThis.ODYSSEY_DEPLOYMENT;
@@ -138,6 +139,7 @@ async function loadMainConversation() {
   if (clarificationStatus) clarificationStatus.hidden = true;
   recoveryControl = null;
   userTextByRequestId.clear();
+  pendingSourceRevisionCards.clear();
   for (const turn of data.turns ?? []) {
     if (turn.role === "user" && typeof turn.request_id === "string" && typeof turn.text === "string") {
       userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
@@ -317,6 +319,14 @@ async function loadOlderConversation() {
         userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
       }
     }
+    // A 40-turn page may contain the assistant refusal but not its user turn.
+    // Join them only when the actual older user message has been loaded.
+    for (const [id, pending] of pendingSourceRevisionCards) {
+      if (userTextByRequestId.has(id)) {
+        pendingSourceRevisionCards.delete(id);
+        appendSourceRevisionControl(pending.article, id, pending.text, pending.status);
+      }
+    }
     let olderDay = null;
     for (const turn of data.turns ?? []) {
       const createdAt = validTurnTime(turn.created_at);
@@ -335,7 +345,7 @@ async function loadOlderConversation() {
         restorePersistedAcknowledgement(message, turn);
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
-      appendSourceRevisionControl(message, turn.request_id, turn.text, turn.status);
+        appendSourceRevisionControl(message, turn.request_id, turn.text, turn.status);
       }
       olderNodes.push(message);
     }
@@ -371,6 +381,13 @@ function appendSourceRevisionControl(article, requestId, text, status) {
       !text.startsWith(sourceRevisionPrefix) || typeof requestId !== "string" ||
       article.querySelector(".source-revision-button")) return;
   const original = userTextByRequestId.get(requestId);
+  if (original === undefined) {
+    // The original may be on a still-unloaded older conversation page.
+    // Never invent it from the assistant's suggestion or an unrelated turn.
+    pendingSourceRevisionCards.set(requestId, {article, text, status});
+    return;
+  }
+  pendingSourceRevisionCards.delete(requestId);
   // User text is capped at 4096 chars in the existing history cache.
   // At the bound, completeness cannot be demonstrated: never offer a
   // misleading "original" draft that might silently omit a trailing fact.
@@ -380,8 +397,17 @@ function appendSourceRevisionControl(article, requestId, text, status) {
   action.className = "source-revision-button";
   action.textContent = "Editar mensaje original";
   action.addEventListener("click", () => {
-    // Draft only. User must consciously submit a NEW delivery after editing.
+    // Draft only. A typed message must not be discarded without an
+    // additional deliberate confirmation click on THIS same button.
     if (input.disabled) return;
+    if ((input.value || "").trim() && input.value !== original &&
+        action.dataset.confirmOverwrite !== "true") {
+      action.dataset.confirmOverwrite = "true";
+      action.textContent = "Sustituir borrador y editar";
+      return;
+    }
+    action.dataset.confirmOverwrite = "false";
+    action.textContent = "Editar mensaje original";
     input.value = original;
     input.focus();
   });
