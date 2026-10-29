@@ -98,6 +98,35 @@ trazabilidad** de esta fuente. El FAIL de `8511e98` no se convierte en PASS:
 hace falta nueva revisión del SHA corregido. La IA no se activa automáticamente
 en la instancia DEV que ya tiene C4: requiere el flag adicional de adopción.
 
+**Revisión focalizada independiente #2 (SHA `4afac2d`): FAIL conservado.**
+Sol confirmó que los P1/P2 de etapa completada, prioridad de C4 AI y
+propiedad de ruta en el ejemplo de dos rutas estaban corregidos. Detectó
+tres límites adicionales: una explicación alternativa **«No hubo cambios
+físicos en la bóveda»** escapó al filtro léxico; una respuesta
+`CANNOT_ANSWER` con C4 AI válido cambiaba su estado real
+`needs_attention` a `failed` en n8n; y se podían señalar etapas de una
+ruta cuyo detalle se había omitido porque el input del modelo solo enviaba
+16 rutas. Hay reproducciones ejecutadas en runtime Python y en el JS n8n
+real, no solo inspección de texto. El parche de fuente posterior a
+`4afac2d` conserva `status` de Core al mostrar AI, transporta hasta las
+32 rutas del E2 ledger dentro del límite original y restringe las etapas a
+los índices de ruta realmente presentados. Tests Python/JS de doble ruta,
+truncamiento y estado preservado se ampliaron. El ejemplo de texto
+«bóveda/cambios» se rechaza también como regresión inmediata, **pero
+ninguna lista finita de palabras garantiza que una explicación libre del
+modelo no haga afirmaciones equivalentes en otro idioma o formulación**.
+
+**Bloqueador semántico de generalidad:** antes de activar el C4 con texto
+libre para usuarios debe existir una evaluación real y un criterio que
+verifique semánticamente la fidelidad de la explicación frente a E2/E3,
+sin equiparar un blacklist textual a una prueba universal. Puede requerir
+un revisor IA independiente o un protocolo de salida más demostrable,
+medidos y probados con ejemplos diversos; no añadir una rama por frase.
+El gateway con `ODYSSEY_CHAT_C4_GRAPH_ENABLED` continúa apagado por defecto.
+El costo/tokens y la llamada bajo bloqueo previos al recibo todavía
+están sin cerrar. **Los dos FAIL se conservan** sobre sus SHAs, no se
+autoconvierten en PASS por superar regresiones posteriores.
+
 **Recuperación automática:** todavía NO incorporada. Reenvío automático con
 nuevo request ID después de una ejecución incierta podría repetir acciones.
 La recuperación exige prueba independiente de que no hay escrituras, decisión

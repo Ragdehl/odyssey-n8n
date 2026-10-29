@@ -88,6 +88,24 @@ def diagnose_trusted_execution_graph(
     events: list[dict[str, object]] = []
     routes: list[dict[str, object]] = []
     known_stages = {("unattributed", None)}
+    for item in raw_routes[:32]:
+        if not isinstance(item, Mapping):
+            continue
+        capability, status = item.get("capability"), item.get("status")
+        if (
+            isinstance(capability, str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", capability)
+            and isinstance(status, str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", status)
+        ):
+            routes.append(
+                {
+                    "route_index": item.get("route_index"),
+                    "depends_on": item.get("depends_on"),
+                    "capability": capability,
+                    "status": status,
+                }
+            )
     for item in raw_stages[:32]:
         if not isinstance(item, Mapping):
             continue
@@ -99,7 +117,7 @@ def diagnose_trusted_execution_graph(
         if error is not None and (not isinstance(error, str) or len(error) > 120):
             continue
         index = item.get("route_index")
-        if index is not None and (type(index) is not int or index < 0 or index >= len(raw_routes)):
+        if index is not None and (type(index) is not int or index < 0 or index >= len(routes)):
             continue
         if outcome in {"failed", "unavailable"}:
             known_stages.add((name, index))
@@ -129,24 +147,6 @@ def diagnose_trusted_execution_graph(
             if outcome == "failed_or_unknown":
                 known_stages.add((name, None))
             events.append({"stage": name, "outcome": outcome})
-    for item in raw_routes[:16]:
-        if not isinstance(item, Mapping):
-            continue
-        capability, status = item.get("capability"), item.get("status")
-        if (
-            isinstance(capability, str)
-            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", capability)
-            and isinstance(status, str)
-            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{0,39}", status)
-        ):
-            routes.append(
-                {
-                    "route_index": item.get("route_index"),
-                    "depends_on": item.get("depends_on"),
-                    "capability": capability,
-                    "status": status,
-                }
-            )
     write_evidence = "SOME" if result.affected_stable_note_ids else "UNKNOWN"
     evidence = {
         "status": result.status.value,
@@ -189,6 +189,13 @@ def diagnose_trusted_execution_graph(
             "file",
             "archivo",
             "ficher",
+            "bóveda",
+            "vault",
+            "cambio",
+            "cambi",
+            "alter",
+            "ningún dato",
+            "datos nuevos",
             "register",
             "registro",
             "dossier",

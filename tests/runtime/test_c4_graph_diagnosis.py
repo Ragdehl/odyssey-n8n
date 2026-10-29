@@ -87,6 +87,7 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
         {"explanation": "No he guardado nada. Puedes volver a pedirlo."},
         {"explanation": "No se modificó ningún archivo, puedes repetirlo."},
         {"explanation": "No hay notas nuevas. Repite la solicitud."},
+        {"explanation": "No hubo cambios físicos en la bóveda."},
         {"evidence_stage": "application.router"},
         {"next_step": "AUTO_RETRY"},
         {"user_question": ""},

@@ -127,3 +127,15 @@ test("repeated stage names across routes require the right failed route index", 
   const correct = render({...common, error_diagnosis: {...diagnostic, route_index: 1}});
   assert.match(correct.message, /revisión no pudo confirmar/);
 });
+
+
+test("verified AI diagnosis preserves a noncompleted Core status", () => {
+  const original = render({
+    status: "needs_attention", product_outcome: "CANNOT_ANSWER",
+    product_reason: diagnostic.reason_code,
+    execution_ledger: {...ledger, status: "needs_attention"},
+  });
+  assert.equal(original.kind, "cannot_answer");
+  assert.equal(original.status, "needs_attention");
+  assert.match(original.message, /revisión no pudo confirmar/);
+});
