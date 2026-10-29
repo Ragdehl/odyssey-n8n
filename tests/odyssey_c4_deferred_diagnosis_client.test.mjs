@@ -91,3 +91,18 @@ test("never invent a confirmed write without matching immutable receipt evidence
   assert.match(validatedDeferredDiagnosis(trueSome, id, "needs_attention", actualWrites),
     /Algunos cambios están confirmados/);
 });
+
+test("an observed failed E2 child overrides a matching E3 parent before displaying advice", () => {
+  const competing = {
+    ...ledger, stages: [
+      ...ledger.stages,
+      {name: "provider.reasoning", parent_stage: stage, route_index: null,
+        outcome: "failed", stage_view: {version: 1, label: "Consulta al servicio de IA", icon: "router"}},
+    ],
+  };
+  assert.equal(validatedDeferredDiagnosis(ready, id, "needs_attention", competing), null);
+  // A completed sibling does not manufacture a more precise observed failure.
+  const passed = {...competing, stages: competing.stages.map((item, index) =>
+    index === 1 ? {...item, outcome: "completed"} : item)};
+  assert.match(validatedDeferredDiagnosis(ready, id, "needs_attention", passed), /Core/);
+});

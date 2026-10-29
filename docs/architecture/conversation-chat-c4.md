@@ -462,7 +462,12 @@ positivas de ausencia de éxito/snapshot. **Estos arreglos no convierten
 los dictámenes previos FAIL en PASS:** requieren nueva auditoría en otro SHA.
 Rendimiento quedó BLOCKED por falta de medición Pi de latencias/recursos.
 
-**Medición específica en Raspberry (fuente reparada, proveedor simulado):**
+**Medición específica en Raspberry Pi 5 Model B Rev 1.1 (4 GiB;
+fuente reparada, proveedor simulado):** la identificación fue leída
+directamente de `/proc/device-tree/model` al archivar los recibos. Las
+cifras no demuestran rendimiento en Raspberry Pi 4, pese a referencias
+históricas del proyecto. Recibos sintéticos reproducibles en
+`docs/architecture/c4-deferred-pi-synthetic-20261029.json`.
 `PYTHONPATH=. python scripts/odyssey_c4_deferred_perf_pi.py`
 usa 8 entregas por modo, 2 respuestas `FakeClient` con retardo fijo
 de 180 ms cada una, notas/actores descartables y comparación física antes y
@@ -480,6 +485,24 @@ modificadas. **No** se extrapolan a proveedor GPT real, cola de navegador,
 uso bajo carga sostenida, red o rendimiento de móvil. La auditoría de
 Rendimiento original sigue BLOCKED hasta nueva comprobación de esta
 evidencia y aceptación del proveedor real.
+
+**Segunda revisión independiente sobre `ab9a62e` (29-10):**
+Generalidad FAIL, Calidad FAIL y Pruebas BLOCKED confirmaron dos nuevos
+fallos de navegador: cuando el E2 original sí estaba presente, un subpaso
+fallido podía quedar oculto por su padre; y el límite `slice(-4)` omitía
+respuestas fallidas en páginas con más casos. Rendimiento BLOCKED: hay
+mediciones sintéticas reproducibles, pero no presupuesto numérico aprobado
+ni recibos brutos incorporados a la revisión, y ningún benchmark GPT real.
+Los resultados originales se conservan, sin convertirlos retrospectivamente
+en PASS. La corrección posterior rechaza padres con hijos fallidos en el E2
+original y añade una cola global de máximo cuatro consultas históricas
+simultáneas, con una única lectura por respuesta antigua. Las cuatro
+respuestas fallidas recientes pueden seguir consultándose mientras el
+diagnóstico aún está `pending`; las anteriores también se consultan una
+vez, sin excepciones por posición. Nuevas regresiones de siete respuestas
+antiguas, seis respuestas de la página inicial, padre/hijo contradictorios
+y solicitudes sin reintento de escritura cubren estas rutas. La evidencia
+sintética no autoriza activación, merge ni despliegue sin revisión nueva.
 
 **Alcance y cautelas:** source-only, *flags OFF en DEV*, sin llamadas GPT
 reales de Odyssey ni despliegue. La decisión de recuperación prewrite sigue

@@ -66,7 +66,10 @@ export function validatedDeferredDiagnosis(value, requestId, originalStatus, led
       !ledger.stages.some(st => st?.name === d.evidence_stage &&
         st.route_index === d.route_index && ["failed", "unavailable"].includes(st.outcome) &&
         st.stage_view?.label === view.label && st.stage_view?.icon === view.icon &&
-        st.stage_view?.version === view.version))) return null;
+        st.stage_view?.version === view.version) ||
+      ledger.stages.some(st => st?.parent_stage === d.evidence_stage &&
+        st.route_index === d.route_index &&
+        ["failed", "unavailable"].includes(st.outcome)))) return null;
   const summary = d.write_evidence === "SOME"
     ? "Algunos cambios están confirmados, pero el resultado completo no."
     : "No se ha podido confirmar si hubo cambios.";

@@ -786,3 +786,52 @@ test("persisted deferred diagnosis attaches on reload and paginated assistant me
   assert.equal(page.deferredCalls[1].requestId, "old-demo");
   assert.match(page.elements.conversation.textContent, /Diagnóstico posterior/);
 });
+
+test("older pages consult every failed reply, bounded to four parallel one-shot lookups", async () => {
+  const older = [];
+  for (let i = 0; i < 7; i += 1) {
+    const request_id = "historic-" + i;
+    older.push({role: "user", request_id, text: "Ayer ocurrió algo: " + i});
+    older.push({role: "assistant", request_id, text: "Revisión pendiente",
+      status: "needs_attention", request_detail: {request_id,
+        operational: {total_duration_ms: 1, stages: []}}});
+  }
+  const pending = [];
+  const page = await mountApp({
+    turns: [{request_id: "newer-demo", role: "user", text: "Hoy"}],
+    olderTurns: older,
+    deferredDiagnosisMock: () => new Promise(resolve => pending.push(resolve)),
+  });
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+  assert.equal(page.deferredCalls.length, 4, "bounded first batch");
+  assert.ok(page.deferredCalls.every(call => call.maxAttempts === 1));
+  for (const resolve of pending.splice(0)) resolve();
+  await flush();
+  assert.equal(page.deferredCalls.length, 7, "no older failed turn is silently discarded");
+  assert.deepEqual(page.deferredCalls.map(call => call.requestId),
+    Array.from({length: 7}, (_, i) => "historic-" + i));
+  for (const resolve of pending.splice(0)) resolve();
+});
+
+test("initial history also retains every eligible failure, with recent polling distinguished", async () => {
+  const turns = [];
+  for (let i = 0; i < 6; i += 1) {
+    const request_id = "history-" + i;
+    turns.push({request_id, role: "user", text: "Anotación " + i});
+    turns.push({request_id, role: "assistant", text: "Revisión pendiente",
+      status: "needs_attention"});
+  }
+  const page = await mountApp({
+    turns,
+    deferredDiagnosisMock: async () => {},
+  });
+  await flush();
+  assert.equal(page.deferredCalls.length, 6, "older visible failures are not discarded");
+  const counts = new Map(page.deferredCalls.map(call => [call.requestId, call.maxAttempts]));
+  assert.deepEqual(Array.from(counts.entries()).sort(), [
+    ["history-0", 1], ["history-1", 1], ["history-2", 24],
+    ["history-3", 24], ["history-4", 24], ["history-5", 24],
+  ]);
+});

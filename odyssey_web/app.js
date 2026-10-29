@@ -170,9 +170,14 @@ async function loadMainConversation() {
       diagnosticCandidates.push({message, turn});
     }
   }
-  for (const {message, turn} of diagnosticCandidates.slice(-4)) {
-    attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
+  const eligibleDiagnostics = diagnosticCandidates.filter(({turn}) =>
+    ["needs_attention", "failed", "partial"].includes(turn.status));
+  // The newest replies may still be processing: poll those; one-shot the
+  // rest of the history through the same globally bounded read-only queue.
+  for (const {message, turn} of eligibleDiagnostics.slice(-4)) {
+    void attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
   }
+  queueHistoricDeferredDiagnoses(eligibleDiagnostics.slice(0, -4));
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
   if (recoverable) {
     retrySubmission = recoverable;
@@ -355,9 +360,9 @@ async function loadOlderConversation() {
       duplicate?.remove();
     }
     if (olderNodes.length) conversation.prepend(...olderNodes);
-    for (const {message, turn} of olderDiagnosticCandidates.slice(-4)) {
-      attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
-    }
+    // Add every eligible historical reply to the globally bounded lookup
+    // queue. Older responses need one read, not repeated provider polling.
+    queueHistoricDeferredDiagnoses(olderDiagnosticCandidates);
     olderCursor = data.before ?? null;
     hasOlder = data.has_older === true;
     conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight;
@@ -582,13 +587,13 @@ function restorePersistedAcknowledgement(message, turn) {
 }
 
 const deferredDiagnosisMessages = new WeakSet();
-function attachDeferredDiagnosis(article, requestId, status, detail) {
+function attachDeferredDiagnosis(article, requestId, status, detail, maxAttempts = 24) {
   if (!article || typeof requestId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(requestId) ||
       !["needs_attention", "failed", "partial"].includes(status) ||
-      deferredDiagnosisMessages.has(article)) return;
+      deferredDiagnosisMessages.has(article)) return Promise.resolve();
   deferredDiagnosisMessages.add(article);
-  void pollDeferredDiagnosis({
-    requestId, originalStatus: status, ledger: detail?.execution_ledger,
+  return pollDeferredDiagnosis({
+    requestId, originalStatus: status, ledger: detail?.execution_ledger, maxAttempts,
     request: id => requestConversation({endpoint: conversationEndpoint,
       operation: "diagnosis", payload: {request_id: id}}),
     onResult: explanation => {
@@ -599,6 +604,30 @@ function attachDeferredDiagnosis(article, requestId, status, detail) {
       article.append(paragraph);
     },
   });
+}
+
+const historicDiagnosisQueue = [];
+let historicDiagnosisActive = 0;
+const MAX_HISTORIC_DIAGNOSIS_READS = 4;
+function queueHistoricDeferredDiagnoses(candidates) {
+  historicDiagnosisQueue.push(...candidates.filter(({turn}) =>
+    ["needs_attention", "failed", "partial"].includes(turn.status)));
+  drainHistoricDiagnosisQueue();
+}
+
+function drainHistoricDiagnosisQueue() {
+  // One queue covers the initial page and all later pages; rapid scrolling
+  // never multiplies the maximum number of concurrent read-only lookups.
+  while (historicDiagnosisActive < MAX_HISTORIC_DIAGNOSIS_READS && historicDiagnosisQueue.length) {
+    const {message, turn} = historicDiagnosisQueue.shift();
+    historicDiagnosisActive += 1;
+    void attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail, 1)
+      .catch(() => {}) // Optional advice cannot fail the conversation.
+      .finally(() => {
+        historicDiagnosisActive -= 1;
+        drainHistoricDiagnosisQueue();
+      });
+  }
 }
 
 function renderProductResult(result) {
