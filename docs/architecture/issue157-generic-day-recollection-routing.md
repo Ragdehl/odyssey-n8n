@@ -256,6 +256,41 @@ model-facing change needs a new authorized GPT gate. This patch needs an exact
 SHA full regression, new independent audit, actual isolated app/browser E2E,
 and pending-clarification durability before merge/deployment acceptance.
 
+### Fifth independent Generality review — SHA db0793d, FAIL (29 October)
+
+The new read-only Sol source review reproduced **two remaining source-bound
+identity breaches** in both legacy and Core-anchored validator modes:
+
+1. A broadly quoted first fact could inherit the later partner relation when
+   the second fact's primary evidence contained only its verb, not the
+   relationship phrase. Simply excluding *overlapping mention spans* did not
+   exclude authority transferred through an overlapping atomic assertion.
+2. Literal persons outside the verified SELF-member set could still be added
+   to the wrong atomic fact using source-wide participants and quotes.
+
+The subsequent candidate applies **conservative Core-only safety boundaries**:
+any two *different overlapping* primary atomic evidence ranges with linked
+people cause abstention, and every explicitly named person outside verified
+SELF memberships must occur in that fact's primary source evidence, even when
+there are no SELF relation groups, **or** be carried by the already-supported
+`dependent_on_fact_index` from an earlier fact that itself has a proved
+reference. This preserves previously verified declarative co-reference like
+«Conocí a Maite; mañana tengo que llamarla», without borrowing unrelated
+people or future assertions. The existing SELF-group membership checks
+remain mandatory. New adversarial cases reproduce both failures in both
+coverage modes. The trade-off is intentional: valid assertions with shared
+context may be withheld pending a source-grounded, typed fact-person
+attribution/handoff that is independently validated. A verb-only source
+fragment is **not** evidence that an unrelated family member participated.
+
+Historical FAILs remain immutable. This source safety patch is not a fresh
+independent PASS, a semantic GPT-provider evaluation, or end-user app E2E.
+A bounded next-generation fact-specific relationship/identity proof requires
+model-facing contract evaluation before it can promise full automatic
+co-reference resolution; do not silently loosen this validator or treat a
+passing deterministic suite as that evidence. The known eight-group capacity
+warning and the missing durable actionable pending clarification remain open.
+
 ## Bounded model evaluation matrix (must be run on production GPT before enabling)
 
 Each model test must inspect the **actual strict JSON schema** and record the

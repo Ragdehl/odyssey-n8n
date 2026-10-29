@@ -296,7 +296,7 @@ def test_broad_planner_primary_cannot_steal_nested_other_fact_relation(core_anch
         reviewed["facts"][0]["source_quote"] = SOURCE
     with pytest.raises(
         WholeMessageCoverageError,
-        match="Verified group member unsupported by this atomic source fact",
+        match="Ambiguous overlapping atomic identity evidence",
     ):
         validate_whole_message_coverage(
             SOURCE,
@@ -369,5 +369,130 @@ def test_shared_all_source_primary_with_different_groups_fails_closed(core_ancho
             ["core", "temporal"],
             verified_relationship_members=ALL_PEOPLE,
             verified_relationship_groups=GROUPS,
+            core_anchored_evidence=core_anchored,
+        )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_broad_planner_cannot_borrow_group_when_other_fact_quotes_only_verb(core_anchored):
+    """A broad fact must not borrow a relation omitted from a narrower verb quote."""
+    proposed, reviewed = _review(ALL_PEOPLE, ("Vera",))
+    proposed["facts"][0]["source_evidence"] = SOURCE
+    proposed["facts"][1]["source_evidence"] = "visitó el museo."
+    if core_anchored:
+        for fact in proposed["facts"]:
+            fact.update(
+                source_evidence_fragments=[],
+                source_evidence_context=None,
+                source_evidence_fragment_contexts=[],
+            )
+        for claim in reviewed["facts"]:
+            del claim["source_quote"]
+    else:
+        reviewed["facts"][0]["source_quote"] = SOURCE
+    with pytest.raises(
+        WholeMessageCoverageError, match="Ambiguous overlapping atomic identity evidence"
+    ):
+        validate_whole_message_coverage(
+            SOURCE,
+            proposed,
+            reviewed,
+            ["core", "temporal"],
+            verified_relationship_members=ALL_PEOPLE,
+            verified_relationship_groups=GROUPS,
+            core_anchored_evidence=core_anchored,
+        )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_person_outside_self_proof_cannot_be_borrowed_across_facts(core_anchored):
+    """Person mentions outside SELF groups need independent fact evidence too."""
+    second = "Ana visitó el museo."
+    source = CHILDREN + " " + second
+    proposed, reviewed = _review(("Nora", "Ivo", "Ana"), ("Ana",))
+    proposed["facts"][1]["source_evidence"] = second
+    reviewed["facts"][1]["source_quote"] = second
+    if core_anchored:
+        for fact in proposed["facts"]:
+            fact.update(
+                source_evidence_fragments=[],
+                source_evidence_context=None,
+                source_evidence_fragment_contexts=[],
+            )
+        for claim in reviewed["facts"]:
+            del claim["source_quote"]
+    else:
+        reviewed["facts"][0]["source_quote"] = source
+    with pytest.raises(
+        WholeMessageCoverageError, match="Person name unsupported by this atomic source fact"
+    ):
+        validate_whole_message_coverage(
+            source,
+            proposed,
+            reviewed,
+            ["core", "temporal"],
+            verified_relationship_members=("Nora", "Ivo"),
+            verified_relationship_groups=(GROUPS[0],),
+            core_anchored_evidence=core_anchored,
+        )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_no_self_groups_still_prevent_explicit_cross_fact_name_theft(core_anchored):
+    """Per-fact named-person safety is universal, not conditional on SELF."""
+    first = "Ana visitó el jardín."
+    second = "Vera fue al museo."
+    source = first + " " + second
+    proposal = {
+        "entities": [],
+        "unresolved": [],
+        "facts": [
+            {
+                "kind": "record",
+                "date": None,
+                "participants": names,
+                "source_evidence": text,
+                "dependent_on_fact_index": None,
+                "needs_clarification": False,
+                **(
+                    {
+                        "source_evidence_fragments": [],
+                        "source_evidence_context": None,
+                        "source_evidence_fragment_contexts": [],
+                    }
+                    if core_anchored
+                    else {}
+                ),
+            }
+            for text, names in ((first, ["Ana", "Vera"]), (second, ["Vera"]))
+        ],
+    }
+    review = {
+        "approved": True,
+        "complete": True,
+        "facts": [
+            {
+                "ordinal": idx,
+                "kind": "record",
+                "date": None,
+                "reviewed_text": " ".join("{{ref:" + str(j) + "}}" for j in range(len(names)))
+                + " estuvo allí.",
+                "reference_names": names,
+                "supported": True,
+                **({} if core_anchored else {"source_quote": text}),
+            }
+            for idx, (text, names) in enumerate(
+                ((source if not core_anchored else first, ["Ana", "Vera"]), (second, ["Vera"]))
+            )
+        ],
+    }
+    with pytest.raises(
+        WholeMessageCoverageError, match="Person name unsupported by this atomic source fact"
+    ):
+        validate_whole_message_coverage(
+            source,
+            proposal,
+            review,
+            ["core"],
             core_anchored_evidence=core_anchored,
         )

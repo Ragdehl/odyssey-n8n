@@ -172,7 +172,12 @@ def validate_whole_message_coverage(
     # primary occurrence offsets (not reviewer-controlled broad quote spans)
     # before deciding which source mentions each fact can safely claim.
     primary_spans: tuple[tuple[int, int], ...] = ()
-    if groups:
+    if groups or any(
+        isinstance(claim, Mapping)
+        and isinstance(claim.get("reference_names"), list)
+        and bool(claim["reference_names"])
+        for claim in judgments
+    ):
         try:
             primary_spans = tuple(
                 (e.primary.start, e.primary.end)
@@ -283,6 +288,38 @@ def validate_whole_message_coverage(
                 and name not in verified
             ):
                 raise WholeMessageCoverageError("Participant absent from original source")
+            # An explicit person is either named in this assertion or safely
+            # handed off by the EXISTING typed preceding-fact dependency. The
+            # latter preserves reviewed co-reference ("Maya ... ella") without
+            # letting an unrelated previous/future person enter another fact.
+            # SELF-collective membership requires its separate proof below.
+            dependency_index = fact.get("dependent_on_fact_index")
+            proven_prior_reference = (
+                type(dependency_index) is int
+                and 0 <= dependency_index < index
+                and name in output[dependency_index].reference_names
+            )
+            if (
+                name not in verified
+                and not owned_mention(name, index, insensitive=True)
+                and not proven_prior_reference
+            ):
+                raise WholeMessageCoverageError(
+                    "Person name unsupported by this atomic source fact"
+                )
+        if names and any(
+            primary_spans[index] != other
+            and primary_spans[index][0] < other[1]
+            and other[0] < primary_spans[index][1]
+            for position, other in enumerate(primary_spans)
+            if position != index
+        ):
+            # Distinct overlapping atomic claims cannot exchange identity
+            # authority, even when another fact quotes only its verb and not
+            # the relationship phrase. A literal fact with no person links can
+            # still proceed. This deliberately fails closed until independently
+            # reviewed fact-to-fact attribution evidence is available.
+            raise WholeMessageCoverageError("Ambiguous overlapping atomic identity evidence")
         if groups:
             # Multiple group memberships inside the very same primary source
             # excerpt cannot be independently assigned to two different facts.
