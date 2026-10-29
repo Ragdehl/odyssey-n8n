@@ -313,6 +313,37 @@ notes, authenticated fake SELF and fixed local clock; no use of private source.
 | Replayed request | Same authenticated delivery ID | Exactly zero additional physical writes |
 | Cross-user evidence | Relation group belongs to another SELF | No identity reuse or writes |
 
+## Actual isolated Chromium UI regression (29 October, source `4747a0f`)
+
+A new **test-only** `issue157_day` scenario in the existing
+`scripts/odyssey_browser_synthetic_p4.py` (paired with its `.cjs` driver)
+uses a disposable `TemporaryDirectory` vault/actor and the actual branch
+Odyssey HTML/JavaScript UI, Core/E3/Markdown, Notes API, source-bound family
+proof and request replay. Recorded Router/Planner/review outputs replace
+paid GPT, and a narrowly allowlisted HTTP adapter stands in for n8n.
+It is NOT deployed DEV, real-model acceptance or public Cloudflare Access.
+
+Actual Chromium was started on the Pi via the already vetted
+`e6-chromium-runtime-deps` **process-local** library path. Both mobile
+390×844 and desktop 1280×960 runs returned PASS: visible Chat typed/submitted
+the accented synthetic memory; one `calendar_day` contained two physical
+facts and three already-existing Person links; no Events/Tasks or duplicate
+people were created. Browser confirmation, actual execution graph, Notes
+readback and browser reload succeeded; same request ID replay left all
+physical Markdown byte-for-byte unchanged. The browser graph correctly shows
+**one Core write receipt** for a single note containing **two atomic facts**;
+requiring two separate note/write receipts was an error in the old
+single-case test harness, not a missing persisted fact.
+
+Independent unchanged older `maya` and `e4_person_task` browser scenarios
+were rerun and passed, including graph/reload, actual Person+Task E3 and
+replay. All browser operations were confined to temporary synthetic data;
+none targeted `/data/odyssey` or `/data/odyssey-dev`. This evidence does NOT
+close the required **authenticated, isolated real n8n + real GPT** app path,
+or the durable actionable pending clarification for unknown relationships.
+See GitHub issue #158 for why a new Cloudflare token must NOT access the
+shared DEV identity/vault before isolation is proven.
+
 ## Verification and release gates
 
 - Deterministic synthetic Core/E3 test: two original facts on one Day,

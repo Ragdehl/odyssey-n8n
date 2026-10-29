@@ -95,17 +95,21 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     surfaceVisible:document.querySelector("#notes-surface")?.hidden===false,
     resultNodes:document.querySelector("#notes-list")?.children.length||0
   }));
+  const expectedReceipts=Number(process.env.ODYSSEY_SYNTHETIC_EXPECTED_RECEIPTS||"2");
+  const minNotes=Number(process.env.ODYSSEY_SYNTHETIC_MIN_NOTE_RESULTS||"2");
+  if(![1,2].includes(expectedReceipts)||![1,2].includes(minNotes))
+    throw Error("Invalid bounded fixture expectation");
   const output={
     pass:before.userMessages===1 && before.acknowledgements===1 &&
       before.details===1 && before.noteButtons===1 &&
       before.userMessages===after.userMessages &&
       before.details===after.details && before.noteButtons===after.noteButtons &&
       before.confirmationVisible===true && after.confirmationVisible===true &&
-      detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===2 &&
+      detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===expectedReceipts &&
       !detail.diagnosticRejected && reloadedDetail.svgCount>0 &&
       reloadedDetail.writeReceipts===detail.writeReceipts &&
       !reloadedDetail.diagnosticRejected &&
-      notes.surfaceVisible && notes.resultNodes>=2 &&
+      notes.surfaceVisible && notes.resultNodes>=minNotes &&
       jsErrors.length===0,
     before,after,detail,reloadedDetail,notes,jsErrorsCount:jsErrors.length,
     actor:"synthetic_only",messages_sent:1
