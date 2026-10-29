@@ -77,6 +77,9 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
     ]
     assert evidence["stages"][1]["error_category"] == "COVERAGE_UNVERIFIED"
     assert evidence["write_evidence"] == "UNKNOWN"
+    assert evidence["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert evidence["prewrite_recovery_proven"] is False
+    assert evidence["specific_provider_failures"] == []
     assert "request_id" not in call["input"][1]["content"]
 
 
@@ -203,6 +206,16 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
     assert actual["clarification_code"] == "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE"
     assert actual["error_diagnosis"]["evidence_stage"] == "application.source_processing"
     assert actual["error_diagnosis"]["next_step"] == "CHECK_SYSTEM"
+    sent = json.loads(gateway.responses.calls[0]["input"][1]["content"])
+    assert sent["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert sent["prewrite_recovery_proven"] is True
+    assert len(sent["specific_provider_failures"]) == 1
+    provider = sent["specific_provider_failures"][0]
+    assert provider["name"].startswith("provider.")
+    assert any(
+        stage["name"] == provider["name"] and stage["outcome"] == "failed"
+        for stage in sent["stages"]
+    )
     stages = actual["execution_ledger"]["stages"]
     assert stages[0]["name"] == "application.source_processing"
     assert stages[0]["outcome"] == "failed"

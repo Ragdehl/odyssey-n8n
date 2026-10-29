@@ -8,7 +8,10 @@ import sys
 
 import pytest
 
-from odyssey_runtime.conversation_gateway import OpenAIConversationGateway
+from odyssey_runtime.conversation_gateway import (
+    GRAPH_DIAGNOSIS_INSTRUCTIONS,
+    OpenAIConversationGateway,
+)
 from scripts.evaluate_c4_graph import CASES, dry_run, evaluate_live, evidence_for
 from tests.runtime.test_conversation_gateway import FakeClient
 
@@ -173,3 +176,18 @@ def test_live_evaluation_resumes_after_three_calls_and_never_repeats_cases(tmp_p
     with pytest.raises(ValueError, match="Resume report does not match"):
         evaluate_live(max_calls=14, resume_report=prior_path, continue_after_rejection=True)
     assert len(last_provider.responses.calls) == 11
+
+
+def test_c4_prompt_preserves_graph_provenance_and_journal_intent_without_names():
+    prompt = GRAPH_DIAGNOSIS_INSTRUCTIONS
+    for concept in (
+        "entry_intent",
+        "Day journal",
+        "prewrite_recovery_proven",
+        "specific_provider_failures",
+        "interpretation stage",
+        "identity resolution",
+    ):
+        assert concept in prompt
+    assert "Manu" not in prompt
+    assert "Manon" not in prompt

@@ -1225,3 +1225,32 @@ objetivo de p95). La reproducción parcial Writer+E3+n8n web aislada sí
 consta, pero no se hará fault injection en el vault personal para conseguir
 una demo. Estas puertas son propias de una futura promoción, no justificación
 para reabrir Tasks o bloquear el diseño de la siguiente fase de notas.
+
+### Contrato candidato tras el FAIL de 14 llamadas (fuente aislada; no aprobado para DEV)
+
+La primera mejora a evaluar reutiliza el gateway y el grafo C4 originales;
+no introduce decisiones por nombres, idiomas o frases de los casos de prueba.
+El runtime presenta a la IA la **intención ya enrutada de conservar
+información o gestionar una operación** (sin certificar una escritura), el
+`prewrite_recovery_proven` **tipado y guardado por el ejecutor** (sin conceder
+permiso de reintentar) y la lista de subpasos de proveedor efectivamente
+fallidos de E2. El prompt general recuerda que una actividad pasada puede
+ser un diario, que un error previo a Core no demuestra una ambigüedad de
+Person, que un proveedor fallido es más específico que el parent genérico,
+y que `interpretation=completed` no significa que el usuario haya completado
+su tarea ni que haya habido escritura física. El truncado corresponde a la
+vista diagnóstica, no necesariamente al mensaje entregado por el usuario.
+
+El validador léxico heredado de C4 **sigue siendo bloqueante e incompleto**:
+rechaza algunas explicaciones inocuas sobre la etapa de escritura y no
+certifica el significado de todas las paráfrasis. NO se ha relajado, porque
+sin una revisión semántica independiente podría aceptar falsos hechos sobre
+el estado de Markdown/E3. La mejora de procedencia/prompts y sus pruebas
+sintéticas NO validan la calidad de Luna real: modifica el hash del prompt
+y requiere **una autorización de presupuesto nueva** para una campaña fresca.
+Los 14/14 de la primera campaña siguen consumidos, su veredicto FAIL no se
+convierte en PASS y C4 GRAPH/RECOVERY permanecen OFF en DEV. La solución
+completa de afirmaciones libres deberá establecer un revisor semántico
+anclado a E2/E3 (o contrato equivalente) y medir coste/latencia antes de
+aceptación. Tampoco sustituye el trabajo concurrente de procedencia
+padre-hijo de etapas que está sin integrar en la PR.

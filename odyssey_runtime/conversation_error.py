@@ -148,10 +148,21 @@ def diagnose_trusted_execution_graph(
                 known_stages.add((name, None))
             events.append({"stage": name, "outcome": outcome})
     write_evidence = "SOME" if result.affected_stable_note_ids else "UNKNOWN"
+    # The caller has already routed this as knowledge/operation. Its source
+    # interpretation can fail before Core, but that is not new proof of a
+    # missing person or an instruction to write anything.
+    specific_provider_failures = [
+        {"name": st["name"], "route_index": st["route_index"]}
+        for st in stages
+        if st["outcome"] in {"failed", "unavailable"} and st["name"].startswith("provider.")
+    ]
     evidence = {
         "status": result.status.value,
         "reason_code": code,
         "write_evidence": write_evidence,
+        "entry_intent": "ROUTED_PERSONAL_INFORMATION_OR_OPERATION",
+        "prewrite_recovery_proven": result.prewrite_recovery_proven is True,
+        "specific_provider_failures": specific_provider_failures,
         "original_message": original_message[:2048] if isinstance(original_message, str) else "",
         "source_truncated": isinstance(original_message, str) and len(original_message) > 2048,
         "events": events,
