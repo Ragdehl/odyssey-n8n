@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from odyssey_core.stage_presentation import stage_view_for
 from odyssey_runtime.composition import _chat_c4_semantic_review_enabled
 from odyssey_runtime.conversation_error import diagnose_trusted_execution_graph
 from odyssey_runtime.conversation_gateway import OpenAIConversationGateway
@@ -41,6 +42,7 @@ def test_semantic_reviewer_cannot_override_legacy_write_text_boundary():
     vetted, calls = _diagnose([{"verdict": "SUPPORTED", "reason": "GROUNDED"}], proposal=proposal)
     assert vetted is not None
     assert vetted["verified_stage_only"] is True
+    assert vetted["stage_view"] == stage_view_for(AI_REPLY["evidence_stage"]).to_response()
     assert "explanation" not in vetted and "user_question" not in vetted
     assert len(calls) == 2
     assert calls[1]["text"]["format"]["strict"] is True
@@ -64,7 +66,12 @@ def test_semantic_reviewer_cannot_override_legacy_write_text_boundary():
     ],
 )
 def test_review_failure_never_releases_model_text(review_response):
-    proposal = {**AI_REPLY, "explanation": "He guardado el archivo sin cambios, puedes repetir."}
+    proposal = {
+        **AI_REPLY,
+        "explanation": "He guardado el archivo sin cambios, puedes repetir.",
+        "next_step": "INSPECT_RESULT",
+        "user_question": "",
+    }
     reviewed, calls = _diagnose([review_response], proposal=proposal)
     assert reviewed is None
     assert len(calls) == 2
@@ -86,6 +93,7 @@ def test_false_positive_second_review_never_releases_unverified_physical_claim()
         "write_evidence",
         "evidence_stage",
         "route_index",
+        "stage_view",
         "next_step",
         "verified_stage_only",
     }
@@ -164,3 +172,83 @@ def test_rejected_second_ai_pass_blocks_retry_and_preserves_original_failure(tmp
     replay = runtime.execute_product(FAMILY_SOURCE, "semantic-denied-recovery", "main", actor)
     assert replay["delivery_replayed"] is True
     assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+
+
+def test_semantic_reviewed_reinterpretation_cannot_propose_retry_without_writer_proof():
+    from tests.runtime.test_c4_safe_prewrite_recovery import RETRY_ADVICE
+
+    value, calls = _diagnose(
+        [{"verdict": "SUPPORTED", "reason": "GROUNDED"}],
+        proposal={**RETRY_ADVICE, "evidence_stage": "candidate.source_boundary_review"},
+    )
+    assert value is None  # typed source executor did not certify prewrite
+    assert len(calls) == 1  # veto before a second, unnecessary provider call
+
+
+def test_canonical_stage_presentation_is_generic_and_source_owned():
+    assert (
+        stage_view_for("candidate.source_boundary_review").label == "Core · revisión de la división"
+    )
+    assert stage_view_for("application.source_processing").label == "Interpretación del mensaje"
+    assert stage_view_for("provider.any-llm.some-operation").label == "Consulta al servicio de IA"
+    assert (
+        stage_view_for("provider.another-model.other-stage").label == "Consulta al servicio de IA"
+    )
+
+
+def test_reviewed_provider_substage_shows_generic_core_owned_label_without_identity_claim():
+    from odyssey_core.application import ApplicationResult, ApplicationStatus
+    from odyssey_core.observability import (
+        OperationalEvidence,
+        OperationalOutcome,
+        OperationalSpan,
+        OperationalStage,
+    )
+
+    child = "provider.gpt-6-luna.odyssey_light_shared_semantic_plan_v1"
+    typed = ApplicationResult(
+        "provider-substage-c4-label",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        clarification_code="FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE",
+        operational=OperationalEvidence(
+            14,
+            (
+                OperationalStage(
+                    "application.source_processing",
+                    OperationalOutcome.FAILED,
+                    14,
+                    substeps=(OperationalSpan(child, OperationalOutcome.FAILED, 0, 12),),
+                ),
+            ),
+        ),
+    )
+    ledger = project_execution_ledger(typed)
+    assert ledger["stages"][1]["parent_stage"] == "application.source_processing"
+    model = FakeClient(
+        [
+            {
+                "evidence_stage": child,
+                "route_index": None,
+                "explanation": "La consulta al proveedor no terminó; Core no ha resuelto identidades.",
+                "next_step": "CHECK_SYSTEM",
+                "user_question": "",
+            },
+            {"verdict": "SUPPORTED", "reason": "GROUNDED"},
+        ]
+    )
+    resolved = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        ledger,
+        OpenAIConversationGateway(model),
+        original_message="Ayer hablé con alguien.",
+        semantic_review=True,
+    )
+    assert resolved is not None
+    assert resolved["evidence_stage"] == child
+    assert resolved["stage_view"] == ledger["stages"][1]["stage_view"]
+    assert resolved["stage_view"]["label"] == "Consulta al servicio de IA"
+    assert "explanation" not in resolved
+    assert len(model.responses.calls) == 2

@@ -356,6 +356,35 @@ An absent/rejected/failing second pass falls back to the original persisted
 Core refusal, with no new interpretation or write. Unreviewed one-pass C4
 retains the earlier conservative lexical guard; no PROD behavior changed.
 
+**Grounded, human-readable stage names (small source improvement):**
+typed-only C4 now reuses the **existing Core/E2 `stage_view_for()`** contract
+rather than exposing technical provider/model IDs or stage identifiers.
+The runtime binds a `stage_view` label and icon to the exact observed
+failure, never to model-authored prose. The E2 ledger independently
+carries the same source-owned label/icon, and n8n verifies equality of
+label, icon, version, stage name and route before presenting it. Old
+ledgers without `stage_view` remain readable under their existing
+one-pass rules but cannot use the new reviewed-only label. The same
+user message may thus be diagnosed as «Core · revisión de la división»
+for observed source-boundary failure, or «Consulta al servicio de IA»
+for an observed provider failure, while the original technical stage
+remains inspectable in the E2 graph. Injected mismatching labels and
+unobserved stages cannot display arbitrary user-facing claims. This
+reuses a single general presentation owner without per-person or
+sample-text rules. A focused independent reviewer returned PASS for this
+narrow source-only change and requested a route-collision regression, now
+included. **Trust boundary:** E2 and the typed product response both come
+from the authenticated Core runtime. A party who compromises the runtime
+or can forge the **entire** backend ledger and diagnosis can potentially
+make matching labels: equality is NOT cryptographic attestation and must
+not be represented as protection against upstream/backend compromise.
+The independent validator does protect against a mistaken or malicious
+**model proposal**, an incorrect route owner, and one-sided label
+corruption at n8n's presentation boundary. Unsafe `ASK_USER` suggestions and retries without
+positive Core prewrite proof are rejected before paying for a second
+semantic-review call. **None of this proves rich model-authored
+explanations semantically safe**; the real-model gate remains open.
+
 **This is a safe intermediate, not full natural-language AI acceptance.**
 AI chooses a grounded stage and suggested action, but the sensitive
 user-facing sentence in this branch is generated from typed verified

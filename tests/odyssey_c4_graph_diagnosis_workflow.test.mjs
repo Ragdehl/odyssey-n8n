@@ -28,7 +28,8 @@ const ledger = {
   version: 1, request_id: ID, status: "needs_attention", events: [],
   event_sequence: null, events_truncated: false,
   stages: [{name: stage, outcome: "failed", duration_ms: 9, start_offset_ms: 0,
-    error_category: "COVERAGE_UNVERIFIED", provider_call_count: 1, route_index: null}],
+    error_category: "COVERAGE_UNVERIFIED", provider_call_count: 1, route_index: null,
+    stage_view: {version: 1, label: "Core · revisión de la división", icon: "core"}}],
   routes: [], write_receipts: [], affected_stable_note_ids: [],
 };
 const base = {
@@ -172,14 +173,56 @@ test("semantically reviewed writer-stage explanation bypasses obsolete lexical r
     status: diagnostic.status, reason_code: diagnostic.reason_code,
     evidence_stage: stage, route_index: null, write_evidence: 'UNKNOWN',
     next_step: 'INSPECT_RESULT', verified_stage_only: true,
+    stage_view: {version: 1, label: "Core · revisión de la división", icon: "core"},
   }});
-  assert.match(typed.message, /La interpretación de IA sitúa el problema/);
-  assert.match(typed.message, /candidate.source_boundary_review/);
+  assert.match(typed.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
+  assert.doesNotMatch(typed.message, /candidate.source_boundary_review/);
   assert.doesNotMatch(typed.message, /La etapa de escritura falló|ya está guardada/);
   const invalidTyped = render({error_diagnosis: {
     status: diagnostic.status, reason_code: diagnostic.reason_code,
     evidence_stage: 'core.identity_resolution', route_index: null, write_evidence: 'UNKNOWN',
     next_step: 'INSPECT_RESULT', verified_stage_only: true,
+    stage_view: {version: 1, label: "Core · revisión de la división", icon: "core"},
   }});
-  assert.doesNotMatch(invalidTyped.message, /La interpretación de IA sitúa el problema/);
+  assert.doesNotMatch(invalidTyped.message, /Core · revisión de la división/);
+  const forgedView = render({error_diagnosis: {
+    status: diagnostic.status, reason_code: diagnostic.reason_code,
+    evidence_stage: stage, route_index: null, write_evidence: 'UNKNOWN',
+    next_step: 'INSPECT_RESULT', verified_stage_only: true,
+    stage_view: {version: 1, label: 'He guardado todos los archivos', icon: 'core'},
+  }});
+  assert.doesNotMatch(forgedView.message, /He guardado todos los archivos/);
+  const malformedLedger = render({execution_ledger: {...ledger, stages: [
+    {...ledger.stages[0], stage_view: {version: 1, label: 'N', icon: 'invalid'}}
+  ]}, error_diagnosis: {
+    status: diagnostic.status, reason_code: diagnostic.reason_code,
+    evidence_stage: stage, route_index: null, write_evidence: 'UNKNOWN',
+    next_step: 'INSPECT_RESULT', verified_stage_only: true,
+    stage_view: {version: 1, label: 'N', icon: 'invalid'},
+  }});
+  assert.doesNotMatch(malformedLedger.message, /He guardado|No he podido completar la solicitud en/);
+});
+
+test("reviewed stage_view requires failed owner route even with repeated stage names", () => {
+  const routes = [
+    {route_index: 0, capability: "core", status: "completed", depends_on: null},
+    {route_index: 1, capability: "tasks", status: "failed", depends_on: null},
+  ];
+  const shared = {...ledger.stages[0]};
+  const updated = {...ledger, routes, stages: [
+    {...shared, route_index: 0, outcome: "completed"},
+    {...shared, route_index: 1, outcome: "failed"},
+  ]};
+  const reviewed = {status: diagnostic.status, reason_code: diagnostic.reason_code,
+    evidence_stage: stage, route_index: 1, write_evidence: "UNKNOWN",
+    next_step: "INSPECT_RESULT", verified_stage_only: true,
+    stage_view: {...shared.stage_view}};
+  const valid = render({execution_ledger: updated, error_diagnosis: reviewed});
+  assert.match(valid.message, /Core · revisión de la división/);
+  const wrongOwner = render({execution_ledger: updated,
+    error_diagnosis: {...reviewed, route_index: 0}});
+  assert.doesNotMatch(wrongOwner.message, /Core · revisión de la división/);
+  const wrongLabel = render({execution_ledger: updated,
+    error_diagnosis: {...reviewed, stage_view: {...reviewed.stage_view, label: "Otro resultado"}}});
+  assert.doesNotMatch(wrongLabel.message, /Otro resultado/);
 });

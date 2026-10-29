@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from odyssey_core.application import ApplicationResult
+from odyssey_core.stage_presentation import stage_view_for
 
 from .conversation_gateway import (
     ConversationGateError,
@@ -204,6 +205,13 @@ def diagnose_trusted_execution_graph(
         or any("\n" in text or "\r" in text for text in (explanation, question))
     ):
         return None
+    # The second model need not be called when Core proof has already made
+    # this proposed step ineligible for the evidence-only presentation.
+    if semantic_review and (
+        next_step == "ASK_USER"
+        or (next_step == "REVIEW_SAFE_RETRY" and result.prewrite_recovery_proven is not True)
+    ):
+        return None
     # Optional second AI pass checks ENTIRE meaning rather than banning
     # substrings such as "escri" (a writer-stage failure is not a claim that
     # Markdown was written). Off by default pending real-model quality/cost.
@@ -218,6 +226,10 @@ def diagnose_trusted_execution_graph(
     # rendered using verified graph evidence by n8n. No model prose crosses
     # this boundary even when two correlated models say SUPPORTED.
     if semantic_review:
+        if next_step == "REVIEW_SAFE_RETRY" and result.prewrite_recovery_proven is not True:
+            # This typed presentation implies a possible safe second pass;
+            # positive source-executor proof, not the model reviewer, owns it.
+            return None
         if next_step == "ASK_USER":
             # Core owns verified clarification text/options; arbitrary AI
             # questions cannot invent a missing identity or date.
@@ -228,6 +240,7 @@ def diagnose_trusted_execution_graph(
             "write_evidence": write_evidence,
             "evidence_stage": stage,
             "route_index": route_index,
+            "stage_view": stage_view_for(stage).to_response(),
             "next_step": next_step,
             "verified_stage_only": True,
         }

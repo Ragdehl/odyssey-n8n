@@ -234,6 +234,11 @@ const safeLedger = value => {
       !Array.isArray(value.write_receipts) || value.write_receipts.length > 64 ||
       !Array.isArray(value.affected_stable_note_ids) || value.affected_stable_note_ids.length > 64) return undefined;
   const safeId = v => typeof v === 'string' && v.length > 0 && v.length <= 128;
+  const safeStageView = v => v && typeof v === 'object' && !Array.isArray(v) &&
+    Object.keys(v).sort().join(',') === 'icon,label,version' && v.version === 1 &&
+    typeof v.label === 'string' && v.label.length >= 1 && v.label.length <= 80 &&
+    typeof v.icon === 'string' &&
+    ['router','temporal','planner','tasks','core','git','index','pending','result'].includes(v.icon);
   const affected = Array.isArray(r.affected_stable_note_ids) ? r.affected_stable_note_ids.filter(safeId).slice(0,64) : [];
   if (JSON.stringify(affected) !== JSON.stringify(value.affected_stable_note_ids)) return undefined;
   if (!value.events.every(e => e && Number.isInteger(e.sequence) && e.sequence >= 1 && safeId(e.stage) &&
@@ -244,6 +249,7 @@ const safeLedger = value => {
       (st.start_offset_ms === null || (typeof st.start_offset_ms === 'number' && Number.isFinite(st.start_offset_ms) && st.start_offset_ms >= 0)) &&
       (st.error_category === null || (typeof st.error_category === 'string' && st.error_category.length <= 120)) &&
       Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
+      (st.stage_view == null || safeStageView(st.stage_view)) &&
       (st.route_index === null || (Number.isInteger(st.route_index) &&
         st.route_index >= 0 && st.route_index < value.routes.length)) &&
       (st.parent_stage == null || (safeId(st.parent_stage) && st.parent_stage !== st.name &&
@@ -265,7 +271,9 @@ const safeLedger = value => {
     stages:value.stages.map(st => ({name:st.name,outcome:st.outcome,duration_ms:st.duration_ms,
       start_offset_ms:st.start_offset_ms,error_category:st.error_category,
       provider_call_count:st.provider_call_count,route_index:st.route_index,
-      parent_stage:st.parent_stage ?? null})),
+      parent_stage:st.parent_stage ?? null,
+      ...(st.stage_view == null ? {} : {stage_view: {
+        version:st.stage_view.version,label:st.stage_view.label,icon:st.stage_view.icon}})})),
     routes:value.routes.map(rt => ({route_index:rt.route_index,capability:rt.capability,status:rt.status,depends_on:rt.depends_on})),
     write_receipts:value.write_receipts.map(item => ({action_index:item.action_index,unit_index:item.unit_index,
       stable_note_id:item.stable_note_id,operation:item.operation,status:item.status})),
@@ -346,10 +354,16 @@ const graphTextSafe = value => typeof value === 'string' &&
 // Typed-only AI interpretation: the selected stage/action are grounded by
 // E2 and E3. A review verdict cannot make arbitrary LLM prose trustworthy.
 const graphStageOnly = gd && gd.verified_stage_only === true &&
-  Object.keys(gd).sort().join(',') === 'evidence_stage,next_step,reason_code,route_index,status,verified_stage_only,write_evidence' &&
+  Object.keys(gd).sort().join(',') === 'evidence_stage,next_step,reason_code,route_index,stage_view,status,verified_stage_only,write_evidence' &&
   gd.next_step !== 'ASK_USER' && /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(gd.evidence_stage) &&
   !!verifiedLedger?.stages.some(st => st.name === gd.evidence_stage &&
-    st.route_index === gd.route_index && ['failed','unavailable'].includes(st.outcome));
+    st.route_index === gd.route_index && ['failed','unavailable'].includes(st.outcome) &&
+    st.stage_view && gd.stage_view && typeof gd.stage_view === 'object' &&
+    !Array.isArray(gd.stage_view) &&
+    Object.keys(gd.stage_view).sort().join(',') === 'icon,label,version' &&
+    st.stage_view.version === gd.stage_view.version &&
+    st.stage_view.label === gd.stage_view.label &&
+    st.stage_view.icon === gd.stage_view.icon);
 const graphDiagnosisValid = gd && typeof gd === 'object' && !Array.isArray(gd) &&
   (graphStageOnly || Object.keys(gd).sort().join(',') === 'evidence_stage,explanation,next_step,reason_code,route_index,status,user_question,write_evidence') &&
   gd.status === r.status && gd.reason_code === (r.product_reason || r.clarification_code || 'UNKNOWN_FAILURE') &&
@@ -364,7 +378,7 @@ const graphDiagnosisValid = gd && typeof gd === 'object' && !Array.isArray(gd) &
 const graphDiagnosisMessage = graphDiagnosisValid ?
   (gd.write_evidence === 'SOME' ? 'Odyssey ha guardado parte de la información. ' :
     'No puedo confirmar todavía si se ha guardado información. ') +
-  (graphStageOnly ? 'La interpretación de IA sitúa el problema en la etapa «' + gd.evidence_stage + '».' : gd.explanation.trim()) +
+  (graphStageOnly ? 'No he podido completar la solicitud en «' + gd.stage_view.label + '».' : gd.explanation.trim()) +
   (gd.next_step === 'ASK_USER' ? ' ' + gd.user_question.trim() :
     gd.next_step === 'REVIEW_SAFE_RETRY' ? ' Se puede evaluar un nuevo intento después de comprobar las escrituras; no he repetido la solicitud.' :
     gd.next_step === 'CHECK_SYSTEM' ? ' Es necesario comprobar el servicio antes de reintentar.' :
