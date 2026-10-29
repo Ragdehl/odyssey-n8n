@@ -226,8 +226,11 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     },name);
     await page.waitForFunction((person,task)=>{
       const title=document.querySelector("#note-detail header h2")?.textContent||"";
+      // Notes uses the unified timeline (incoming reference origins), not
+      // the retired standalone .note-backlinks panel. Assert real source
+      // navigation buttons, never a text-only accidental match.
       const inbound=Array.from(document.querySelectorAll(
-        "#note-detail .note-backlinks .backlink-source .backlink"));
+        '#note-detail .note-fact-incoming button.note-fact-origin[aria-label^="Abrir nota de origen:"]'));
       return !document.querySelector("#note-detail")?.hidden && title.includes(person) &&
         inbound.some(item=>item.textContent.includes(task));
     },{timeout:15000},name,taskName);

@@ -344,6 +344,25 @@ or the durable actionable pending clarification for unknown relationships.
 See GitHub issue #158 for why a new Cloudflare token must NOT access the
 shared DEV identity/vault before isolation is proven.
 
+### Shared real-n8n regression (29 October, recorded E4 fixture)
+
+The independent pre-existing `scripts/odyssey_e4_live_browser_n8n.py` run
+was repeated against the same branch in its **recorded GPT** mode. It
+successfully drove actual Chromium, a local cookie-authenticated browser,
+a separate network-isolated Docker n8n engine and synthetic Core/E3/Git
+canonical writes. It verified the Person+Task link, Notes UI, progress/graph,
+physical Markdown/readback, an unauthenticated request denial and unchanged
+Markdown on replay. This is a neighboring *shared transport* regression,
+**not the Issue #157 family-memory case** and not a live-provider evaluation.
+
+The first run identified an outdated **test selector** for the retired
+standalone `.note-backlinks` section; the actual Notes UI already showed
+the incoming reference in its unified fact timeline. The test-only Chromium
+driver now asserts the current clickable `.note-fact-origin` with the genuine
+source-note label, and the rerun passed in 38.86 seconds. No app production
+code, user authentication, Cloudflare policy or canonical private vault was
+changed. The test environment and temporary n8n container were ephemeral.
+
 ## Verification and release gates
 
 - Deterministic synthetic Core/E3 test: two original facts on one Day,
