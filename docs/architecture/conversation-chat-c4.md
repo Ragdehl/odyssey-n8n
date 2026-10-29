@@ -286,6 +286,32 @@ informe real y el contrato C4: **VERDICT FAIL**, registrado en
   en el texto fuente no fue obedecida en el caso ensayado; esto no es
   prueba universal de inmunidad.
 
+**Candidate evidence-contract repair (isolated source branch,
+2026-10-29, NOT live-model accepted):** A separately preserved worktree
+`fix/c4-semantic-evidence-v2` reuses the prior pending proposal without
+writing to the unexpectedly dirty PR #161 checkout. The E2 ledger now
+carries an observed `parent_stage` per actual provider subspan. C4's typed
+context includes the existing product entry intent, the true guarded
+`prewrite_recovery_proven` value and failed provider substage evidence, and
+rejects diagnoses attributing a failed parent instead of an observed failed
+child. The n8n renderer and web client preserve/validate the same ownership,
+with backward-compatible absence for older ledgers. Generalized model
+instructions no longer repeatedly ask users what to do with an already
+routed past-day recollection; they explicitly distinguish successful
+interpretation from successful user operations and may **suggest** a second
+interpretation only when Core reports guarded prewrite proof. A single
+original error code combining coverage and identity does not prove the
+identity stage ran. Synthetic source-only test cases were updated to
+supply the same positive prewrite proof that the real source executor
+would attest, without altering the recorded historical 14-call outcome.
+
+**Limits:** the old 14-call FAIL still stands; new prompt has a different
+hash and has **not** been evaluated against GPT real. Two correct writer
+explanations were rejected by an overbroad lexical write-claim filter,
+which this candidate has **not** loosened: a general semantic reviewer or
+more provable statement contract is needed, not exceptions for the word
+«escritura». C4 GRAPH/RECOVERY remain OFF, no automatic unsafe writes.
+
 **Aceptación: BLOQUEADA.** Antes de activar C4 GRAPH/RECOVERY en DEV,
 corregir de forma GENERAL la granularidad del grafo y la pregunta sobre
 el hecho fallido (Router/coverage vs identidad Core), la diferencia entre

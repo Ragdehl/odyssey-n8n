@@ -139,3 +139,16 @@ test("verified AI diagnosis preserves a noncompleted Core status", () => {
   assert.equal(original.status, "needs_attention");
   assert.match(original.message, /revisión no pudo confirmar/);
 });
+
+
+test("n8n rejects generic parent attribution when a failed nested provider stage exists", () => {
+  const parent = {...ledger.stages[0], name: "application.source_processing", parent_stage: null};
+  const child = {...ledger.stages[0], name: "provider.semantic_review", parent_stage: parent.name};
+  const nested = {...ledger, stages: [parent, child]};
+  const misleading = render({execution_ledger: nested,
+    error_diagnosis: {...diagnostic, evidence_stage: parent.name}});
+  assert.doesNotMatch(misleading.message, /revisión no pudo confirmar/);
+  const grounded = render({execution_ledger: nested,
+    error_diagnosis: {...diagnostic, evidence_stage: child.name}});
+  assert.match(grounded.message, /revisión no pudo confirmar/);
+});

@@ -50,6 +50,8 @@ def project_execution_ledger(
                 "provider_call_count": len(stage.provider_calls),
                 "stage_view": stage_view_for(stage.name).to_response(),
                 "route_index": stage.route_index,
+                # This is an observed top-level stage, not a derived child.
+                "parent_stage": None,
             }
         )
         # Only the standalone source-processing stage owns provider subspans
@@ -71,6 +73,9 @@ def project_execution_ledger(
                     "provider_call_count": 0,
                     "stage_view": stage_view_for(span.name).to_response(),
                     "route_index": stage.route_index,
+                    # Explicit parent provenance: a failed provider substep
+                    # is more specific than the failed source-processing span.
+                    "parent_stage": stage.name,
                 }
             )
     routes = []

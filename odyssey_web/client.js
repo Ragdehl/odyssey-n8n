@@ -355,7 +355,11 @@ export function validateExecutionLedger(value, requestId, changes) {
         (st.error_category === null || typeof st.error_category === "string" && st.error_category.length <= 120) &&
         Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
         (st.route_index === null || Number.isSafeInteger(st.route_index) &&
-          st.route_index >= 0 && st.route_index < value.routes.length)) ||
+          st.route_index >= 0 && st.route_index < value.routes.length) &&
+        (st.parent_stage == null || safeId(st.parent_stage) &&
+          st.parent_stage !== st.name && value.stages.some(parent =>
+            parent !== st && parent.name === st.parent_stage &&
+            parent.route_index === st.route_index))) ||
       !value.routes.every((rt,i) => rt && rt.route_index === i && typeof rt.capability === "string" &&
         rt.capability.length <= 40 && typeof rt.status === "string" && rt.status.length <= 40 &&
         (rt.depends_on === null || Number.isSafeInteger(rt.depends_on) && rt.depends_on >= 0 && rt.depends_on < i)) ||
@@ -373,7 +377,7 @@ export function validateExecutionLedger(value, requestId, changes) {
     stages: value.stages.map(st => ({name: st.name, outcome: st.outcome,
       duration_ms: st.duration_ms, start_offset_ms: st.start_offset_ms,
       error_category: st.error_category, provider_call_count: st.provider_call_count,
-      route_index: st.route_index})),
+      route_index: st.route_index, parent_stage: st.parent_stage ?? null})),
     routes: value.routes.map(rt => ({route_index: rt.route_index,
       capability: rt.capability, status: rt.status, depends_on: rt.depends_on})),
     write_receipts: value.write_receipts.map(item => ({action_index: item.action_index,

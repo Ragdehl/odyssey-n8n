@@ -6,6 +6,8 @@ application; source/diagnostic provider responses are bounded recordings.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
@@ -56,6 +58,9 @@ def test_one_c4_advised_retry_reuses_original_id_and_real_core_day_writer(tmp_pa
     assert first["status"] == "completed", first
     assert source_executor.client.calls.count("odyssey_light_capability_route_events_v1") == 2
     assert len(model.responses.calls) == 1
+    prewrite_evidence = json.loads(model.responses.calls[0]["input"][1]["content"])
+    assert prewrite_evidence["prewrite_recovery_proven"] is True
+    assert prewrite_evidence["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
     assert "error_diagnosis" not in first  # final status success, not a prior failure
     graph_events = first["execution_ledger"]["events"]
     assert sum(e["stage"] == "diagnostic.prewrite_reinterpretation" for e in graph_events) == 1

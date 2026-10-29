@@ -8,7 +8,10 @@ import sys
 
 import pytest
 
-from odyssey_runtime.conversation_gateway import OpenAIConversationGateway
+from odyssey_runtime.conversation_gateway import (
+    GRAPH_DIAGNOSIS_INSTRUCTIONS,
+    OpenAIConversationGateway,
+)
 from scripts.evaluate_c4_graph import CASES, dry_run, evaluate_live, evidence_for
 from tests.runtime.test_conversation_gateway import FakeClient
 
@@ -25,6 +28,11 @@ def test_eval_matrix_is_comprehensive_bounded_real_e2_schema():
         typed, product, ledger = evidence_for(case, f"c4-check-{index}")
         assert product["product_outcome"] in {"CLARIFY", "CANNOT_ANSWER"}
         assert typed.request_id == ledger["request_id"]
+        assert typed.prewrite_recovery_proven is (
+            case.reason == "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED"
+            and len(case.stages) == 1
+            and case.stages[0][0] == "application.source_processing"
+        )
         assert [s["name"] for s in ledger["stages"]] == [s[0] for s in case.stages]
         assert (case.expected_stage, case.expected_route) in {
             (stage["name"], stage["route_index"])
@@ -173,3 +181,17 @@ def test_live_evaluation_resumes_after_three_calls_and_never_repeats_cases(tmp_p
     with pytest.raises(ValueError, match="Resume report does not match"):
         evaluate_live(max_calls=14, resume_report=prior_path, continue_after_rejection=True)
     assert len(last_provider.responses.calls) == 11
+
+
+def test_c4_prompt_preserves_generic_journal_intent_and_proof_boundaries():
+    prompt = GRAPH_DIAGNOSIS_INSTRUCTIONS
+    # General semantic constraints, never a phrase-specific fixture or identity hack.
+    assert "entry_intent" in prompt
+    assert "Day journal" in prompt
+    assert "prewrite_recovery_proven" in prompt
+    assert "failed_provider_substages" in prompt
+    assert "interpretation" not in prompt or "write" in prompt
+    assert "Core identity failure" in prompt
+    assert "completed stage" in prompt.lower()
+    assert "Manu" not in prompt
+    assert "Manon" not in prompt

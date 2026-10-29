@@ -248,6 +248,15 @@ def evidence_for(
         clarification_code=case.reason,
         operational=OperationalEvidence(8, stages),
         execution_flow=flow,
+        # Synthetic source-only Router/coverage failures model the real
+        # WholeSourceLight._abstain pre-writer proof; the provider/Tasks/Core
+        # and post-writer cases deliberately do not receive this authority.
+        prewrite_recovery_proven=(
+            case.reason == "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED"
+            and len(case.stages) == 1
+            and case.stages[0][0] == "application.source_processing"
+            and not case.write_ids
+        ),
     )
     return result, application_result_to_response(result), project_execution_ledger(result)
 

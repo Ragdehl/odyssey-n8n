@@ -77,6 +77,9 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
     ]
     assert evidence["stages"][1]["error_category"] == "COVERAGE_UNVERIFIED"
     assert evidence["write_evidence"] == "UNKNOWN"
+    assert evidence["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert evidence["prewrite_recovery_proven"] is False
+    assert evidence["failed_provider_substages"] == []
     assert "request_id" not in call["input"][1]["content"]
 
 
@@ -169,6 +172,7 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
     """The actual P4 source path, not a hand-authored graph, must expose its failed AI stage."""
     from openai import OpenAIError
 
+    from odyssey_runtime.whole_source_light import PLANNER_MODEL
     from tests.runtime.test_whole_source_light_product_p4 import (
         RecordedClient,
         _actual_snapshot,
@@ -185,12 +189,13 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
             return super().create(**kwargs)
 
     executor.client = PlannerDown([router])
+    failed_planner_stage = f"provider.{PLANNER_MODEL}.odyssey_light_shared_semantic_plan_v1"
     gateway = FakeClient(
         [
             {
-                "evidence_stage": "application.source_processing",
+                "evidence_stage": failed_planner_stage,
                 "route_index": None,
-                "explanation": "El procesamiento se interrumpió al consultar el planificador, antes de verificar entidades en Core.",
+                "explanation": "Falló la llamada observada al planificador, antes de verificar entidades en Core.",
                 "next_step": "CHECK_SYSTEM",
                 "user_question": "",
             }
@@ -201,8 +206,20 @@ def test_real_source_prewrite_provider_failure_reports_failed_graph_stage_withou
     actual = runtime.execute_product(source, "real-router-prewrite", "main", actor)
     assert actual["status"] == "needs_attention"
     assert actual["clarification_code"] == "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE"
-    assert actual["error_diagnosis"]["evidence_stage"] == "application.source_processing"
+    assert actual["error_diagnosis"]["evidence_stage"] == failed_planner_stage
     assert actual["error_diagnosis"]["next_step"] == "CHECK_SYSTEM"
+    sent = json.loads(gateway.responses.calls[0]["input"][1]["content"])
+    assert sent["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
+    assert sent["prewrite_recovery_proven"] is True
+    assert sent["failed_provider_substages"]
+    assert all(
+        observed["name"].startswith("provider.")
+        and any(
+            stage["name"] == observed["name"] and stage["outcome"] == "failed"
+            for stage in sent["stages"]
+        )
+        for observed in sent["failed_provider_substages"]
+    )
     stages = actual["execution_ledger"]["stages"]
     assert stages[0]["name"] == "application.source_processing"
     assert stages[0]["outcome"] == "failed"
@@ -288,3 +305,94 @@ def test_graph_ai_rejects_mismatched_route_owner_and_marks_source_truncation():
     assert observed["original_message"] == source[:2048]
     assert [stage["route_index"] for stage in observed["stages"]] == [0, 1]
     assert observed["routes"][1]["capability"] == "tasks"
+
+
+def test_provider_substage_is_preferred_to_failed_source_parent():
+    """Observed child failure identifies the actual interruption, not Core identity."""
+    typed = rejected()
+    ledger = project_execution_ledger(typed)
+    parent = {
+        "name": "application.source_processing",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": None,
+        "error_category": "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE",
+    }
+    child = {
+        "name": "provider.semantic_review",
+        "outcome": "failed",
+        "route_index": None,
+        "parent_stage": "application.source_processing",
+        "error_category": "UPSTREAM_PROVIDER_FAILURE",
+    }
+    ledger["stages"] = [parent, child]
+    proposed = {**AI_REPLY, "evidence_stage": "application.source_processing"}
+    fake = FakeClient([proposed])
+    assert (
+        diagnose_trusted_execution_graph(
+            typed,
+            application_result_to_response(typed),
+            ledger,
+            OpenAIConversationGateway(fake),
+            original_message=SOURCE,
+        )
+        is None
+    )
+    good = FakeClient([{**proposed, "evidence_stage": child["name"]}])
+    diagnosis = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        ledger,
+        OpenAIConversationGateway(good),
+        original_message=SOURCE,
+    )
+    assert diagnosis and diagnosis["evidence_stage"] == child["name"]
+    observed = json.loads(good.responses.calls[0]["input"][1]["content"])
+    assert observed["stages"][1]["parent_stage"] == parent["name"]
+
+
+def test_provider_parent_does_not_lose_attribution_if_child_succeeded():
+    typed = rejected()
+    ledger = project_execution_ledger(typed)
+    ledger["stages"] = [
+        {
+            "name": "application.source_processing",
+            "outcome": "failed",
+            "route_index": None,
+            "parent_stage": None,
+        },
+        {
+            "name": "provider.semantic_review",
+            "outcome": "completed",
+            "route_index": None,
+            "parent_stage": "application.source_processing",
+        },
+    ]
+    fake = FakeClient([{**AI_REPLY, "evidence_stage": "application.source_processing"}])
+    assert (
+        diagnose_trusted_execution_graph(
+            typed,
+            application_result_to_response(typed),
+            ledger,
+            OpenAIConversationGateway(fake),
+            original_message=SOURCE,
+        )
+        is not None
+    )
+
+
+def test_c4_prompt_is_general_about_journal_stage_success_and_proven_write():
+    from odyssey_runtime.conversation_gateway import GRAPH_DIAGNOSIS_INSTRUCTIONS
+
+    for contract in (
+        "parent_stage",
+        "CHILD",
+        "interpretation",
+        "write evidence",
+        "day-journal",
+        "ASK_USER",
+        "prewrite proof",
+    ):
+        assert contract.lower() in GRAPH_DIAGNOSIS_INSTRUCTIONS.lower()
+    assert "Manu" not in GRAPH_DIAGNOSIS_INSTRUCTIONS
+    assert "jardín" not in GRAPH_DIAGNOSIS_INSTRUCTIONS
