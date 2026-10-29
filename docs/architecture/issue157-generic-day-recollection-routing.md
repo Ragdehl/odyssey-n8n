@@ -4,6 +4,54 @@
 Base: merged `dev` after PR #156, 28 Oct 2026. Source issue:
 [GitHub #157](https://github.com/Ragdehl/odyssey-n8n/issues/157).
 
+### Generic journal rather than Event/Task — regression checkpoint, 29 October
+
+The desired behavior has *already existed in Core/Temporal*: a user narration
+of a completed encounter or activity is a `record` on a canonical
+`calendar_day`, **not** a future Event, a Task, or automatically a Person
+mutation. A verified existing Person can be linked when the source and
+identity proof allow it. An unknown mentioned name can remain **literal Day
+content** rather than being invented as a new Person. Calendar may also
+materialize an unrelated empty Day as a derived reference; the assertion
+belongs only to the fact-bearing target date.
+
+To guard this behavior independently of the specific family source, a new
+E3/Markdown regression suite executes the *actual Events-enabled Router →
+Core/Temporal → canonical Day writer* with frozen model reviews and a
+synthetic authenticated actor for: «Hoy he visto a Manu», «He visto a Manu»,
+«Ayer vi a Manu», a completed walk unrelated to any person, and an
+existing verified Manu Person link. All require the **complete Day fact,
+no extra Person, Event or Task**, and an idempotent same-ID replay. An
+incorrect mixed `events+core` Router proposal is proved to **abstain
+with zero mutations**, rather than silently becoming an Event or bypassing
+Core/E3. These tests now run in the normal cross-surface gate.
+
+The same source-only candidate was independently exercised through a
+**real Chromium mobile and desktop user sessions → authenticated local cookie gate →
+real isolated n8n Docker (`--network none`) → Core/E3 and canonical
+Markdown → Notes UI → browser reload and replay** using *recorded GPT
+responses*, never a new paid model call. The new `generic_day` case
+«He visto a Manu.» yielded **PASS**: one fact on `date:2026-10-16`,
+exactly one existing SELF Person (no invented Manu), zero Events, zero Tasks,
+one actual E3 write, immutable replay, one persisted assistant reply, Notes
+readback, no JS errors and unauthenticated access denied. The previously
+recorded `issue157_day` family case was rerun on the same candidate
+and **PASS**: two actual Day facts, three existing family Person links,
+zero Events/Tasks, immutability across reload/replay. Synthetic data only,
+DEV and PROD unchanged. Evidence: harness `ODYSSEY_E4_RECORDED_CASE`
+with `generic_day` or `issue157_day`; local logs under
+`/tmp/odyssey-generic-manu-e4-browser-v3.log` and
+`/tmp/odyssey-issue157-e4-a826-v3-mobile.log`, plus desktop
+`/tmp/odyssey-generic-manu-e4-desktop.log`.
+
+**Release caveat:** This is source-only evidence with recorded GPT replies.
+It is *not* proof that the live Router will choose Core for every wording,
+nor that a bad Event-only suggestion always recovers itself. C4's new graph
+AI can explain a route refusal when enabled and validated; safe autonomous
+Router resubmission is still an explicit separate gate. Neither the Person
+identity clarifier nor the Event lifecycle writer should be duplicated to
+provide a tempting but unsafe unconditional fallback.
+
 ## Observed boundary and non-goals
 
 The private DEV report of 27 October was a completed family/day recollection

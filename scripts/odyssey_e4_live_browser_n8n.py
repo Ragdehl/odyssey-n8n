@@ -53,23 +53,33 @@ BROWSER = ROOT / "scripts/odyssey_e4_live_browser.cjs"
 CLOCK = "2026-10-20T10:30:00+02:00"
 # Entirely disposable test-run selection; cannot modify the deployed product.
 RECORDED_CASE = os.environ.get("ODYSSEY_E4_RECORDED_CASE", "person_task")
-if RECORDED_CASE not in {"person_task", "issue157_day"}:
+if RECORDED_CASE not in {"person_task", "issue157_day", "generic_day"}:
     raise RuntimeError("Unsupported isolated browser fixture")
-if RECORDED_CASE == "issue157_day" and os.environ.get("ODYSSEY_E4_RECORDED") != "1":
+if (
+    RECORDED_CASE in {"issue157_day", "generic_day"}
+    and os.environ.get("ODYSSEY_E4_RECORDED") != "1"
+):
     raise RuntimeError("Family fixture requires recorded model responses")
 if RECORDED_CASE == "issue157_day":
     from tests.runtime.test_issue157_family_day_recollection import SOURCE as FAMILY_SOURCE
 else:
     FAMILY_SOURCE = None
 # Source and expected physical targets are test inputs, never production routing.
-E4_SOURCE = FAMILY_SOURCE or os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
-EXPECTED_PERSON_NAMES = tuple(
-    json.loads(os.environ.get("ODYSSEY_E4_SYNTHETIC_PERSONS", '["Marta"]'))
+E4_SOURCE = (
+    "He visto a Manu."
+    if RECORDED_CASE == "generic_day"
+    else FAMILY_SOURCE or os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
+)
+EXPECTED_PERSON_NAMES = (
+    ()
+    if RECORDED_CASE == "generic_day"
+    else tuple(json.loads(os.environ.get("ODYSSEY_E4_SYNTHETIC_PERSONS", '["Marta"]')))
 )
 if (
     not isinstance(E4_SOURCE, str)
     or not 1 <= len(E4_SOURCE) <= 500
-    or not 1 <= len(EXPECTED_PERSON_NAMES) <= 8
+    or not 0 <= len(EXPECTED_PERSON_NAMES) <= 8
+    or (RECORDED_CASE != "generic_day" and not EXPECTED_PERSON_NAMES)
     or len(set(EXPECTED_PERSON_NAMES)) != len(EXPECTED_PERSON_NAMES)
     or any(
         not isinstance(name, str)
@@ -307,7 +317,24 @@ exec n8n start"""
 
 @contextmanager
 def selected_product(root: Path):
-    if RECORDED_CASE == "issue157_day":
+    if RECORDED_CASE == "generic_day":
+        from tests.runtime.test_p4_general_day_journal_fallback import _reviewed_day
+        from tests.runtime.test_whole_source_light_product_p4 import (
+            SCHEMA,
+            RecordedClient,
+            _fixture,
+        )
+
+        root.mkdir(parents=True)
+        repo, actor, executor, runtime = _fixture(root)
+        executor.event_delegate = lambda *_: (_ for _ in ()).throw(
+            RuntimeError("Past-day source misrouted as Event")
+        )
+        executor.client = RecordedClient(_reviewed_day(E4_SOURCE, "2026-10-16"))
+        runtime.notes_service = NotesQueryService(repo, SCHEMA, executor.context_index)
+        runtime.vault_repository = repo
+        yield repo, actor, runtime
+    elif RECORDED_CASE == "issue157_day":
         from tests.runtime.test_issue157_family_day_recollection import (
             _family,
             _model_responses,
@@ -611,7 +638,7 @@ def run() -> dict:
                                 else "0",
                                 "ODYSSEY_E4_EXPECTED_WRITES": str(
                                     1
-                                    if RECORDED_CASE == "issue157_day"
+                                    if RECORDED_CASE in {"issue157_day", "generic_day"}
                                     else len(EXPECTED_PERSON_NAMES)
                                     + (1 if os.environ.get("ODYSSEY_E4_RECORDED") == "1" else 2)
                                 ),
@@ -655,6 +682,55 @@ def run() -> dict:
                             notes = {
                                 p: parse_note(repo.read_text(p)) for p in repo.list_markdown_paths()
                             }
+                            if RECORDED_CASE == "generic_day":
+                                day_notes = [
+                                    n
+                                    for n in notes.values()
+                                    if n.metadata.get("type") == "calendar_day"
+                                    and n.metadata.get("id") == "date:2026-10-16"
+                                ]
+                                assert len(day_notes) == 1
+                                body = day_notes[0].content
+                                assert "He visto a Manu" in body
+                                assert body.count("odyssey:fact request=") == 1
+                                assert (
+                                    len(
+                                        [
+                                            n
+                                            for n in notes.values()
+                                            if n.metadata.get("type") == "person"
+                                        ]
+                                    )
+                                    == 1
+                                )
+                                assert not any(
+                                    n.metadata.get("type") in {"task", "event"}
+                                    for n in notes.values()
+                                )
+                                assert stats["replay"] == stats["first_writes"] == 1
+                                assert stats["assistant_persisted"] == 1
+                                assert stats["notes_read"] >= 1 and stats["denied"] >= 1
+                                return {
+                                    "passed": True,
+                                    "source_case": RECORDED_CASE,
+                                    "seconds": round(time.monotonic() - started, 2),
+                                    "gpt": "recorded",
+                                    "n8n": "real_offline_docker",
+                                    "browser": "Chromium real",
+                                    "authentication": "synthetic_local_cookie_gate",
+                                    "unauth_denied": True,
+                                    "physical_persons": 1,
+                                    "physical_days": 1,
+                                    "physical_day_facts": 1,
+                                    "physical_tasks": 0,
+                                    "physical_events": 0,
+                                    "markdown_e3_replay_unchanged": True,
+                                    "notes_after": len(notes),
+                                    "statistics": stats,
+                                    "browser_gate": browser["pass"],
+                                    "cloudflare_access_tested": False,
+                                    "dev_prod_untouched": True,
+                                }
                             if RECORDED_CASE == "issue157_day":
                                 from tests.runtime.test_issue157_family_day_recollection import (
                                     DAY,

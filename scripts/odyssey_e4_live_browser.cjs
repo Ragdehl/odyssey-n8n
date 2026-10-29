@@ -138,7 +138,7 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     {timeout:10000});
   await page.waitForFunction(()=>document.querySelector("#notes-list")?.children.length>0,
     {timeout:11000});
-  if(process.env.ODYSSEY_E4_RECORDED_CASE==="issue157_day") {
+  if(["issue157_day","generic_day"].includes(process.env.ODYSSEY_E4_RECORDED_CASE)) {
     checkpoint="verify_family_day_ui";
     // The note-set snapshot is flat (one affected Day), unlike the
     // grouped full Notes browser. Test what the user actually sees.
@@ -147,15 +147,19 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
       {timeout:12000});
     await page.evaluate(()=>Array.from(document.querySelectorAll(
       '#notes-list .note-row')).find(row=>row.textContent.includes('2026-10-16')).click());
-    await page.waitForFunction(()=>{
+    const genericDay=process.env.ODYSSEY_E4_RECORDED_CASE==="generic_day";
+    await page.waitForFunction((generic)=>{
       const view=document.querySelector('#note-detail');
       const text=view?.textContent||"";
-      return !view?.hidden && text.includes("jardín") && text.includes("museo") &&
-        ["Nora","Ivo","Vera"].every(name=>text.includes(name));
-    },{timeout:12000});
+      return !view?.hidden && (generic
+        ? text.includes("He visto a Manu")
+        : text.includes("jardín") && text.includes("museo") &&
+          ["Nora","Ivo","Vera"].every(name=>text.includes(name)));
+    },{timeout:12000},genericDay);
     const dayDetail=await page.evaluate(()=>({
       garden:document.querySelector('#note-detail')?.textContent.includes("jardín"),
       museum:document.querySelector('#note-detail')?.textContent.includes("museo"),
+      manu:document.querySelector('#note-detail')?.textContent.includes("He visto a Manu"),
       linkedNames:["Nora","Ivo","Vera"].filter(name=>
         document.querySelector('#note-detail')?.textContent.includes(name)),
     }));
@@ -169,7 +173,8 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
         detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===receipt &&
         reloadedDetail.svgCount>0 && reloadedDetail.writeReceipts===receipt &&
         !detail.diagnosticRejected && !reloadedDetail.diagnosticRejected &&
-        dayDetail.garden && dayDetail.museum && dayDetail.linkedNames.length===3 &&
+        (genericDay ? dayDetail.manu && dayDetail.linkedNames.length===0 :
+          dayDetail.garden && dayDetail.museum && dayDetail.linkedNames.length===3) &&
         jsErrors.length===0,
       before,after,detail,reloadedDetail,dayDetail,progressDonut,progressTrace,
       actor:"synthetic_only",jsErrorsCount:jsErrors.length,messages_sent:1,
