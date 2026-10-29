@@ -875,7 +875,14 @@ class WholeSourceLightExecutor:
                 not isinstance(span, str) or not span or len(span) > 128
                 for span in proposed_relation_spans
             )
-            or len(proposed_relation_spans) != len(set(proposed_relation_spans))
+            # Repeated literal relationship phrases are valid when they
+            # appear in separate assertions. Require enough actual source
+            # occurrences for every repeated entry; never trust a duplicated
+            # model span unsupported by the original message.
+            or any(
+                source.count(span) < proposed_relation_spans.count(span)
+                for span in set(proposed_relation_spans)
+            )
             or (
                 legacy_relation_span is not None
                 and (

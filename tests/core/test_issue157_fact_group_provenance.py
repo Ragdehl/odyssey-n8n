@@ -244,3 +244,35 @@ def test_singular_ellipsis_never_inherits_entire_prior_collective():
                 ("mi pareja", ("Vera",)),
             ),
         )
+
+
+@pytest.mark.parametrize("core_anchored", [False, True])
+def test_broad_review_quote_cannot_launder_other_fact_group(core_anchored):
+    """Only planner-anchored atomic evidence may authorize a SELF link."""
+    proposed, reviewed = _review(ALL_PEOPLE, ("Vera",))
+    if core_anchored:
+        for fact in proposed["facts"]:
+            fact.update(
+                source_evidence_fragments=[],
+                source_evidence_context=None,
+                source_evidence_fragment_contexts=[],
+            )
+        for claim in reviewed["facts"]:
+            del claim["source_quote"]
+    else:
+        # The reviewer can enlarge a quote to the entire original message,
+        # but that does not make its other relationship part of THIS fact.
+        reviewed["facts"][0]["source_quote"] = SOURCE
+    with pytest.raises(
+        WholeMessageCoverageError,
+        match="Verified group member unsupported by this atomic source fact",
+    ):
+        validate_whole_message_coverage(
+            SOURCE,
+            proposed,
+            reviewed,
+            ["core", "temporal"],
+            verified_relationship_members=ALL_PEOPLE,
+            verified_relationship_groups=GROUPS,
+            core_anchored_evidence=core_anchored,
+        )

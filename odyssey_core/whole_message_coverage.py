@@ -241,13 +241,12 @@ def validate_whole_message_coverage(
             ):
                 raise WholeMessageCoverageError("Participant absent from original source")
         if groups:
-            # Only the atomic fact's own literal SELF-relation phrase can
-            # authorize that group's names. An elliptical continuation may
-            # still be saved as a literal Day fact, but cannot inherit a
-            # person's canonical identity solely from a preceding sentence.
-            # Without independently verified fact-to-fact group continuity,
-            # even "Ella" after a collective reference is ambiguous.
-            direct = {name for phrase, members in groups if phrase in quote for name in members}
+            # Relationship membership must be evidenced by THIS atomic fact's
+            # planner-anchored primary assertion, never by a broader quote
+            # selected by the second (untrusted) reviewer. Supporting context
+            # and prior sentences are not a fact-to-fact identity handoff.
+            # Elliptical continuations can be saved literally without links.
+            direct = {name for phrase, members in groups if phrase in requested for name in members}
             for name in names:
                 if (
                     name in verified

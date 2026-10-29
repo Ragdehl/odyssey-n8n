@@ -192,6 +192,36 @@ Calendar Events from past tense, extra agents/services, or any production
 provider budget expansion. Existing `calendar_day`, source coverage,
 Temporal, Core/E3 and Git/readback remain canonical.
 
+### Third independent Generality review — SHA 3fc034f, FAIL (29 October)
+
+An independent read-only Sol review of the 3fc034f SHA found **two new
+repairable blockers**, neither covered by that SHA's passing 2,378 Python
+and 259 JavaScript cross-surface gate:
+
+1. The legacy Core reviewer could expand `source_quote` to the entire message
+   although a planner fact's `source_evidence` described only one assertion.
+   Checking relation membership against the **reviewer's broad quote** could
+   therefore attach a verified partner to the separate children-only fact.
+2. The Router rejected identical `self_relation_spans` despite a phrase
+   occurring independently in multiple valid original-source assertions.
+
+A subsequent unreviewed source patch narrows Core's relation authorization to
+**each fact's original planner-anchored primary evidence**; an auxiliary or
+broader quote is never another identity authority. The Router accepts repeated
+verbatim group phrases only up to their actual occurrence count in the
+unchanged original source, still capped at eight entries and independently
+verified from fresh authenticated SELF facts. Negative broad-quote tests cover
+both legacy and Core-anchored modes; a two-assertion real E3/Markdown/replay
+fixture covers valid repeated phrasing. Neither workaround adds a phrase-based
+rule, bypasses Core/E3 or enables unspecified ellipsis inference.
+
+**Previous FAIL remains historical; this patch is not a new audit PASS.** The
+reviewer also warned about the existing schema/prompt eight-group bound; no
+model-facing prompt/schema has been changed after the authorized 12/12 GPT
+calls. A new independent verdict on the patched SHA and a complete matching
+source gate are still required; DEV app acceptance and durable actionable
+clarification remain separate unresolved gates.
+
 ## Bounded model evaluation matrix (must be run on production GPT before enabling)
 
 Each model test must inspect the **actual strict JSON schema** and record the

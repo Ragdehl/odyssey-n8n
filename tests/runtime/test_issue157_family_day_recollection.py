@@ -348,3 +348,41 @@ def test_unknown_partner_in_future_event_is_not_delegated(tmp_path):
     result = runtime.execute_product(source, "issue157-unknown-future-partner", "main", actor)
     assert result["status"] == "needs_attention"
     assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+
+
+def test_repeated_relationship_phrase_in_two_facts_persists_and_replays(tmp_path):
+    """A repeated source occurrence is not an invented model duplicate."""
+    repo, actor, service, runtime = _family(tmp_path)
+    first = "Hoy mis hijos visitaron un jardín."
+    second = "Después mis hijos visitaron un museo."
+    source = first + " " + second
+    replies = _model_responses()
+    replies[0]["self_relation_spans"] = ["mis hijos", "mis hijos"]
+    for index, statement in enumerate((first, second)):
+        replies[1]["facts"][index].update(
+            meaning=statement, source_evidence=statement, participants=list(PEOPLE[:2])
+        )
+        replies[2]["facts"][index].update(
+            source_quote=statement,
+            reviewed_text="{{ref:0}} y {{ref:1}} visitaron un lugar.",
+            reference_names=list(PEOPLE[:2]),
+        )
+        for speaker in replies[3:]:
+            speaker["facts"][index]["source_quote"] = statement
+    service.client = RecordedClient(replies)
+    result = runtime.execute_product(source, "issue157-repeated-group", "main", actor)
+    assert result["status"] == "completed", result
+    day_notes = [
+        parse_note(repo.read_text(path))
+        for path in repo.list_markdown_paths()
+        if parse_note(repo.read_text(path)).metadata.get("type") == "calendar_day"
+    ]
+    assert len(day_notes) == 1
+    body = day_notes[0].content
+    assert body.count("odyssey:fact request=issue157-repeated-group-") == 2
+    assert all("[[" + name in body for name in PEOPLE[:2])
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    assert runtime.execute_product(source, "issue157-repeated-group", "main", actor)[
+        "delivery_replayed"
+    ]
+    assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
