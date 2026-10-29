@@ -56,6 +56,7 @@ def diagnose_trusted_execution_graph(
     gateway: OpenAIConversationGateway,
     *,
     original_message: str = "",
+    semantic_review: bool = False,
 ) -> dict[str, object] | None:
     """Let C4 AI interpret the existing observed graph, with no execution authority.
 
@@ -203,8 +204,34 @@ def diagnose_trusted_execution_graph(
         or any("\n" in text or "\r" in text for text in (explanation, question))
     ):
         return None
-    # MODEL-OWNED text is a diagnostic possibility, not evidence that data were
-    # written or not written. Keep that outside the model's textual authority.
+    # Optional second AI pass checks ENTIRE meaning rather than banning
+    # substrings such as "escri" (a writer-stage failure is not a claim that
+    # Markdown was written). Off by default pending real-model quality/cost.
+    if semantic_review:
+        try:
+            if not gateway.review_execution_diagnosis(evidence, proposal):
+                return None
+        except (ConversationGateError, OSError, TypeError, ValueError):
+            return None
+    # The second AI may veto an unsupported cause/step but cannot grant its
+    # own free text material-fact authority. A typed-only interpretation is
+    # rendered using verified graph evidence by n8n. No model prose crosses
+    # this boundary even when two correlated models say SUPPORTED.
+    if semantic_review:
+        if next_step == "ASK_USER":
+            # Core owns verified clarification text/options; arbitrary AI
+            # questions cannot invent a missing identity or date.
+            return None
+        return {
+            "status": result.status.value,
+            "reason_code": code,
+            "write_evidence": write_evidence,
+            "evidence_stage": stage,
+            "route_index": route_index,
+            "next_step": next_step,
+            "verified_stage_only": True,
+        }
+    # Legacy one-pass free text stays behind its old conservative veto.
     if any(
         fragment in (explanation + " " + question).casefold()
         for fragment in (

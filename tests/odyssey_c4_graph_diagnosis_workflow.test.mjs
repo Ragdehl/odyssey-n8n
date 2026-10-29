@@ -152,3 +152,34 @@ test("n8n rejects generic parent attribution when a failed nested provider stage
     error_diagnosis: {...diagnostic, evidence_stage: child.name}});
   assert.match(grounded.message, /revisión no pudo confirmar/);
 });
+
+test("semantically reviewed writer-stage explanation bypasses obsolete lexical rejection only with typed marker", () => {
+  const text = "La etapa de escritura falló; el resultado físico de la operación no está confirmado.";
+  const lexical = render({error_diagnosis: {...diagnostic, explanation: text}});
+  assert.doesNotMatch(lexical.message, /La etapa de escritura falló/);
+  const vetted = render({error_diagnosis: {...diagnostic, explanation: text, semantic_reviewed: true}});
+  assert.doesNotMatch(vetted.message, /La etapa de escritura falló/);
+  // Even a forged semantic attestation in n8n cannot lift the write-claim
+  // guard; verified stage membership is necessary but insufficient.
+  assert.match(vetted.message, /No puedo verificar la causa exacta/);
+  const invalid = render({error_diagnosis: {...diagnostic, explanation: text,
+    semantic_reviewed: false}});
+  assert.doesNotMatch(invalid.message, /La etapa de escritura falló/);
+  const invented = render({error_diagnosis: {...diagnostic, explanation: text,
+    semantic_reviewed: true, retry_authorized: true}});
+  assert.doesNotMatch(invented.message, /La etapa de escritura falló/);
+  const typed = render({error_diagnosis: {
+    status: diagnostic.status, reason_code: diagnostic.reason_code,
+    evidence_stage: stage, route_index: null, write_evidence: 'UNKNOWN',
+    next_step: 'INSPECT_RESULT', verified_stage_only: true,
+  }});
+  assert.match(typed.message, /La interpretación de IA sitúa el problema/);
+  assert.match(typed.message, /candidate.source_boundary_review/);
+  assert.doesNotMatch(typed.message, /La etapa de escritura falló|ya está guardada/);
+  const invalidTyped = render({error_diagnosis: {
+    status: diagnostic.status, reason_code: diagnostic.reason_code,
+    evidence_stage: 'core.identity_resolution', route_index: null, write_evidence: 'UNKNOWN',
+    next_step: 'INSPECT_RESULT', verified_stage_only: true,
+  }});
+  assert.doesNotMatch(invalidTyped.message, /La interpretación de IA sitúa el problema/);
+});

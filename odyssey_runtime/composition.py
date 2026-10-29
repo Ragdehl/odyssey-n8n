@@ -339,6 +339,16 @@ def _chat_c4_prewrite_recovery_enabled() -> bool:
     )
 
 
+def _chat_c4_semantic_review_enabled() -> bool:
+    """Independent DEV-only semantic verifier; cannot enable in PROD."""
+    return (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_SEMANTIC_REVIEW_ENABLED") == "1"
+    )
+
+
 def _c4_graph_gateway_from_environment() -> OpenAIConversationGateway | None:
     """Enable C4 AI only for DEV C4; lack of a provider must not stop Core.
 
@@ -647,6 +657,9 @@ class RuntimeComposition:
     # C4 diagnosis reuses the existing OpenAI gateway but is independent of
     # the C3 conversational router. A model explanation is never write authority.
     conversation_graph_gateway: OpenAIConversationGateway | None = None
+    # Optional second AI read-only pass. Off until live-model semantic/latency
+    # gate; a rejected or unavailable verdict never unlocks free text/retry.
+    conversation_graph_semantic_review_enabled: bool = False
     # Explicit DEV-only opt-in. One C4-advised prewrite reinterpretation may
     # re-enter the ORIGINAL Router, but never a post-delegate/mutated request.
     conversation_prewrite_recovery_enabled: bool = False
@@ -974,6 +987,7 @@ class RuntimeComposition:
                 observed,
                 self.conversation_graph_gateway,
                 original_message=user_request,
+                semantic_review=self.conversation_graph_semantic_review_enabled,
             )
         except Exception:
             # Diagnostic model failures (including transport/SDK exceptions)
@@ -1365,6 +1379,7 @@ class RuntimeComposition:
                     response["execution_ledger"],
                     self.conversation_graph_gateway,
                     original_message=source_text,
+                    semantic_review=self.conversation_graph_semantic_review_enabled,
                 )
                 if diagnosis is not None:
                     response["error_diagnosis"] = diagnosis
@@ -6134,6 +6149,7 @@ def _build_runtime_from_environment_unlocked(
         ),
         conversation_error_model_advisory_enabled=_chat_c4_model_advisory_enabled(),
         conversation_graph_gateway=_c4_graph_gateway_from_environment(),
+        conversation_graph_semantic_review_enabled=_chat_c4_semantic_review_enabled(),
         conversation_prewrite_recovery_enabled=_chat_c4_prewrite_recovery_enabled(),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,

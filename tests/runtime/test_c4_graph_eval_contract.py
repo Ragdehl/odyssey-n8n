@@ -195,3 +195,21 @@ def test_c4_prompt_preserves_generic_journal_intent_and_proof_boundaries():
     assert "completed stage" in prompt.lower()
     assert "Manu" not in prompt
     assert "Manon" not in prompt
+
+
+def test_semantic_two_pass_cost_and_replay_probe_uses_existing_gateway():
+    completed = subprocess.run(
+        [sys.executable, "-m", "scripts.odyssey_chat_c4_perf_gate", "--semantic-review"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    result = json.loads(completed.stdout)
+    assert result["pass"] is True
+    assert result["semantic_review_enabled"] is True
+    assert result["C4_advisory_calls"] == 14
+    assert result["calls"] == 7
+    assert result["notes_written"] == 0
+    assert result["real_provider"] is False
+    assert result["replay_core_extra_calls"] == 0

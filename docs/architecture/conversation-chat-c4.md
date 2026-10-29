@@ -324,6 +324,58 @@ which this candidate has **not** loosened: a general semantic reviewer or
 more provable statement contract is needed, not exceptions for the word
 «escritura». C4 GRAPH/RECOVERY remain OFF, no automatic unsafe writes.
 
+### C4 semantic review and evidence-only UI candidate — source only (29 Oct 2026)
+
+The 14-call Luna experiment exposed false rejections of genuine explanations
+such as «la etapa de escritura falló» by legacy fragments like `escri`;
+removing that list alone would allow fabricated write claims in arbitrary
+languages. The existing C4 reads observed E2 stages and Core/E3 write
+receipts; the new separately prompted *second AI call* reviews the proposed
+stage, next action, question, natural-language explanation and underlying
+E2 graph with a strict `SUPPORTED/GROUNDED` or `UNSUPPORTED/<reason>`
+verdict. It is a semantic **veto**, not write, retry or presentation authority;
+the second Luna review is correlated with the first and can also hallucinate.
+
+An independent safety audit of the **initial** candidate returned **FAIL**:
+a false-positive reviewer could release arbitrary text, and a plain
+`semantic_reviewed: true` marker could be spoofed at n8n's input boundary.
+Those attempted free-text bypasses were removed before commit. With
+`ODYSSEY_CHAT_C4_SEMANTIC_REVIEW_ENABLED=1` only in DEV alongside the
+existing GRAPH+C4 flags, the backend may now emit **only a typed,
+evidence-checked** `verified_stage_only` (stage/route/status/write evidence/
+nonexecuting next_step) after a reviewer accepts the proposal. Raw model
+explanations and user questions are NEVER included in that shape, even
+if a malicious or mistaken reviewer claims they are grounded. n8n
+re-verifies the failed E2 stage and existing Core result evidence and
+renders bounded human-readable text from the selected observed stage and
+allowed action. Even a forged `verified_stage_only` marker cannot smuggle
+model-written prose, notes, identity assertions or retry parameters into
+the response. For ASK_USER without Core-proven choices this experimental
+path deliberately abstains; Core's existing selector remains authoritative.
+An absent/rejected/failing second pass falls back to the original persisted
+Core refusal, with no new interpretation or write. Unreviewed one-pass C4
+retains the earlier conservative lexical guard; no PROD behavior changed.
+
+**This is a safe intermediate, not full natural-language AI acceptance.**
+AI chooses a grounded stage and suggested action, but the sensitive
+user-facing sentence in this branch is generated from typed verified
+fields rather than unrestricted AI prose. Delivering richer prose requires
+a general evidence-linked **claim-level** representation and acceptance;
+model approval alone cannot be a proof of physical changes or missing
+identity. No new Odyssey GPT calls were authorized or spent after the old
+14/14 campaign. All new features remain OFF in deployed DEV and PROD.
+
+The reusable synthetic Raspberry probe now accepts
+`python -m scripts.odyssey_chat_c4_perf_gate --semantic-review` and
+exercises both actual strict Responses contracts with 180 ms artificial
+delay *per pass*, seven requests and three overlapping: 14 fake calls,
+**p50 362.6 ms, nearest-rank p95 1087.1 ms**, no writes, immutable replay,
+0 observed process swap. One pass had p50 182 ms/p95 546 ms. These are **not**
+real provider latencies or prices. The optional second call currently runs
+under the delivery lock; its critical-path overhead needs an actor-scoped,
+receipt-safe background/presentation redesign before DEV acceptance.
+
+
 **Aceptación: BLOQUEADA.** Antes de activar C4 GRAPH/RECOVERY en DEV,
 corregir de forma GENERAL la granularidad del grafo y la pregunta sobre
 el hecho fallido (Router/coverage vs identidad Core), la diferencia entre

@@ -343,20 +343,29 @@ const graphTextSafe = value => typeof value === 'string' &&
     'guard','escri','salvad','modific','actualiz','cread','elimin','borrad',
     'añad','persist','enregistr','écri','save','writ','delet','updat'].some(word =>
     value.toLowerCase().includes(word));
+// Typed-only AI interpretation: the selected stage/action are grounded by
+// E2 and E3. A review verdict cannot make arbitrary LLM prose trustworthy.
+const graphStageOnly = gd && gd.verified_stage_only === true &&
+  Object.keys(gd).sort().join(',') === 'evidence_stage,next_step,reason_code,route_index,status,verified_stage_only,write_evidence' &&
+  gd.next_step !== 'ASK_USER' && /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/.test(gd.evidence_stage) &&
+  !!verifiedLedger?.stages.some(st => st.name === gd.evidence_stage &&
+    st.route_index === gd.route_index && ['failed','unavailable'].includes(st.outcome));
 const graphDiagnosisValid = gd && typeof gd === 'object' && !Array.isArray(gd) &&
-  Object.keys(gd).sort().join(',') === 'evidence_stage,explanation,next_step,reason_code,route_index,status,user_question,write_evidence' &&
+  (graphStageOnly || Object.keys(gd).sort().join(',') === 'evidence_stage,explanation,next_step,reason_code,route_index,status,user_question,write_evidence') &&
   gd.status === r.status && gd.reason_code === (r.product_reason || r.clarification_code || 'UNKNOWN_FAILURE') &&
   gd.write_evidence === (Array.isArray(r.affected_stable_note_ids) && r.affected_stable_note_ids.length ? 'SOME' : 'UNKNOWN') &&
   ['failed','partial','needs_attention'].includes(r.status) &&
-  graphStage(gd.evidence_stage, gd.route_index) && graphTextSafe(gd.explanation) &&
-  gd.explanation.trim().length >= 12 && gd.explanation.length <= 420 &&
-  graphTextSafe(gd.user_question) && gd.user_question.length <= 240 &&
+  graphStage(gd.evidence_stage, gd.route_index) &&
+  (graphStageOnly || (graphTextSafe(gd.explanation) &&
+    gd.explanation.trim().length >= 12 && gd.explanation.length <= 420 &&
+    graphTextSafe(gd.user_question) && gd.user_question.length <= 240)) &&
   ['ASK_USER','REVIEW_SAFE_RETRY','CHECK_SYSTEM','INSPECT_RESULT'].includes(gd.next_step) &&
-  ((gd.next_step === 'ASK_USER') === (gd.user_question.trim().length > 0));
+  (graphStageOnly || (gd.next_step === 'ASK_USER') === (gd.user_question.trim().length > 0));
 const graphDiagnosisMessage = graphDiagnosisValid ?
   (gd.write_evidence === 'SOME' ? 'Odyssey ha guardado parte de la información. ' :
     'No puedo confirmar todavía si se ha guardado información. ') +
-  gd.explanation.trim() + (gd.next_step === 'ASK_USER' ? ' ' + gd.user_question.trim() :
+  (graphStageOnly ? 'La interpretación de IA sitúa el problema en la etapa «' + gd.evidence_stage + '».' : gd.explanation.trim()) +
+  (gd.next_step === 'ASK_USER' ? ' ' + gd.user_question.trim() :
     gd.next_step === 'REVIEW_SAFE_RETRY' ? ' Se puede evaluar un nuevo intento después de comprobar las escrituras; no he repetido la solicitud.' :
     gd.next_step === 'CHECK_SYSTEM' ? ' Es necesario comprobar el servicio antes de reintentar.' :
     ' Consulta el resultado de la solicitud antes de decidir si debes repetirla.') : null;

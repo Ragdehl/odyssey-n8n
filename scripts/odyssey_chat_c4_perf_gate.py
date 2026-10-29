@@ -103,11 +103,20 @@ class GraphDelayedFakeGateway(OpenAIConversationGateway):
         self.reasoning_effort = "synthetic"
 
     def create(self, **kwargs):
-        assert kwargs["text"]["format"]["name"] == "odyssey_execution_graph_diagnosis"
+        name = kwargs["text"]["format"]["name"]
+        assert name in {
+            "odyssey_execution_graph_diagnosis",
+            "odyssey_execution_diagnosis_semantic_review",
+        }
         assert kwargs["store"] is False
         with self.lock:
             self.calls += 1
         time.sleep(self.delay)
+        if name == "odyssey_execution_diagnosis_semantic_review":
+            return SimpleNamespace(
+                status="completed",
+                output_text=json.dumps({"verdict": "SUPPORTED", "reason": "GROUNDED"}),
+            )
         return SimpleNamespace(
             status="completed",
             output_text=json.dumps(
@@ -123,12 +132,13 @@ class GraphDelayedFakeGateway(OpenAIConversationGateway):
 
 
 def main() -> None:
-    if sys.argv[1:] not in ([], ["--model-advisory"], ["--graph-diagnosis"]):
+    if sys.argv[1:] not in ([], ["--model-advisory"], ["--graph-diagnosis"], ["--semantic-review"]):
         raise SystemExit(
-            "Usage: python -m scripts.odyssey_chat_c4_perf_gate [--model-advisory|--graph-diagnosis]"
+            "Usage: python -m scripts.odyssey_chat_c4_perf_gate [--model-advisory|--graph-diagnosis|--semantic-review]"
         )
     advisory = sys.argv[1:] == ["--model-advisory"]
-    graph_mode = sys.argv[1:] == ["--graph-diagnosis"]
+    semantic_review = sys.argv[1:] == ["--semantic-review"]
+    graph_mode = semantic_review or sys.argv[1:] == ["--graph-diagnosis"]
     delay = 0.18
     gateway = GraphDelayedFakeGateway(delay) if graph_mode else DelayedFakeGateway(delay)
     samples = []
@@ -184,6 +194,7 @@ def main() -> None:
             conversation_root_resolver=ConversationRootResolver(Path(d) / "state"),
             conversation_gateway=None if graph_mode else gateway,
             conversation_graph_gateway=gateway if graph_mode else None,
+            conversation_graph_semantic_review_enabled=semantic_review,
             conversation_error_guidance_enabled=True,
             conversation_error_model_advisory_enabled=advisory,
         )
@@ -214,7 +225,7 @@ def main() -> None:
             futs = [pool.submit(invoke, f"synthetic-parallel-{i}") for i in range(3)]
             measurements += [{"scope": "3-overlapping", **f.result()} for f in futs]
         assert len(calls) == len(measurements) == 7
-        assert gateway.calls == (7 if advisory or graph_mode else 0)
+        assert gateway.calls == (14 if semantic_review else 7 if advisory or graph_mode else 0)
     stop.set()
     monitor.join(1)
     last = snapshot()
@@ -226,6 +237,7 @@ def main() -> None:
         "model": "DELAYED_FAKE_NOT_REAL_PROVIDER",
         "model_advisory_enabled": advisory,
         "graph_diagnosis_enabled": graph_mode,
+        "semantic_review_enabled": semantic_review,
         "C4_advisory_calls": gateway.calls,
         "synthetic_provider_delay_ms": int(delay * 1000),
         "worker_concurrency": 3,
