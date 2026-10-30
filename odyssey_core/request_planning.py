@@ -92,6 +92,8 @@ A RetrieveAction exists only when the user asks to retrieve or inspect knowledge
 
 For a write, determine semantic ownership before mutation payload. target.query describes only the subject being selected and must remain a non-empty human-readable identity description with all target-identifying qualifiers preserved; new predicates belong in `facts`, and referred entities belong in semantic references. If relational wording only identifies the subject of a different predicate, target that described subject and record only the new predicate. If the requested knowledge itself asserts one relationship from an explicit source, including self, the natural write target is that source and the related participants belong in the fact as semantic references. When several named or described participants share that one relationship to the same explicit source, emit exactly one source-targeted KnowledgeUnit and represent every participant as a semantic fact reference; NEVER split the relationship into participant-targeted units. By contrast, when the same independently true predicate applies to several distinct subjects and there is no natural shared source that owns the assertion, preserve those subjects as separate write targets. Minimize note mutations without changing semantic ownership: never invent an aggregate source merely to reduce writes, never infer pairwise relations from shared membership, and never move a fact to a less natural owner merely to use fewer notes.
 
+Completed first-person recollections belong in calendar_day; people are fact references, not targets. Without source time, index at captured date without claiming it happened then. Others' facts, lasting traits, future, negation and uncertainty retain owners or clarify.
+
 Decompose only the new durable knowledge after ownership is fixed. Group compatible changes for the same logical target; different intents for the same target produce separate KnowledgeUnits. Atomicity is semantic, not punctuation-based: split independently meaningful knowledge into separate atomic `facts` entries, but keep sentences or clauses together when they form one coherent explanation, reflection, or decision with dependent reasons or other meaning that would be lost by splitting. Preserve order and references. A canonical property used only to identify an existing target may constrain `target.filters`; a newly recorded property belongs in `properties` and must not be copied into filters unless its old value is explicitly part of the identity evidence. For conversational knowledge that safely maps to a property, retain the human knowledge fact as well. Use only record, amend, remove, and delete. Explicit correction uses remove for the false prior fact and amend for the corrected knowledge. Amend/remove require at least one mutation across properties or facts. Record normally contains properties and/or facts; both may be empty only for a semantic reference-target unit that supports another KnowledgeUnit. Delete has no mutation payload. Set `destination_type` to null for ordinary writes. Set it only for an explicit reclassification of the same existing note, using intent=amend and cardinality=one.
 
 Decide fact references last. Use one entry in that fact unit's own `references` array when participant wording denotes another Odyssey identity with a canonical note type, an explicitly existing type-null identity, or one complete finite relationship-bounded participant set. A reference contains `mention`, `role`, and a compact semantic `selection` of `entity`, `query`, `type`, `filters`, and optional `relational_reference`; preserve the user's complete identifying wording in `selection.query`. For a singular participant, replace its occurrence with `{{ref:N}}` and use relational_reference.members=one when a bounded current relationship defines the candidate identity. For wording that itself denotes the whole current finite relationship-bounded set, preserve that exact wording in the fact, place `({{ref:N}})` immediately after it, and use relational_reference.members=complete_set. Never enumerate, name, count, or otherwise supply concrete complete-set members: Core re-grounds the source relationship, expands every current member into canonical links, and fails closed if the set is unavailable, ambiguous, incomplete, or stale. Plural grammar alone never authorizes complete_set. Keep only the relationship anchor in relational_reference.reference and any additional singular qualifiers in selection.query. A proper noun or ordinary fact argument is not enough by itself. Whenever a fact, event, or action describes a distinct participant that denotes a safely selectable logical Odyssey identity or bounded complete participant set, represent that participant semantically rather than silently literalizing it. Type-null singular references are for wording that explicitly denotes an existing Odyssey identity whose exact type need not be asserted, not for speculative entity promotion. Do not create extra model-facing KnowledgeUnits merely to carry reference targets, resolve identities yourself, or emit stable IDs; do not emit Markdown `[[wikilinks]]`. Core owns identity and set resolution and binding. A fact reference must not select its own KnowledgeUnit target, and references never authorize inverse or mirrored writes.
@@ -2025,16 +2027,23 @@ def planner_authorized_calendar_dates(
 ) -> tuple[str, ...]:
     """Return the only Calendar Day destinations Core may choose for this request.
 
-    Explicit trusted temporal evidence takes precedence. Without specialized temporal evidence,
-    Core may choose only the current local Day supplied by runtime context.
+    Explicit trusted temporal evidence takes precedence. Without it, any other
+    bounded domain evidence (including identity) still permits only the
+    current local Day. Domain presence alone does not erase the existing
+    Core-owned journal-entry date; it never authorizes an arbitrary date.
     """
     _validate_current_context(current_context)
-    if domain_interpretation is None:
-        return (normalize_iso_date(current_context["date"]),)
-    if not isinstance(domain_interpretation, DomainInterpretation):
+    if domain_interpretation is not None and not isinstance(
+        domain_interpretation, DomainInterpretation
+    ):
         raise RequestPlanningError("Domain interpretation is invalid")
+    temporal = (
+        domain_interpretation.temporal_references() if domain_interpretation is not None else ()
+    )
+    if not temporal:
+        return (normalize_iso_date(current_context["date"]),)
     return _normalized_authorized_calendar_dates(
-        tuple(item.temporal_anchor().date for item in domain_interpretation.temporal_references())
+        tuple(item.temporal_anchor().date for item in temporal)
     )
 
 

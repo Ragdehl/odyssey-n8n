@@ -281,6 +281,18 @@ def test_luna_read_and_delegate_schema_subtrees_are_byte_equivalent(
         )
 
 
+def test_shared_semantic_write_ownership_preserves_journal_without_implicit_event_date(
+    schema: dict[str, Any],
+) -> None:
+    """One ownership rule serves direct Core and selected E5 continuations."""
+    prompt = render_luna_experimental_prompt(schema, BASELINE_CONTEXT)
+    assert "recollections belong in calendar_day" in prompt
+    assert "people are fact references, not targets" in prompt
+    assert "index at captured date without claiming it happened then" in prompt
+    assert "Others' facts, lasting traits, future, negation" in prompt
+    assert prompt.count("recollections belong in calendar_day") == 1
+
+
 def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     schema: dict[str, Any],
 ) -> None:

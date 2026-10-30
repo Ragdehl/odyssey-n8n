@@ -23,6 +23,7 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RequestPlanningError,
     WriteAction,
+    planner_authorized_calendar_dates,
     render_request_planner_prompt,
     render_semantic_write_planner_prompt,
 )
@@ -89,6 +90,31 @@ def semantic_result(*, date: str = "2026-10-03", include_temporal: bool = True) 
         "clarification_code": None,
         "presentation_intent": "answer",
     }
+
+
+def test_non_temporal_domain_evidence_preserves_canonical_day_entry_authorization() -> None:
+    source = "He hablado con ella en el parque."
+    selected = DomainInterpretation(
+        "core",
+        source,
+        "CANONICAL_REFERENCE",
+        (DomainEvidence("canonical_reference", "ella", "person:Elena"),),
+    )
+    assert planner_authorized_calendar_dates(CURRENT) == ("2026-10-02",)
+    assert planner_authorized_calendar_dates(CURRENT, selected) == ("2026-10-02",)
+    # Explicit Temporal evidence takes precedence over captured date.
+    temporal = DomainInterpretation(
+        "core",
+        source,
+        "CANONICAL_REFERENCE",
+        (
+            DomainEvidence("canonical_reference", "ella", "person:Elena"),
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, "en el parque", "2026-09-30"),
+        ),
+    )
+    assert planner_authorized_calendar_dates(CURRENT, temporal) == ("2026-09-30",)
+    with pytest.raises(RequestPlanningError):
+        planner_authorized_calendar_dates(CURRENT, object())
 
 
 def test_domain_interpretation_is_bounded_grounded_and_mutation_free() -> None:

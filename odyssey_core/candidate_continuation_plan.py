@@ -208,10 +208,12 @@ def inspect_selected_candidate_plan(
                             "Proposed symbolic references are invalid or duplicated"
                         )
                     used_reference_indexes.update(slots)
-                    # Reuse the canonical Core Day target as temporal evidence
-                    # when ordinary Planner output has no optional per-fact row.
-                    # Never silently collapse a conflicting Day/anchor date:
-                    # the independent reviewer cannot accept multiple dates.
+                    # A Day target equal to the original captured local Day
+                    # can index an undated journal ENTRY, not assert an event
+                    # happened on that day. Keep it in destination_query, not
+                    # the fact's temporal_values. A different Day target is
+                    # claimed event-time evidence and must pass full review.
+                    # Explicit conflicting anchors are NEVER collapsed.
                     temporal_values = [anchor.value for anchor in temporal]
                     if unit.target.type == CALENDAR_DAY_TYPE:
                         try:
@@ -220,7 +222,8 @@ def inspect_selected_candidate_plan(
                             raise CandidateContinuationPlanError(
                                 "Continuation Day target date is invalid"
                             ) from error
-                        if day not in temporal_values:
+                        captured_day = normalize_iso_date(context.captured_at[:10])
+                        if day != captured_day and day not in temporal_values:
                             temporal_values.insert(0, day)
                     facts.append(
                         CoreContinuationProposedFact(

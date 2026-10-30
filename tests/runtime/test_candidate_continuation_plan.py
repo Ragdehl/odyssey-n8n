@@ -82,6 +82,26 @@ def test_regular_core_plan_without_optional_temporal_rows_is_inspectable(tmp_pat
     assert not result.may_execute
 
 
+def test_capture_day_journal_index_is_not_fabricated_occurrence_date(
+    tmp_path: Path,
+) -> None:
+    """Day entry index and an asserted date are different review coordinates."""
+    context, plan, _ = _ready_inspector(tmp_path)
+    writer, helper = plan.actions[0].units
+    undated_day = replace(
+        writer,
+        target=replace(writer.target, query=context.captured_at[:10]),
+        fact_temporal_anchors=(),
+    )
+    inspected = inspect_selected_candidate_plan(
+        context, RequestPlan((WriteAction((undated_day, helper)),), ())
+    )
+    assert inspected.proposed_facts[0].destination_type == "calendar_day"
+    assert inspected.proposed_facts[0].destination_query == context.captured_at[:10]
+    assert inspected.proposed_facts[0].temporal_values == ()
+    assert not inspected.may_execute
+
+
 def test_day_target_and_different_temporal_anchor_require_separate_review(tmp_path: Path):
     """A mismatched Day destination cannot be disguised by optional anchors."""
     evidence, plan, _ = _ready_inspector(tmp_path)

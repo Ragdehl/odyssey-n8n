@@ -875,12 +875,30 @@ seam, with no externally reachable forged empty-result path found. The
 model-origin claim can still be wrong; independent semantic review is a
 separate evidence boundary, not formal mathematical proof of absence. This
 is NOT four-role product acceptance.
-The previously implemented P4 general Day-journal fallback is covered by
-tests/runtime/test_p4_general_day_journal_fallback.py (6/6 PASS in the current
-source). It was NOT created by this E5 change. E5 selected-source continuation
-still needs a generic shared disposition contract: a no-date recollection's
-observed live Core proposal wrote to person, not Calendar Day. Do not insert
-a name, language or date-word-specific override to force the journal target.
+The previously implemented P4 Day-journal route is covered by 6/6 source
+tests in tests/runtime/test_p4_general_day_journal_fallback.py; E5 did not
+create that feature. The shared Core semantic planner now applies the
+same natural ownership rule for completed autobiographical recollections.
+Root cause: planner_authorized_calendar_dates had suppressed the ordinary
+captured local Day whenever ANY DomainInterpretation existed, even if it
+contained only canonical identity evidence and no temporal values.
+Core now preserves the captured Day if the DomainInterpretation has NO
+Temporal references; explicit verified Temporal dates still take precedence.
+Independent reviewer sees calendar_day destination_query separately from
+temporal_values: the captured Day can index an undated journal ENTRY without
+asserting the experience occurred then. Other dates remain asserted time
+coordinates subject to independent source review; contradictory anchors
+remain visible and reject. This is a shared contract, not a literal phrase,
+person or language override.
+Fresh synthetic read-only Temporal→Luna-first→GPT-5.6 Luna review:
+no-date recollection PASSED (one Luna planner call), calendar_day target
+2026-10-04 and no asserted temporal_values. Independent persisted-state
+tests used *synthetic review responses* to prove existing Core/E3 physical
+Day Markdown readback and replay without duplicate write for TWO selected
+identities; 72 focused continuation/semantic/delivery tests PASS.
+This combines distinct proof types and is NOT one authenticated DEV browser
+end-to-end. Four final audit roles and matching-deployed DEV E2E still
+PENDING, as is larger real-model variation and performance acceptance.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
 bounded synthetic-vault vertical also reached the existing Core/E3, physically

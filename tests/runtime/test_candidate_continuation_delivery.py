@@ -129,6 +129,118 @@ def test_canonical_day_target_without_optional_anchors_reuses_core_e3_and_replay
     assert len(calls) == 1
 
 
+@pytest.mark.parametrize("selected", ("Luis", "Eric"))
+def test_undated_recollection_continuation_writes_one_captured_day_entry_with_e3_replay(
+    tmp_path: Path,
+    selected: str,
+) -> None:
+    """Use the existing pending state, selected identity, E3 writer and replay."""
+    from odyssey_core.candidate_continuation_context import prepare_selected_candidate_continuation
+    from odyssey_core.candidate_continuation_plan import inspect_selected_candidate_plan
+    from odyssey_core.candidate_continuation_semantic import (
+        validate_independent_continuation_verdict,
+    )
+    from odyssey_core.candidate_pending_state import CandidatePendingRepository
+    from odyssey_core.clarification import ClarificationOption
+    from odyssey_core.request_planning import RequestPlan, WriteAction
+    from tests.runtime.test_candidate_pending_state import NOW, _ready, _reply
+    from tests.runtime.test_temporal_user_path_e2e import _linked_day_plan
+
+    original, _, vault, _ = _ready(tmp_path)
+    old_pending = original.pending[0]
+    new_clause = "He estado con él en el parque."
+    new_source = original.original_request[: old_pending.source_start] + new_clause
+    reference_start = old_pending.source_start + new_clause.index("él")
+    pending_item = replace(
+        old_pending,
+        source_text=new_clause,
+        source_end=len(new_source),
+        reference_start=reference_start,
+        reference_end=reference_start + len("él"),
+    )
+    revised = replace(original, original_request=new_source, pending=(pending_item,))
+    pending_root = tmp_path / "independent-no-date-pending"
+    pending_root.mkdir()
+    pending = CandidatePendingRepository(pending_root)
+    pending.record(
+        revised,
+        conversation_id="chat-1",
+        created_at=NOW,
+        created_timezone="Europe/Paris",
+        options=(ClarificationOption("eric-id", "Eric"), ClarificationOption("luis-id", "Luis")),
+        vault=vault,
+        schema=SCHEMA,
+    )
+    assert _reply(pending, vault, f"Con {selected}").outcome == "choice_recorded"
+    context = prepare_selected_candidate_continuation(
+        pending,
+        conversation_id="chat-1",
+        request_id=revised.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    initial = _linked_day_plan(
+        "2026-10-04",
+        "He estado con {{ref:0}} en el parque.",
+        "él",
+        "2026-10-04",
+        target_name=selected,
+    )
+    writer, helper = initial.actions[0].units
+    plan = RequestPlan((WriteAction((replace(writer, fact_temporal_anchors=()), helper)),), ())
+    inspection = inspect_selected_candidate_plan(context, plan)
+    assert inspection.proposed_facts[0].temporal_values == ()
+    review = {
+        "approved": True,
+        "complete": True,
+        "reason": None,
+        "facts": [
+            {
+                "ordinal": 0,
+                "kind": "record",
+                "reviewed_text": "He estado con {{ref:0}} en el parque.",
+                "date": None,
+                "reference_names": [selected],
+                "supported": True,
+            }
+        ],
+    }
+    validate_independent_continuation_verdict(context, inspection, review)
+    before = {path: vault.read_text(path) for path in vault.list_markdown_paths()}
+    store = LocalDeliveryResultStore(tmp_path / "no-date-journal-deliveries")
+    calls: list[str] = []
+
+    def run_core(prepared, proposal, request_id, guard):
+        calls.append(request_id)
+        return _execute(vault, prepared, proposal, guard, request_id=request_id)
+
+    kwargs = dict(
+        pending=pending,
+        deliveries=store,
+        conversation_id="chat-1",
+        original_request_id=revised.request_id,
+        plan=plan,
+        independent_review=review,
+        vault=vault,
+        schema=SCHEMA,
+        run_existing_core=run_core,
+    )
+    delivered = deliver_reviewed_candidate_continuation(**kwargs)
+    assert delivered["status"] == "completed"
+    assert delivered["facts"][0]["note_id"] == "date:2026-10-04"
+    assert len(calls) == 1
+    day = vault.read_text("calendar/days/2026-10-04.md")
+    assert day.count(f"He estado con [[{selected}|{selected}]] en el parque.") == 1
+    assert {
+        path for path, original_text in before.items() if vault.read_text(path) != original_text
+    } == {"calendar/days/2026-10-04.md"}
+    replay = deliver_reviewed_candidate_continuation(
+        **{**kwargs, "run_existing_core": lambda *_: pytest.fail("duplicate Core/E3")}
+    )
+    assert replay == {**delivered, "delivery_replayed": True}
+    assert len(calls) == 1
+
+
 def test_inconsistent_day_and_explicit_anchor_refuse_before_any_e3_claim(
     tmp_path: Path,
 ) -> None:
