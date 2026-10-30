@@ -70,6 +70,32 @@ def test_source_exact_read_only_proposal_lists_only_pending_new_facts(tmp_path: 
     assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == before
 
 
+def test_regular_core_plan_without_optional_temporal_rows_is_inspectable(tmp_path: Path):
+    """Zero supplied anchors is a valid Core shape, not a fabricated date."""
+    evidence, plan, _vault = _ready_inspector(tmp_path)
+    writer, helper = plan.actions[0].units
+    without_anchors = replace(writer, fact_temporal_anchors=())
+    result = inspect_selected_candidate_plan(
+        evidence, RequestPlan((WriteAction((without_anchors, helper)),), ())
+    )
+    assert result.proposed_facts[0].temporal_values == ()
+    assert not result.may_execute
+
+
+def test_partial_temporal_rows_are_still_rejected(tmp_path: Path):
+    """An incomplete nonempty anchor set must not silently lose a fact's time."""
+    evidence, plan, _vault = _ready_inspector(tmp_path)
+    writer, helper = plan.actions[0].units
+    incomplete = replace(
+        writer,
+        facts=("Iré al cine con {{ref:0}}.", "Veré la exposición con {{ref:0}}."),
+    )
+    with pytest.raises(CandidateContinuationPlanError, match="Missing temporal fact positions"):
+        inspect_selected_candidate_plan(
+            evidence, RequestPlan((WriteAction((incomplete, helper)),), ())
+        )
+
+
 def test_one_pending_candidate_can_propose_multiple_facts_without_extra_write(tmp_path: Path):
     evidence, plan, _vault = _ready_inspector(tmp_path)
     action = plan.actions[0]

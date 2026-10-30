@@ -151,8 +151,15 @@ def inspect_selected_candidate_plan(
                     continue
                 if not unit.facts:
                     raise CandidateContinuationPlanError("Empty continuation writer")
-                if len(unit.facts) != len(unit.fact_temporal_anchors):
+                # Ordinary Core plans may omit optional temporal rows entirely.
+                # A present but incomplete row set remains invalid; never infer
+                # a temporal value for a missing fact from the source wording.
+                if not isinstance(unit.fact_temporal_anchors, tuple) or (
+                    unit.fact_temporal_anchors
+                    and len(unit.facts) != len(unit.fact_temporal_anchors)
+                ):
                     raise CandidateContinuationPlanError("Missing temporal fact positions")
+                temporal_rows = unit.fact_temporal_anchors or tuple(() for _ in unit.facts)
                 used_reference_indexes: set[int] = set()
                 selected_reference_indexes: set[int] = set()
                 for reference_index, reference in enumerate(unit.references):
@@ -174,7 +181,7 @@ def inspect_selected_candidate_plan(
                             )
                         selected_reference_indexes.add(reference_index)
                 for ordinal, literal, temporal in zip(
-                    unit_ordinals, unit.facts, unit.fact_temporal_anchors, strict=True
+                    unit_ordinals, unit.facts, temporal_rows, strict=True
                 ):
                     if (
                         not isinstance(literal, str)
