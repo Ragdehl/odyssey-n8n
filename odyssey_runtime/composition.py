@@ -3280,7 +3280,25 @@ class RuntimeComposition:
         with self._conversation_lock:
             store = self._conversation_store(actor)
             store.load_or_create_main(now=_current_time()["timestamp"])
-            return store.load_main_page(limit=40 if limit is None else limit, before=before)
+            page = store.load_main_page(limit=40 if limit is None else limit, before=before)
+        if before is None:
+            # Read-only, actor-scoped recovery on the initial conversation page;
+            # never reconstruct a Core plan or silently reopen selected work.
+            try:
+                pending = self._candidate_pending_repository(actor)
+                if pending is not None:
+                    page["pending_clarifications"] = list(
+                        pending.verified_open_choice_cards(
+                            MAIN_CONVERSATION_ID,
+                            vault=cast(VaultRepository, self.vault_repository),
+                            schema=cast(dict[str, Any], self.canonical_schema),
+                        )
+                    )
+            except (CandidatePendingStateError, OSError, ValueError):
+                # Preserve transcript availability without claiming there are
+                # no pending records when validation or storage failed.
+                page["pending_recovery_unavailable"] = True
+        return page
 
     def list_conversations(
         self,

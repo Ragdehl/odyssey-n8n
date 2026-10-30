@@ -527,8 +527,34 @@ cliente, tarjeta y validador n8n. Son pruebas offline con datos
 sintéticos, **no** aceptación navegador desplegado/Cloudflare/GPT real.
 
 
-**Límite conocido de la interfaz:** las tarjetas v2 mantienen su ID mientras
-están representadas en la conversación actual. La bóveda operativa conserva
-la aclaración tras reinicios, pero la navegación de pendientes seleccionados
-y la restauración de **tarjetas interactivas tras recargar** aún necesitan
-integración; no afirmar UX de recuperación completa tras un reinicio.
+**Recuperación tras recarga, añadida en fuente:** el endpoint actor-autenticado
+`conversation/main` consulta los registros v2 `open` en la raíz privada ya
+existente, verifica **otra vez** los guards de todas las identidades y los
+hechos previamente escritos y proyecta como máximo cuatro tarjetas con
+`source_pending: true`, sin enviar fuente completa, guards ni datos de
+otros perfiles. Las tarjetas usan el mismo botón correlacionado y el
+frontend valida la forma del resultado antes de mostrarlo. La consulta
+no crea planes ni toca Markdown. Si la lectura del estado resulta
+corrupta/no verificable, no bloquea el histórico; comunica que la
+recuperación requiere atención. Una identidad obsoleta no se ofrece
+como opción válida. La paginación antigua del chat no repite tarjetas.
+
+**Límites aún reales:** no se muestran todos los pendientes si existen
+más de cuatro; los pendientes sin opciones canónicas actuales requieren
+revisión en vez de una tarjeta; una elección ya guardada sigue esperando
+una continuación semántica para convertirse en hecho. El recorrido
+completo con navegador autenticado/HTTPS y la reanudación de escritura
+todavía no están aceptados. Pruebas actuales con Runtime reiniciado,
+bóveda sintética, HTTP privado y DOM/cliente simulado, no GPT real.
+**Gate fuente del cambio:** 2.465 Python (+7 subtests), 292 JS,
+Ruff/Docs Guard PASS. La seguridad de selección se vuelve a validar
+cuando el usuario responde, no solo cuando se dibuja la tarjeta.
+
+**Siguiente bloqueo funcional:** `selected_for_core_review` ya da
+identidad seleccionada, fuente literal y reloj original; el guard de
+continuación actual aún compara frases concretas del corpus F14/F27.
+No convertir ese guard en una autorización genérica mediante búsqueda y
+sustitución de pronombres. Hacen falta propuesta Core con semántica
+revisada independientemente (fechas, polaridad, participantes, hechos
+N:M, roles y referencias), guardas de CAS e idempotencia antes de E3,
+más evaluación real acotada del prompt cuando se autorice gasto.

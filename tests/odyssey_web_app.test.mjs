@@ -195,8 +195,8 @@ function createPage() {
   return {document, elements};
 }
 
-async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission,
-  progressThrows = false, deferredDiagnosisMock}) {
+async function mountApp({turns, olderTurns = [], pendingClarifications = [],
+  requestProductResult, createSubmission, progressThrows = false, deferredDiagnosisMock}) {
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
@@ -224,7 +224,8 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
         return {conversation_id: "main", turns: olderTurns, has_older: false, before: null};
       }
       if (operation === "main") return {
-        conversation_id: "main", turns, has_older: olderTurns.length > 0,
+        conversation_id: "main", turns, pending_clarifications: pendingClarifications,
+        has_older: olderTurns.length > 0,
         before: olderTurns.length > 0 ? "older-page" : null,
       };
       persisted.push(payload);
@@ -869,4 +870,41 @@ test("an older v2 source clarification card sends its exact pending request ID",
   await flush();
   assert.equal(submitted.at(-1).request, "cancel");
   assert.equal(submitted.at(-1).replyToRequestId, "web-initial-ambiguous-r1");
+});
+
+
+test("a reloaded source-pending card keeps the exact selector without re-running Core", async () => {
+  let resolveChoice;
+  const submissions = [];
+  const card = {
+    request_id: "old-candidate-r1", source_pending: true,
+    requested_reference: "él",
+    explanation: "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+    options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+  };
+  const page = await mountApp({
+    turns: [{request_id: "older-human", role: "assistant", text: "Otra conversación"}],
+    pendingClarifications: [card],
+    createSubmission: (request, _crypto, _conversation, replyToRequestId) => ({
+      request, requestId: "reply-resumed", replyToRequestId,
+    }),
+    requestProductResult: ({submission}) => {
+      submissions.push(submission);
+      return new Promise(resolve => {resolveChoice = resolve;});
+    },
+  });
+  const restored = page.elements.conversation.querySelector(".message-clarification-restored");
+  assert.ok(restored);
+  assert.match(restored.querySelector(".message-text").textContent, /¿A quién te refieres/);
+  restored.querySelector(".clarification-choose").click();
+  await flush();
+  assert.equal(submissions.length, 1);
+  assert.equal(submissions[0].replyToRequestId, "old-candidate-r1");
+  assert.equal(submissions[0].request, "He elegido a Eric.");
+  resolveChoice({
+    request_id: "reply-resumed", status: "needs_attention", kind: "cannot_answer",
+    message: "Elección registrada; escritura pendiente de revisión.",
+  });
+  await flush();
+  assert.equal(submissions.length, 1);
 });

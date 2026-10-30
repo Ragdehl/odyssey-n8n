@@ -104,3 +104,49 @@ def test_explicit_reply_uses_authenticated_http_boundary_after_other_turn(tmp_pa
         http.shutdown()
         http.server_close()
         thread.join(timeout=5)
+
+
+def test_main_conversation_http_recovers_bounded_pending_cards_without_writing(tmp_path):
+    runtime, _resolver, vault, _calls, source, first_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, first_id, "main", ACTOR)
+    original = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(runtime))
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def post(actor):
+        conn = HTTPConnection(*server.server_address, timeout=4)
+        conn.request(
+            "POST",
+            "/conversation/main",
+            json.dumps(
+                {
+                    "operation": "main",
+                    "limit": 40,
+                    "authenticated_actor": {"stable_user_id": actor.stable_user_id},
+                }
+            ).encode(),
+            {"Content-Type": "application/json"},
+        )
+        response = conn.getresponse()
+        payload = response.status, json.loads(response.read())
+        conn.close()
+        return payload
+
+    try:
+        status, current = post(ACTOR)
+        assert status == 200
+        cards = current["pending_clarifications"]
+        assert len(cards) == 1
+        assert cards[0]["request_id"] == route_execution_id(first_id, 0)
+        assert cards[0]["source_pending"] is True
+        assert cards[0]["requested_reference"] == "él"
+        assert [o["label"] for o in cards[0]["options"]] == ["Eric", "Luis"]
+        assert "selected_guard" not in json.dumps(current)
+        assert "original_request" not in json.dumps(cards)
+        assert not post(OTHER_ACTOR)[1].get("pending_clarifications")
+        assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

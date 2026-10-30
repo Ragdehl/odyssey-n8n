@@ -109,7 +109,21 @@ export async function requestConversation({endpoint = "/api/conversation", opera
   if (!Array.isArray(value.turns)) {
     throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
   }
-  return {...value, turns: value.turns.map(validateConversationTurn)};
+  const cards = value.pending_clarifications;
+  if (cards !== undefined && (
+    operation !== "main" || payload.before || !Array.isArray(cards) || cards.length > 4
+  )) throw new ProductRequestError("Odyssey devolvió aclaraciones pendientes inválidas.");
+  const verified = cards?.map(validateClarification);
+  if (verified?.some(card => card.source_pending !== true) ||
+    (verified && new Set(verified.map(card => card.request_id)).size !== verified.length)) {
+    throw new ProductRequestError("Odyssey devolvió una aclaración sin verificar.");
+  }
+  if (value.pending_recovery_unavailable !== undefined &&
+    (operation !== "main" || payload.before || value.pending_recovery_unavailable !== true)) {
+    throw new ProductRequestError("Odyssey devolvió un estado de aclaración inválido.");
+  }
+  return {...value, turns: value.turns.map(validateConversationTurn),
+    ...(verified === undefined ? {} : {pending_clarifications: verified})};
 }
 
 function validateConversationTurn(value) {

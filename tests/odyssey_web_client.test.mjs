@@ -1088,3 +1088,34 @@ test("only Core source-pending basic cards may declare explicit reply correlatio
   assert.equal(Object.hasOwn(validateProductResponse(product(base)).clarification,
     "source_pending"), false);
 });
+
+
+test("conversation main validates source-pending cards from authenticated server", async () => {
+  const sample = {
+    request_id: "original-route", source_pending: true,
+    requested_reference: "él", explanation: "¿Quién era?",
+    options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+  };
+  const call = async (cards, extra = {}) => requestConversation({
+    endpoint: "/api/conversation", operation: "main", payload: {limit: 40},
+    fetchImpl: async () => response({payload: {
+      conversation_id: "main", turns: [], pending_clarifications: cards,
+      ...extra,
+    }}),
+  });
+  assert.equal((await call([sample])).pending_clarifications[0].request_id,
+    "original-route");
+  for (const cards of [
+    [{...sample, source_pending: false}],
+    [{...sample, options: [sample.options[0]]}],
+    [sample, sample],
+    Array.from({length: 5}, (_, i) => ({...sample, request_id: `id-${i}`})),
+    [{...sample, options: [{...sample.options[0], id: "../../vault"}, sample.options[1]]}],
+    "not an array",
+  ]) {
+    await assert.rejects(call(cards), ProductRequestError);
+  }
+  await assert.rejects(call([], {pending_recovery_unavailable: "true"}), ProductRequestError);
+  assert.equal((await call([], {pending_recovery_unavailable: true}))
+    .pending_recovery_unavailable, true);
+});

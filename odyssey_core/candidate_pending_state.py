@@ -434,6 +434,65 @@ class CandidatePendingRepository:
                 matches.append(record["request_id"])
         return tuple(sorted(matches))
 
+    def verified_open_choice_cards(
+        self,
+        conversation_id: str,
+        *,
+        vault: VaultRepository,
+        schema: dict[str, Any],
+        limit: int = 4,
+    ) -> tuple[dict[str, Any], ...]:
+        """Read bounded, current Core options for re-rendering durable v2 cards.
+
+        The record is workflow state, not a write plan or durable knowledge.
+        A stale identity or altered previously-written fact cannot become a
+        newly actionable browser card. Historical v1 pending plans are excluded.
+        """
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 8:
+            raise CandidatePendingStateError("Pending card limit is invalid")
+        if not isinstance(vault, VaultRepository) or not isinstance(schema, dict):
+            raise CandidatePendingStateError("Verified canonical context required")
+        with self._locked():
+            records = [self._read(request_id) for request_id in self.open_requests(conversation_id)]
+            records.sort(key=lambda item: (item["created_at"], item["request_id"]), reverse=True)
+            visible: list[dict[str, Any]] = []
+            for record in records:
+                pending = record["pending"]
+                options = record["options"]
+                if (
+                    len(pending) != 1
+                    or pending[0]["reason"] != "ambiguous_identity"
+                    or not isinstance(pending[0]["reference_text"], str)
+                    or not 2 <= len(options) <= 4
+                    or not self._completed_facts_still_valid(record, vault, schema)
+                ):
+                    continue
+                try:
+                    if any(
+                        current_identity_guard(vault, schema, option["id"]) != option["guard"]
+                        for option in options
+                    ):
+                        continue
+                except (ReferencePreflightError, ValueError, OSError):
+                    continue
+                visible.append(
+                    {
+                        "request_id": record["request_id"],
+                        "source_pending": True,
+                        "requested_reference": pending[0]["reference_text"],
+                        "explanation": (
+                            "No puedo identificar con seguridad a "
+                            f"«{pending[0]['reference_text']}». Elige una persona o cancela."
+                        ),
+                        "options": [
+                            {"id": option["id"], "label": option["label"]} for option in options
+                        ],
+                    }
+                )
+                if len(visible) == limit:
+                    break
+            return tuple(visible)
+
     @staticmethod
     def _completed_facts_still_valid(
         record: dict[str, Any], vault: VaultRepository, schema: dict[str, Any]

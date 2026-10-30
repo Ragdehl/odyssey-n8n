@@ -342,3 +342,75 @@ def test_explicit_candidate_id_cannot_select_other_actor_or_unknown_record(tmp_p
     assert pending.read(initial_id)["status"] == "open"
     assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original_notes
     assert calls == [(source, initial_id)]
+
+
+def test_reloaded_main_conversation_restores_only_live_actor_verified_pending_cards(
+    tmp_path: Path,
+) -> None:
+    """Read-only restart projection does not grant identity or write authority."""
+    from odyssey_runtime.composition import RuntimeComposition
+
+    runtime, resolver, vault, calls, source, first_id = _runtime(tmp_path, routed=True)
+    result = runtime.execute_product(source, first_id, "main", ACTOR)
+    pending_id = route_execution_id(first_id, 0)
+    assert result["clarification"]["request_id"] == pending_id
+    original = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    # A new Runtime composition reads the same actor-local disk state after restart.
+    rebooted = RuntimeComposition(
+        core_execute=lambda *_: (_ for _ in ()).throw(AssertionError("No writes allowed")),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        vault_repository=vault,
+        canonical_schema=SCHEMA,
+        hybrid_candidate_execute=runtime.hybrid_candidate_execute,
+    )
+    page = rebooted.main_conversation(ACTOR)
+    assert page["pending_clarifications"] == [
+        {
+            "request_id": pending_id,
+            "source_pending": True,
+            "requested_reference": "él",
+            "explanation": "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+            "options": [{"id": "eric-id", "label": "Eric"}, {"id": "luis-id", "label": "Luis"}],
+        }
+    ]
+    assert (
+        "pending_clarifications" not in rebooted.main_conversation(ACTOR, before=page["before"])
+        if page["before"] is not None
+        else True
+    )
+    other_page = rebooted.main_conversation(OTHER_ACTOR)
+    assert not other_page.get("pending_clarifications")
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original
+    assert calls == [(source, first_id)]
+
+    answer = rebooted.execute_product(
+        "Con Luis",
+        "from-reloaded-card",
+        "main",
+        ACTOR,
+        reply_to_request_id=pending_id,
+    )
+    assert answer["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    assert rebooted.main_conversation(ACTOR).get("pending_clarifications") == []
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original
+
+
+def test_stale_identity_cannot_be_redisplayed_as_current_pending_card(tmp_path: Path) -> None:
+    runtime, _resolver, vault, _calls, source, first_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, first_id, "main", ACTOR)
+    note = vault.root / "Luis.md"
+    note.write_text(note.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    assert runtime.main_conversation(ACTOR)["pending_clarifications"] == []
+    # The pending source is not destroyed by stale evidence, so explicit
+    # recovery remains possible only after another Core-supported review.
+    assert (
+        runtime.execute_product(
+            "Con Luis",
+            "stale-after-reload",
+            "main",
+            ACTOR,
+            reply_to_request_id=route_execution_id(first_id, 0),
+        )["product_control"]
+        == "STALE_CANDIDATE_SELECTION"
+    )

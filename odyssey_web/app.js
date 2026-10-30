@@ -178,6 +178,17 @@ async function loadMainConversation() {
     void attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
   }
   queueHistoricDeferredDiagnoses(eligibleDiagnostics.slice(0, -4));
+  // Restored cards carry Core-verified options, never inferred transcript text.
+  for (const card of data.pending_clarifications ?? []) {
+    const message = appendMessage("odyssey", "Aclaración pendiente", "needs_attention");
+    message.classList.add("message-clarification-restored");
+    appendClarificationCard(message, card);
+  }
+  if (data.pending_recovery_unavailable === true) {
+    appendMessage("odyssey",
+      "No he podido verificar las aclaraciones pendientes. Las notas no se han modificado.",
+      "needs_attention");
+  }
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
   if (recoverable) {
     retrySubmission = recoverable;
