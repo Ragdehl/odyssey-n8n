@@ -49,11 +49,21 @@ from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "odyssey_web"
-BROWSER = ROOT / "scripts/odyssey_e4_live_browser.cjs"
+BROWSER = ROOT / (
+    "scripts/odyssey_e5_clarification_live_browser.cjs"
+    if os.environ.get("ODYSSEY_E4_RECORDED_CASE") == "e5_selected"
+    else "scripts/odyssey_e4_live_browser.cjs"
+)
 CLOCK = "2026-10-20T10:30:00+02:00"
 # Entirely disposable test-run selection; cannot modify the deployed product.
 RECORDED_CASE = os.environ.get("ODYSSEY_E4_RECORDED_CASE", "person_task")
-if RECORDED_CASE not in {"person_task", "issue157_day", "generic_day", "recovery_day"}:
+if RECORDED_CASE not in {
+    "person_task",
+    "issue157_day",
+    "generic_day",
+    "recovery_day",
+    "e5_selected",
+}:
     raise RuntimeError("Unsupported isolated browser fixture")
 if (
     RECORDED_CASE in {"issue157_day", "generic_day", "recovery_day"}
@@ -66,12 +76,16 @@ else:
     FAMILY_SOURCE = None
 # Source and expected physical targets are test inputs, never production routing.
 E4_SOURCE = (
-    "He visto a Manu."
+    "He elegido a Luis."
+    if RECORDED_CASE == "e5_selected"
+    else "He visto a Manu."
     if RECORDED_CASE == "generic_day"
     else FAMILY_SOURCE or os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
 )
 EXPECTED_PERSON_NAMES = (
-    ()
+    ("Eric", "Luis")
+    if RECORDED_CASE == "e5_selected"
+    else ()
     if RECORDED_CASE == "generic_day"
     else tuple(json.loads(os.environ.get("ODYSSEY_E4_SYNTHETIC_PERSONS", '["Marta"]')))
 )
@@ -84,7 +98,10 @@ if (
     or any(
         not isinstance(name, str)
         or not name.strip()
-        or (RECORDED_CASE not in {"issue157_day", "recovery_day"} and name not in E4_SOURCE)
+        or (
+            RECORDED_CASE not in {"issue157_day", "recovery_day", "e5_selected"}
+            and name not in E4_SOURCE
+        )
         for name in EXPECTED_PERSON_NAMES
     )
 ):
@@ -203,8 +220,37 @@ def assert_person_inventory(
 
 
 def build_workflow():
-    graph = workflow(validated_deployed_projection(PINNED_RENDER), E4_SOURCE)
+    if RECORDED_CASE == "e5_selected":
+        # For isolated E5 acceptance, render the precise current source
+        # Code node rather than the older DEV deployed revision.
+        import re
+
+        source = (ROOT / "workflows/odyssey-online.ts").read_text()
+        marker = chr(96)
+        dollar = chr(36)
+        helper = source.split("const costHelpers = String.raw" + marker, 1)[1].split(
+            marker + ";", 1
+        )[0]
+        route = source.split("const routeCode = " + marker, 1)[1].split(marker + ";", 1)[0]
+        pricing = dollar + "{pricingSnapshotLiteral}"
+        cost = dollar + "{costHelpers}"
+        assert set(re.findall(r"\$\{[^}]+\}", route)) == {pricing, cost}
+        code = route.replace(pricing, json.dumps({"as_of": "synthetic", "models": {}}))
+        code = code.replace(cost, helper)
+        assert 25000 < len(code) < 65000
+        params = {"jsCode": code, "mode": "runOnceForAllItems", "language": "javaScript"}
+    else:
+        params = validated_deployed_projection(PINNED_RENDER)
+    graph = workflow(params, E4_SOURCE)
     guard = next(node for node in graph["nodes"] if node["name"] == "Validate isolated request")
+    if RECORDED_CASE == "e5_selected":
+        writer = next(node for node in graph["nodes"] if node["name"].startswith("Execute real P4"))
+        writer["parameters"]["jsonBody"] = (
+            "={{ { request_id: $('Odyssey product request').first().json.body.request_id, "
+            "request: $('Odyssey product request').first().json.body.request, "
+            "conversation_id: 'main', "
+            "reply_to_request_id: $('Odyssey product request').first().json.body.reply_to_request_id } }}"
+        )
     guard["parameters"]["jsCode"] = (
         "const b=$('Odyssey product request').first().json.body;"
         "return [{json:{approved:!!b && typeof b.request_id==='string' && "
@@ -317,7 +363,75 @@ exec n8n start"""
 
 @contextmanager
 def selected_product(root: Path):
-    if RECORDED_CASE == "generic_day":
+    if RECORDED_CASE == "e5_selected":
+        from openai import OpenAI
+        from pytest import MonkeyPatch
+
+        from odyssey_runtime.whole_source_light import WholeSourceLightExecutor
+        from tests.runtime.test_candidate_continuation_factory_callback import ACTOR, _factory
+        from tests.runtime.test_candidate_pending_state import NOW
+
+        original_temporal = composition.OpenAITemporalInterpreter.from_environment
+        original_planner = composition.OpenAIRequestPlanner.from_environment
+        original_ask = WholeSourceLightExecutor._ask
+        real_key = os.environ.get("OPENAI_API_KEY")
+        mp = MonkeyPatch()
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            product, repo, pending, _context, _trace = _factory(
+                root,
+                mp,
+                undated=True,
+                temporal_mode="empty",
+                select=False,
+                conversation="main",
+            )
+            original_id = pending.open_requests("main")[0]
+            record = pending.read(original_id)
+            store = product._conversation_store(ACTOR.stable_user_id)
+            store.append_turn(
+                request_id=original_id,
+                role="user",
+                text=record["original_request"],
+                created_at=NOW,
+            )
+            store.append_turn(
+                request_id=original_id,
+                role="assistant",
+                text="No puedo identificar con seguridad a «él». ¿Eric o Luis?",
+                status="needs_attention",
+                created_at=NOW,
+            )
+            if os.environ.get("ODYSSEY_E4_RECORDED") != "1":
+                if not real_key:
+                    raise RuntimeError("Isolated E5 real provider key unavailable")
+                mp.setenv("OPENAI_API_KEY", real_key)
+                mp.setattr(
+                    composition.OpenAITemporalInterpreter,
+                    "from_environment",
+                    classmethod(original_temporal.__func__),
+                )
+                mp.setattr(
+                    composition.OpenAIRequestPlanner,
+                    "from_environment",
+                    classmethod(original_planner.__func__),
+                )
+                mp.setattr(WholeSourceLightExecutor, "_ask", original_ask)
+                closure = dict(
+                    zip(
+                        product.candidate_continuation_execute.__code__.co_freevars,
+                        (
+                            cell.cell_contents
+                            for cell in product.candidate_continuation_execute.__closure__
+                        ),
+                        strict=True,
+                    )
+                )
+                closure["light_source_execute"].client = OpenAI(max_retries=0, timeout=70)
+            yield repo, ACTOR, product
+        finally:
+            mp.undo()
+    elif RECORDED_CASE == "generic_day":
         from tests.runtime.test_p4_general_day_journal_fallback import _reviewed_day
         from tests.runtime.test_whole_source_light_product_p4 import (
             SCHEMA,
@@ -419,7 +533,12 @@ def run() -> dict:
                         if (
                             len(raw) <= 16000
                             and isinstance(payload, dict)
-                            and set(payload) == {"request_id", "request", "conversation_id"}
+                            and set(payload)
+                            == (
+                                {"request_id", "request", "conversation_id", "reply_to_request_id"}
+                                if RECORDED_CASE == "e5_selected"
+                                else {"request_id", "request", "conversation_id"}
+                            )
                             and isinstance(payload["request_id"], str)
                             and re.fullmatch("[a-zA-Z0-9-]{8,110}", payload["request_id"])
                             and payload["request"] == E4_SOURCE
@@ -427,7 +546,15 @@ def run() -> dict:
                         ):
                             stats["writer_calls"] += 1
                             result = product.execute_product(
-                                E4_SOURCE, payload["request_id"], "main", actor
+                                E4_SOURCE,
+                                payload["request_id"],
+                                "main",
+                                actor,
+                                **(
+                                    {"reply_to_request_id": payload["reply_to_request_id"]}
+                                    if RECORDED_CASE == "e5_selected"
+                                    else {}
+                                ),
                             )
                             print(
                                 "E4_WRITER_STATUS="
@@ -567,11 +694,11 @@ def run() -> dict:
                         stats["notes_read"] += 1
                         code, answer = private_call("/notes", data)
                         return self.reply(code, answer)
-                    if uri == "/api/request" and set(data) == {
-                        "request",
-                        "request_id",
-                        "conversation_id",
-                    }:
+                    if uri == "/api/request" and set(data) == (
+                        {"request", "request_id", "conversation_id", "reply_to_request_id"}
+                        if RECORDED_CASE == "e5_selected"
+                        else {"request", "request_id", "conversation_id"}
+                    ):
                         stats["n8n_calls"] += 1
                         captured_ids.append(data["request_id"])
                         code, answer = docker_post(container, data)
@@ -641,7 +768,10 @@ def run() -> dict:
                                 "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
                                 "HOME": str(Path.home()),
                                 "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH")
-                                or "/tmp/odyssey-p4-browser-deps/root/usr/lib/aarch64-linux-gnu",
+                                or (
+                                    "/home/ragdehl/projects/.odyssey-agent-runs/"
+                                    "e6-chromium-runtime-deps/root/usr/lib/aarch64-linux-gnu"
+                                ),
                                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public.server_port}/",
                                 "ODYSSEY_SYNTHETIC_SOURCE": E4_SOURCE,
                                 "ODYSSEY_E4_EXPECTED_PERSONS": json.dumps(EXPECTED_PERSON_NAMES),
@@ -683,19 +813,57 @@ def run() -> dict:
                             assert browser["pass"] is True, browser
                             assert len(captured_ids) == 1, captured_ids
                             before = snapshot()
-                            http, replayed = docker_post(
-                                container,
-                                {
-                                    "request_id": captured_ids[0],
-                                    "request": E4_SOURCE,
-                                    "conversation_id": "main",
-                                },
-                            )
+                            replay_body = {
+                                "request_id": captured_ids[0],
+                                "request": E4_SOURCE,
+                                "conversation_id": "main",
+                            }
+                            if RECORDED_CASE == "e5_selected":
+                                turns = product._conversation_store(
+                                    actor.stable_user_id
+                                ).load_main_page()["turns"]
+                                replay_body["reply_to_request_id"] = turns[0]["request_id"]
+                            http, replayed = docker_post(container, replay_body)
                             assert http == 200 and replayed.get("status") == "completed"
                             assert snapshot() == before, "E3 changed Markdown bytes"
                             notes = {
                                 p: parse_note(repo.read_text(p)) for p in repo.list_markdown_paths()
                             }
+                            if RECORDED_CASE == "e5_selected":
+                                days = [
+                                    note
+                                    for note in notes.values()
+                                    if note.metadata.get("id") == "date:2026-10-04"
+                                ]
+                                assert len(days) == 1, days
+                                body = days[0].content
+                                assert (
+                                    body.count("He estado con [[Luis|Luis]] en el parque.") == 1
+                                ), body
+                                assert not any(
+                                    n.metadata.get("type") in {"task", "event"}
+                                    for n in notes.values()
+                                )
+                                assert stats["replay"] == stats["first_writes"] == 1, stats
+                                assert stats["assistant_persisted"] == 1, stats
+                                assert stats["denied"] >= 1
+                                return {
+                                    "passed": True,
+                                    "source_case": "e5_selected",
+                                    "seconds": round(time.monotonic() - started, 2),
+                                    "gpt": "recorded"
+                                    if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
+                                    else "real",
+                                    "n8n": "real_offline_docker",
+                                    "browser": "Chromium real",
+                                    "authentication": "synthetic_local_cookie_gate",
+                                    "cloudflare_access_tested": False,
+                                    "canonical_date": "2026-10-04",
+                                    "journal_wikilink": True,
+                                    "replay_no_duplicate": True,
+                                    "browser_gate": browser["pass"],
+                                    "dev_prod_untouched": True,
+                                }
                             if RECORDED_CASE == "generic_day":
                                 day_notes = [
                                     n

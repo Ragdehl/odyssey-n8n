@@ -30,7 +30,15 @@ from tests.runtime.test_temporal_user_path_e2e import SCHEMA, ConstantEmbedder, 
 ACTOR = AuthenticatedActorContext("33333333-3333-4333-8333-333333333333")
 
 
-def _factory(tmp_path: Path, monkeypatch, *, undated: bool, temporal_mode: str):
+def _factory(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    undated: bool,
+    temporal_mode: str,
+    select: bool = True,
+    conversation: str = "chat-1",
+):
     fixture = tmp_path / "fixture"
     fixture.mkdir()
     preview, _, vault, _ = _ready(fixture, captured_timezone="Europe/Paris")
@@ -160,21 +168,37 @@ def _factory(tmp_path: Path, monkeypatch, *, undated: bool, temporal_mode: str):
     pending = CandidatePendingRepository(actor_pending_root)
     pending.record(
         preview,
-        conversation_id="chat-1",
+        conversation_id=conversation,
         created_at=NOW,
         created_timezone="Europe/Paris",
         options=(ClarificationOption("eric-id", "Eric"), ClarificationOption("luis-id", "Luis")),
         vault=vault,
         schema=SCHEMA,
     )
-    assert _reply(pending, vault, "Con Luis").outcome == "choice_recorded"
-    context = prepare_selected_candidate_continuation(
-        pending,
-        conversation_id="chat-1",
-        request_id=preview.request_id,
-        vault=vault,
-        schema=SCHEMA,
-    )
+    if select:
+        if conversation == "chat-1":
+            assert _reply(pending, vault, "Con Luis").outcome == "choice_recorded"
+        else:
+            assert (
+                pending.reply(
+                    conversation_id=conversation,
+                    reply="Con Luis",
+                    answer_id="selected-test-reply",
+                    vault=vault,
+                    schema=SCHEMA,
+                    immediate_followup=True,
+                ).outcome
+                == "choice_recorded"
+            )
+        context = prepare_selected_candidate_continuation(
+            pending,
+            conversation_id=conversation,
+            request_id=preview.request_id,
+            vault=vault,
+            schema=SCHEMA,
+        )
+    else:
+        context = None
     return product, vault, pending, context, trace
 
 

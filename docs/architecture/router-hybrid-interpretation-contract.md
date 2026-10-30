@@ -950,16 +950,35 @@ probe. The negative callback and same-ID replay had already passed in the
 separate deterministic production callback test; these are not claimed
 as real-provider replay. This new combined proof supersedes the need to
 repeat the previous isolated provider/Planner/Core positive checks.
-Remaining feature acceptance requires isolated matching-SHA authenticated
-browser→n8n→real provider→Core/E3→Notes/Calendar/UI. Real latency is only
-one point (18.53 s), not p95 or a concurrency guarantee. Reuse existing
-Events/Tasks E5 evidence; avoid scope growth and unnecessary repeat audits.
-Earlier open concerns include more varied semantic
-sources (third-person, future, negated, mixed Apps), representative full
-provider/performance and concurrent-resource measurements, fresh scoped audit,
-and isolated authenticated Chromium→HTTPS→n8n→actual provider→Core/E3→Markdown
-→UI with exact deployed SHA and replay. A Cloudflare principal alone cannot
-isolate the existing DEV shared actor and vault. Keep E5 OFF.
+The final isolated browser route revealed a DIFFERENT actual product defect:
+Core/E3 returned product_control=CANDIDATE_CONTINUATION_SAVED, but the
+workflow route treated its conversation_reply as read-only C3 and rejected
+a completed write with a generic error. Fixed in workflows/odyssey-online.ts
+by an explicit tightly validated E3 receipt projection BEFORE the read-only
+C3 branch; no generic saved-message acceptance or alternate Writer.
+The existing scripts/odyssey_e4_live_browser_n8n.py and its Docker
+network=none n8n fixture were reused, not cloned. A new Chromium E5
+interaction script clicks the actual recovered choice, checks confirmation,
+reload and Notes UI. Source TS Code is used instead of the OLD deployed
+DEV renderer; no runtime/n8n/Cloudflare deployment was changed.
+
+Evidence on current source (2026-10-30, same isolated actor/vault fixture):
+- Real Chromium + offline Docker n8n + recorded providers + actual Core/E3
+  PASS, 38.64 s; selected card «Eric/Luis», click «Luis», physically verified
+  Day wikilink, persisted reply, Notes UI and immutable same-ID replay.
+- The exact browser→n8n→host REAL Temporal, LunaFirst and independent
+  reviewer→Core/E3→Markdown→UI PASS, 50.37 s. One real end-to-end
+  sample, no repeated model calls or p95/concurrency acceptance.
+- Both use a synthetic local authenticated cookie; NOT Cloudflare Access,
+  NOT the currently deployed DEV SHA, and NOT a real personal vault.
+  Existing DEV shares one actor across Cloudflare principals, so a
+  matching-SHA isolated deployment and explicit environment authorization
+  remain needed before public DEV/PROD adoption or enablement.
+The prior 18.53 s source-only real-model callback proof remains historical;
+do not re-run it merely because this broader isolated browser E2E passed.
+Existing Events/Tasks and other recorded semantic regressions remain valid.
+Do not confuse this new source with the older four-role audit SHA.
+No measured p95 or concurrency SLA is claimed; keep E5 OFF in existing DEV.
 Prior targeted temporal security PASS is separate from these four verdicts.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second

@@ -202,6 +202,34 @@ const flowMatchesStages = (flow, stages) => {
 };
 if (!id || !r || r.request_id !== id) return [{ json: error }];
 // C3 is a trusted runtime-only, non-writing reply. Never infer this from text.
+// E5 continuation has a verified Core/E3 receipt; C3 read-only does not.
+// Never accept an arbitrary provider claim that a conversation_reply was saved.
+if (r.product_control === 'CANDIDATE_CONTINUATION_SAVED') {
+  const c = r.conversation_reply;
+  const affected = r.affected_stable_note_ids;
+  const valid = r.status === 'completed' && r.product_outcome === 'ANSWER' &&
+    c && typeof c === 'object' && !Array.isArray(c) &&
+    Object.keys(c).sort().join(',') === 'kind,message,status' &&
+    c.kind === 'saved' && c.status === 'completed' &&
+    c.message === 'He guardado la información pendiente.' &&
+    Array.isArray(r.actions) && r.actions.length === 0 &&
+    typeof r.selected_pending_request_id === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(r.selected_pending_request_id) &&
+    Array.isArray(affected) && affected.length >= 1 && affected.length <= 64 &&
+    affected.every(n => typeof n === 'string' && /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/.test(n)) &&
+    new Set(affected).size === affected.length &&
+    r.operational && r.operational.total_duration_ms === 0 &&
+    Array.isArray(r.operational.stages) && r.operational.stages.length === 0 &&
+    (r.delivery_replayed === undefined || r.delivery_replayed === true);
+  if (!valid) return [{json:error}];
+  const detail = {
+    request_id:id,
+    operational:{total_duration_ms:0,stages:[]},
+    changes:{affected_stable_note_ids:affected,units:[]}
+  };
+  return [{json:{route:'direct',request_id:id,status:'completed',
+    kind:'acknowledgement',message:c.message,request_detail:detail}}];
+}
 if (Object.hasOwn(r, 'conversation_reply')) {
   const c = r.conversation_reply;
   const safe = c && typeof c === 'object' && !Array.isArray(c) &&
