@@ -824,3 +824,19 @@ PASS cannot override either planner failure; next investigate the
 generic chosen-identity guidance of the existing Core planner rather
 than constructing an example-specific planner. DEV real browser+n8n+
 provider+Core and complete independent four-role review remain pending.
+
+Continuation diagnosis (30-10-2026, source-only): the durable selected
+identity was already supplied as `canonical_reference` evidence, but the
+shared Core Planner instruction described only multi-member finite sets. The
+minimal contract repair now gives one-or-many bindings the same rule: preserve
+the exact source mention, supplied `type:name` lookup hint, and a matching
+Core reference. The Luna semantic variant additionally requires an identity
+part and reserves raw marker/helper construction for the deterministic Core
+compiler. Marker validation remains strict. This adds no Writer, state store,
+or alternate identity resolver; the existing stale/cross-actor, physical
+readback, and replay/no-duplication guards remain the authority. Prompt
+sentinels cover single ES and EN selected references. No provider call,
+deployment, merge, or vault mutation occurred. This isolated checkout lacks
+`pytest` and `ruff`, so AST parsing, schema validation, and diff checks are
+the only fresh local evidence; deterministic tests and an explicitly
+authorized real-planner evaluation remain required.

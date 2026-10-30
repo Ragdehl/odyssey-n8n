@@ -658,18 +658,28 @@ def _render_domain_interpretation_section(
         and len({entry.value for entry in canonical_refs}) == len(canonical_refs)
     )
     canonical_reference_instruction = (
-        " These canonical_reference evidence items describe a source-grounded "
-        "finite set of DISTINCT physically verified Notes. Preserve EACH "
-        "member as an ordinary Core identity reference in the SAME "
-        "source-owned write action only when the source requests one shared "
-        "operation. Never group independent operations merely because they "
-        "appear in the same interpretation, and never split a single shared "
-        "operation merely because it references several members. For every link "
-        "retain the exact shared SOURCE_TEXT and its distinct canonical VALUE. "
-        "Do not invent Note IDs or assignments, nor grant mutation authority "
-        "to evidence. Core preflight verifies every canonical target and marker; "
-        "ESCALATE instead of dropping a member or guessing action grouping."
-        if shared_finite_set
+        " Each canonical_reference evidence item binds one exact source mention "
+        "to one physically verified existing Note. When that mention is a "
+        "semantic participant or other linked identity in a proposed fact, "
+        "preserve the exact SOURCE_TEXT as an ordinary Core identity reference "
+        "and use its supplied type:name VALUE for the lookup target. Emit the "
+        "corresponding local fact reference marker and its matching reference "
+        "entry together; never emit a marker without that entry, replace the "
+        "source mention with a bare name, or invent an ID or assignment. "
+        "The evidence is a bounded binding hint, not mutation authority. "
+        "Core preflight verifies every canonical target and marker; ESCALATE "
+        "instead of dropping or guessing a required binding."
+        + (
+            " The evidence items describe a source-grounded finite set of DISTINCT "
+            "physically verified Notes. Preserve EACH member in the SAME source-owned "
+            "write action only when the source requests one shared operation. Never "
+            "group independent operations merely because they appear in the same "
+            "interpretation, and never split a single shared operation merely because "
+            "it references several members."
+            if shared_finite_set
+            else ""
+        )
+        if canonical_refs
         else ""
     )
     return (

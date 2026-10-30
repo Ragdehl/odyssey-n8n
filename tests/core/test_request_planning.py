@@ -88,6 +88,28 @@ def reference_selection(
     }
 
 
+def test_single_canonical_reference_prompt_requires_a_matching_core_reference(schema: dict) -> None:
+    """One selected identity gets the same typed binding contract as a set."""
+    from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
+
+    prompt = render_request_planner_prompt(
+        schema,
+        CONTEXT,
+        domain_interpretation=DomainInterpretation(
+            "core",
+            "Mañana iré al cine con él",
+            "CANONICAL_REFERENCE",
+            (DomainEvidence("canonical_reference", "él", "person:Luis"),),
+        ),
+    )
+    assert "Each canonical_reference evidence item binds one exact source mention" in prompt
+    assert (
+        "Emit the corresponding local fact reference marker and its matching reference entry"
+        in prompt
+    )
+    assert "never emit a marker without that entry" in prompt
+
+
 def semantic_set_selection(query: str) -> dict:
     """Build the only planner-visible Slice 1 semantic-set retrieval intent."""
     result = selection(query)
@@ -513,6 +535,13 @@ def test_swr01_style_self_source_and_two_references_remains_valid(schema: dict) 
     assert schema_accepts(provider_output(payload), planner_result_json_schema(schema))
     plan = validate_planner_result(payload, schema)
     assert len(plan.actions[0].units[0].references) == 2  # type: ignore[union-attr]
+
+
+def test_selected_reference_marker_without_matching_entry_stays_rejected(schema: dict) -> None:
+    """Reproduce the planner boundary that must remain fail-closed."""
+    malformed = schema_unit("Marta", note_type="person", facts=["Con {{ref:0}}."])
+    with pytest.raises(RequestPlanningError, match="fact reference marker is out of range"):
+        validate_request_plan(output(write(malformed)), schema)
 
 
 @pytest.mark.parametrize(

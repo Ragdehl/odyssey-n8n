@@ -969,6 +969,30 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     assert all(item["request"] in prompt for item in load_teaching_examples())
 
 
+def test_luna_canonical_reference_requires_semantic_identity_not_raw_marker(
+    schema: dict[str, Any],
+) -> None:
+    """Selected-reference evidence stays source-scoped and compiler-owned."""
+    from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
+
+    prompt = render_luna_experimental_prompt(
+        schema,
+        CONTEXT,
+        domain_interpretation=DomainInterpretation(
+            "core",
+            "Tomorrow I will meet her.",
+            "CANONICAL_REFERENCE",
+            (DomainEvidence("canonical_reference", "her", "person:Zoë"),),
+        ),
+    )
+    assert "A semantic identity part is required for every such linked fact" in prompt
+    assert (
+        "do not put the selected name in literal text or manufacture raw {{ref:N}} syntax"
+        in prompt
+    )
+    assert "The Core semantic compiler alone derives each local marker" in prompt
+
+
 def test_relational_target_with_described_reference_teaching_example_compiles(
     schema: dict[str, Any],
 ) -> None:
