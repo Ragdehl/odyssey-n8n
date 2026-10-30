@@ -17,12 +17,12 @@ from odyssey_core.application import ApplicationStatus, execute_request
 from odyssey_core.candidate_continuation_context import (
     prepare_selected_candidate_continuation,
 )
-from odyssey_core.candidate_continuation_guard import ReviewedCandidateContinuationWriteGuard
 from odyssey_core.candidate_continuation_plan import inspect_selected_candidate_plan
 from odyssey_core.candidate_continuation_semantic import (
     validate_independent_continuation_verdict,
 )
 from odyssey_core.request_planning import RequestPlan, WriteAction
+from odyssey_core.reviewed_continuation_guard import ReviewedCandidateContinuationWriteGuard
 from tests.runtime.test_candidate_pending_state import _ready, _reply
 from tests.runtime.test_temporal_user_path_e2e import (
     SCHEMA,
@@ -220,3 +220,118 @@ def test_reviewed_guard_reuses_canonical_preflight_for_another_identity(tmp_path
     day = vault.read_text("calendar/days/2026-10-05.md")
     assert day.count("Iré al cine con [[Eric|Eric]]") == 1
     assert "[[Luis|Luis]]" not in day
+
+
+def test_shared_core_readback_verifies_selected_link_and_original_day(tmp_path: Path):
+    from odyssey_core.candidate_fact_readback import readback_core_write_plan_facts
+
+    preview, pending, vault, context, plan, guard = _prepared(tmp_path)
+    original = vault.read_text("calendar/days/2026-10-03.md")
+    result = _execute(vault, context, plan, guard)
+    receipts = readback_core_write_plan_facts(plan, result, vault, SCHEMA)
+    assert [(r.ordinal, r.status, r.note_id) for r in receipts] == [
+        (0, "verified_in_markdown", "date:2026-10-05")
+    ]
+    assert all(r.rendered_fact_digest for r in receipts)
+    assert vault.read_text("calendar/days/2026-10-03.md") == original
+    assert pending.read(preview.request_id)["status"] == "selected"
+
+
+@pytest.mark.parametrize("change", ["text", "marker", "extra_copy", "plan"])
+def test_shared_core_readback_does_not_certify_tampered_or_duplicate_fact(
+    tmp_path: Path, change: str
+):
+    from odyssey_core.candidate_fact_readback import readback_core_write_plan_facts
+
+    _preview, _pending, vault, context, plan, guard = _prepared(tmp_path)
+    result = _execute(vault, context, plan, guard)
+    path = "calendar/days/2026-10-05.md"
+    source = vault.read_text(path)
+    if change == "text":
+        (vault.root / path).write_text(
+            source.replace("Iré al cine con", "Iré a otra parte con"), encoding="utf-8"
+        )
+    elif change == "marker":
+        (vault.root / path).write_text(
+            source.replace("request=continuation-test", "request=altered-source"),
+            encoding="utf-8",
+        )
+    elif change == "extra_copy":
+        (vault.root / "duplicate.md").write_text(source, encoding="utf-8")
+    elif change == "plan":
+        writer, helper = plan.actions[0].units
+        writer = replace(writer, facts=("Iré al teatro con {{ref:0}}.",))
+        plan = RequestPlan((WriteAction((writer, helper)),), ())
+    receipts = readback_core_write_plan_facts(plan, result, vault, SCHEMA)
+    assert len(receipts) == 1
+    assert receipts[0].status == "not_verified"
+    assert receipts[0].note_id is None
+
+
+def test_existing_delivery_claim_requires_physical_readback_before_replay(
+    tmp_path: Path,
+):
+    """Reuses actor-local DeliveryResultStore; no separate continuation DB."""
+    from datetime import UTC, datetime
+
+    from odyssey_core.candidate_fact_readback import readback_core_write_plan_facts
+    from odyssey_runtime.delivery_results import DeliveryResultError, LocalDeliveryResultStore
+
+    _preview, _pending, vault, context, plan, guard = _prepared(tmp_path)
+    store = LocalDeliveryResultStore(tmp_path / "delivery-results")
+    request_id = "selected-reply-core-once"
+    fingerprint = store.fingerprint(
+        context.pending_source,
+        context.conversation_id,
+        reply_to_request_id=context.original_request_id,
+    )
+    assert store.load(request_id, fingerprint) is None
+    store.claim_mutation(request_id, fingerprint)
+    result = _execute(vault, context, plan, guard, request_id=request_id)
+    verified = readback_core_write_plan_facts(plan, result, vault, SCHEMA)
+    assert len(verified) == 1
+    assert all(item.status == "verified_in_markdown" for item in verified)
+    recorded = {
+        "request_id": request_id,
+        "status": "completed",
+        "original_request_id": context.original_request_id,
+        "facts": [
+            {"ordinal": item.ordinal, "note_id": item.note_id, "digest": item.rendered_fact_digest}
+            for item in verified
+        ],
+    }
+    store.save(request_id, fingerprint, recorded, datetime.now(UTC).isoformat())
+    store.finish_mutation_claim(request_id)
+    reopened = LocalDeliveryResultStore(tmp_path / "delivery-results")
+    assert reopened.load(request_id, fingerprint) == recorded
+    assert reopened.inspect_mutation_claim(request_id, fingerprint)["replay_permitted"]
+    assert (
+        vault.read_text("calendar/days/2026-10-05.md").count("Iré al cine con [[Luis|Luis]]") == 1
+    )
+    with pytest.raises(DeliveryResultError):
+        reopened.load(request_id, store.fingerprint("different", context.conversation_id))
+
+
+def test_existing_claim_blocks_crash_replay_without_any_receipt(tmp_path: Path):
+    from odyssey_runtime.delivery_results import DeliveryResultError, LocalDeliveryResultStore
+
+    _preview, _pending, vault, context, plan, guard = _prepared(tmp_path)
+    store = LocalDeliveryResultStore(tmp_path / "delivery-results")
+    request_id = "selected-reply-crash"
+    fingerprint = store.fingerprint(
+        context.pending_source,
+        context.conversation_id,
+        reply_to_request_id=context.original_request_id,
+    )
+    store.claim_mutation(request_id, fingerprint)
+    # A crash might occur after Core writes Markdown and before receipt save.
+    # The claim is an unresolved E3 attempt; no retry may invoke the writer.
+    _execute(vault, context, plan, guard, request_id=request_id)
+    reopened = LocalDeliveryResultStore(tmp_path / "delivery-results")
+    assert reopened.inspect_mutation_claim(request_id, fingerprint)["state"] == "unresolved_attempt"
+    assert not reopened.inspect_mutation_claim(request_id, fingerprint)["replay_permitted"]
+    with pytest.raises(DeliveryResultError, match="unresolved prior attempt"):
+        reopened.claim_mutation(request_id, fingerprint)
+    assert (
+        vault.read_text("calendar/days/2026-10-05.md").count("Iré al cine con [[Luis|Luis]]") == 1
+    )

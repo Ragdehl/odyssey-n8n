@@ -39,33 +39,16 @@ class CandidateWriteObservation:
     observed_core_write_units: tuple[ObservedCoreWriteUnit, ...]
 
 
-def observe_candidate_write_outcomes(
-    source: str,
-    context: CoreCandidateContext,
-    plan: RequestPlan,
-    result: ApplicationResult,
-) -> CandidateWriteObservation:
-    """Observe a real Core execution without inventing a candidate→fact mapping.
+def observe_core_write_units(
+    plan: RequestPlan, result: ApplicationResult
+) -> tuple[ObservedCoreWriteUnit, ...]:
+    """Use Core's plan and actual results; no Router attribution is inferred.
 
-    Args:
-        source: Exactly the unchanged current user request.
-        context: Independently revalidated, Core-owned candidate source packet.
-        plan: Core's validated request-level plan, not a Router-derived rewrite.
-        result: Result returned by ordinary Core execution for that plan.
-
-    Returns:
-        Bounded per-Core-unit statuses and an explicit ``unattributed`` marker
-        for *all* proposed fact candidates. This is not write authorization.
-
-    Raises:
-        ValueError: If request sources, action order/types, or unit outcomes
-            cannot be correlated safely with the actual Core result.
+    This is shared by original-source candidate accounting and reviewed
+    continuations. It is read-only and never authorizes a mutation.
     """
-    if not isinstance(context, CoreCandidateContext):
-        raise ValueError("Core candidate context is invalid")
-    context.validate(source)
     if not isinstance(plan, RequestPlan) or not isinstance(result, ApplicationResult):
-        raise ValueError("A validated Core plan and execution result are required")
+        raise ValueError("A typed Core plan and result are required")
     if len(plan.actions) > MAX_OBSERVED_CORE_ACTIONS:
         raise ValueError("Core write observation exceeds action budget")
     if (
@@ -111,6 +94,37 @@ def observe_candidate_write_outcomes(
                 )
             )
             next_write_unit += 1
+    return tuple(receipts)
+
+
+def observe_candidate_write_outcomes(
+    source: str,
+    context: CoreCandidateContext,
+    plan: RequestPlan,
+    result: ApplicationResult,
+) -> CandidateWriteObservation:
+    """Observe a real Core execution without inventing a candidate→fact mapping.
+
+    Args:
+        source: Exactly the unchanged current user request.
+        context: Independently revalidated, Core-owned candidate source packet.
+        plan: Core's validated request-level plan, not a Router-derived rewrite.
+        result: Result returned by ordinary Core execution for that plan.
+
+    Returns:
+        Bounded per-Core-unit statuses and an explicit ``unattributed`` marker
+        for *all* proposed fact candidates. This is not write authorization.
+
+    Raises:
+        ValueError: If request sources, action order/types, or unit outcomes
+            cannot be correlated safely with the actual Core result.
+    """
+    if not isinstance(context, CoreCandidateContext):
+        raise ValueError("Core candidate context is invalid")
+    context.validate(source)
+    if not isinstance(plan, RequestPlan) or not isinstance(result, ApplicationResult):
+        raise ValueError("A validated Core plan and execution result are required")
+    receipts = observe_core_write_units(plan, result)
     return CandidateWriteObservation(
         candidate_ids=tuple(item.candidate_id for item in context.candidates),
         attribution_status="unattributed",
@@ -118,5 +132,5 @@ def observe_candidate_write_outcomes(
             item.candidate_id for item in context.candidates if item.state == "ambiguous_identity"
         ),
         core_request_status=result.status.value,
-        observed_core_write_units=tuple(receipts),
+        observed_core_write_units=receipts,
     )

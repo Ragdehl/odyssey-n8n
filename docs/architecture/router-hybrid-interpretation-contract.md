@@ -755,7 +755,33 @@ no autorizan una escritura extra en la bóveda temporal.
 Estos ensayos NO prueban que el revisor entienda el lenguaje; su dictamen
 es sintético y puede afirmar falsamente `approved`. El guard no se
 inyecta en Runtime/n8n/DEV/PROD ni concede permiso general para escribir.
-**Siguiente bloqueo operativo único:** campaña semántica real y acotada
-del prompt heredado; después conectar el flujo de autorización, recibo
-duradero de terminación y readback confirmado con el E3 ordinario,
-auditoría final y aceptación desde navegador en DEV matching-SHA.
+**Ensayo de entrega recuperable (30-10-2026, solo fuente):** el readback
+de continuación utiliza ahora la misma implementación de verificación
+física de Markdown, IDs únicos, ordinales y enlaces canónicos que los
+hechos ya escritos del mensaje inicial. `deliver_reviewed_candidate_continuation`
+reutiliza `LocalDeliveryResultStore`: ID determinista asociado a aclaración,
+claim exclusivo antes de ejecutar Core/E3, guard de plan y referencia elegida,
+comprobación de los recibos de referencia y de TODOS los hechos físicos,
+recibo inmutable y replay sin segunda llamada a Core. Una caída tras
+escribir, un resultado parcial o un hecho Markdown alterado bloquea el
+reintento, no se considera éxito. Pruebas verticales sobre vault sintético
+incluyen cambio de texto, marcador, duplicate note ID, error post-escritura,
+conversación errónea y corrupción del recibo del ayudante.
+**No hay una segunda base de datos, otro Writer o motor de resolución.**
+Para preservar el aislamiento de los validadores de frase heredados,
+el guard semántico general está separado en
+`odyssey_core/reviewed_continuation_guard.py` y la antigua ruta F14/F27
+importa únicamente su comprobación canónica compartida de referencias.
+El runtime no importa `candidate_continuation_guard.py`; su puerta
+histórica sigue sin ser un consumidor del producto. La regresión
+`test_semantic_validator_isolation_p4` verifica esta frontera.
+La coordinación no está invocada por RuntimeComposition ni recibe GPT real,
+ni pone el candidato en estado completado. Una revisión sintética aprobada
+no prueba el significado y no permite adoptar el flujo. El código fuente
+no equivale a un recorrido funcional desde la aplicación.
+
+**Siguiente bloqueo operativo único:** evaluar con modelo real y campaña
+acotada la semántica del prompt heredado; después habilitar de forma
+controlada la continuación en el chat sobre los propietarios existentes,
+probar Chromium→n8n→Core/E3→Markdown→UI en DEV matching-SHA y obtener
+los cuatro dictámenes finales. No fusionar ni activar automáticamente.

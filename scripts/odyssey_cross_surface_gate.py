@@ -165,6 +165,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_candidate_continuation_semantic.py",
         "tests/runtime/test_candidate_continuation_plan.py",
         "tests/runtime/test_candidate_continuation_reviewed_core_e3.py",
+        "tests/runtime/test_candidate_continuation_delivery.py",
     ),
     "runtime_http_and_isolation": (
         "tests/runtime/test_runtime_boundary.py",
