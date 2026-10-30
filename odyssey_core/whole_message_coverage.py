@@ -118,6 +118,7 @@ def validate_whole_message_coverage(
     *,
     verified_relationship_members: Sequence[str] = (),
     verified_relationship_groups: Sequence[tuple[str, tuple[str, ...]]] = (),
+    unverified_source_mentions: Sequence[str] = (),
     core_anchored_evidence: bool = False,
 ) -> ReviewedFullSource:
     """Verify semantic proposal/reviewer agreement and literal source provenance.
@@ -148,6 +149,23 @@ def validate_whole_message_coverage(
     entities = proposal.get("entities")
     if not isinstance(entities, list) or not all(isinstance(e, Mapping) for e in entities):
         raise WholeMessageCoverageError("Invalid entity evidence")
+    # Unverified mentions carry no identity authority. They may be saved as
+    # literal source, but independent semantic review must preserve each one.
+    mentions = tuple(unverified_source_mentions)
+    if (
+        len(mentions) > 8
+        or any(not isinstance(m, str) or not m or m not in source for m in mentions)
+        or any(
+            not any(
+                isinstance(row, Mapping)
+                and isinstance(row.get("reviewed_text"), str)
+                and mention in row["reviewed_text"]
+                for row in judgments
+            )
+            for mention in mentions
+        )
+    ):
+        raise WholeMessageCoverageError("Unverified source mention was not retained")
     verified = set(verified_relationship_members)
     if not all(isinstance(name, str) and name.strip() for name in verified):
         raise WholeMessageCoverageError("Invalid relationship evidence")
