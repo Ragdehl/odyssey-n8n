@@ -814,29 +814,25 @@ ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED=1 is DEV-only and requires
 the existing light-source configuration. Product tests use a synthetic
 reviewer and vault and do not prove a live browser flow.
 
-Blocking discovery from two bounded real read-only planner probes:
-the production Core Planner rejected its own proposed fact with
-KnowledgeUnit fact reference marker is out of range; the already
-existing Luna experimental planner independently rejected its proposal
-with Luna semantic WRITE failed local compilation. Both refused
-before any E3 execution or Markdown write. The separate review model
-PASS cannot override either planner failure; next investigate the
-generic chosen-identity guidance of the existing Core planner rather
-than constructing an example-specific planner. DEV real browser+n8n+
-provider+Core and complete independent four-role review remain pending.
+Historical 30-10 blocker: Core Planner emitted an out-of-range reference
+marker; Luna failed semantic WRITE compilation. Neither reached E3.
+The shared canonical_reference prompt now covers one exact selected mention
+as well as finite groups, retaining strict markers and Note-ID safety;
+Luna's semantic variant preserves compiler ownership of helpers. No second
+Planner, Writer, identity store, or example-specific branch was introduced.
 
-Continuation diagnosis (30-10-2026, source-only): the durable selected
-identity was already supplied as `canonical_reference` evidence, but the
-shared Core Planner instruction described only multi-member finite sets. The
-minimal contract repair now gives one-or-many bindings the same rule: preserve
-the exact source mention, supplied `type:name` lookup hint, and a matching
-Core reference. The Luna semantic variant additionally requires an identity
-part and reserves raw marker/helper construction for the deterministic Core
-compiler. Marker validation remains strict. This adds no Writer, state store,
-or alternate identity resolver; the existing stale/cross-actor, physical
-readback, and replay/no-duplication guards remain the authority. Prompt
-sentinels cover single ES and EN selected references. No provider call,
-deployment, merge, or vault mutation occurred. This isolated checkout lacks
-`pytest` and `ruff`, so AST parsing, schema validation, and diff checks are
-the only fresh local evidence; deterministic tests and an explicitly
-authorized real-planner evaluation remain required.
+Source SHA 3a6cbd7: two follow-up prompt commits and an inspection fix passed
+Ruff, formatting, official cross-surface Python/Node gate and NoteSchema.
+Core's ordinary empty optional temporal-anchor rows are accepted for
+read-only inspection; partially populated rows still fail closed. One fresh
+GPT-5.6 Luna/low planner call with synthetic vault and original clock returned
+one RequestPlan fact with the selected reference; structural inspection PASS.
+The proposed fact had no explicit temporal anchor. This is not proof that the
+independent reviewer accepts the exact plan, destination/date and original
+source, nor that Core/E3 writes and replays the correct canonical note.
+Ordinary Core Planner has not been retested after prompt changes.
+DEV remains at 4ba8bb8 with the feature OFF, PR #161 is DRAFT, and neither
+DEV, PROD nor personal Markdown was modified. Remaining E5 acceptance:
+source/clock/date and negative semantic cases on real Planner output,
+readback/replay through existing Core/E3, four independent integrated audit
+roles, and authenticated Chromium HTTPS/n8n E2E matching deployed SHA.
