@@ -137,6 +137,43 @@ def test_domain_handoff_retires_old_journal_prompt_and_pins_current_luna_candida
     )
 
 
+@pytest.mark.parametrize(
+    ("source", "reference", "date_text", "date"),
+    [
+        ("Mañana visitaré a él", "él", "Mañana", "2026-10-03"),
+        ("Demain je verrai mon ami", "mon ami", "Demain", "2026-10-03"),
+        ("Tomorrow I'll see her", "her", "Tomorrow", "2026-10-03"),
+    ],
+)
+def test_selected_identity_and_exact_temporal_evidence_share_existing_core_contract(
+    source: str, reference: str, date_text: str, date: str
+) -> None:
+    """Two existing Core evidence types compose without a new date or reference resolver."""
+    domain = DomainInterpretation(
+        "core",
+        source,
+        "CANONICAL_REFERENCE",
+        (
+            DomainEvidence("canonical_reference", reference, "person:Alex Example"),
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, date_text, date),
+        ),
+    )
+    assert [entry.kind for entry in domain.evidence] == [
+        "canonical_reference",
+        TEMPORAL_REFERENCE_EVIDENCE,
+    ]
+    assert [item.value for item in domain.temporal_references()] == [date]
+    prompt = render_luna_experimental_prompt(schema(), CURRENT, domain_interpretation=domain)
+    assert '"kind":"canonical_reference"' in prompt
+    assert '"kind":"temporal_reference"' in prompt
+    assert date in prompt
+    assert "Core still owns action choice" in prompt
+    assert (
+        "semantic_temporal_reference_part"
+        in luna_experimental_result_json_schema(schema(), domain)["$defs"]
+    )
+
+
 def test_core_prompt_is_identical_when_no_domain_interpretation_is_supplied() -> None:
     active_schema = schema()
     normal = render_request_planner_prompt(active_schema, CURRENT)

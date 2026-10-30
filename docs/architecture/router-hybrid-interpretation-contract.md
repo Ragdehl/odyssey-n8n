@@ -832,6 +832,33 @@ independent reviewer accepts the exact plan, destination/date and original
 source, nor that Core/E3 writes and replays the correct canonical note.
 After the follow-up repair, read-only inspection projects an already typed and validated calendar_day destination date as temporal review evidence even when Core supplies no optional fact temporal rows. Explicit different anchors stay visible as multiple dates and are rejected by the unchanged independent semantic validator; invalid Day target dates reject before review. This reuses Core's canonical date and the previously accepted reviewer schema, without any new Temporal stage. 63 focused continuation/review/delivery tests PASS with no provider call. Ordinary Core Planner has not been retested after prompt changes.
 DEV remains at 4ba8bb8 with the feature OFF, PR #161 is DRAFT, and neither
-DEV, PROD nor personal Markdown was modified. New disposable Core/E3 delivery test checks ordinary empty-anchor Day plans for two independently selected identities, physical Markdown and idempotent replay; contradictory Day/anchor plans fail before claim. 66 focused Python tests PASS. A separate read-only Codex Generalidad review of source delta 660974d..22bc4cb plus the new test returned PASS with no actionable findings on name-specific branches, duplicate owners or weakened Core guards; this is NOT four-role final approval.\nRemaining E5 acceptance:\nsource/clock/date and negative semantic cases on real Planner output,
-readback/replay through existing Core/E3, four independent integrated audit
-roles, and authenticated Chromium HTTPS/n8n E2E matching deployed SHA.
+DEV, PROD nor personal Markdown was modified. New disposable Core/E3 delivery tests check ordinary empty-anchor Day
+plans with two selected identities, physical Markdown, idempotent replay,
+and preclaim rejection of contradictory dates (66 focused Python PASS).
+A read-only Codex Generalidad audit on the earlier source delta
+660974d..22bc4cb returned PASS; this is not a four-role final audit.
+
+Normal RuntimeComposition ALREADY uses LunaFirstRequestPlanner, with the
+shared semantic compiler and bounded Sol fallback; no alternate planner
+is necessary. A standalone legacy Sol-only model probe failed but did not
+represent the actual E5 planner. In a two-case real Luna-first probe without
+Temporal evidence, the positive request lost its verified date/destination
+and the independent reviewer vetoed it. A question in French did not write.
+
+The continuation callback now calls the established Temporal interpreter
+with the ORIGINAL capture clock and combines its exact source-bound date
+evidence with canonical identity evidence in the SAME Core DomainInterpretation.
+Non-exact Temporal results fail before claim; if no Temporal interpretation
+is available, the independent whole-source reviewer still has veto authority.
+No new resolver, writer, note schema or phrase-specific branch was added.
+Three language variants of the combined-domain contract passed local tests.
+Fresh read-only real Temporal + Luna-first + independent review PASS; a second
+bounded synthetic-vault vertical also reached the existing Core/E3, physically
+verified one canonical Markdown link, preserved the previous Day and replayed
+without duplicate write in 10.81 seconds. Neither proof is a deployed browser
+session or four-role integrated audit.
+
+Remaining E5 acceptance: multi-case real semantic testing with both positive
+and negative variants, the four independent audit roles on the final SHA,
+then authenticated Chromium→HTTPS→n8n→provider→Core/E3→Markdown→UI
+E2E on the exact deployed DEV commit, plus fixes arising from those gates.

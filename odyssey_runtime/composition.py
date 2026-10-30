@@ -6385,19 +6385,38 @@ def _build_runtime_from_environment_unlocked(
             }
             # The user's selected name is a Core-verified planning HINT, not
             # provider-granted canonical write authority. E3 re-grounds the ID.
-            evidence = DomainInterpretation(
-                "core",
-                prepared.pending_source,
-                "CANONICAL_REFERENCE",
-                (
-                    DomainEvidence(
-                        "canonical_reference",
-                        prepared.reference_text,
-                        f"person:{prepared.selected_name}",
-                    ),
-                ),
-            )
             try:
+                # Reuse the SAME Temporal interpreter and captured request clock
+                # as ordinary routed writes. Identity resolution alone cannot
+                # authorize guessed dates in a continuation plan.
+                temporal = prepare_temporal_interpretation(
+                    prepared.pending_source, (), captured_clock=captured_clock
+                ).value
+                temporal_evidence = ()
+                if isinstance(temporal, TemporalInterpretation):
+                    if not all(
+                        kind
+                        in {
+                            TemporalResolutionKind.EXACT_DATE,
+                            TemporalResolutionKind.EXACT_DATETIME,
+                        }
+                        for kind in temporal.kinds()
+                    ):
+                        raise ValueError("Continuation Temporal interpretation is not exact")
+                    temporal_evidence = temporal.core_domain_interpretation().evidence
+                evidence = DomainInterpretation(
+                    "core",
+                    prepared.pending_source,
+                    "CANONICAL_REFERENCE",
+                    (
+                        DomainEvidence(
+                            "canonical_reference",
+                            prepared.reference_text,
+                            f"person:{prepared.selected_name}",
+                        ),
+                        *temporal_evidence,
+                    ),
+                )
                 planned = prepare_core_plan(prepared.pending_source, captured_clock, (), evidence)
                 plan = planned.planner.plan(prepared.pending_source)
                 if not isinstance(plan, RequestPlan):
