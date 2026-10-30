@@ -160,6 +160,17 @@ def test_temporal_provider_failure_is_never_approved_as_missing_date(tmp_path: P
         _continuation_exact_temporal_evidence(None)
 
 
+def test_verified_absence_of_temporal_mentions_is_not_a_provider_failure() -> None:
+    """A successful zero-mention Temporal verdict adds no invented dates."""
+    from odyssey_core.temporal_interpretation import TemporalInterpretation
+    from odyssey_runtime.composition import _continuation_exact_temporal_evidence
+
+    temporal = TemporalInterpretation(
+        "He visto a alguien en el parque", (), verified_no_mentions=True
+    )
+    assert _continuation_exact_temporal_evidence(temporal) == ()
+
+
 def test_non_exact_temporal_result_cannot_authorize_a_pending_write() -> None:
     from odyssey_core.temporal_interpretation import TemporalInterpretation, TemporalMention
     from odyssey_core.temporal_resolution import TemporalResolution, TemporalResolutionKind

@@ -62,13 +62,15 @@ class TemporalInterpretation:
 
     source_text: str
     mentions: tuple[TemporalMention, ...]
+    verified_no_mentions: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_text, str) or not self.source_text.strip():
             raise TemporalInterpreterError("Temporal source must be non-empty")
         if (
             not isinstance(self.mentions, tuple)
-            or not self.mentions
+            or type(self.verified_no_mentions) is not bool
+            or (not self.mentions) != self.verified_no_mentions
             or len(self.mentions) > TEMPORAL_INTERPRETER_MAX_ITEMS
             or not all(isinstance(item, TemporalMention) for item in self.mentions)
         ):
@@ -120,14 +122,16 @@ def _temporal_mention_json_schema() -> dict[str, Any]:
     }
 
 
-def temporal_interpretation_json_schema() -> dict[str, Any]:
-    """Return Temporal's closed ordered multi-mention provider contract."""
+def temporal_interpretation_json_schema(*, allow_empty_mentions: bool = False) -> dict[str, Any]:
+    """Preserve the historical nonempty contract unless zero-mention mode is requested."""
+    if type(allow_empty_mentions) is not bool:
+        raise TemporalInterpreterError("Temporal no-mention option must be boolean")
     return {
         "type": "object",
         "properties": {
             "mentions": {
                 "type": "array",
-                "minItems": 1,
+                "minItems": 0 if allow_empty_mentions else 1,
                 "maxItems": TEMPORAL_INTERPRETER_MAX_ITEMS,
                 "items": _temporal_mention_json_schema(),
             }
@@ -138,15 +142,21 @@ def temporal_interpretation_json_schema() -> dict[str, Any]:
 
 
 def parse_temporal_interpretation(
-    payload: Mapping[str, Any], source_text: str, *, timezone: str
+    payload: Mapping[str, Any],
+    source_text: str,
+    *,
+    timezone: str,
+    allow_empty_mentions: bool = False,
 ) -> TemporalInterpretation:
     """Validate ordered untrusted Temporal provider results against their exact source."""
+    if type(allow_empty_mentions) is not bool:
+        raise TemporalInterpreterError("Temporal no-mention option must be boolean")
     if not isinstance(payload, Mapping) or set(payload) != {"mentions"}:
         raise TemporalInterpreterError("Temporal interpretation fields are invalid")
     raw_mentions = payload["mentions"]
     if (
         not isinstance(raw_mentions, list)
-        or not raw_mentions
+        or (not raw_mentions and not allow_empty_mentions)
         or len(raw_mentions) > TEMPORAL_INTERPRETER_MAX_ITEMS
     ):
         raise TemporalInterpreterError("Temporal mentions are invalid")
@@ -170,11 +180,15 @@ def parse_temporal_interpretation(
         if len(years) == 1 and resolved is not None and resolved[:4] not in years:
             raise TemporalInterpreterError("Explicit year conflicts with resolved date")
         mentions.append(TemporalMention(temporal_text, resolution))
-    return TemporalInterpretation(source_text, tuple(mentions))
+    return TemporalInterpretation(source_text, tuple(mentions), verified_no_mentions=not mentions)
 
 
-def render_temporal_prompt(current_context: Mapping[str, str]) -> str:
+def render_temporal_prompt(
+    current_context: Mapping[str, str], *, allow_empty_mentions: bool = False
+) -> str:
     """Render only date/time resolution instructions and explicit runtime clock context."""
+    if type(allow_empty_mentions) is not bool:
+        raise TemporalInterpreterError("Temporal no-mention option must be boolean")
     if set(current_context) != {"date", "time", "timezone"} or not all(
         isinstance(value, str) and value.strip() for value in current_context.values()
     ):
@@ -195,6 +209,13 @@ def render_temporal_prompt(current_context: Mapping[str, str]) -> str:
         "calendar interval using a half-open range_end_exclusive, and UNSPECIFIED only when that temporal "
         "wording cannot be normalized safely. For relative wording, use only the supplied current date, "
         "time, and timezone. Never invent a different temporal phrase. Return only the strict JSON object.\n"
+        + (
+            " When this exact source contains no temporal wording, return"
+            ' {"mentions":[]} instead of inventing one. Empty means verified'
+            " no temporal mentions, NOT an unknown or unresolved date.\n"
+            if allow_empty_mentions
+            else ""
+        )
         + json.dumps(dict(current_context), ensure_ascii=False, separators=(",", ":"))
     )
 
@@ -209,6 +230,7 @@ class OpenAITemporalInterpreter:
         *,
         max_output_tokens: int = TEMPORAL_INTERPRETER_MAX_OUTPUT_TOKENS,
         scoped_date_time_context: bool = False,
+        allow_empty_mentions: bool = False,
     ) -> None:
         if (
             type(max_output_tokens) is not int
@@ -219,7 +241,10 @@ class OpenAITemporalInterpreter:
             raise TemporalInterpreterError("Temporal output token allowance is invalid")
         if type(scoped_date_time_context) is not bool:
             raise TemporalInterpreterError("Temporal scoped date/time mode is invalid")
+        if type(allow_empty_mentions) is not bool:
+            raise TemporalInterpreterError("Temporal no-mention option must be boolean")
         self.scoped_date_time_context = scoped_date_time_context
+        self.allow_empty_mentions = allow_empty_mentions
         self.max_output_tokens = max_output_tokens
         self._client = client
         self._current_context = dict(current_context)
@@ -237,7 +262,9 @@ class OpenAITemporalInterpreter:
         return self._current_context["timezone"]
 
     @classmethod
-    def from_environment(cls, current_context: Mapping[str, str]) -> OpenAITemporalInterpreter:
+    def from_environment(
+        cls, current_context: Mapping[str, str], *, allow_empty_mentions: bool = False
+    ) -> OpenAITemporalInterpreter:
         """Build the shared resolver with SDK retries disabled."""
         if not os.environ.get("OPENAI_API_KEY"):
             raise TemporalInterpreterError("OPENAI_API_KEY is required for Temporal interpretation")
@@ -248,7 +275,9 @@ class OpenAITemporalInterpreter:
                 "Install the OpenAI SDK for Temporal interpretation"
             ) from error
         return cls(
-            OpenAI(max_retries=0, timeout=TEMPORAL_INTERPRETER_TIMEOUT_SECONDS), current_context
+            OpenAI(max_retries=0, timeout=TEMPORAL_INTERPRETER_TIMEOUT_SECONDS),
+            current_context,
+            allow_empty_mentions=allow_empty_mentions,
         )
 
     def interpret(
@@ -262,7 +291,9 @@ class OpenAITemporalInterpreter:
         del conversation_context
         if not isinstance(source_text, str) or not source_text.strip():
             raise TemporalInterpreterError("Temporal source must be non-empty")
-        prompt = render_temporal_prompt(self._current_context)
+        prompt = render_temporal_prompt(
+            self._current_context, allow_empty_mentions=self.allow_empty_mentions
+        )
         if self.scoped_date_time_context:
             prompt += (
                 "\nScoped date/time composition: an unqualified clock phrase "
@@ -337,7 +368,9 @@ class OpenAITemporalInterpreter:
                         "type": "json_schema",
                         "name": "odyssey_temporal_interpretation",
                         "strict": True,
-                        "schema": temporal_interpretation_json_schema(),
+                        "schema": temporal_interpretation_json_schema(
+                            allow_empty_mentions=self.allow_empty_mentions
+                        ),
                     }
                 },
             )
@@ -358,7 +391,10 @@ class OpenAITemporalInterpreter:
             raise TemporalInterpreterError("Temporal provider returned malformed output") from error
         try:
             parsed = parse_temporal_interpretation(
-                payload, source_text, timezone=self._current_context["timezone"]
+                payload,
+                source_text,
+                timezone=self._current_context["timezone"],
+                allow_empty_mentions=self.allow_empty_mentions,
             )
             inherited_days = {
                 item.value[:10] for item in inherited_temporal if len(item.value) >= 10

@@ -9,6 +9,7 @@ import pytest
 from odyssey_core.temporal_interpretation import (
     TEMPORAL_INTERPRETER_MAX_ITEMS,
     OpenAITemporalInterpreter,
+    TemporalInterpretation,
     TemporalInterpreterError,
     parse_temporal_interpretation,
     render_temporal_prompt,
@@ -194,6 +195,79 @@ def test_parse_rejects_empty_open_or_overlarge_mentions() -> None:
             "hoy " * (TEMPORAL_INTERPRETER_MAX_ITEMS + 1),
             timezone="Europe/Paris",
         )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "He visto a Sara en el parque.",
+        "J'ai rencontré mon voisin.",
+        "I talked with my colleague.",
+    ],
+)
+def test_explicit_optin_represents_verified_absence_without_creating_date_evidence(
+    source: str,
+) -> None:
+    """Valid zero-mention output is distinct from failure, in any source language."""
+    payload = {"mentions": []}
+    result = parse_temporal_interpretation(
+        payload, source, timezone="Europe/Paris", allow_empty_mentions=True
+    )
+    assert result.source_text == source
+    assert result.mentions == ()
+    assert result.verified_no_mentions is True
+    assert result.kinds() == ()
+    with pytest.raises(TemporalInterpreterError, match="mentions"):
+        TemporalInterpretation(source, ())
+    assert (
+        temporal_interpretation_json_schema(allow_empty_mentions=True)["properties"]["mentions"][
+            "minItems"
+        ]
+        == 0
+    )
+    assert "return" in render_temporal_prompt(CURRENT, allow_empty_mentions=True)
+    # The ordinary established Temporal contracts remain fail-closed.
+    with pytest.raises(TemporalInterpreterError, match="mentions"):
+        parse_temporal_interpretation(payload, source, timezone="Europe/Paris")
+    assert temporal_interpretation_json_schema()["properties"]["mentions"]["minItems"] == 1
+
+
+def test_optin_empty_temporal_is_one_successful_bounded_provider_call() -> None:
+    calls: list[dict] = []
+
+    class Responses:
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                status="completed",
+                output_text=json.dumps({"mentions": []}),
+                id="synthetic-no-temporal",
+            )
+
+    interpreter = OpenAITemporalInterpreter(
+        SimpleNamespace(responses=Responses()), CURRENT, allow_empty_mentions=True
+    )
+    source = "He hablado con un amigo."
+    assert interpreter.interpret(source).mentions == ()
+    assert len(calls) == 1
+    assert calls[0]["text"]["format"]["schema"]["properties"]["mentions"]["minItems"] == 0
+    assert interpreter.last_error_category is None
+    with pytest.raises(TemporalInterpreterError):
+        ordinary = OpenAITemporalInterpreter(SimpleNamespace(responses=Responses()), CURRENT)
+        ordinary.interpret(source)
+
+
+def test_optin_does_not_convert_provider_failure_into_verified_absence() -> None:
+    class Responses:
+        def create(self, **_kwargs):
+            raise TimeoutError("synthetic Temporal unavailable")
+
+    interpreter = OpenAITemporalInterpreter(
+        SimpleNamespace(responses=Responses()), CURRENT, allow_empty_mentions=True
+    )
+    with pytest.raises(TemporalInterpreterError, match="provider"):
+        interpreter.interpret("Saw my neighbor")
+    assert interpreter.last_error_category == "TimeoutError"
 
 
 def test_provider_contract_makes_one_low_reasoning_call_without_retries() -> None:

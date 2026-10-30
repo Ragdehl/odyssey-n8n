@@ -4718,11 +4718,13 @@ def _build_runtime_from_environment_unlocked(
         conversation_context: Sequence[Mapping[str, str]] = (),
         *,
         captured_clock: dict[str, str] | None = None,
+        allow_empty_mentions: bool = False,
     ) -> _PreparedInterpretation:
-        """Interpret exact time against the SAME captured delivery instant if supplied."""
+        """Interpret time against the SAME captured clock; opt in to verified absence."""
         clock = captured_clock if captured_clock is not None else _current_time()
         interpreter = OpenAITemporalInterpreter.from_environment(
-            {key: clock[key] for key in ("date", "time", "timezone")}
+            {key: clock[key] for key in ("date", "time", "timezone")},
+            **({"allow_empty_mentions": True} if allow_empty_mentions else {}),
         )
         started = perf_counter()
         try:
@@ -6389,7 +6391,10 @@ def _build_runtime_from_environment_unlocked(
                 # as ordinary routed writes. Identity resolution alone cannot
                 # authorize guessed dates in a continuation plan.
                 prepared_temporal = prepare_temporal_interpretation(
-                    prepared.pending_source, (), captured_clock=captured_clock
+                    prepared.pending_source,
+                    (),
+                    captured_clock=captured_clock,
+                    allow_empty_mentions=True,
                 )
                 temporal_evidence = _continuation_exact_temporal_evidence(prepared_temporal.value)
                 evidence = DomainInterpretation(
@@ -6822,8 +6827,8 @@ def _continuation_exact_temporal_evidence(
     temporal: TemporalInterpretation | None,
 ) -> tuple[DomainEvidence, ...]:
     """Project ONLY existing Temporal's fully validated exact source evidence."""
-    # Temporal's current strict schema cannot encode a successful empty list.
-    # A None is a provider/validation failure, not proof of no time in source.
+    # Only the opt-in Temporal schema can return a validated empty list.
+    # None still means a provider/validation failure, not verified absence.
     if not isinstance(temporal, TemporalInterpretation):
         raise CandidateContinuationPrewriteError("Continuation Temporal evidence is unavailable")
     if not all(
@@ -6833,7 +6838,9 @@ def _continuation_exact_temporal_evidence(
         raise CandidateContinuationPrewriteError(
             "Continuation Temporal interpretation is not exact"
         )
-    return temporal.core_domain_interpretation().evidence
+    return (
+        temporal.core_domain_interpretation().evidence if not temporal.verified_no_mentions else ()
+    )
 
 
 def _current_time() -> dict[str, str]:

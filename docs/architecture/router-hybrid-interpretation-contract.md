@@ -848,9 +848,17 @@ and the independent reviewer vetoed it. A question in French did not write.
 The continuation callback now calls the established Temporal interpreter
 with the ORIGINAL capture clock and combines its exact source-bound date
 evidence with canonical identity evidence in the SAME Core DomainInterpretation.
-Non-exact or unavailable Temporal results now fail before any write claim;
-the strict Temporal contract cannot represent a verified zero-mention output.
-There is no guess-based fallback to identity-only plans.
+Unavailable or non-exact Temporal results fail before any write claim.
+A small opt-in extension of the SAME Temporal contract now permits a successful
+zero-mention result for a source without time expressions. The existing
+Temporal nonempty schema, parser and prompt stay the default for Calendar,
+Tasks and Events; this continuation explicitly requests allow_empty_mentions
+and only a returned validated TemporalInterpretation with the explicit
+verified_no_mentions=True marker can contribute zero date evidence. The
+historical direct constructor still rejects unmarked empty interpretations.
+None remains a failed call/validation and is
+never downgraded to "no date". This introduces no independent temporal
+resolver or keyword/list-of-phrases date detector.
 No new resolver, writer, note schema or phrase-specific branch was added.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
@@ -879,7 +887,21 @@ after claim is treated as a harmless replan. Source regression tests
 check stale selected Markdown refuses with zero E3 operations. Re-review
 the final repaired SHA; no four-role acceptance yet.
 
-Remaining E5 acceptance: multi-case real semantic testing with both positive
-and negative variants, the four independent audit roles on the final SHA,
-then authenticated Chromium→HTTPS→n8n→provider→Core/E3→Markdown→UI
-E2E on the exact deployed DEV commit, plus fixes arising from those gates.
+Fresh shared Temporal provider evidence on the opt-in schema (2026-10-30):
+5/5 real GPT-6 Luna/low results PASS; three no-date ES/FR/EN sources returned
+empty mentions, an explicit Spanish relative date returned EXACT_DATE, and
+a French uncertain time expression returned UNSPECIFIED. The exact source and
+prompt/schema hashes are in the nonsecret one-time /tmp gate receipt.
+A second bounded real-provider two-case continuation without explicit dates
+gave 2/2 expected behavior: Core Luna-first planned one ES statement using
+the selected reference, and the independent GPT-5.6 Luna reviewer accepted
+the read-only proposal; an ES question could not pass the record-only gate.
+The positive planner selected a person destination, NOT a Calendar Day:
+this is not proof of the general daily-journal fallback. Neither two-case
+check invoked E3; the previous dated-source synthetic-vault E3 readback/replay
+remains the only full real-provider E3 vertical.
+Remaining E5 acceptance: additional factual daily-journal placement and
+negative source variations, final four independent audits on a pinned SHA,
+and authenticated Chromium→HTTPS→n8n→provider→Core/E3→Markdown→UI on
+an isolated matching deployed DEV SHA, including replay, performance and
+any corrections from the gates. Keep feature OFF until proven.
