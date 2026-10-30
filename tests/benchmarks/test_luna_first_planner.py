@@ -987,8 +987,7 @@ def test_luna_canonical_reference_requires_semantic_identity_not_raw_marker(
     )
     assert "A semantic identity part is required for every such linked fact" in prompt
     assert (
-        "do not put the selected name in literal text or manufacture raw {{ref:N}} syntax"
-        in prompt
+        "do not put the selected name in literal text or manufacture raw {{ref:N}} syntax" in prompt
     )
     assert "The Core semantic compiler alone derives each local marker" in prompt
 

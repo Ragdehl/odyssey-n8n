@@ -667,6 +667,7 @@ def _render_domain_interpretation_section(
         "entry together; never emit a marker without that entry, replace the "
         "source mention with a bare name, or invent an ID or assignment. "
         "The evidence is a bounded binding hint, not mutation authority. "
+        "Do not invent Note IDs or assignments. "
         "Core preflight verifies every canonical target and marker; ESCALATE "
         "instead of dropping or guessing a required binding."
         + (
