@@ -343,14 +343,6 @@ const graphStage = (stage, routeIndex) => !!verifiedLedger &&
         child.route_index === routeIndex && ['failed','unavailable'].includes(child.outcome))) ||
     verifiedLedger.events.some(ev => ev.stage === stage && routeIndex === null &&
       ev.outcome === 'failed_or_unknown'));
-const graphTextSafe = value => typeof value === 'string' &&
-  !value.includes(String.fromCharCode(10)) && !value.includes(String.fromCharCode(13)) &&
-  !['nota','file','archivo','ficher','register','registro','dossier','intact',
-    'unchang','no hay','sin cambios','ninguna nueva','no new',
-    'bóveda','vault','cambi','alter','ningún dato','datos nuevos',
-    'guard','escri','salvad','modific','actualiz','cread','elimin','borrad',
-    'añad','persist','enregistr','écri','save','writ','delet','updat'].some(word =>
-    value.toLowerCase().includes(word));
 // Typed-only AI interpretation: the selected stage/action are grounded by
 // E2 and E3. A review verdict cannot make arbitrary LLM prose trustworthy.
 const graphStageOnly = gd && gd.verified_stage_only === true &&
@@ -365,22 +357,20 @@ const graphStageOnly = gd && gd.verified_stage_only === true &&
     st.stage_view.label === gd.stage_view.label &&
     st.stage_view.icon === gd.stage_view.icon);
 const graphDiagnosisValid = gd && typeof gd === 'object' && !Array.isArray(gd) &&
-  (graphStageOnly || Object.keys(gd).sort().join(',') === 'evidence_stage,explanation,next_step,reason_code,route_index,status,user_question,write_evidence') &&
+  graphStageOnly &&
   gd.status === r.status && gd.reason_code === (r.product_reason || r.clarification_code || 'UNKNOWN_FAILURE') &&
   gd.write_evidence === (Array.isArray(r.affected_stable_note_ids) && r.affected_stable_note_ids.length ? 'SOME' : 'UNKNOWN') &&
   ['failed','partial','needs_attention'].includes(r.status) &&
   graphStage(gd.evidence_stage, gd.route_index) &&
-  (graphStageOnly || (graphTextSafe(gd.explanation) &&
-    gd.explanation.trim().length >= 12 && gd.explanation.length <= 420 &&
-    graphTextSafe(gd.user_question) && gd.user_question.length <= 240)) &&
+  (!verifiedLedger.stages.some(st => ['failed','unavailable'].includes(st.outcome) &&
+    st.name.split('.').includes('writer')) || gd.next_step === 'INSPECT_RESULT') &&
   ['ASK_USER','REVIEW_SAFE_RETRY','CHECK_SYSTEM','INSPECT_RESULT'].includes(gd.next_step) &&
-  (graphStageOnly || (gd.next_step === 'ASK_USER') === (gd.user_question.trim().length > 0));
+  gd.next_step !== 'ASK_USER';
 const graphDiagnosisMessage = graphDiagnosisValid ?
   (gd.write_evidence === 'SOME' ? 'Odyssey ha guardado parte de la información. ' :
     'No puedo confirmar todavía si se ha guardado información. ') +
-  (graphStageOnly ? 'No he podido completar la solicitud en «' + gd.stage_view.label + '».' : gd.explanation.trim()) +
-  (gd.next_step === 'ASK_USER' ? ' ' + gd.user_question.trim() :
-    gd.next_step === 'REVIEW_SAFE_RETRY' ? ' Se puede evaluar un nuevo intento después de comprobar las escrituras; no he repetido la solicitud.' :
+  'No he podido completar la solicitud en «' + gd.stage_view.label + '».' +
+  (gd.next_step === 'REVIEW_SAFE_RETRY' ? ' Se puede evaluar un nuevo intento después de comprobar las escrituras; no he repetido la solicitud.' :
     gd.next_step === 'CHECK_SYSTEM' ? ' Es necesario comprobar el servicio antes de reintentar.' :
     ' Consulta el resultado de la solicitud antes de decidir si debes repetirla.') : null;
 const outcome = ['ANSWER', 'CLARIFY', 'CANNOT_ANSWER'].includes(r.product_outcome) ? r.product_outcome : 'CANNOT_ANSWER';

@@ -1094,6 +1094,9 @@ class RuntimeComposition:
         """
         if not (
             self.conversation_prewrite_recovery_enabled
+            # Model-selected advice alone is not permission to reenter Core:
+            # a separate optional semantic veto must have run first.
+            and self.conversation_graph_semantic_review_enabled
             and self.conversation_graph_gateway is not None
             and self.full_source_mutation_guard
             and self.hybrid_candidate_execute is not None
@@ -1131,7 +1134,12 @@ class RuntimeComposition:
             # must not strand a prewrite, no-mutation delivery as an uncertain
             # E3 claim. Only the actual SECOND execution propagates errors.
             return result, None, True
-        if diagnosis is None or diagnosis.get("next_step") != "REVIEW_SAFE_RETRY":
+        if (
+            not self.conversation_graph_semantic_review_enabled
+            or diagnosis is None
+            or diagnosis.get("verified_stage_only") is not True
+            or diagnosis.get("next_step") != "REVIEW_SAFE_RETRY"
+        ):
             return result, diagnosis, True
         # The very same request ID/fingerprint/claim stays active in the
         # outer execute_product lock. There is NO second claim or extra ID,

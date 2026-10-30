@@ -38,7 +38,9 @@ def test_semantic_reviewer_cannot_override_legacy_write_text_boundary():
         "user_question": "",
     }
     legacy, before = _diagnose([], reviewed=False, proposal=proposal)
-    assert legacy is None and len(before) == 1  # historical false rejection
+    assert legacy is not None and len(before) == 1
+    assert legacy["verified_stage_only"] is True
+    assert "explanation" not in legacy and "user_question" not in legacy
     vetted, calls = _diagnose([{"verdict": "SUPPORTED", "reason": "GROUNDED"}], proposal=proposal)
     assert vetted is not None
     assert vetted["verified_stage_only"] is True

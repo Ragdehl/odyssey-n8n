@@ -205,11 +205,19 @@ def diagnose_trusted_execution_graph(
         or any("\n" in text or "\r" in text for text in (explanation, question))
     ):
         return None
-    # The second model need not be called when Core proof has already made
-    # this proposed step ineligible for the evidence-only presentation.
-    if semantic_review and (
+    # A model never owns the next action. The response can only display an
+    # observed stage and a non-executable step supported by trusted evidence.
+    # Identity/date questions require Core's verified clarification contract,
+    # not an arbitrary model-written question. A failed writer cannot imply
+    # that a retry is safe, even if a model recommends checking a service.
+    uncertain_writer = any(
+        item["outcome"] in {"failed", "unavailable"} and "writer" in item["name"].split(".")
+        for item in stages
+    )
+    if (
         next_step == "ASK_USER"
         or (next_step == "REVIEW_SAFE_RETRY" and result.prewrite_recovery_proven is not True)
+        or (uncertain_writer and next_step != "INSPECT_RESULT")
     ):
         return None
     # Optional second AI pass checks ENTIRE meaning rather than banning
@@ -221,82 +229,19 @@ def diagnose_trusted_execution_graph(
                 return None
         except (ConversationGateError, OSError, TypeError, ValueError):
             return None
-    # The second AI may veto an unsupported cause/step but cannot grant its
-    # own free text material-fact authority. A typed-only interpretation is
-    # rendered using verified graph evidence by n8n. No model prose crosses
-    # this boundary even when two correlated models say SUPPORTED.
-    if semantic_review:
-        if next_step == "REVIEW_SAFE_RETRY" and result.prewrite_recovery_proven is not True:
-            # This typed presentation implies a possible safe second pass;
-            # positive source-executor proof, not the model reviewer, owns it.
-            return None
-        if next_step == "ASK_USER":
-            # Core owns verified clarification text/options; arbitrary AI
-            # questions cannot invent a missing identity or date.
-            return None
-        return {
-            "status": result.status.value,
-            "reason_code": code,
-            "write_evidence": write_evidence,
-            "evidence_stage": stage,
-            "route_index": route_index,
-            "stage_view": stage_view_for(stage).to_response(),
-            "next_step": next_step,
-            "verified_stage_only": True,
-        }
-    # Legacy one-pass free text stays behind its old conservative veto.
-    if any(
-        fragment in (explanation + " " + question).casefold()
-        for fragment in (
-            "nota",
-            "file",
-            "archivo",
-            "ficher",
-            "bóveda",
-            "vault",
-            "cambio",
-            "cambi",
-            "alter",
-            "ningún dato",
-            "datos nuevos",
-            "register",
-            "registro",
-            "dossier",
-            "intact",
-            "unchang",
-            "no hay",
-            "sin cambios",
-            "ninguna nueva",
-            "no new",
-            "guard",
-            "escri",
-            "salvad",
-            "modific",
-            "actualiz",
-            "cread",
-            "elimin",
-            "borrad",
-            "añad",
-            "persist",
-            "enregistr",
-            "écri",
-            "save",
-            "writ",
-            "delet",
-            "updat",
-        )
-    ):
-        return None
+    # No unreviewed or double-reviewed free-form model explanation enters the
+    # product receipt. This also prevents a plausible-sounding response in a
+    # different language or false material-write claim from reaching the UI.
+    # The second review remains a *veto* only; it is never a grant of authority.
     return {
         "status": result.status.value,
         "reason_code": code,
         "write_evidence": write_evidence,
         "evidence_stage": stage,
         "route_index": route_index,
-        "explanation": explanation.strip(),
+        "stage_view": stage_view_for(stage).to_response(),
         "next_step": next_step,
-        "user_question": question.strip(),
-        # Only validated write receipts, not model output, control retries.
+        "verified_stage_only": True,
     }
 
 

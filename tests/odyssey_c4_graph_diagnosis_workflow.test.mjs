@@ -21,8 +21,8 @@ const stage = "candidate.source_boundary_review";
 const diagnostic = {
   status: "needs_attention", reason_code: "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
   write_evidence: "UNKNOWN", evidence_stage: stage, route_index: null,
-  explanation: "La revisión no pudo confirmar que se conservaran todas las partes de la frase.",
-  next_step: "ASK_USER", user_question: "¿Puedes aclarar la relación entre las dos actividades?",
+  next_step: "INSPECT_RESULT", verified_stage_only: true,
+  stage_view: {version: 1, label: "Core · revisión de la división", icon: "core"},
 };
 const ledger = {
   version: 1, request_id: ID, status: "needs_attention", events: [],
@@ -52,8 +52,8 @@ test("AI explains real Router coverage failure before Core identity matching", (
   const result = render({});
   assert.equal(result.kind, "clarification");
   assert.equal(result.status, "needs_attention");
-  assert.match(result.message, /revisión no pudo confirmar/);
-  assert.match(result.message, /relación entre las dos actividades/);
+  assert.match(result.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
+  assert.doesNotMatch(result.message, /relación entre las dos actividades/);
   assert.match(result.message, /No puedo confirmar todavía si se ha guardado/);
   assert.doesNotMatch(result.message, /qué persona|mi hijo|especificar el nombre/i);
   assert.equal(result.clarification.options.length, 0);
@@ -77,7 +77,7 @@ test("model hallucination of stages, writes, commands and source is discarded", 
     const result = render(mutation);
     assert.equal(result.status, "needs_attention");
     assert.equal(result.kind, "clarification");
-    assert.doesNotMatch(result.message, /revisión no pudo confirmar/);
+    assert.doesNotMatch(result.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
   }
 });
 
@@ -108,7 +108,7 @@ test("valid AI graph diagnosis takes precedence over a fixed known CLARIFY fallb
     clarification_code: "ROUTER_CLARIFY", product_reason: "ROUTER_CLARIFY",
     error_diagnosis: {...diagnostic, reason_code: "ROUTER_CLARIFY"},
   });
-  assert.match(result.message, /revisión no pudo confirmar/);
+  assert.match(result.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
   assert.doesNotMatch(result.message, /No puedo decidir con seguridad qué aplicación/);
 });
 
@@ -124,9 +124,9 @@ test("repeated stage names across routes require the right failed route index", 
   ];
   const common = {execution_ledger: {...ledger, routes, stages: duplicated}};
   const wrong = render({...common, error_diagnosis: {...diagnostic, route_index: 0}});
-  assert.doesNotMatch(wrong.message, /revisión no pudo confirmar/);
+  assert.doesNotMatch(wrong.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
   const correct = render({...common, error_diagnosis: {...diagnostic, route_index: 1}});
-  assert.match(correct.message, /revisión no pudo confirmar/);
+  assert.match(correct.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
 });
 
 
@@ -138,20 +138,23 @@ test("verified AI diagnosis preserves a noncompleted Core status", () => {
   });
   assert.equal(original.kind, "cannot_answer");
   assert.equal(original.status, "needs_attention");
-  assert.match(original.message, /revisión no pudo confirmar/);
+  assert.match(original.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
 });
 
 
 test("n8n rejects generic parent attribution when a failed nested provider stage exists", () => {
   const parent = {...ledger.stages[0], name: "application.source_processing", parent_stage: null};
-  const child = {...ledger.stages[0], name: "provider.semantic_review", parent_stage: parent.name};
+  const child = {...ledger.stages[0], name: "provider.semantic_review",
+    parent_stage: parent.name, stage_view: {version: 1,
+      label: "Consulta al servicio de IA", icon: "router"}};
   const nested = {...ledger, stages: [parent, child]};
   const misleading = render({execution_ledger: nested,
     error_diagnosis: {...diagnostic, evidence_stage: parent.name}});
-  assert.doesNotMatch(misleading.message, /revisión no pudo confirmar/);
+  assert.doesNotMatch(misleading.message, /No he podido completar la solicitud en «Core · revisión de la división»/);
   const grounded = render({execution_ledger: nested,
-    error_diagnosis: {...diagnostic, evidence_stage: child.name}});
-  assert.match(grounded.message, /revisión no pudo confirmar/);
+    error_diagnosis: {...diagnostic, evidence_stage: child.name,
+      stage_view: child.stage_view}});
+  assert.match(grounded.message, /No he podido completar la solicitud en «Consulta al servicio de IA»/);
 });
 
 test("semantically reviewed writer-stage explanation bypasses obsolete lexical rejection only with typed marker", () => {
@@ -237,4 +240,38 @@ test("CANNOT_ANSWER without synchronous advisory preserves Core needs_attention 
   assert.equal(result.kind, "cannot_answer");
   assert.equal(result.status, "needs_attention");
   assert.equal(validateProductResponse(result).status, "needs_attention");
+});
+
+test("n8n refuses all legacy model prose regardless of its language or purported physical proof", () => {
+  const messages = [
+    "No hay evidencia de escritura.",
+    "Tus notas ya están guardadas, todo correcto.",
+    "Обработка прошла успешно, файл обновлен.",
+    "Please delete the note and retry.",
+  ];
+  for (const explanation of messages) {
+    const raw = {status: diagnostic.status, reason_code: diagnostic.reason_code,
+      write_evidence: "UNKNOWN", evidence_stage: stage, route_index: null,
+      next_step: "INSPECT_RESULT", explanation, user_question: ""};
+    const result = render({error_diagnosis: raw});
+    assert.equal(result.kind, "clarification");
+    assert.doesNotMatch(result.message, /No he podido completar la solicitud en/);
+    assert.ok(!result.message.includes(explanation));
+  }
+});
+
+
+test("a failed writer stage cannot carry CHECK_SYSTEM or unsafe retry through n8n", () => {
+  const writer = {...ledger.stages[0], name: "tasks.writer.persist",
+    stage_view: {version: 1, label: "Escritura", icon: "core"}};
+  const observed = {...ledger, stages: [writer]};
+  const checked = {...diagnostic, evidence_stage: writer.name,
+    stage_view: writer.stage_view, next_step: "INSPECT_RESULT"};
+  const safe = render({execution_ledger: observed, error_diagnosis: checked});
+  assert.match(safe.message, /No he podido completar la solicitud en «Escritura»/);
+  for (const next_step of ["CHECK_SYSTEM", "REVIEW_SAFE_RETRY"]) {
+    const refused = render({execution_ledger: observed,
+      error_diagnosis: {...checked, next_step}});
+    assert.doesNotMatch(refused.message, /No he podido completar la solicitud en «Escritura»/);
+  }
 });

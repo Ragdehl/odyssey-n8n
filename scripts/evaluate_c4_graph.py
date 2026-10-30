@@ -351,6 +351,7 @@ def _read_resume(path: Path) -> dict[str, Any]:
         or (
             old.get("prompt_sha256") != prompt_fingerprint()
             or old.get("requested_calls") != len(CASES)
+            or old.get("validator_contract") != "receipt_bound_typed_only_v2"
         )
     ):
         raise ValueError("Resume report does not match authorized prompt and 14-call budget")
@@ -389,7 +390,6 @@ def evaluate_live(
         os.environ.get("ODYSSEY_C4_LIVE_EVAL_AUTHORIZED") != "1"
         or max_calls != len(CASES)
         or not 1 <= max_calls <= 16
-        or (continue_after_rejection and resume_report is None)
     ):
         raise ValueError(
             "Live C4 evaluation requires an explicitly authorized exact 14-call budget"
@@ -412,6 +412,7 @@ def evaluate_live(
     def report() -> dict[str, Any]:
         return {
             "mode": "live",
+            "validator_contract": "receipt_bound_typed_only_v2",
             "model": gateway.model,
             "effort": gateway.reasoning_effort,
             "prompt_sha256": prompt_fingerprint(),
@@ -448,8 +449,12 @@ def evaluate_live(
             ),
             "step_acceptable": bool(diagnosis and diagnosis["next_step"] in case.accepted_steps),
             "status": "valid" if diagnosis is not None else "rejected",
-            "explanation": diagnosis["explanation"] if diagnosis is not None else None,
-            "user_question": diagnosis["user_question"] if diagnosis is not None else None,
+            # Free model prose must never cross the product boundary.
+            "explanation": None,
+            "user_question": None,
+            "verified_stage_only": diagnosis.get("verified_stage_only") is True
+            if diagnosis is not None
+            else False,
             "expected_stage": case.expected_stage,
             "expected_route": case.expected_route,
             "expected_acceptable_steps": case.accepted_steps,

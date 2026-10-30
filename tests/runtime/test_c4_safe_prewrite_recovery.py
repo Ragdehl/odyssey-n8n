@@ -11,15 +11,11 @@ import json
 import pytest
 
 from odyssey_core.application import ApplicationResult, ApplicationStatus
-from odyssey_core.notes import parse_note
 from odyssey_runtime.conversation_gateway import OpenAIConversationGateway
 from tests.runtime.test_conversation_gateway import FakeClient
 from tests.runtime.test_issue157_family_day_recollection import (
-    DAY,
-    PEOPLE,
     SOURCE,
     _family,
-    _model_responses,
 )
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
 
@@ -43,36 +39,34 @@ def _bad_route():
     }
 
 
-def test_one_c4_advised_retry_reuses_original_id_and_real_core_day_writer(tmp_path):
+def test_one_pass_diagnosis_cannot_reenter_router_or_write_even_with_prewrite_proof(tmp_path):
     repo, actor, source_executor, runtime = _family(tmp_path)
     from odyssey_runtime.execution_checkpoints import LocalExecutionCheckpointStore
 
     runtime.execution_checkpoint_store_factory = LocalExecutionCheckpointStore
-    responses = [_bad_route(), *_model_responses()]
-    source_executor.client = RecordedClient(responses)
+    source_executor.client = RecordedClient([_bad_route()])
     model = FakeClient([RETRY_ADVICE])
     runtime.conversation_graph_gateway = OpenAIConversationGateway(model)
     runtime.conversation_prewrite_recovery_enabled = True
-
-    first = runtime.execute_product(SOURCE, "recover-prewrite-day", "main", actor)
-    assert first["status"] == "completed", first
-    assert source_executor.client.calls.count("odyssey_light_capability_route_events_v1") == 2
-    assert len(model.responses.calls) == 1
-    prewrite_evidence = json.loads(model.responses.calls[0]["input"][1]["content"])
-    assert prewrite_evidence["prewrite_recovery_proven"] is True
-    assert prewrite_evidence["entry_intent"] == "ROUTED_PERSONAL_INFORMATION_OR_OPERATION"
-    assert "error_diagnosis" not in first  # final status success, not a prior failure
-    graph_events = first["execution_ledger"]["events"]
-    assert sum(e["stage"] == "diagnostic.prewrite_reinterpretation" for e in graph_events) == 1
-    day = parse_note(repo.read_text(f"calendar/days/{DAY}.md"))
-    assert day.content.count("odyssey:fact request=recover-prewrite-day-") == 2
-    assert all(f"[[{name}" in day.content for name in PEOPLE)
+    runtime.conversation_graph_semantic_review_enabled = False
     before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    first = runtime.execute_product(SOURCE, "recover-prewrite-day", "main", actor)
+    assert first["status"] == "needs_attention"
+    assert first["error_diagnosis"]["verified_stage_only"] is True
+    assert first["error_diagnosis"]["next_step"] == "REVIEW_SAFE_RETRY"
+    assert source_executor.client.calls == ["odyssey_light_capability_route_events_v1"]
+    assert len(model.responses.calls) == 1
+    sent = json.loads(model.responses.calls[0]["input"][1]["content"])
+    assert sent["prewrite_recovery_proven"] is True
+    assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    assert all(
+        event["stage"] != "diagnostic.prewrite_reinterpretation"
+        for event in first["execution_ledger"]["events"]
+    )
     replay = runtime.execute_product(SOURCE, "recover-prewrite-day", "main", actor)
     assert replay["delivery_replayed"] is True
+    assert len(model.responses.calls) == len(source_executor.client.calls) == 1
     assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
-    assert len(model.responses.calls) == 1
-    assert len(source_executor.client.calls) == 6
 
 
 def test_prewrite_proof_is_not_inferred_from_empty_result_after_event_delegate(tmp_path):
@@ -169,21 +163,21 @@ def test_c4_provider_crash_during_optional_retry_preserves_original_durable_refu
     assert len(model.responses.calls) == 1
 
 
-def test_repeated_router_refusal_has_hard_cap_one_reinterpretation(tmp_path):
+def test_repeated_source_refusal_is_not_auto_retried_without_independent_review(tmp_path):
     repo, actor, source_executor, runtime = _family(tmp_path)
-    source_executor.client = RecordedClient([_bad_route(), _bad_route()])
-    model = FakeClient([RETRY_ADVICE, RETRY_ADVICE])
+    source_executor.client = RecordedClient([_bad_route()])
+    model = FakeClient([RETRY_ADVICE])
     runtime.conversation_graph_gateway = OpenAIConversationGateway(model)
     runtime.conversation_prewrite_recovery_enabled = True
+    runtime.conversation_graph_semantic_review_enabled = False
     before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
     result = runtime.execute_product(SOURCE, "bounded-repeat-source", "main", actor)
     assert result["status"] == "needs_attention"
-    assert len(source_executor.client.calls) == 2
-    assert len(model.responses.calls) == 2  # first retry decision, then last-failure explanation
+    assert len(source_executor.client.calls) == 1
+    assert len(model.responses.calls) == 1
     replay = runtime.execute_product(SOURCE, "bounded-repeat-source", "main", actor)
     assert replay["delivery_replayed"] is True
-    assert len(source_executor.client.calls) == 2
-    assert len(model.responses.calls) == 2
+    assert len(source_executor.client.calls) == len(model.responses.calls) == 1
     assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
 
 

@@ -79,10 +79,12 @@ def test_authorized_eval_with_recorded_provider_only_uses_real_schema(monkeypatc
         "from_environment",
         classmethod(lambda cls, **kw: OpenAIConversationGateway(recorded)),
     )
-    result = evaluate_live(max_calls=14)
+    result = evaluate_live(max_calls=14, continue_after_rejection=True)
     assert result["executed_calls"] == 14
-    assert result["stage_correct"] == 14
-    assert result["step_acceptable"] == 14
+    assert result["stage_correct"] == 9  # Five AI questions lack Core-verified choices.
+    assert result["step_acceptable"] == 9
+    assert result["validator_contract"] == "receipt_bound_typed_only_v2"
+    assert all(row["explanation"] is None for row in result["cases"])
     assert len(recorded.responses.calls) == 14
     assert result["usage_missing"] == 14
     assert result["reported_input_tokens"] == 0
@@ -147,7 +149,7 @@ def test_live_evaluation_resumes_after_three_calls_and_never_repeats_cases(tmp_p
         "from_environment",
         classmethod(lambda cls, **kw: OpenAIConversationGateway(first_provider)),
     )
-    complete = evaluate_live(max_calls=14)
+    complete = evaluate_live(max_calls=14, continue_after_rejection=True)
     prior = {
         **complete,
         "executed_calls": 3,

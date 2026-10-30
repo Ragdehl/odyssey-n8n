@@ -377,6 +377,84 @@ en DEV y la evaluación del diseño reparado siguen pendientes;
 las nuevas funciones continúan OFF. No repetir campañas pagadas con
 esta autorización agotada.
 
+### Corrección general de seguridad C4 — 30 octubre 2026, solo fuente
+
+**Origen del fallo:** C4 GRAPH con una sola pasada seguía enviando
+`explanation` y `user_question` generados por GPT, y dos listas de
+subcadenas (runtime y n8n) intentaban proteger la escritura mediante
+fragmentos de palabras de varios idiomas. La campaña real de 14 llamadas
+dio 11 falsos vetos de esa lista, dejó pasar un texto ruso en un caso
+inglés y detectó un `CHECK_SYSTEM` incorrecto ante una escritura incierta.
+
+**Corrección sin nuevas llamadas de proveedor ni infraestructura:** la
+ruta de una pasada y la ruta opcional de dos pasadas comparten ahora el
+único contrato de respuesta **`verified_stage_only`** ya existente:
+estado, razón, presencia de cambios verificados, etapa/ruta fallida
+observada, `stage_view` proporcionado por Core/E2 y acción orientativa
+no ejecutable. `explanation` y `user_question` generados por el modelo
+se descartan siempre de la respuesta final, incluso si un segundo modelo
+afirma que son correctos. El validador exige la etapa fallida observada
+más específica, ruta exacta y rechazo de etapas no ejecutadas. El
+renderer n8n **rechaza por contrato** todo diagnóstico legacy que
+contenga texto libre, aun cuando su frase no incluya ninguna de las
+antiguas palabras prohibidas. La presentación actual sigue usando las
+frases fijas de la UI en **español**, independientes de la lengua en que
+haya respondido la IA; **no es internacionalización completa** para
+usuarios franceses o ingleses.
+
+**Siguiente acción basada en evidencia:** cualquier etapa observada y
+fallida cuyo nombre de módulo incluya `writer` exige `INSPECT_RESULT`,
+pues no sabemos si hubo cambios físicos. `REVIEW_SAFE_RETRY` solo es
+admisible si el ejecutor Core certificó la frontera anterior a la
+escritura; `ASK_USER` no publica preguntas inventadas por el modelo,
+porque es Core quien debe proporcionar opciones de aclaración reales.
+Estas prohibiciones se comprueban antes de gastar la segunda llamada
+de revisión semántica, y n8n vuelve a verificar la restricción de
+escritura de manera independiente. **Regresión detectada por la suite
+global:** al retirar el veto léxico, una recomendación de `REVIEW_SAFE_RETRY`
+de una sola pasada podía volver a ejecutar Router antes de E3. El
+reintento automático ahora exige **además** que la segunda revisión
+semántica independiente esté activada y apruebe la interpretación tipada;
+el Runtime comprueba esa condición al entrar y justo antes de reejecutar.
+La simple presentación `verified_stage_only` nunca implica autorización
+de reintento. Las regresiones de una pasada, fallo, sin escritura y replay
+verifican que el primer recibo es inmutable. Cuando el modelo no
+satisface el contrato, la respuesta original Core/E3 se conserva sin cambios.
+
+**Regresión grabada, sin llamadas reales adicionales:** se reprodujeron
+en `FakeClient` las 14 salidas de la campaña del 30-10 contra el nuevo
+contrato: **10/14 diagnósticos tipados, sin texto libre**, y **4/14
+rechazos seguros** (`identity_ambiguous`, `tasks_target_missing`,
+`temporal_unknown`, `unknown_after_writer`). No se cambiaron los
+gold semánticos ni se reutilizó el presupuesto ya agotado. La matriz
+de evaluación distingue ahora el contrato `receipt_bound_typed_only_v2`
+de los recibos antiguos, sin alterar el hash del prompt para inventar
+una nueva evaluación de modelo. Se añadieron pruebas negativas para
+textos de falsa escritura, ruso/inglés, preguntas sin prueba de Core,
+fallo del writer, múltiples rutas y falsos attestados en n8n.
+
+**Estado:** cambio en fuente, no desplegado, sin nuevos permisos ni
+modificaciones de Markdown personal. La prueba grabada no demuestra
+que el nuevo código alcance el mismo resultado estadístico bajo
+14 nuevas llamadas reales, ni valida la experiencia desde el
+navegador y HTTPS. Quedan pendientes una nueva evaluación autorizada
+de C4 tipado, UX multilingüe completa y aceptación integral de E5.
+La auditoría de la campaña anterior sigue FAIL históricamente; no
+se reetiqueta como PASS porque haya cambiado el validador.
+
+**Regresión en gate integral y corrección:** se detectó que una propuesta
+`REVIEW_SAFE_RETRY` de una pasada, que antes había sido vetada por el
+texto libre, podía reentrar al Router aunque la salida visible fuera
+tipada. El runtime ahora condiciona la re-ejecución automática a
+`conversation_graph_semantic_review_enabled` **y** a un diagnóstico
+`verified_stage_only` aprobado por la segunda revisión, además de la
+prueba propia del ejecutor de que aún no se invocó escritor. La
+sugerencia de una pasada **nunca** es permiso de re-ejecución. Se añadió
+prueba de no duplicación, replay y ausencia de mutaciones; se conserva
+la prueba positiva de reintento autorizado con dos pasadas. **Gate
+final offline:** **2.463 Python (+7 subtests) y 283 JS PASS**,
+Ruff/Docs Guard/NoteSchema. Los switches están OFF en DEV.
+
 ### C4 semantic review and evidence-only UI candidate — source only (29 Oct 2026)
 
 The 14-call Luna experiment exposed false rejections of genuine explanations

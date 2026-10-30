@@ -24,8 +24,8 @@ AI_REPLY = {
     "evidence_stage": "candidate.source_boundary_review",
     "route_index": None,
     "explanation": "La revisión de cobertura del texto no pudo comprobar la separación de los recuerdos.",
-    "next_step": "ASK_USER",
-    "user_question": "¿Puedes confirmar si fueron dos visitas diferentes?",
+    "next_step": "INSPECT_RESULT",
+    "user_question": "",
 }
 
 
@@ -63,8 +63,10 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
     )
     assert diagnosis is not None
     assert diagnosis["evidence_stage"] == "candidate.source_boundary_review"
-    assert diagnosis["next_step"] == "ASK_USER"
+    assert diagnosis["next_step"] == "INSPECT_RESULT"
     assert diagnosis["write_evidence"] == "UNKNOWN"
+    assert diagnosis["verified_stage_only"] is True
+    assert "explanation" not in diagnosis and "user_question" not in diagnosis
     assert "retry_authorized" not in diagnosis
     call = fake.responses.calls[0]
     assert call["text"]["format"]["strict"] is True
@@ -87,13 +89,9 @@ def test_graph_ai_reuses_existing_c4_gateway_with_stages_and_original_message():
     "alteration",
     [
         {"evidence_stage": "core.identity_resolution"},  # did not run
-        {"explanation": "No he guardado nada. Puedes volver a pedirlo."},
-        {"explanation": "No se modificó ningún archivo, puedes repetirlo."},
-        {"explanation": "No hay notas nuevas. Repite la solicitud."},
-        {"explanation": "No hubo cambios físicos en la bóveda."},
-        {"evidence_stage": "application.router"},
+        {"evidence_stage": "application.router"},  # completed, not failed
         {"next_step": "AUTO_RETRY"},
-        {"user_question": ""},
+        {"next_step": "ASK_USER", "user_question": "¿Qué información falta?"},
         {"free_write_command": "CREATE"},
     ],
 )
@@ -108,6 +106,30 @@ def test_ai_must_not_invent_stages_safety_evidence_or_commands(alteration):
         original_message=SOURCE,
     )
     assert result is None
+
+
+@pytest.mark.parametrize(
+    "explanation",
+    [
+        "No hay evidencia de un resultado físico.",
+        "Se ha modificado tu nota; la escritura ya está guardada.",
+        "Обработка остановилась, но операция сохранена.",
+        "The note was deleted: please retry.",
+    ],
+)
+def test_model_free_text_is_never_exposed_on_one_pass(explanation):
+    typed = rejected()
+    fake = FakeClient([{**AI_REPLY, "explanation": explanation}])
+    result = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        project_execution_ledger(typed),
+        OpenAIConversationGateway(fake),
+        original_message=SOURCE,
+    )
+    assert result is not None and result["verified_stage_only"] is True
+    assert "explanation" not in result and "user_question" not in result
+    assert explanation not in str(result)
 
 
 def test_graph_ai_runs_for_clarify_before_core_with_actor_replay_and_zero_new_writes(tmp_path):
@@ -139,6 +161,51 @@ def test_graph_ai_runs_for_clarify_before_core_with_actor_replay_and_zero_new_wr
     assert again["delivery_replayed"] is True
     assert {key: value for key, value in again.items() if key != "delivery_replayed"} == first
     assert len(calls) == len(fake.responses.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "proposed_step",
+    [
+        "CHECK_SYSTEM",
+        "REVIEW_SAFE_RETRY",
+        "INSPECT_RESULT",
+    ],
+)
+def test_uncertain_writer_allows_only_inspection_and_never_model_text(proposed_step):
+    typed = ApplicationResult(
+        "writer-uncertain-c4",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        clarification_code="OPERATIONAL_FAILURE",
+        operational=OperationalEvidence(
+            10, (OperationalStage("tasks.writer.persist", OperationalOutcome.FAILED, 9),)
+        ),
+    )
+    proposal = {
+        "evidence_stage": "tasks.writer.persist",
+        "route_index": None,
+        "explanation": "La nota se ha guardado; vuelve a pedirlo.",
+        "next_step": proposed_step,
+        "user_question": "",
+    }
+    fake = FakeClient([proposal, {"verdict": "SUPPORTED", "reason": "GROUNDED"}])
+    diagnosis = diagnose_trusted_execution_graph(
+        typed,
+        application_result_to_response(typed),
+        project_execution_ledger(typed),
+        OpenAIConversationGateway(fake),
+        original_message="Marca mi compra.",
+        semantic_review=True,
+    )
+    if proposed_step != "INSPECT_RESULT":
+        assert diagnosis is None
+        assert len(fake.responses.calls) == 1
+    else:
+        assert diagnosis is not None and diagnosis["verified_stage_only"] is True
+        assert diagnosis["next_step"] == "INSPECT_RESULT"
+        assert "explanation" not in diagnosis
+        assert len(fake.responses.calls) == 2
 
 
 def test_graph_ai_failure_preserves_existing_core_result_and_never_retries(tmp_path):
