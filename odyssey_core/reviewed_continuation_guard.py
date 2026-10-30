@@ -72,10 +72,10 @@ def _verify_selected_reference_preflight(
 class ReviewedCandidateContinuationWriteGuard:
     """Experimental E3 preflight for a complete, independently checked Core plan.
 
-    It has no runtime wiring or model authorization. This exists solely to
-    exercise the eventual write boundary with synthetic reviewed decisions.
-    Live adoption additionally needs fresh model-semantic acceptance, a
-    durable completion receipt and replay/readback lifecycle.
+    Used by the optional DEV source-continuation callback and synthetic
+    product tests. It never invokes a model or grants independent write
+    authority: actual Core/E3 execution additionally requires fresh semantic
+    review, an actor-bound delivery claim and physical readback/replay.
     """
 
     pending: CandidatePendingRepository
@@ -119,7 +119,16 @@ class ReviewedCandidateContinuationWriteGuard:
         schema: dict[str, Any],
     ) -> None:
         """Recheck current selection and actual Core target IDs after preflight."""
-        if repository is not self._bound_vault or schema is not self._bound_schema:
+        # Core intentionally deep-copies the canonical schema for its
+        # capability-scoped plan/execution snapshot. Identity would reject
+        # this exact, unchanged copy during ordinary E3 execution; content
+        # equality still vetoes a changed schema while vault identity stays
+        # strict to prevent actor/storage swaps.
+        if (
+            repository is not self._bound_vault
+            or not isinstance(schema, dict)
+            or schema != self._bound_schema
+        ):
             raise WritePreflightGuardError("CANDIDATE_CONTINUATION_CONTEXT_MISMATCH")
         self.validate_request_plan(self.original_plan)
         if (

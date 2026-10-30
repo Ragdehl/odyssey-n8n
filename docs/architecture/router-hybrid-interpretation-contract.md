@@ -907,19 +907,38 @@ E2E, Testing BLOCKED by a genuine callback-level test gap AND DEV E2E,
 Performance BLOCKED for no measured E5 p50/p95, CPU/RAM/swap/temp/fan
 and concurrency. No four-PASS product acceptance is implied.
 
-The concrete Testing gap: product tests currently replace
-candidate_continuation_execute with an injected function; they never run
-the actual nested production composition callback through Temporal,
-LunaFirst, independent reviewer and E3 as one synthetic-host path. A
-false-empty Temporal test does not pass that result through the callback.
-Add that contract test reusing the real composition (not a second
-implementation), for fake-empty dated source, provider failure and valid
-undated journal source; verify no E3 claim on refusals and readback/replay
-on success. Then add source cases for third-person, future, negation and
-mixed Apps; collect representative Pi performance telemetry; test one
-isolated authenticated Chromium→HTTPS→n8n→real provider→Core/E3→Markdown→UI
-journey with matching deployed SHA and replay. A Cloudflare principal
-alone cannot isolate the existing DEV shared actor and vault. Keep E5 OFF.
+The callback-level gap found by the Testing auditor now has a direct
+regression in tests/runtime/test_candidate_continuation_factory_callback.py.
+It constructs the UNMODIFIED production closure via
+build_runtime_from_environment against a disposable actor/state/vault and
+freezes only Temporal/Planner/reviewer provider replies. The same callback
+vetoes a dated original source after a false Temporal empty, vetoes Temporal
+provider failure BEFORE Planner/review, and writes a true no-date recollection
+through real Core/E3, exact Markdown readback and same-ID replay. No duplicate
+closure or independent Writer is introduced. The test also exposed a real
+pre-existing mismatch in ReviewedCandidateContinuationWriteGuard: Core's
+planning_schema_for_capability deep-copies an unchanged canonical schema
+but the guard compared schema by Python object identity. The bound repository
+MUST remain the same instance; the projected schema now requires exact
+CONTENT equality, and changed schema or repository is rejected. This is
+tested on the actual callback plus a separate tampering/copy regression.
+36 guard/continuation/E3 focused tests PASS before the new complete gate.
+The already completed 4-role review is pinned to the PRE-FIX SHA and remains
+historical until a fresh review of this change.
+
+One bounded Raspberry synthetic-provider local callback timing sample (8
+independent fixture runs per case; FROZEN no API calls): journal success
+median 27.49 ms, nearest-rank p95 27.69 ms; false-empty veto median 3.05 ms,
+p95 3.11 ms; provider failure median 2.72 ms, p95 2.75 ms. Observed process
+max RSS about 86.1 MiB, MemAvailable ~2564→2560 MiB, SwapFree 870 MiB.
+These are measurements of the local callback only, excluding fixture setup,
+GPT latency, HTTPS/browser/n8n, concurrent load and sustained Pi conditions.
+NOT acceptance of real-world latency or scaling. Next: more varied semantic
+sources (third-person, future, negated, mixed Apps), representative full
+provider/performance and concurrent-resource measurements, fresh scoped audit,
+and isolated authenticated Chromium→HTTPS→n8n→actual provider→Core/E3→Markdown
+→UI with exact deployed SHA and replay. A Cloudflare principal alone cannot
+isolate the existing DEV shared actor and vault. Keep E5 OFF.
 Prior targeted temporal security PASS is separate from these four verdicts.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
