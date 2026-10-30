@@ -1,0 +1,30 @@
+{
+  "case": "es-multi-v2",
+  "source": "Hoy hemos ido al jardín con mis hijos y mi pareja. Después hemos visitado el museo.",
+  "production_model": "gpt-6-luna",
+  "reasoning": "low",
+  "observed_source_sha": "fb137fabc80056fe827af7c2255cf2acdaed5b75",
+  "prompt_sha": "88bc44e513d23274c59eb36cba547e5bbb4c9357236e0c0eaa61c0bedc6131c2",
+  "schema_sha": "64686a8512832f5eaf7fa0e51e3610bff9a30111be4f316c111dec9e9f51603f",
+  "recorded_immutable_router_output": {
+    "capabilities": [
+      "core",
+      "temporal"
+    ],
+    "self_relation_span": null,
+    "interpretation": "joint",
+    "reason": "shared_subject",
+    "app_scopes": [
+      {
+        "capability": "core",
+        "description": "Record the shared recollection of going to the garden with the speaker’s children and partner, then visiting the museum, on the day indicated by “Hoy”.",
+        "depends_on_another_scope": false
+      }
+    ],
+    "self_relation_spans": [
+      "mis hijos",
+      "mi pareja"
+    ]
+  },
+  "interpretation": "Captured real GPT Router output; later Core planner/review stages are frozen synthetic outputs, and E3/Markdown writer is real"
+}

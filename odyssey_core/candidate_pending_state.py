@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .atomic_facts import AtomicFactError, normalize_atomic_fact, parse_atomic_facts
 from .candidate_pending_projection import CandidatePendingPreview
@@ -137,7 +138,7 @@ class CandidatePendingRepository:
         }
         if (
             not isinstance(payload, dict)
-            or set(payload) != fields
+            or set(payload) not in (fields, fields | {"created_timezone"})
             or (payload["format"], payload["format_version"], payload["request_id"])
             != (_FORMAT, _VERSION, request_id)
         ):
@@ -148,6 +149,10 @@ class CandidatePendingRepository:
             or not isinstance(payload["created_at"], str)
             or not 1 <= len(payload["created_at"]) <= 64
             or not _valid_capture_time(payload["created_at"])
+            or (
+                "created_timezone" in payload
+                and not valid_captured_timezone(payload["created_at"], payload["created_timezone"])
+            )
             or not isinstance(payload["original_request"], str)
             or not payload["original_request"].strip()
             or len(payload["original_request"].encode("utf-8")) > 16384
@@ -301,6 +306,7 @@ class CandidatePendingRepository:
         *,
         conversation_id: str,
         created_at: str,
+        created_timezone: str | None = None,
         options: tuple[ClarificationOption, ...] = (),
         vault: VaultRepository | None = None,
         schema: dict[str, Any] | None = None,
@@ -345,6 +351,7 @@ class CandidatePendingRepository:
             "request_id": preview.request_id,
             "conversation_id": conversation_id,
             "created_at": created_at,
+            **({"created_timezone": created_timezone} if created_timezone is not None else {}),
             "status": "open",
             "original_request": preview.original_request,
             "pending": [
@@ -433,6 +440,65 @@ class CandidatePendingRepository:
             if record["conversation_id"] == conversation_id and record["status"] == "open":
                 matches.append(record["request_id"])
         return tuple(sorted(matches))
+
+    def verified_open_choice_cards(
+        self,
+        conversation_id: str,
+        *,
+        vault: VaultRepository,
+        schema: dict[str, Any],
+        limit: int = 4,
+    ) -> tuple[dict[str, Any], ...]:
+        """Read bounded, current Core options for re-rendering durable v2 cards.
+
+        The record is workflow state, not a write plan or durable knowledge.
+        A stale identity or altered previously-written fact cannot become a
+        newly actionable browser card. Historical v1 pending plans are excluded.
+        """
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 8:
+            raise CandidatePendingStateError("Pending card limit is invalid")
+        if not isinstance(vault, VaultRepository) or not isinstance(schema, dict):
+            raise CandidatePendingStateError("Verified canonical context required")
+        with self._locked():
+            records = [self._read(request_id) for request_id in self.open_requests(conversation_id)]
+            records.sort(key=lambda item: (item["created_at"], item["request_id"]), reverse=True)
+            visible: list[dict[str, Any]] = []
+            for record in records:
+                pending = record["pending"]
+                options = record["options"]
+                if (
+                    len(pending) != 1
+                    or pending[0]["reason"] != "ambiguous_identity"
+                    or not isinstance(pending[0]["reference_text"], str)
+                    or not 2 <= len(options) <= 4
+                    or not self._completed_facts_still_valid(record, vault, schema)
+                ):
+                    continue
+                try:
+                    if any(
+                        current_identity_guard(vault, schema, option["id"]) != option["guard"]
+                        for option in options
+                    ):
+                        continue
+                except (ReferencePreflightError, ValueError, OSError):
+                    continue
+                visible.append(
+                    {
+                        "request_id": record["request_id"],
+                        "source_pending": True,
+                        "requested_reference": pending[0]["reference_text"],
+                        "explanation": (
+                            "No puedo identificar con seguridad a "
+                            f"«{pending[0]['reference_text']}». Elige una persona o cancela."
+                        ),
+                        "options": [
+                            {"id": option["id"], "label": option["label"]} for option in options
+                        ],
+                    }
+                )
+                if len(visible) == limit:
+                    break
+            return tuple(visible)
 
     @staticmethod
     def _completed_facts_still_valid(
@@ -644,3 +710,26 @@ def _valid_capture_time(value: str) -> bool:
     except ValueError:
         return False
     return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def valid_captured_timezone(instant: str, timezone: object) -> bool:
+    """Require the original local instant and offset to agree with its IANA zone.
+
+    A fixed-offset ISO value alone cannot reconstruct its original IANA zone
+    after restart, and a different current process timezone must never replace it.
+    Old v2 records lacking an explicit zone stay readable but are not automatically
+    eligible for time-dependent resumed writes.
+    """
+    if not isinstance(timezone, str) or not 1 <= len(timezone) <= 128:
+        return False
+    try:
+        parsed = datetime.fromisoformat(instant)
+        if parsed.utcoffset() is None:
+            return False
+        zoned = parsed.astimezone(ZoneInfo(timezone))
+    except (ValueError, TypeError, ZoneInfoNotFoundError, OverflowError):
+        return False
+    return (
+        parsed.replace(tzinfo=None) == zoned.replace(tzinfo=None)
+        and parsed.utcoffset() == zoned.utcoffset()
+    )

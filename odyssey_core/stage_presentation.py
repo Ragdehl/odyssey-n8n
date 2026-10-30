@@ -38,6 +38,7 @@ class StageView:
 
 _KNOWN = {
     "application.router": ("Router", "router"),
+    "application.source_processing": ("Interpretación del mensaje", "router"),
     "candidate.source_proposal": ("Router", "router"),
     "candidate.router_revision": ("Router · corrección", "router"),
     "candidate.source_boundary_review": ("Core · revisión de la división", "core"),
@@ -59,6 +60,10 @@ def stage_view_for(name: str) -> StageView:
     if name in _KNOWN:
         label, icon = _KNOWN[name]
         return StageView(1, label, icon)
+    if name.startswith("provider."):
+        # Keep model/provider identifiers out of user-facing diagnostic prose;
+        # every provider substep reuses one stable E2 presentation.
+        return StageView(1, "Consulta al servicio de IA", "planner")
     if name.startswith(("action.write", "write")):
         return StageView(1, "Core · guardar", "core")
     if name.startswith("action."):

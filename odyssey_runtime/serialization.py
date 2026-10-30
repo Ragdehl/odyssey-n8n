@@ -161,6 +161,10 @@ def application_result_to_response(result: ApplicationResult) -> dict[str, Any]:
         "status": result.status.value,
         "product_outcome": product_outcome,
         "product_reason": product_reason,
+        # Positive witness from the source executor, not a model guess.
+        # Omit false/unknown rather than converting absent proof to false
+        # evidence that no write was physically attempted.
+        **({"prewrite_recovery_proven": True} if result.prewrite_recovery_proven is True else {}),
         "planning_error": result.planning_error,
         "clarification_code": result.clarification_code,
         "presentation_intent": result.presentation_intent,

@@ -38,6 +38,7 @@ _STAGES = frozenset(
         "action.retrieve.started",
         "action.delegate.started",
         "action.write.started",
+        "diagnostic.prewrite_reinterpretation",
         "finalizing",
         "delivery.result_persisted",
         "processing.returned",

@@ -39,6 +39,16 @@ test("new submissions trim text and receive a safe web request id", () => {
   });
 });
 
+test("explicit source clarification carries only a bounded correlated request id", () => {
+  const submitted = createSubmission("Con Luis", fakeCrypto, "main", "request-abc");
+  assert.equal(submitted.replyToRequestId, "request-abc");
+  assert.equal(submitted.conversationId, "main");
+  for (const ref of ["../secrets", "", "a b", "x".repeat(129), 42]) {
+    assert.throws(() => createSubmission("Con Luis", fakeCrypto, "main", ref),
+      ProductRequestError);
+  }
+});
+
 test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
 });
@@ -1006,4 +1016,106 @@ test("browser preserves every reviewed parent of a multi-target dependency", () 
   const invalid = structuredClone(flow);
   invalid.routes[2].dependency_indices = [0, 0];
   assert.throws(() => validateExecutionFlow(invalid, stages), ProductRequestError);
+});
+
+
+test("browser product projection keeps receipt-backed stage labels without inventing stages", () => {
+  const label = {version: 1, label: "Core · revisión de la división", icon: "core"};
+  const failure = {
+    request_id: "web-c4-ledger-projection", status: "needs_attention",
+    kind: "cannot_answer", message: "Hace falta revisar.",
+    request_detail: {
+      request_id: "web-c4-ledger-projection",
+      operational: {total_duration_ms: 40, stages: []},
+      execution_ledger: {
+        version: 1, request_id: "web-c4-ledger-projection", status: "needs_attention",
+        events: [], event_sequence: null, events_truncated: false, routes: [],
+        affected_stable_note_ids: [], write_receipts: [],
+        stages: [{name: "candidate.source_boundary_review", outcome: "failed",
+          duration_ms: null, start_offset_ms: null, error_category: null,
+          provider_call_count: 0, route_index: null, parent_stage: null, stage_view: label}],
+      },
+    },
+  };
+  const projected = validateProductResponse(failure);
+  assert.deepEqual(projected.request_detail.execution_ledger.stages[0].stage_view, label);
+  const invalid = structuredClone(failure);
+  invalid.request_detail.execution_ledger.stages[0].stage_view = {
+    version: 1, label: "Forged", icon: "totally-untrusted",
+  };
+  const safe = validateProductResponse(invalid);
+  assert.equal(safe.request_detail.execution_ledger.stages[0].stage_view, undefined);
+});
+
+test("browser POST forwards a correlated pending ID only when the source card provides it", async () => {
+  let captured;
+  const fetchImpl = async (_url, options) => {
+    captured = JSON.parse(options.body);
+    return response({payload: {
+      request_id: captured.request_id, status: "needs_attention", kind: "cannot_answer",
+      message: "He registrado tu elección; la escritura sigue pendiente de revisión.",
+    }});
+  };
+  const reply = createSubmission("Con Luis", fakeCrypto, "main", "original-r1");
+  await requestProductResult({
+    endpoint: "/api/request", submission: reply, fetchImpl,
+  });
+  assert.equal(captured.reply_to_request_id, "original-r1");
+  assert.equal(captured.request_id, reply.requestId);
+  assert.equal(captured.conversation_id, "main");
+  const next = createSubmission("Comprar pan", fakeCrypto, "main");
+  await requestProductResult({endpoint: "/api/request", submission: next, fetchImpl});
+  assert.equal(Object.hasOwn(captured, "reply_to_request_id"), false);
+});
+
+test("only Core source-pending basic cards may declare explicit reply correlation", () => {
+  const base = {request_id: "web-v2-source", requested_reference: "él",
+    explanation: "Necesito aclarar la referencia.",
+    options: [{id: "person-a", label: "A"}, {id: "person-b", label: "B"}]};
+  const product = clarification => ({
+    request_id: "web-answer", status: "needs_attention", kind: "clarification",
+    message: "Elige una opción.", clarification,
+  });
+  assert.equal(validateProductResponse(product({...base, source_pending: true}))
+    .clarification.source_pending, true);
+  for (const marker of [false, "true", 1, null]) {
+    assert.throws(() => validateProductResponse(product({...base, source_pending: marker})),
+      ProductRequestError);
+  }
+  const rich = {...base, source_pending: true, options: base.options.map(option =>
+    ({...option, note_type: "person", evidence: "Core"}))};
+  assert.throws(() => validateProductResponse(product(rich)), ProductRequestError);
+  assert.equal(Object.hasOwn(validateProductResponse(product(base)).clarification,
+    "source_pending"), false);
+});
+
+
+test("conversation main validates source-pending cards from authenticated server", async () => {
+  const sample = {
+    request_id: "original-route", source_pending: true,
+    requested_reference: "él", explanation: "¿Quién era?",
+    options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+  };
+  const call = async (cards, extra = {}) => requestConversation({
+    endpoint: "/api/conversation", operation: "main", payload: {limit: 40},
+    fetchImpl: async () => response({payload: {
+      conversation_id: "main", turns: [], pending_clarifications: cards,
+      ...extra,
+    }}),
+  });
+  assert.equal((await call([sample])).pending_clarifications[0].request_id,
+    "original-route");
+  for (const cards of [
+    [{...sample, source_pending: false}],
+    [{...sample, options: [sample.options[0]]}],
+    [sample, sample],
+    Array.from({length: 5}, (_, i) => ({...sample, request_id: `id-${i}`})),
+    [{...sample, options: [{...sample.options[0], id: "../../vault"}, sample.options[1]]}],
+    "not an array",
+  ]) {
+    await assert.rejects(call(cards), ProductRequestError);
+  }
+  await assert.rejects(call([], {pending_recovery_unavailable: "true"}), ProductRequestError);
+  assert.equal((await call([], {pending_recovery_unavailable: true}))
+    .pending_recovery_unavailable, true);
 });

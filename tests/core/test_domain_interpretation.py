@@ -23,6 +23,7 @@ from odyssey_core.request_planning import (
     RequestPlan,
     RequestPlanningError,
     WriteAction,
+    planner_authorized_calendar_dates,
     render_request_planner_prompt,
     render_semantic_write_planner_prompt,
 )
@@ -91,6 +92,31 @@ def semantic_result(*, date: str = "2026-10-03", include_temporal: bool = True) 
     }
 
 
+def test_non_temporal_domain_evidence_preserves_canonical_day_entry_authorization() -> None:
+    source = "He hablado con ella en el parque."
+    selected = DomainInterpretation(
+        "core",
+        source,
+        "CANONICAL_REFERENCE",
+        (DomainEvidence("canonical_reference", "ella", "person:Elena"),),
+    )
+    assert planner_authorized_calendar_dates(CURRENT) == ("2026-10-02",)
+    assert planner_authorized_calendar_dates(CURRENT, selected) == ("2026-10-02",)
+    # Explicit Temporal evidence takes precedence over captured date.
+    temporal = DomainInterpretation(
+        "core",
+        source,
+        "CANONICAL_REFERENCE",
+        (
+            DomainEvidence("canonical_reference", "ella", "person:Elena"),
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, "en el parque", "2026-09-30"),
+        ),
+    )
+    assert planner_authorized_calendar_dates(CURRENT, temporal) == ("2026-09-30",)
+    with pytest.raises(RequestPlanningError):
+        planner_authorized_calendar_dates(CURRENT, object())
+
+
 def test_domain_interpretation_is_bounded_grounded_and_mutation_free() -> None:
     value = interpretation()
     assert value.to_prompt_payload() == {
@@ -134,6 +160,43 @@ def test_domain_handoff_retires_old_journal_prompt_and_pins_current_luna_candida
     )
     assert hashlib.sha256(encoded).hexdigest() == (
         "3d37079cdd04a807c92f0541e9d0977e9fe39971c330157975168ec7a2446c2d"
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "reference", "date_text", "date"),
+    [
+        ("Mañana visitaré a él", "él", "Mañana", "2026-10-03"),
+        ("Demain je verrai mon ami", "mon ami", "Demain", "2026-10-03"),
+        ("Tomorrow I'll see her", "her", "Tomorrow", "2026-10-03"),
+    ],
+)
+def test_selected_identity_and_exact_temporal_evidence_share_existing_core_contract(
+    source: str, reference: str, date_text: str, date: str
+) -> None:
+    """Two existing Core evidence types compose without a new date or reference resolver."""
+    domain = DomainInterpretation(
+        "core",
+        source,
+        "CANONICAL_REFERENCE",
+        (
+            DomainEvidence("canonical_reference", reference, "person:Alex Example"),
+            DomainEvidence(TEMPORAL_REFERENCE_EVIDENCE, date_text, date),
+        ),
+    )
+    assert [entry.kind for entry in domain.evidence] == [
+        "canonical_reference",
+        TEMPORAL_REFERENCE_EVIDENCE,
+    ]
+    assert [item.value for item in domain.temporal_references()] == [date]
+    prompt = render_luna_experimental_prompt(schema(), CURRENT, domain_interpretation=domain)
+    assert '"kind":"canonical_reference"' in prompt
+    assert '"kind":"temporal_reference"' in prompt
+    assert date in prompt
+    assert "Core still owns action choice" in prompt
+    assert (
+        "semantic_temporal_reference_part"
+        in luna_experimental_result_json_schema(schema(), domain)["$defs"]
     )
 
 

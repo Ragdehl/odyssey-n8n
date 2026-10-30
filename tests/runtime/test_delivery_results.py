@@ -63,3 +63,15 @@ def test_result_bounds_and_identifiers_are_enforced(tmp_path: Path) -> None:
     oversized["payload"] = "x" * (2 * 1024 * 1024)
     with pytest.raises(DeliveryResultError, match="too large"):
         store.save("web-delivery-1", fingerprint, oversized, "now")
+
+
+def test_pending_locator_is_part_of_delivery_fingerprint_without_changing_legacy(tmp_path: Path):
+    store = LocalDeliveryResultStore(tmp_path / "state")
+    historical = store.fingerprint("Con Luis", "main")
+    assert historical == store.fingerprint("Con Luis", "main", reply_to_request_id=None)
+    first = store.fingerprint("Con Luis", "main", reply_to_request_id="pending-a")
+    second = store.fingerprint("Con Luis", "main", reply_to_request_id="pending-b")
+    assert len({historical, first, second}) == 3
+    for malformed in ("", "../../danger", "two words", True, 7, "x" * 129):
+        with pytest.raises(DeliveryResultError):
+            store.fingerprint("Con Luis", "main", reply_to_request_id=malformed)

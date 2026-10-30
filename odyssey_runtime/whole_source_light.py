@@ -92,6 +92,7 @@ from odyssey_core.whole_message_identity_guard import (
     reject_unproven_person_collisions,
 )
 from odyssey_core.whole_message_relationship_proof import (
+    VerifiedSelfRelationship,
     WholeSourceRelationshipError,
     recheck_self_relationship,
     verify_self_relationship,
@@ -150,6 +151,18 @@ PLANNER_MODEL = "gpt-5.6-luna"
 _P4_PROVIDER_SPANS: ContextVar[SpanRecorder | None] = ContextVar(
     "odyssey_p4_provider_spans", default=None
 )
+# A request-local positive prewrite proof. Set only while the actual source
+# executor runs; flip irreversibly before ANY app/writer or durable operation
+# manifest. A successful E3 write can still return zero affected IDs after a
+# downstream failure, so a missing write receipt never substitutes for this.
+_P4_WRITE_BOUNDARY_CROSSED: ContextVar[bool | None] = ContextVar(
+    "odyssey_p4_write_boundary_crossed", default=None
+)
+
+
+def _cross_p4_write_boundary() -> None:
+    if _P4_WRITE_BOUNDARY_CROSSED.get() is not None:
+        _P4_WRITE_BOUNDARY_CROSSED.set(True)
 
 
 class WholeSourceLightError(ValueError):
@@ -608,6 +621,7 @@ class WholeSourceLightExecutor:
         started = perf_counter()
         recorder = SpanRecorder(started, perf_counter)
         token = _P4_PROVIDER_SPANS.set(recorder)
+        write_boundary_token = _P4_WRITE_BOUNDARY_CROSSED.set(False)
         try:
             with (
                 scoped_note_decode_cache(),
@@ -623,17 +637,32 @@ class WholeSourceLightExecutor:
                     # own typed failures, which must still propagate and retain
                     # the E3 claim if a physical write may have happened.
                     result = self._abstain(delivery, "FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE")
+                # Even a delegated ApplicationResult claiming positive proof
+                # cannot override the outer observed writer/manifest boundary.
+                if _P4_WRITE_BOUNDARY_CROSSED.get() is True and result.prewrite_recovery_proven:
+                    result = replace(result, prewrite_recovery_proven=False)
         finally:
+            _P4_WRITE_BOUNDARY_CROSSED.reset(write_boundary_token)
             _P4_PROVIDER_SPANS.reset(token)
         elapsed_ms = max(0.0, (perf_counter() - started) * 1000)
         stages = result.operational.stages
         # One true source wall-clock stage with bounded model-only substeps.
         # The Core Writers/Task services continue to own their own stages;
         # overlaps here describe nested work, not additional operations.
+        # A safe early abstention is not a successful source interpretation.
+        # Preserve its original verified reason in the actual E2 stage so C4
+        # can distinguish a Router/reviewer failure from Core identity matching.
+        # This is observed status, not a speculative diagnosis or retry grant.
+        source_reason = result.clarification_code or result.planning_error
         source_stage = OperationalStage(
             "application.source_processing",
-            OperationalOutcome.COMPLETED,
+            OperationalOutcome.COMPLETED
+            if result.status is ApplicationStatus.COMPLETED
+            else OperationalOutcome.FAILED,
             elapsed_ms,
+            error_category=source_reason
+            if isinstance(source_reason, str) and len(source_reason) <= 120
+            else None,
             substeps=recorder.spans[:64],
         )
         flow = result.execution_flow
@@ -857,6 +886,76 @@ class WholeSourceLightExecutor:
             or not set(capabilities) <= allowed
         ):
             return self._abstain(delivery)
+        # The Events-enabled router can propose multiple exact SELF-owned
+        # relationship groups; older frozen router outputs remain readable.
+        # Model-proposed spans grant NO identity authority. Verify every group
+        # against one current canonical SELF fact or decline the entire source.
+        proposed_relation_spans = route.get("self_relation_spans")
+        legacy_relation_span = route.get("self_relation_span")
+        if proposed_relation_spans is None:
+            proposed_relation_spans = (
+                [legacy_relation_span] if isinstance(legacy_relation_span, str) else []
+            )
+        if (
+            not isinstance(proposed_relation_spans, list)
+            or len(proposed_relation_spans) > 8
+            or any(
+                not isinstance(span, str) or not span or len(span) > 128
+                for span in proposed_relation_spans
+            )
+            # Repeated literal relationship phrases are valid when they
+            # appear in separate assertions. Require enough actual source
+            # occurrences for every repeated entry; never trust a duplicated
+            # model span unsupported by the original message.
+            or any(
+                source.count(span) < proposed_relation_spans.count(span)
+                for span in set(proposed_relation_spans)
+            )
+            or (
+                legacy_relation_span is not None
+                and (
+                    not isinstance(legacy_relation_span, str)
+                    or len(proposed_relation_spans) != 1
+                    or legacy_relation_span != proposed_relation_spans[0]
+                )
+            )
+        ):
+            return self._abstain(delivery)
+        # Ground every model-suggested group in fresh authenticated SELF.
+        # Reuse already-verified identities, never deduce an ID from grammar.
+        relationships = []
+        verified_members: dict[str, str] = {}
+        try:
+            for relation_span in proposed_relation_spans:
+                proof = verify_self_relationship(
+                    source,
+                    relation_span,
+                    repository=self.repository,
+                    schema=self.schema,
+                    actor=actor,
+                    bindings=self.bindings,
+                )
+                # Two distinct relation phrases in one canonical atomic fact
+                # may project the SAME combined target set. Its target list
+                # cannot prove which member belongs to which phrase. Refuse
+                # ambiguous grouping rather than attribute unrelated people.
+                if any(
+                    prior.source_id == proof.source_id
+                    and prior.fact_locator == proof.fact_locator
+                    and prior.original_relation_span != proof.original_relation_span
+                    for prior in relationships
+                ):
+                    raise WholeSourceRelationshipError("Groups share an indivisible source fact")
+                relationships.append(proof)
+                for note_id, name in proof.members:
+                    if note_id in verified_members and verified_members[note_id] != name:
+                        raise WholeSourceRelationshipError("Conflicting member proof")
+                    verified_members[note_id] = name
+            if len(set(verified_members.values())) != len(verified_members):
+                raise WholeSourceRelationshipError("Ambiguous member names")
+        except (WholeSourceRelationshipError, ValueError):
+            return self._abstain(delivery)
+        group_members = [{"name": name} for name in verified_members.values()]
         if "events" in capabilities:
             # Two independent Event+Task spans reuse the E2 two-review
             # source partition and the existing E3 operation manifest.
@@ -866,7 +965,6 @@ class WholeSourceLightExecutor:
                 and len(capabilities) == len(set(capabilities))
                 and route.get("interpretation") == "separable"
                 and route.get("reason") == "independent"
-                and route.get("self_relation_span") is None
                 and isinstance(scopes, list)
                 and len(scopes) >= 2
                 and all(
@@ -889,6 +987,7 @@ class WholeSourceLightExecutor:
                     delivery_instant=instant,
                     router_started=router_started,
                     route_scopes=scopes,
+                    verified_relationships=tuple(relationships),
                 )
             # The authenticated SELF/actor guard is already complete. One
             # independently declared Events scope is equivalent to no scopes
@@ -905,12 +1004,28 @@ class WholeSourceLightExecutor:
             if (
                 set(capabilities) not in ({"events"}, {"events", "temporal"})
                 or len(capabilities) != len(set(capabilities))
-                or route.get("self_relation_span") is not None
                 or (scopes != [] and not one_event_scope)
                 or self.event_delegate is None
                 or independent_scope is not None
             ):
                 return self._abstain(delivery, "EVENT_MIXED_SOURCE_NEEDS_CLARIFICATION")
+            # Event-specific interpretation still owns its lifecycle and E3
+            # mutations. The Router's group spans grant no identity authority.
+            # Recheck every earlier Core relationship proof at this boundary,
+            # because the canonical SELF note may have changed since routing.
+            if relationships:
+                try:
+                    for relationship in relationships:
+                        recheck_self_relationship(
+                            relationship,
+                            repository=self.repository,
+                            schema=self.schema,
+                            actor=actor,
+                            bindings=self.bindings,
+                        )
+                except (WholeSourceRelationshipError, ValueError):
+                    return self._abstain(delivery)
+            _cross_p4_write_boundary()
             result = self.event_delegate(source, delivery, actor)
             if result.request_id != delivery:
                 raise WholeSourceLightError("Events route broke delivery correlation")
@@ -938,27 +1053,6 @@ class WholeSourceLightExecutor:
             or not set(capabilities) <= {independent_scope, "temporal"}
         ):
             return self._abstain(delivery)
-        # Router can only propose an exact source span, never relationship
-        # membership or a Note ID. Core re-grounds the group in CURRENT SELF.
-        relationship = None
-        relation_span = route.get("self_relation_span")
-        if relation_span is not None:
-            try:
-                relationship = verify_self_relationship(
-                    source,
-                    relation_span,
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    bindings=self.bindings,
-                )
-            except (WholeSourceRelationshipError, ValueError):
-                return self._abstain(delivery)
-        group_members = (
-            [{"name": name} for _id, name in relationship.members]
-            if relationship is not None
-            else []
-        )
         if self.progress is not None:
             self.progress("routing.ready", {"route_count": 1})
         # Only a fully source-partitioned and independently attested set of
@@ -1133,6 +1227,7 @@ class WholeSourceLightExecutor:
                 if self.progress is not None:
                     self.progress("action.delegate.started", {})
                 with timed_dev_hot_path(delivery, "tasks.delegate"):
+                    _cross_p4_write_boundary()
                     return self.task_delegate(source, delivery, actor)
             if not self.task_create_batch_enabled:
                 self._observe_prewrite(delivery, "task_scope_rejected")
@@ -1304,9 +1399,11 @@ class WholeSourceLightExecutor:
                 proposed,
                 review,
                 capabilities,
-                verified_relationship_members=tuple(name for _id, name in relationship.members)
-                if relationship is not None
-                else (),
+                verified_relationship_members=tuple(verified_members.values()),
+                verified_relationship_groups=tuple(
+                    (proof.original_relation_span, tuple(name for _id, name in proof.members))
+                    for proof in relationships
+                ),
                 core_anchored_evidence=self.core_anchored_coverage_enabled,
             )
             names = tuple(
@@ -1381,6 +1478,7 @@ class WholeSourceLightExecutor:
             planner = SimpleNamespace(plan=lambda *_args, _plan=plan: _plan)
             # The P4 compiler is Core-owned. The Task App contributes only
             # its lifecycle preflight, never restructures a Core RequestPlan.
+            _cross_p4_write_boundary()
             return execute_request(
                 source,
                 planner=planner,
@@ -1404,22 +1502,9 @@ class WholeSourceLightExecutor:
         # A SELF fact/member set might change while GPT is reasoning or between
         # source preflight and a delayed write. Never convert stale members to
         # fresh references, even when the prior reviewer was satisfied.
-        if relationship is not None:
+        if relationships:
             try:
-                recheck_self_relationship(
-                    relationship,
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    bindings=self.bindings,
-                )
-            except (WholeSourceRelationshipError, ValueError):
-                return self._abstain(delivery)
-        # The existing Core Writer and E3 guard remain the ONLY write path;
-        # no app-specific plan rewrites or per-example validators execute.
-        for operation in operations:
-            if relationship is not None:
-                try:
+                for relationship in relationships:
                     recheck_self_relationship(
                         relationship,
                         repository=self.repository,
@@ -1427,6 +1512,21 @@ class WholeSourceLightExecutor:
                         actor=actor,
                         bindings=self.bindings,
                     )
+            except (WholeSourceRelationshipError, ValueError):
+                return self._abstain(delivery)
+        # The existing Core Writer and E3 guard remain the ONLY write path;
+        # no app-specific plan rewrites or per-example validators execute.
+        for operation in operations:
+            if relationships:
+                try:
+                    for relationship in relationships:
+                        recheck_self_relationship(
+                            relationship,
+                            repository=self.repository,
+                            schema=self.schema,
+                            actor=actor,
+                            bindings=self.bindings,
+                        )
                 except (WholeSourceRelationshipError, ValueError):
                     return self._partial(delivery, results) if results else self._abstain(delivery)
             result = self._measure_local(
@@ -1692,6 +1792,7 @@ class WholeSourceLightExecutor:
         if max(len(core_locator), len(task_locator)) > 110:
             return self._abstain(delivery)
         if self.operation_manifest_begin is not None:
+            _cross_p4_write_boundary()
             self.operation_manifest_begin(
                 delivery,
                 source,
@@ -1706,6 +1807,7 @@ class WholeSourceLightExecutor:
             self.progress("action.write.started", {})
         # Standard Core planner/Writer performs the first write and MUST prove
         # a physical Task backlink. Provider and identity failures stay safe.
+        _cross_p4_write_boundary()
         core = self.dependent_core_delegate(
             scope.antecedent.strip(), core_locator, actor, delivery_instant
         )
@@ -2290,6 +2392,7 @@ class WholeSourceLightExecutor:
         except TaskBatchPreflightError:
             return self._abstain(delivery, "DEPENDENT_N_TASK_BATCH_INCOMPATIBLE")
         if self.operation_manifest_begin is not None:
+            _cross_p4_write_boundary()
             self.operation_manifest_begin(
                 delivery,
                 source,
@@ -2331,6 +2434,7 @@ class WholeSourceLightExecutor:
                 pending_index_ids.clear()
             if part.capability == "core":
                 # Ordinary Core Planner/Writer, not a second custom writer.
+                _cross_p4_write_boundary()
                 outcome = self.dependent_core_delegate(
                     part.source.strip(), locator, actor, delivery_instant
                 )
@@ -2341,6 +2445,7 @@ class WholeSourceLightExecutor:
                     assert self.independent_task_delegate is not None
                     if self.progress is not None:
                         self.progress("action.delegate.started", {})
+                    _cross_p4_write_boundary()
                     outcome = self.independent_task_delegate(
                         part.source.strip(),
                         locator,
@@ -2556,6 +2661,7 @@ class WholeSourceLightExecutor:
         delivery_instant: datetime,
         router_started: float,
         route_scopes: list[dict[str, object]],
+        verified_relationships: tuple[VerifiedSelfRelationship, ...] = (),
     ) -> ApplicationResult:
         # Proposed scopes are non-authoritative byte ranges. No trimming,
         # deletion, or LLM-authored canonical identities in this boundary.
@@ -2598,6 +2704,15 @@ class WholeSourceLightExecutor:
             for part in verified
         ):
             return self._abstain(delivery, "INDEPENDENT_ROUTE_PARTITION_MISMATCH")
+        # A Router-suggested SELF relationship cannot be shifted from one
+        # independently source-verified application scope to another.
+        # Every model-supplied span must belong to exactly one exact partition.
+        if verified_relationships:
+            if not event_mix or any(
+                sum(proof.original_relation_span in part.source for part in verified) != 1
+                for proof in verified_relationships
+            ):
+                return self._abstain(delivery, "INDEPENDENT_RELATION_PARTITION_UNVERIFIED")
         # Reject overlong derived locators BEFORE writing anything. This keeps
         # the outer E3 claim responsible for the full logical request.
         locators = [f"{delivery}-independent-{part.index}" for part in verified]
@@ -2670,7 +2785,23 @@ class WholeSourceLightExecutor:
                     prepared_events[part.index] = (candidate, temporal)
                 except (ValueError, OpenAIError, TimeoutError, ConnectionError, OSError):
                     return self._abstain(delivery, "INDEPENDENT_EVENT_PREWRITE_UNAVAILABLE")
+        # A trust check must run AFTER both AI partition reviewers and ALL
+        # Task/Event prepare phases, immediately before the first mutation.
+        # No E3 operation is allowed to race this prewrite membership check.
+        if verified_relationships:
+            try:
+                for proof in verified_relationships:
+                    recheck_self_relationship(
+                        proof,
+                        repository=self.repository,
+                        schema=self.schema,
+                        actor=actor,
+                        bindings=self.bindings,
+                    )
+            except (WholeSourceRelationshipError, ValueError):
+                return self._abstain(delivery, "INDEPENDENT_SELF_RELATION_STALE")
         if self.operation_manifest_begin is not None:
+            _cross_p4_write_boundary()
             self.operation_manifest_begin(
                 delivery,
                 source,
@@ -2681,6 +2812,12 @@ class WholeSourceLightExecutor:
         outcomes: list[ApplicationResult] = []
         pending_index_ids: list[str] = []
         for part, locator in zip(verified, locators, strict=True):
+            # The verified SELF groups were already freshly re-grounded after
+            # BOTH independent partition reviewers and all operation prepares,
+            # immediately before the first E3 mutation. Do not re-enter the
+            # full verified catalog after an earlier E3 commit while its derived
+            # snapshot is legitimately stale; each independently reviewed
+            # delegate still owns its own guarded write and request-level CAS.
             # An earlier canonical Writer may have made derived hints stale.
             # Refresh only the changed Note IDs before another Core planner
             # reads derived context. Never rebuild the complete index, and
@@ -2706,6 +2843,7 @@ class WholeSourceLightExecutor:
             try:
                 if part.capability == "tasks" and self.independent_task_delegate is not None:
                     task, temporal = prepared_tasks[part.index]
+                    _cross_p4_write_boundary()
                     outcome = self.independent_task_delegate(
                         part.source.strip(),
                         locator,
@@ -2716,6 +2854,7 @@ class WholeSourceLightExecutor:
                     )
                 elif part.capability == "events" and self.independent_event_delegate is not None:
                     event_candidate, event_temporal = prepared_events[part.index]
+                    _cross_p4_write_boundary()
                     outcome = self.independent_event_delegate(
                         part.source.strip(),
                         locator,
@@ -2822,6 +2961,7 @@ class WholeSourceLightExecutor:
             (),
             (),
             clarification_code=code,
+            prewrite_recovery_proven=_P4_WRITE_BOUNDARY_CROSSED.get() is False,
         )
 
     @staticmethod

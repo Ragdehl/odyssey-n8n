@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from threading import Condition, RLock, Thread
+from threading import BoundedSemaphore, Condition, RLock, Thread
 from time import perf_counter, thread_time
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -81,9 +81,15 @@ from odyssey_core.application import (
     execute_request,
 )
 from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
+from odyssey_core.candidate_continuation_context import (
+    CandidateContinuationContextError,
+    CoreCandidateContinuationContext,
+    prepare_selected_candidate_continuation,
+)
 from odyssey_core.candidate_pending_state import (
     CandidatePendingRepository,
     CandidatePendingStateError,
+    valid_captured_timezone,
 )
 from odyssey_core.clarification import (
     ClarificationChoice,
@@ -165,12 +171,14 @@ from odyssey_core.temporal_resolution import TemporalResolutionKind
 from odyssey_core.verified_source_inventory import verified_context_source_inventory
 from odyssey_runtime.application_bindings import bind_registered_executors
 
+from .candidate_continuation_delivery import CandidateContinuationPrewriteError
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
 from .conversation_chat import deployed_chat_help_capabilities
 from .conversation_entry import evaluate_conversation_entry
-from .conversation_error import explain_trusted_product_failure
+from .conversation_error import diagnose_trusted_execution_graph, explain_trusted_product_failure
 from .conversation_gateway import ConversationGateError, OpenAIConversationGateway
+from .deferred_diagnostics import DeferredDiagnosticStore, project_receipt_diagnostic_evidence
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 from .dev_hot_path_diagnostics import timed_dev_hot_path
 from .execution_checkpoints import CheckpointOutcome, LocalExecutionCheckpointStore
@@ -327,6 +335,54 @@ def _chat_c4_model_advisory_enabled() -> bool:
         and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
         and os.environ.get("ODYSSEY_CHAT_C4_MODEL_ADVISORY_ENABLED") == "1"
     )
+
+
+def _chat_c4_prewrite_recovery_enabled() -> bool:
+    """An independent DEV-only opt-in; existing C4 must stay unchanged."""
+    return (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_RECOVERY_ENABLED") == "1"
+    )
+
+
+def _chat_c4_semantic_review_enabled() -> bool:
+    """Independent DEV-only semantic verifier; cannot enable in PROD."""
+    return (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+        and os.environ.get("ODYSSEY_CHAT_C4_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") == "1"
+        and os.environ.get("ODYSSEY_CHAT_C4_SEMANTIC_REVIEW_ENABLED") == "1"
+    )
+
+
+def _chat_c4_deferred_enabled() -> bool:
+    """An independent DEV opt-in requiring vetted, typed C4 explanations."""
+    return (
+        _chat_c4_semantic_review_enabled()
+        and os.environ.get("ODYSSEY_CHAT_C4_DEFERRED_ENABLED") == "1"
+    )
+
+
+def _c4_graph_gateway_from_environment() -> OpenAIConversationGateway | None:
+    """Enable C4 AI only for DEV C4; lack of a provider must not stop Core.
+
+    C4 has its own gateway so a DEV runtime with C3 disabled does not
+    inadvertently activate conversational classification on every request.
+    """
+    if (
+        os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV"
+        or os.environ.get("ODYSSEY_CHAT_C4_ENABLED") != "1"
+        or os.environ.get("ODYSSEY_CHAT_C4_GRAPH_ENABLED") != "1"
+    ):
+        return None
+    try:
+        return OpenAIConversationGateway.from_environment(timeout_seconds=12.0)
+    except ConversationGateError:
+        # Provider unavailable: the immutable Core result and existing
+        # evidence-grounded fallback still work, with no speculative retry.
+        return None
 
 
 # Preserve the existing runtime composition injection seam while changing its production target.
@@ -608,14 +664,35 @@ class RuntimeComposition:
     # The injected gateway only classifies/answers and cannot authorize Core writes.
     conversation_gateway: OpenAIConversationGateway | None = None
     conversation_deployed_capabilities: frozenset[str] = frozenset()
+    # A semantically accepted continuation can optionally delegate through
+    # the actor-scoped Core/E3 delivery. Disabled unless deliberately wired
+    # by the DEV composition; no new Writer, store, or public planner input.
+    candidate_continuation_execute: (
+        Callable[[CoreCandidateContinuationContext, str], dict[str, Any]] | None
+    ) = None
     # C4 stays separately off even on a DEV instance running C3.
     conversation_error_guidance_enabled: bool = False
     # The deterministic Core reason code fully determines the public C4 hint.
     # Optional live-model advisory remains available for bounded diagnostics
     # but must be explicitly requested and never changes canonical authority.
     conversation_error_model_advisory_enabled: bool = False
+    # C4 diagnosis reuses the existing OpenAI gateway but is independent of
+    # the C3 conversational router. A model explanation is never write authority.
+    conversation_graph_gateway: OpenAIConversationGateway | None = None
+    # Optional second AI read-only pass. Off until live-model semantic/latency
+    # gate; a rejected or unavailable verdict never unlocks free text/retry.
+    conversation_graph_semantic_review_enabled: bool = False
+    # Optional background post-receipt advice. The saved E3 delivery never
+    # changes; failures leave an ordinary, usable Core fallback response.
+    conversation_graph_deferred_enabled: bool = False
+    # Explicit DEV-only opt-in. One C4-advised prewrite reinterpretation may
+    # re-enter the ORIGINAL Router, but never a post-delegate/mutated request.
+    conversation_prewrite_recovery_enabled: bool = False
     monotonic: Callable[[], float] = perf_counter
     _execute_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+    _deferred_slots: BoundedSemaphore = field(
+        default_factory=lambda: BoundedSemaphore(2), init=False, repr=False
+    )
     _conversation_lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def execute_product(
@@ -625,6 +702,8 @@ class RuntimeComposition:
         conversation_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
+        *,
+        reply_to_request_id: str | None = None,
     ) -> dict[str, object]:
         """Execute one delivery once and replay a durable completed mutation result.
 
@@ -635,6 +714,13 @@ class RuntimeComposition:
         another planner or mutation pass.
         """
         actor = self._resolve_actor(authenticated_actor, external_principal)
+        if reply_to_request_id is not None and (
+            not isinstance(reply_to_request_id, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", reply_to_request_id) is None
+            or request_id is None
+            or conversation_id is None
+        ):
+            raise ValueError("Explicit clarification needs a scoped delivery")
         checkpoint_store = self._checkpoint_store(actor)
         # A replay is a verified read of an existing delivery, not a new
         # execution. Do not register a fake "starting" milestone or reset its
@@ -647,7 +733,9 @@ class RuntimeComposition:
             store = LocalDeliveryResultStore(
                 self.conversation_root_resolver.resolve(actor) / "delivery-results"
             )
-            fingerprint = store.fingerprint(user_request, conversation_id)
+            fingerprint = store.fingerprint(
+                user_request, conversation_id, reply_to_request_id=reply_to_request_id
+            )
         clarification_store = (
             LocalClarificationStore(self.conversation_root_resolver.resolve(actor), conversation_id)
             if conversation_id is not None and self.conversation_root_resolver is not None
@@ -682,6 +770,7 @@ class RuntimeComposition:
                 conversation_id,
                 request_id,
                 user_request,
+                reply_to_request_id=reply_to_request_id,
             )
             if candidate_response is not None:
                 if store is not None and fingerprint is not None:
@@ -789,6 +878,7 @@ class RuntimeComposition:
                         force_replay=True,
                         actor=actor,
                         conversation_id=conversation_id,
+                        source_text=pending.original_request,
                     )
                     self._record_terminal_checkpoint(
                         checkpoint_store,
@@ -851,6 +941,18 @@ class RuntimeComposition:
                 else None,
                 None,
             )
+            result, checked_diagnosis, diagnosis_checked = (
+                self._maybe_retry_verified_prewrite_interpretation(
+                    result,
+                    actor=actor,
+                    user_request=user_request,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    authenticated_actor=authenticated_actor,
+                    external_principal=external_principal,
+                    checkpoint_store=checkpoint_store,
+                )
+            )
             with timed_dev_hot_path(request_id or "", "runtime.finish_product"):
                 response = self._finish_product_result(
                     result,
@@ -859,6 +961,9 @@ class RuntimeComposition:
                     clarification_store,
                     actor=actor,
                     conversation_id=conversation_id,
+                    source_text=user_request,
+                    precomputed_graph_diagnosis=checked_diagnosis,
+                    graph_diagnosis_checked=diagnosis_checked,
                 )
             if self.full_source_mutation_guard:
                 assert store is not None and request_id is not None
@@ -868,7 +973,220 @@ class RuntimeComposition:
             self._record_terminal_checkpoint(
                 checkpoint_store, request_id, response, store, fingerprint
             )
+            if not diagnosis_checked:
+                self._schedule_deferred_diagnosis(actor, result, response, user_request, store)
             return response
+
+    def _schedule_deferred_diagnosis(
+        self,
+        actor: str,
+        result: ApplicationResult,
+        response: dict[str, object],
+        source_text: str,
+        store: LocalDeliveryResultStore | None,
+    ) -> None:
+        """Schedule only after E3 is immutable; optional failure never affects it."""
+        if not (
+            self.conversation_graph_deferred_enabled
+            and self.conversation_graph_semantic_review_enabled
+            and self.conversation_graph_gateway is not None
+            and store is not None
+            and result.status
+            in (
+                ApplicationStatus.NEEDS_ATTENTION,
+                ApplicationStatus.FAILED,
+                ApplicationStatus.PARTIAL,
+            )
+            and "error_diagnosis" not in response
+            and isinstance(response.get("execution_ledger"), dict)
+        ):
+            return
+        options = response.get("clarification")
+        if isinstance(options, dict) and len(options.get("options", [])) >= 2:
+            return  # Core already verified the human choice list.
+        if not self._deferred_slots.acquire(blocking=False):
+            return
+        try:
+            diagnostic = self._deferred_diagnostic_store(actor)
+            binding = store.read_diagnostic_binding(result.request_id)
+            if (
+                diagnostic is None
+                or binding is None
+                or not diagnostic.claim(result.request_id, *binding)
+            ):
+                self._deferred_slots.release()
+                return
+        except (DeliveryResultError, OSError, ValueError):
+            self._deferred_slots.release()
+            return
+
+        def run() -> None:
+            diagnosis = None
+            try:
+                diagnosis = diagnose_trusted_execution_graph(
+                    result,
+                    response,
+                    response["execution_ledger"],
+                    self.conversation_graph_gateway,
+                    original_message=source_text,
+                    semantic_review=True,
+                )
+                if diagnosis is not None and diagnosis.get("verified_stage_only") is not True:
+                    diagnosis = None
+            except Exception:
+                diagnosis = None
+            finally:
+                try:
+                    diagnostic.finish(result.request_id, *binding, diagnosis)
+                except (DeliveryResultError, OSError, ValueError):
+                    pass  # Uncertain outcome stays unavailable, never retried.
+                self._deferred_slots.release()
+
+        try:
+            Thread(target=run, daemon=True, name="odyssey-c4-diagnostic").start()
+        except RuntimeError:
+            # Claim is already durable; do not retry an uncertain schedule.
+            self._deferred_slots.release()
+
+    def _deferred_diagnostic_store(self, actor: str) -> DeferredDiagnosticStore | None:
+        if self.conversation_root_resolver is None:
+            return None
+        return DeferredDiagnosticStore(
+            self.conversation_root_resolver.resolve(actor) / "c4-diagnostics"
+        )
+
+    def deferred_diagnosis(
+        self,
+        request_id: str,
+        authenticated_actor: AuthenticatedActorContext | None = None,
+        external_principal: ExternalPrincipal | None = None,
+    ) -> dict[str, object]:
+        """Actor-authenticated, read-only lookup; never re-enters the Router."""
+        if authenticated_actor is None and external_principal is None:
+            raise ValueError("C4 diagnostic read requires a verified actor")
+        actor = self._resolve_actor(authenticated_actor, external_principal)
+        if self.conversation_root_resolver is None:
+            return {"version": 1, "request_id": request_id, "status": "unavailable"}
+        root = self.conversation_root_resolver.resolve(actor)
+        delivery = LocalDeliveryResultStore(root / "delivery-results")
+        binding = delivery.read_diagnostic_binding(request_id)
+        diagnostic = self._deferred_diagnostic_store(actor)
+        unavailable = {"version": 1, "request_id": request_id, "status": "unavailable"}
+        if binding is None or diagnostic is None:
+            return unavailable
+        result = diagnostic.read(request_id, *binding)
+        if result["status"] != "completed":
+            return {"version": 1, "request_id": request_id, **result}
+        # Recover minimal E2 evidence from the original SHA-checked E3 receipt;
+        # the transcript deliberately omits execution_ledger for privacy/size.
+        saved = delivery.load(request_id, binding[0])
+        evidence = project_receipt_diagnostic_evidence(saved) if saved is not None else None
+        diagnosis = result["diagnosis"]
+        if (
+            evidence is None
+            or not isinstance(diagnosis, dict)
+            or diagnosis.get("status") != evidence["status"]
+            or diagnosis.get("reason_code") != evidence["reason_code"]
+            or diagnosis.get("write_evidence") != evidence["write_evidence"]
+        ):
+            return unavailable
+        return {
+            "version": 1,
+            "request_id": request_id,
+            **result,
+            "receipt_evidence": evidence,
+        }
+
+    def _maybe_retry_verified_prewrite_interpretation(
+        self,
+        result: ApplicationResult,
+        *,
+        actor: str,
+        user_request: str,
+        request_id: str | None,
+        conversation_id: str | None,
+        authenticated_actor: AuthenticatedActorContext | None,
+        external_principal: ExternalPrincipal | None,
+        checkpoint_store: LocalExecutionCheckpointStore | None,
+    ) -> tuple[ApplicationResult, dict[str, object] | None, bool]:
+        """One C4-advised re-read of the ORIGINAL source before any app writer.
+
+        An empty affected-ID list is NEVER evidence that Core/E3 did not try
+        to write. Only the request-local proof from the source executor,
+        irreversibly invalidated before every Core/Task/Event/manifest call,
+        allows re-entering the Router under the same actor and delivery claim.
+        This is NOT a semantic override, plan/identity choice or new delivery.
+        """
+        if not (
+            self.conversation_prewrite_recovery_enabled
+            # Model-selected advice alone is not permission to reenter Core:
+            # a separate optional semantic veto must have run first.
+            and self.conversation_graph_semantic_review_enabled
+            and self.conversation_graph_gateway is not None
+            and self.full_source_mutation_guard
+            and self.hybrid_candidate_execute is not None
+            and request_id is not None
+            and conversation_id == MAIN_CONVERSATION_ID
+            and isinstance(user_request, str)
+            and result.request_id == request_id
+            and result.status is ApplicationStatus.NEEDS_ATTENTION
+            and result.prewrite_recovery_proven is True
+            and not result.action_results
+            and not result.affected_stable_note_ids
+            and result.planning_error is None
+            and result.pending_work.record_id is None
+        ):
+            return result, None, False
+        # The only evidence source is the typed Core result + actor-owned
+        # checkpoint. AI text can suggest trying again, but never prove that
+        # the first attempt was prewrite or permit changing the user's source.
+        from .execution_ledger import project_execution_ledger
+
+        try:
+            checkpoint = checkpoint_store.load(request_id) if checkpoint_store else None
+            observed = project_execution_ledger(result, checkpoint)
+            response = application_result_to_response(result)
+            diagnosis = diagnose_trusted_execution_graph(
+                result,
+                response,
+                observed,
+                self.conversation_graph_gateway,
+                original_message=user_request,
+                semantic_review=self.conversation_graph_semantic_review_enabled,
+            )
+        except Exception:
+            # Diagnostic model failures (including transport/SDK exceptions)
+            # must not strand a prewrite, no-mutation delivery as an uncertain
+            # E3 claim. Only the actual SECOND execution propagates errors.
+            return result, None, True
+        if (
+            not self.conversation_graph_semantic_review_enabled
+            or diagnosis is None
+            or diagnosis.get("verified_stage_only") is not True
+            or diagnosis.get("next_step") != "REVIEW_SAFE_RETRY"
+        ):
+            return result, diagnosis, True
+        # The very same request ID/fingerprint/claim stays active in the
+        # outer execute_product lock. There is NO second claim or extra ID,
+        # and the E3 result is still saved once at the end of this call.
+        self._record_checkpoint(
+            checkpoint_store,
+            request_id,
+            "diagnostic.prewrite_reinterpretation",
+            CheckpointOutcome.MILESTONE_OBSERVED,
+        )
+        retried = self._execute_with_progress(
+            actor,
+            request_id,
+            user_request,
+            request_id,
+            conversation_id,
+            AuthenticatedActorContext(actor)
+            if authenticated_actor is not None or external_principal is not None
+            else None,
+            None,
+        )
+        return retried, None, False
 
     def _conversation_product_reply(
         self,
@@ -1136,6 +1454,9 @@ class RuntimeComposition:
         force_replay: bool = False,
         actor: str | None = None,
         conversation_id: str | None = None,
+        source_text: str = "",
+        precomputed_graph_diagnosis: dict[str, object] | None = None,
+        graph_diagnosis_checked: bool = False,
     ) -> dict[str, object]:
         """Persist one safely completed delivery and replay it without re-execution.
 
@@ -1156,6 +1477,7 @@ class RuntimeComposition:
                     (
                         self.conversation_gateway
                         if self.conversation_error_model_advisory_enabled
+                        and self.conversation_graph_gateway is None
                         else None
                     ),
                 )
@@ -1204,6 +1526,38 @@ class RuntimeComposition:
                     # A choice with no bounded safe options cannot be resumed in this v1.
                     # Keep the specific product reason so the UI can explain what was unresolved.
                     response["product_outcome"] = "CANNOT_ANSWER"
+        # The old C4 reason map remains a fallback. The AI reads the observed
+        # E2 ledger (including early Router/refusal stages) and explains it.
+        # Existing verified Core choice lists have precedence: never invent
+        # a competing model-driven identity dialogue.
+        if precomputed_graph_diagnosis is not None:
+            response["error_diagnosis"] = precomputed_graph_diagnosis
+        if (
+            not graph_diagnosis_checked
+            and not self.conversation_graph_deferred_enabled
+            and self.conversation_graph_gateway is not None
+            and isinstance(response.get("execution_ledger"), dict)
+            and not (
+                isinstance(response.get("clarification"), dict)
+                and isinstance(response["clarification"].get("options"), list)
+                and len(response["clarification"]["options"]) >= 2
+            )
+        ):
+            try:
+                diagnosis = diagnose_trusted_execution_graph(
+                    result,
+                    response,
+                    response["execution_ledger"],
+                    self.conversation_graph_gateway,
+                    original_message=source_text,
+                    semantic_review=self.conversation_graph_semantic_review_enabled,
+                )
+                if diagnosis is not None:
+                    response["error_diagnosis"] = diagnosis
+            except Exception:
+                # A failed optional diagnosis cannot invalidate the original
+                # immutable Core response or permit a fresh write.
+                pass
         if (
             store is not None
             and fingerprint is not None
@@ -1252,6 +1606,9 @@ class RuntimeComposition:
             pending = record["pending"]
             return {
                 "request_id": record["request_id"],
+                # Only this Core-projected v2 card may supply an explicit
+                # source-pending locator. Legacy v1 plans keep their path.
+                "source_pending": True,
                 "requested_reference": pending[0]["reference_text"],
                 "explanation": (
                     "No puedo identificar con seguridad a "
@@ -1306,6 +1663,8 @@ class RuntimeComposition:
         conversation_id: str | None,
         request_id: str | None,
         user_request: str,
+        *,
+        reply_to_request_id: str | None = None,
     ) -> dict[str, object] | None:
         """Consume a v2 selection/cancel before v1 or hybrid routing, never execute it.
 
@@ -1317,12 +1676,21 @@ class RuntimeComposition:
             return None
         try:
             repository = self._candidate_pending_repository(actor)
-            if repository is None or not repository.open_requests(conversation_id):
+            if repository is None:
+                # A correlated choice is never ordinary user source even when
+                # the v2 feature is currently disabled or state is missing.
+                if reply_to_request_id is not None:
+                    return self._control_response(request_id, "CANDIDATE_UNAVAILABLE")
+                return None
+            if not repository.open_requests(conversation_id):
+                if reply_to_request_id is not None:
+                    return self._control_response(request_id, "CANDIDATE_UNAVAILABLE")
                 return None
             reply = repository.reply(
                 conversation_id=conversation_id,
                 reply=user_request,
                 answer_id=request_id,
+                request_id=reply_to_request_id,
                 vault=self.vault_repository,
                 schema=cast(dict[str, Any], self.canonical_schema),
                 immediate_followup=self._candidate_reply_is_immediate(
@@ -1336,16 +1704,78 @@ class RuntimeComposition:
             return None
         self._append_clarification_reply(actor, conversation_id, request_id, user_request)
         if reply.outcome == "choice_recorded":
-            # Re-check under the repository lock before making even the
-            # non-executing acknowledgement visible to the caller.
-            review = repository.selected_for_core_review(
-                conversation_id=conversation_id,
-                request_id=cast(str, reply.request_id),
-                vault=self.vault_repository,
-                schema=cast(dict[str, Any], self.canonical_schema),
-            )
-            if review.outcome != "choice_ready_for_core_review":
+            # Compose source-exact read-only Core input from the persisted
+            # choice, original clock and physically verified previous facts.
+            # This handoff does NOT replan or authorize any new mutation.
+            try:
+                prepared = prepare_selected_candidate_continuation(
+                    repository,
+                    conversation_id=conversation_id,
+                    request_id=cast(str, reply.request_id),
+                    vault=cast(VaultRepository, self.vault_repository),
+                    schema=cast(dict[str, Any], self.canonical_schema),
+                )
+            except CandidateContinuationContextError:
                 return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
+            if prepared.may_execute:
+                return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
+            if self.candidate_continuation_execute is not None:
+                # The injected callback owns the existing Core/E3 claim,
+                # review and physical receipt. Its output cannot grant
+                # authority merely by claiming "completed".
+                try:
+                    delivered = self.candidate_continuation_execute(prepared, actor)
+                except CandidateContinuationPrewriteError:
+                    # A false/invalid planning or semantic review BEFORE claim
+                    # is not a write incident and needs no recovery fiction.
+                    return {
+                        **self._control_response(request_id, "CANDIDATE_REVIEW_NOT_APPROVED"),
+                        "product_reason": "CONTINUATION_REVIEW_REQUIRED",
+                        "selected_pending_request_id": reply.request_id,
+                    }
+                except Exception:
+                    # A crash after the Core write has an uncertain delivery
+                    # claim; never retry it blindly or claim nothing was saved.
+                    return {
+                        **self._control_response(request_id, "CANDIDATE_CONTINUATION_UNCERTAIN"),
+                        "product_reason": "CONTINUATION_REQUIRES_RECONCILIATION",
+                        "selected_pending_request_id": reply.request_id,
+                    }
+                facts = delivered.get("facts") if isinstance(delivered, dict) else None
+                if (
+                    not isinstance(delivered, dict)
+                    or delivered.get("status") != "completed"
+                    or delivered.get("kind") != "reviewed_candidate_continuation"
+                    or delivered.get("original_request_id") != prepared.original_request_id
+                    or not isinstance(facts, list)
+                    or not facts
+                    or any(
+                        not isinstance(item, dict)
+                        or item.get("status")
+                        not in {"verified_in_markdown", "verified_existing_knowledge"}
+                        or not isinstance(item.get("note_id"), str)
+                        or not item["note_id"]
+                        or not isinstance(item.get("fact_sha256"), str)
+                        or len(item["fact_sha256"]) != 64
+                        for item in facts
+                    )
+                ):
+                    return self._control_response(request_id, "CANDIDATE_CONTINUATION_UNCERTAIN")
+                return {
+                    "request_id": request_id,
+                    "status": "completed",
+                    "product_outcome": "ANSWER",
+                    "product_control": "CANDIDATE_CONTINUATION_SAVED",
+                    "selected_pending_request_id": reply.request_id,
+                    "actions": [],
+                    "affected_stable_note_ids": sorted({item["note_id"] for item in facts}),
+                    "conversation_reply": {
+                        "status": "completed",
+                        "kind": "saved",
+                        "message": "He guardado la información pendiente.",
+                    },
+                    "operational": {"total_duration_ms": 0.0, "stages": []},
+                }
             return {
                 **self._control_response(request_id, "CANDIDATE_SELECTION_RECORDED"),
                 "status": "needs_attention",
@@ -2933,7 +3363,25 @@ class RuntimeComposition:
         with self._conversation_lock:
             store = self._conversation_store(actor)
             store.load_or_create_main(now=_current_time()["timestamp"])
-            return store.load_main_page(limit=40 if limit is None else limit, before=before)
+            page = store.load_main_page(limit=40 if limit is None else limit, before=before)
+        if before is None:
+            # Read-only, actor-scoped recovery on the initial conversation page;
+            # never reconstruct a Core plan or silently reopen selected work.
+            try:
+                pending = self._candidate_pending_repository(actor)
+                if pending is not None:
+                    page["pending_clarifications"] = list(
+                        pending.verified_open_choice_cards(
+                            MAIN_CONVERSATION_ID,
+                            vault=cast(VaultRepository, self.vault_repository),
+                            schema=cast(dict[str, Any], self.canonical_schema),
+                        )
+                    )
+            except (CandidatePendingStateError, OSError, ValueError):
+                # Preserve transcript availability without claiming there are
+                # no pending records when validation or storage failed.
+                page["pending_recovery_unavailable"] = True
+        return page
 
     def list_conversations(
         self,
@@ -4110,6 +4558,7 @@ def _build_runtime_from_environment_unlocked(
                 preview,
                 conversation_id=conversation_id,
                 created_at=clock["timestamp"],
+                created_timezone=clock["timezone"],
                 options=options,
                 vault=repository,
                 schema=schema,
@@ -4269,11 +4718,13 @@ def _build_runtime_from_environment_unlocked(
         conversation_context: Sequence[Mapping[str, str]] = (),
         *,
         captured_clock: dict[str, str] | None = None,
+        allow_empty_mentions: bool = False,
     ) -> _PreparedInterpretation:
-        """Interpret exact time against the SAME captured delivery instant if supplied."""
+        """Interpret time against the SAME captured clock; opt in to verified absence."""
         clock = captured_clock if captured_clock is not None else _current_time()
         interpreter = OpenAITemporalInterpreter.from_environment(
-            {key: clock[key] for key in ("date", "time", "timezone")}
+            {key: clock[key] for key in ("date", "time", "timezone")},
+            **({"allow_empty_mentions": True} if allow_empty_mentions else {}),
         )
         started = perf_counter()
         try:
@@ -5897,6 +6348,126 @@ def _build_runtime_from_environment_unlocked(
             else None,
         )
 
+    # Explicitly gated DEV integration; no product caller imports the frozen
+    # F14/F27 legacy validator or supplies a second Writer. Successful live
+    # semantic review is necessary but cannot bypass the existing E3 guard.
+    candidate_continuation_execute = None
+    if os.environ.get("ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED") == "1":
+        if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or light_source_execute is None:
+            raise ValueError("E5 continuation requires isolated DEV reviewed-source ownership")
+
+        from odyssey_core.candidate_continuation_context import (
+            validate_selected_continuation_current,
+        )
+        from odyssey_core.candidate_continuation_plan import inspect_selected_candidate_plan
+        from odyssey_runtime.candidate_continuation_delivery import (
+            deliver_reviewed_candidate_continuation,
+        )
+        from odyssey_runtime.candidate_continuation_review import (
+            review_selected_candidate_with_provider,
+        )
+
+        def candidate_continuation_execute(
+            prepared: CoreCandidateContinuationContext, stable_actor: str
+        ) -> dict[str, Any]:
+            """Plan/review before one guarded E3 delivery; never a second Core writer."""
+            # All checks until the independent review precede any mutation
+            # claim. Classify failure here as prewrite even if the *selected
+            # identity/source* becomes stale before Temporal is invoked.
+            try:
+                state = conversation_root_resolver.resolve(stable_actor)
+                pending_root = state / "pending"
+                pending = CandidatePendingRepository(pending_root)
+                validate_selected_continuation_current(
+                    prepared,
+                    pending,
+                    vault=repository,
+                    schema=schema,
+                )
+                captured_clock = _continuation_original_clock(prepared)
+                # The user's selected name is a Core-verified planning HINT,
+                # not provider-granted authority; E3 re-grounds its ID.
+                # Reuse the SAME Temporal interpreter and captured request clock
+                # as ordinary routed writes. Identity resolution alone cannot
+                # authorize guessed dates in a continuation plan.
+                prepared_temporal = prepare_temporal_interpretation(
+                    prepared.pending_source,
+                    (),
+                    captured_clock=captured_clock,
+                    allow_empty_mentions=True,
+                )
+                temporal_evidence = _continuation_exact_temporal_evidence(
+                    prepared.pending_source, prepared_temporal.value
+                )
+                evidence = DomainInterpretation(
+                    "core",
+                    prepared.pending_source,
+                    "CANONICAL_REFERENCE",
+                    (
+                        DomainEvidence(
+                            "canonical_reference",
+                            prepared.reference_text,
+                            f"person:{prepared.selected_name}",
+                        ),
+                        *temporal_evidence,
+                    ),
+                )
+                planned = prepare_core_plan(prepared.pending_source, captured_clock, (), evidence)
+                plan = planned.planner.plan(prepared.pending_source)
+                if not isinstance(plan, RequestPlan):
+                    raise ValueError("E5 continuation Core planner did not propose a complete plan")
+                inspection = inspect_selected_candidate_plan(prepared, plan)
+                review, _review_verdict = review_selected_candidate_with_provider(
+                    prepared,
+                    inspection,
+                    ask=light_source_execute._ask,
+                    model="gpt-5.6-luna",
+                )
+            except Exception as error:
+                # Nothing in this block mutates Markdown or takes an E3 claim.
+                raise CandidateContinuationPrewriteError(
+                    "The continuation planner/reviewer did not pass independent review"
+                ) from error
+
+            def run_existing_core(
+                current: CoreCandidateContinuationContext,
+                current_plan: RequestPlan,
+                delivery_id: str,
+                guard: WritePreflightGuard,
+            ) -> ApplicationResult:
+                return core_execute(
+                    current.pending_source,
+                    delivery_id,
+                    AuthenticatedActorContext(stable_actor),
+                    resume_plan=current_plan,
+                    write_preflight_guard=guard,
+                    captured_request_instant=datetime.fromisoformat(current.captured_at),
+                )
+
+            receipt = deliver_reviewed_candidate_continuation(
+                pending=pending,
+                deliveries=LocalDeliveryResultStore(state / "delivery-results"),
+                conversation_id=prepared.conversation_id,
+                original_request_id=prepared.original_request_id,
+                plan=plan,
+                independent_review=review,
+                vault=repository,
+                schema=schema,
+                run_existing_core=run_existing_core,
+            )
+            affected = tuple(
+                sorted(
+                    {
+                        item["note_id"]
+                        for item in receipt["facts"]
+                        if item["status"] == "verified_in_markdown"
+                    }
+                )
+            )
+            if affected:
+                index_refresh_coordinator.schedule(affected)
+            return receipt
+
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
@@ -5952,6 +6523,7 @@ def _build_runtime_from_environment_unlocked(
             execute_hybrid_proven_read if light_source_enabled or hybrid_dev_enabled else None
         ),
         full_source_mutation_guard=light_source_enabled,
+        candidate_continuation_execute=candidate_continuation_execute,
         conversation_gateway=(
             OpenAIConversationGateway.from_environment()
             if os.environ.get("ODYSSEY_CHAT_C3_ENABLED") == "1"
@@ -5965,6 +6537,10 @@ def _build_runtime_from_environment_unlocked(
             and os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
         ),
         conversation_error_model_advisory_enabled=_chat_c4_model_advisory_enabled(),
+        conversation_graph_gateway=_c4_graph_gateway_from_environment(),
+        conversation_graph_semantic_review_enabled=_chat_c4_semantic_review_enabled(),
+        conversation_graph_deferred_enabled=_chat_c4_deferred_enabled(),
+        conversation_prewrite_recovery_enabled=_chat_c4_prewrite_recovery_enabled(),
         conversation_deployed_capabilities=deployed_chat_help_capabilities(
             application_executors,
             notes_available=notes_service is not None,
@@ -6232,6 +6808,44 @@ def _positive_int_env(name: str, default: int) -> int:
     if value <= 0:
         raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+def _continuation_original_clock(prepared: CoreCandidateContinuationContext) -> dict[str, str]:
+    """Preserve the captured IANA local clock; never substitute the current TZ."""
+    if not valid_captured_timezone(prepared.captured_at, prepared.captured_timezone):
+        raise CandidateContinuationPrewriteError(
+            "Original request IANA timezone is unavailable or inconsistent"
+        )
+    captured = datetime.fromisoformat(prepared.captured_at)
+    return {
+        "date": captured.date().isoformat(),
+        "time": captured.time().replace(microsecond=0).isoformat(),
+        "timezone": cast(str, prepared.captured_timezone),
+        "timestamp": captured.isoformat(timespec="seconds"),
+    }
+
+
+def _continuation_exact_temporal_evidence(
+    source_text: str,
+    temporal: TemporalInterpretation | None,
+) -> tuple[DomainEvidence, ...]:
+    """Bind a trusted Temporal outcome to this exact continuation source."""
+    # Only the opt-in Temporal schema can return a validated empty list.
+    # None still means a provider/validation failure, not verified absence.
+    if not isinstance(temporal, TemporalInterpretation):
+        raise CandidateContinuationPrewriteError("Continuation Temporal evidence is unavailable")
+    if temporal.source_text != source_text:
+        raise CandidateContinuationPrewriteError("Temporal result belongs to another source")
+    if not all(
+        kind in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
+        for kind in temporal.kinds()
+    ):
+        raise CandidateContinuationPrewriteError(
+            "Continuation Temporal interpretation is not exact"
+        )
+    return (
+        temporal.core_domain_interpretation().evidence if not temporal.verified_no_mentions else ()
+    )
 
 
 def _current_time() -> dict[str, str]:

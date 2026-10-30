@@ -9,6 +9,7 @@ import {
 import {actionButton, mountNotes, setActionIcon} from "./notes.js";
 import {mountCalendar} from "./calendar.js";
 import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";
+import {pollDeferredDiagnosis} from "./deferred_diagnosis.js";
 
 const form = document.querySelector("#odyssey-form");
 const input = document.querySelector("#request-input");
@@ -144,6 +145,7 @@ async function loadMainConversation() {
     }
   }
   const userMessages = new Map();
+  const diagnosticCandidates = [];
   let visibleDay = null;
   for (const turn of data.turns ?? []) {
     const createdAt = validTurnTime(turn.created_at);
@@ -165,7 +167,27 @@ async function loadMainConversation() {
       restorePersistedAcknowledgement(message, turn);
       appendDetailButton(message, turn.request_detail);
       appendNoteSetAffordance(message, turn.note_result_snapshot);
+      diagnosticCandidates.push({message, turn});
     }
+  }
+  const eligibleDiagnostics = diagnosticCandidates.filter(({turn}) =>
+    ["needs_attention", "failed", "partial"].includes(turn.status));
+  // The newest replies may still be processing: poll those; one-shot the
+  // rest of the history through the same globally bounded read-only queue.
+  for (const {message, turn} of eligibleDiagnostics.slice(-4)) {
+    void attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail);
+  }
+  queueHistoricDeferredDiagnoses(eligibleDiagnostics.slice(0, -4));
+  // Restored cards carry Core-verified options, never inferred transcript text.
+  for (const card of data.pending_clarifications ?? []) {
+    const message = appendMessage("odyssey", "Aclaración pendiente", "needs_attention");
+    message.classList.add("message-clarification-restored");
+    appendClarificationCard(message, card);
+  }
+  if (data.pending_recovery_unavailable === true) {
+    appendMessage("odyssey",
+      "No he podido verificar las aclaraciones pendientes. Las notas no se han modificado.",
+      "needs_attention");
   }
   const recoverable = findRecoverableSubmission(data.turns, conversationId);
   if (recoverable) {
@@ -311,6 +333,7 @@ async function loadOlderConversation() {
     const data = await requestConversation({endpoint: conversationEndpoint, operation: "main", payload: {limit: 40, before: cursor}});
     if (cursor !== olderCursor) return;
     const olderNodes = [];
+    const olderDiagnosticCandidates = [];
     for (const turn of data.turns ?? []) {
       if (turn.role === "user" && typeof turn.request_id === "string" && typeof turn.text === "string") {
         userTextByRequestId.set(turn.request_id, turn.text.slice(0, 4096));
@@ -334,6 +357,7 @@ async function loadOlderConversation() {
         restorePersistedAcknowledgement(message, turn);
         appendDetailButton(message, turn.request_detail);
         appendNoteSetAffordance(message, turn.note_result_snapshot);
+        olderDiagnosticCandidates.push({message, turn});
       }
       olderNodes.push(message);
     }
@@ -347,6 +371,9 @@ async function loadOlderConversation() {
       duplicate?.remove();
     }
     if (olderNodes.length) conversation.prepend(...olderNodes);
+    // Add every eligible historical reply to the globally bounded lookup
+    // queue. Older responses need one read, not repeated provider polling.
+    queueHistoricDeferredDiagnoses(olderDiagnosticCandidates);
     olderCursor = data.before ?? null;
     hasOlder = data.has_older === true;
     conversation.scrollTop = previousTop + conversation.scrollHeight - previousHeight;
@@ -570,6 +597,50 @@ function restorePersistedAcknowledgement(message, turn) {
   }
 }
 
+const deferredDiagnosisMessages = new WeakSet();
+function attachDeferredDiagnosis(article, requestId, status, detail, maxAttempts = 24) {
+  if (!article || typeof requestId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(requestId) ||
+      !["needs_attention", "failed", "partial"].includes(status) ||
+      deferredDiagnosisMessages.has(article)) return Promise.resolve();
+  deferredDiagnosisMessages.add(article);
+  return pollDeferredDiagnosis({
+    requestId, originalStatus: status, ledger: detail?.execution_ledger, maxAttempts,
+    request: id => requestConversation({endpoint: conversationEndpoint,
+      operation: "diagnosis", payload: {request_id: id}}),
+    onResult: explanation => {
+      if (!article.isConnected) return;
+      const paragraph = document.createElement("p");
+      paragraph.className = "continuity-warning deferred-diagnosis";
+      paragraph.textContent = "Diagnóstico posterior: " + explanation;
+      article.append(paragraph);
+    },
+  });
+}
+
+const historicDiagnosisQueue = [];
+let historicDiagnosisActive = 0;
+const MAX_HISTORIC_DIAGNOSIS_READS = 4;
+function queueHistoricDeferredDiagnoses(candidates) {
+  historicDiagnosisQueue.push(...candidates.filter(({turn}) =>
+    ["needs_attention", "failed", "partial"].includes(turn.status)));
+  drainHistoricDiagnosisQueue();
+}
+
+function drainHistoricDiagnosisQueue() {
+  // One queue covers the initial page and all later pages; rapid scrolling
+  // never multiplies the maximum number of concurrent read-only lookups.
+  while (historicDiagnosisActive < MAX_HISTORIC_DIAGNOSIS_READS && historicDiagnosisQueue.length) {
+    const {message, turn} = historicDiagnosisQueue.shift();
+    historicDiagnosisActive += 1;
+    void attachDeferredDiagnosis(message, turn.request_id, turn.status, turn.request_detail, 1)
+      .catch(() => {}) // Optional advice cannot fail the conversation.
+      .finally(() => {
+        historicDiagnosisActive -= 1;
+        drainHistoricDiagnosisQueue();
+      });
+  }
+}
+
 function renderProductResult(result) {
   const message = appendMessage("odyssey", result.message, result.status);
   if (result.status === "completed" && result.kind === "acknowledgement" && result.note_result_snapshot?.kind === "affected_notes") {
@@ -579,6 +650,7 @@ function renderProductResult(result) {
   appendDetailButton(message, result.request_detail);
   appendNoteSetAffordance(message, result.note_result_snapshot);
   appendClarificationCard(message, result.clarification);
+  attachDeferredDiagnosis(message, result.request_id, result.status, result.request_detail);
   if (clarificationStatus) {
     clarificationStatus.hidden = !(
       result.kind === "clarification"
@@ -612,6 +684,10 @@ function appendClarificationCard(article, clarification) {
       && option.evidence === clarification.options[0].evidence);
   const sameType = clarification.options.every((option) =>
     option.note_type === clarification.options[0].note_type);
+  // A server-owned v2 marker distinguishes source-pending choices from
+  // legacy plan clarification cards (which can have the same basic shape).
+  const sourcePendingId = clarification.source_pending === true
+    ? clarification.request_id : null;
   const list = document.createElement("div");
   list.className = "clarification-options";
   clarification.options.forEach((option) => {
@@ -638,7 +714,7 @@ function appendClarificationCard(article, clarification) {
     const controls = document.createElement("div");
     controls.className = "clarification-controls";
     const choose = actionButton("check", `Elegir a ${option.label}`, () => {
-      submitClarificationReply(`He elegido a ${option.label}.`);
+      submitClarificationReply(`He elegido a ${option.label}.`, sourcePendingId);
     }, "clarification-choose");
     const inspect = actionButton("openNote", `Ver nota de ${option.label}`, () => {
       selectSurface("notes");
@@ -657,14 +733,14 @@ function appendClarificationCard(article, clarification) {
     article.append(evidence);
   }
   const cancel = actionButton("close", "Cancelar selección", () => {
-    submitClarificationReply("cancel");
+    submitClarificationReply("cancel", sourcePendingId);
   }, "clarification-cancel");
   article.append(cancel);
 }
 
-function submitClarificationReply(reply) {
+function submitClarificationReply(reply, replyToRequestId = null) {
   try {
-    void sendSubmission(createSubmission(reply, globalThis.crypto, conversationId));
+    void sendSubmission(createSubmission(reply, globalThis.crypto, conversationId, replyToRequestId));
   } catch {
     input.focus();
   }

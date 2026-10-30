@@ -281,6 +281,18 @@ def test_luna_read_and_delegate_schema_subtrees_are_byte_equivalent(
         )
 
 
+def test_shared_semantic_write_ownership_preserves_journal_without_implicit_event_date(
+    schema: dict[str, Any],
+) -> None:
+    """One ownership rule serves direct Core and selected E5 continuations."""
+    prompt = render_luna_experimental_prompt(schema, BASELINE_CONTEXT)
+    assert "recollections belong in calendar_day" in prompt
+    assert "people are fact references, not targets" in prompt
+    assert "index at captured date without claiming it happened then" in prompt
+    assert "Others' facts, lasting traits, future, negation" in prompt
+    assert prompt.count("recollections belong in calendar_day") == 1
+
+
 def test_semantic_write_branch_and_whole_luna_inputs_are_measured(
     schema: dict[str, Any],
 ) -> None:
@@ -967,6 +979,29 @@ def test_prompt_contains_ordered_decisions_and_only_teaching_examples(
     cases_payload, _ = load_frozen_registry()
     assert all(item["request"] not in prompt for item in cases_payload["cases"])
     assert all(item["request"] in prompt for item in load_teaching_examples())
+
+
+def test_luna_canonical_reference_requires_semantic_identity_not_raw_marker(
+    schema: dict[str, Any],
+) -> None:
+    """Selected-reference evidence stays source-scoped and compiler-owned."""
+    from odyssey_core.domain_interpretation import DomainEvidence, DomainInterpretation
+
+    prompt = render_luna_experimental_prompt(
+        schema,
+        CONTEXT,
+        domain_interpretation=DomainInterpretation(
+            "core",
+            "Tomorrow I will meet her.",
+            "CANONICAL_REFERENCE",
+            (DomainEvidence("canonical_reference", "her", "person:Zoë"),),
+        ),
+    )
+    assert "A semantic identity part is required for every such linked fact" in prompt
+    assert (
+        "do not put the selected name in literal text or manufacture raw {{ref:N}} syntax" in prompt
+    )
+    assert "The Core semantic compiler alone derives each local marker" in prompt
 
 
 def test_relational_target_with_described_reference_teaching_example_compiles(

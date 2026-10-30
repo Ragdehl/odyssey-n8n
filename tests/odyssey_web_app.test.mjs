@@ -23,6 +23,8 @@ class FakeElement {
     this.scrollTop = 0;
     this._listeners = new Map();
     this._textContent = "";
+    // An inserted message is connected within the synthetic Chat tree.
+    Object.defineProperty(this, "isConnected", {get: () => this.parentNode !== null});
     this.classList = {
       add: (...names) => {
         this.className = [...new Set([...this.className.split(" "), ...names])]
@@ -193,12 +195,18 @@ function createPage() {
   return {document, elements};
 }
 
-async function mountApp({turns, olderTurns = [], requestProductResult, createSubmission, progressThrows = false}) {
+async function mountApp({turns, olderTurns = [], pendingClarifications = [],
+  requestProductResult, createSubmission, progressThrows = false, deferredDiagnosisMock}) {
   const {document, elements} = createPage();
   const persisted = [];
   let renderedWithoutRecovery = false;
   let notesHomeCalls = 0;
   let calendarHomeCalls = 0;
+  const deferredCalls = [];
+  globalThis.__odysseyTestDeferredPoll = async options => {
+    deferredCalls.push(options);
+    return deferredDiagnosisMock?.(options);
+  };
   globalThis.document = document;
   globalThis.CustomEvent = class CustomEvent {
     constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
@@ -216,7 +224,8 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
         return {conversation_id: "main", turns: olderTurns, has_older: false, before: null};
       }
       if (operation === "main") return {
-        conversation_id: "main", turns, has_older: olderTurns.length > 0,
+        conversation_id: "main", turns, pending_clarifications: pendingClarifications,
+        has_older: olderTurns.length > 0,
         before: olderTurns.length > 0 ? "older-page" : null,
       };
       persisted.push(payload);
@@ -264,6 +273,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     .replace('import {actionButton, mountNotes, setActionIcon} from "./notes.js";', "const {actionButton, mountNotes, setActionIcon} = globalThis.__odysseyTestNotes;")
     .replace('import {mountCalendar} from "./calendar.js";', "const {mountCalendar} = globalThis.__odysseyTestCalendar;")
     .replace('import {createProcessingIndicator, startProgressPolling, renderExecutionFlow} from "./progress.js";', "const {createProcessingIndicator, startProgressPolling, renderExecutionFlow} = globalThis.__odysseyTestProgress;")
+    .replace('import {pollDeferredDiagnosis} from "./deferred_diagnosis.js";', "const pollDeferredDiagnosis = globalThis.__odysseyTestDeferredPoll;")
     .replace("void (async () => {", "globalThis.__odysseyAppReady = (async () => {");
   const fixtureSource = `${testable}\n// fixture ${fixtureNumber += 1}`;
   await import(`data:text/javascript;base64,${Buffer.from(fixtureSource).toString("base64")}`);
@@ -273,6 +283,7 @@ async function mountApp({turns, olderTurns = [], requestProductResult, createSub
     renderedWithoutRecovery: () => renderedWithoutRecovery,
     notesHomeCalls: () => notesHomeCalls,
     calendarHomeCalls: () => calendarHomeCalls,
+    deferredCalls,
   };
 }
 
@@ -748,4 +759,152 @@ test("recoverable history warns only that its assistant turn is missing, not its
   const control = page.elements.conversation.querySelector(".recovery-control");
   assert.match(control.textContent, /La respuesta no figura en el historial/);
   assert.doesNotMatch(control.textContent, /no tiene una respuesta guardada/);
+});
+
+
+test("persisted deferred diagnosis attaches on reload and paginated assistant messages", async () => {
+  const failure = request_id => ({
+    request_id, role: "assistant", text: "La operación necesita revisión.",
+    status: "needs_attention", request_detail: {
+      request_id, operational: {total_duration_ms: 50, stages: []},
+      // The E2 ledger is intentionally NOT in persisted ConversationStore detail.
+    },
+  });
+  const page = await mountApp({
+    turns: [{request_id: "recent-demo", role: "user", text: "Recordatorio de ayer"},
+      failure("recent-demo")],
+    olderTurns: [{request_id: "old-demo", role: "user", text: "Visita antigua"},
+      failure("old-demo")],
+    deferredDiagnosisMock: ({onResult}) => onResult("Consejo fundamentado en E3."),
+  });
+  assert.equal(page.deferredCalls.length, 1, "rehydrated recent reply has a lookup");
+  assert.equal(page.deferredCalls[0].ledger, undefined, "no invented E2 metadata");
+  assert.match(page.elements.conversation.textContent, /Consejo fundamentado en E3/);
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+  assert.equal(page.deferredCalls.length, 2, "paginated reply also has a lookup");
+  assert.equal(page.deferredCalls[1].requestId, "old-demo");
+  assert.match(page.elements.conversation.textContent, /Diagnóstico posterior/);
+});
+
+test("older pages consult every failed reply, bounded to four parallel one-shot lookups", async () => {
+  const older = [];
+  for (let i = 0; i < 7; i += 1) {
+    const request_id = "historic-" + i;
+    older.push({role: "user", request_id, text: "Ayer ocurrió algo: " + i});
+    older.push({role: "assistant", request_id, text: "Revisión pendiente",
+      status: "needs_attention", request_detail: {request_id,
+        operational: {total_duration_ms: 1, stages: []}}});
+  }
+  const pending = [];
+  const page = await mountApp({
+    turns: [{request_id: "newer-demo", role: "user", text: "Hoy"}],
+    olderTurns: older,
+    deferredDiagnosisMock: () => new Promise(resolve => pending.push(resolve)),
+  });
+  page.elements.conversation.scrollTop = 0;
+  page.elements.conversation.emit("scroll");
+  await flush();
+  assert.equal(page.deferredCalls.length, 4, "bounded first batch");
+  assert.ok(page.deferredCalls.every(call => call.maxAttempts === 1));
+  for (const resolve of pending.splice(0)) resolve();
+  await flush();
+  assert.equal(page.deferredCalls.length, 7, "no older failed turn is silently discarded");
+  assert.deepEqual(page.deferredCalls.map(call => call.requestId),
+    Array.from({length: 7}, (_, i) => "historic-" + i));
+  for (const resolve of pending.splice(0)) resolve();
+});
+
+test("initial history also retains every eligible failure, with recent polling distinguished", async () => {
+  const turns = [];
+  for (let i = 0; i < 6; i += 1) {
+    const request_id = "history-" + i;
+    turns.push({request_id, role: "user", text: "Anotación " + i});
+    turns.push({request_id, role: "assistant", text: "Revisión pendiente",
+      status: "needs_attention"});
+  }
+  const page = await mountApp({
+    turns,
+    deferredDiagnosisMock: async () => {},
+  });
+  await flush();
+  assert.equal(page.deferredCalls.length, 6, "older visible failures are not discarded");
+  const counts = new Map(page.deferredCalls.map(call => [call.requestId, call.maxAttempts]));
+  assert.deepEqual(Array.from(counts.entries()).sort(), [
+    ["history-0", 1], ["history-1", 1], ["history-2", 24],
+    ["history-3", 24], ["history-4", 24], ["history-5", 24],
+  ]);
+});
+
+test("an older v2 source clarification card sends its exact pending request ID", async () => {
+  const submitted = [];
+  let deliverFirst;
+  const page = await mountApp({
+    turns: [{request_id: "web-initial-ambiguous", role: "user", text: "Hablé con dos personas"}],
+    createSubmission: (request, _crypto, _conversation, replyToRequestId) => ({
+      request, requestId: `v2-${request}`, replyToRequestId,
+    }),
+    requestProductResult: ({submission}) => {
+      submitted.push(submission);
+      return new Promise(resolve => { deliverFirst = resolve; });
+    },
+  });
+  page.elements.conversation.querySelector(".recovery-action").click();
+  await flush();
+  deliverFirst({
+    request_id: "web-initial-ambiguous", status: "needs_attention", kind: "clarification",
+    message: "Elige una persona.", clarification: {
+      request_id: "web-initial-ambiguous-r1", source_pending: true,
+      requested_reference: "él",
+      explanation: "No puedo identificar con seguridad a «él».",
+      options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+    },
+  });
+  await flush();
+  page.elements.conversation.querySelector(".clarification-choose").click();
+  await flush();
+  assert.equal(submitted.at(-1).request, "He elegido a Eric.");
+  assert.equal(submitted.at(-1).replyToRequestId, "web-initial-ambiguous-r1");
+  page.elements.conversation.querySelector(".clarification-cancel").click();
+  await flush();
+  assert.equal(submitted.at(-1).request, "cancel");
+  assert.equal(submitted.at(-1).replyToRequestId, "web-initial-ambiguous-r1");
+});
+
+
+test("a reloaded source-pending card keeps the exact selector without re-running Core", async () => {
+  let resolveChoice;
+  const submissions = [];
+  const card = {
+    request_id: "old-candidate-r1", source_pending: true,
+    requested_reference: "él",
+    explanation: "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+    options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+  };
+  const page = await mountApp({
+    turns: [{request_id: "older-human", role: "assistant", text: "Otra conversación"}],
+    pendingClarifications: [card],
+    createSubmission: (request, _crypto, _conversation, replyToRequestId) => ({
+      request, requestId: "reply-resumed", replyToRequestId,
+    }),
+    requestProductResult: ({submission}) => {
+      submissions.push(submission);
+      return new Promise(resolve => {resolveChoice = resolve;});
+    },
+  });
+  const restored = page.elements.conversation.querySelector(".message-clarification-restored");
+  assert.ok(restored);
+  assert.match(restored.querySelector(".message-text").textContent, /¿A quién te refieres/);
+  restored.querySelector(".clarification-choose").click();
+  await flush();
+  assert.equal(submissions.length, 1);
+  assert.equal(submissions[0].replyToRequestId, "old-candidate-r1");
+  assert.equal(submissions[0].request, "He elegido a Eric.");
+  resolveChoice({
+    request_id: "reply-resumed", status: "needs_attention", kind: "cannot_answer",
+    message: "Elección registrada; escritura pendiente de revisión.",
+  });
+  await flush();
+  assert.equal(submissions.length, 1);
 });

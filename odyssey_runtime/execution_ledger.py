@@ -36,21 +36,48 @@ def project_execution_ledger(
                     "observed_at": item["observed_at"],
                 }
             )
-    stages = tuple(
-        {
-            "name": stage.name,
-            "outcome": stage.outcome.value,
-            "duration_ms": stage.duration_ms,
-            "start_offset_ms": stage.start_offset_ms,
-            "error_category": stage.error_category,
-            "provider_call_count": len(stage.provider_calls),
-            "stage_view": stage_view_for(stage.name).to_response(),
-            # The real route-result aggregator supplies this exact owner. A
-            # standalone Core stage or Router boundary keeps None.
-            "route_index": stage.route_index,
-        }
-        for stage in result.operational.stages[:_MAX]
-    )
+    stages: list[dict[str, object]] = []
+    for stage in result.operational.stages:
+        if len(stages) >= _MAX:
+            break
+        stages.append(
+            {
+                "name": stage.name,
+                "outcome": stage.outcome.value,
+                "duration_ms": stage.duration_ms,
+                "start_offset_ms": stage.start_offset_ms,
+                "error_category": stage.error_category,
+                "provider_call_count": len(stage.provider_calls),
+                "stage_view": stage_view_for(stage.name).to_response(),
+                "route_index": stage.route_index,
+                # This is an observed top-level stage, not a derived child.
+                "parent_stage": None,
+            }
+        )
+        # Only the standalone source-processing stage owns provider subspans
+        # outside routed execution. On multi-route flows, the Router stage is
+        # global and its children must NOT appear as route-owned siblings.
+        # Keep E2's established route-index ownership contract unchanged.
+        if stage.name != "application.source_processing":
+            continue
+        for span in stage.substeps:
+            if len(stages) >= _MAX:
+                break
+            stages.append(
+                {
+                    "name": span.name,
+                    "outcome": span.outcome.value,
+                    "duration_ms": span.duration_ms,
+                    "start_offset_ms": None,
+                    "error_category": span.error_category,
+                    "provider_call_count": 0,
+                    "stage_view": stage_view_for(span.name).to_response(),
+                    "route_index": stage.route_index,
+                    # Explicit parent provenance: a failed provider substep
+                    # is more specific than the failed source-processing span.
+                    "parent_stage": stage.name,
+                }
+            )
     routes = []
     flow = result.execution_flow
     if isinstance(flow, Mapping) and isinstance(flow.get("routes"), (list, tuple)):
@@ -96,7 +123,7 @@ def project_execution_ledger(
         "events": events,
         "event_sequence": checkpoint.get("sequence") if checkpoint is not None else None,
         "events_truncated": bool(checkpoint.get("truncated")) if checkpoint is not None else False,
-        "stages": list(stages),
+        "stages": stages,
         "routes": routes,
         "write_receipts": receipts[:_MAX],
         # Preserve affected IDs even when a partial failure omitted individual

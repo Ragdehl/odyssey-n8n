@@ -25,6 +25,8 @@ Environment=ODYSSEY_ACTOR=odyssey-dev
 Environment=ODYSSEY_ENABLED_APPLICATIONS=tasks,events
 Environment=ODYSSEY_LIGHT_SOURCE_V1=1
 Environment=ODYSSEY_DEPLOYMENT_ENV=DEV
+# E5 single-user DEV pilot: Core/E3 guards still own all persistent writes.
+Environment=ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED=1
 # DEV-only: keep ONNX hot for a user session to avoid repeated 2-3s cold starts.
 # Temporary UX-first compromise; investigate smaller multilingual models.
 Environment=ODYSSEY_EMBEDDING_SUBPROCESS=1

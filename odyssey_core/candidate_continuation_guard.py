@@ -16,8 +16,8 @@ from .application import WritePreflightGuardError
 from .candidate_pending_state import CandidatePendingRepository
 from .reference_preflight import UnitTargetPreflight
 from .request_planning import RequestPlan, WriteAction
+from .reviewed_continuation_guard import _verify_selected_reference_preflight
 from .storage import VaultRepository
-from .write_target import WriteTargetOutcome
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +130,6 @@ class SelectedCandidateWriteGuard:
             raise WritePreflightGuardError("CANDIDATE_CONTINUATION_UNSUPPORTED_WRITE_SHAPE")
         fact_index, helper_index = consumers[0], helpers[0]
         fact_unit, helper_unit = action.units[fact_index], action.units[helper_index]
-        identity_target = preflight[helper_index]
         if (
             len(fact_unit.facts) != 1
             or fact_unit.intent != "record"
@@ -145,12 +144,14 @@ class SelectedCandidateWriteGuard:
             or helper_unit.properties
             or helper_unit.tag_changes
             or helper_unit.intent != "record"
-            or identity_target.unit_index != helper_index
-            or identity_target.outcome is not WriteTargetOutcome.UPDATE
-            or identity_target.stable_id != self.selected_note_id
-            or not identity_target.reference_only
         ):
             raise WritePreflightGuardError("CANDIDATE_CONTINUATION_IDENTITY_MISMATCH")
+        _verify_selected_reference_preflight(
+            action,
+            preflight,
+            reference_text=self.pending_reference_text,
+            selected_note_id=self.selected_note_id,
+        )
 
 
 def build_selected_candidate_guard(

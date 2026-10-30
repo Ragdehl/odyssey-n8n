@@ -80,6 +80,7 @@ def test_inventory_is_the_complete_explicit_ui2_product_surface() -> None:
         ("GET", "/api/calendar.js", "static"),
         ("GET", "/api/calendar-client.js", "static"),
         ("GET", "/api/progress.js", "static"),
+        ("GET", "/api/deferred_diagnosis.js", "static"),
         ("GET", "/api/presence.js", "static"),
         ("POST", "/api/request", "api"),
         ("POST", "/api/conversation", "api"),
@@ -88,7 +89,22 @@ def test_inventory_is_the_complete_explicit_ui2_product_surface() -> None:
     ]
 
 
-def test_reconciliation_adds_only_missing_dev_routes() -> None:
+def test_underscored_browser_module_roundtrips_without_regex_wildcards() -> None:
+    """One concrete required ES module can be routed, but never regex-matched loosely."""
+    routes = load_inventory(INVENTORY)
+    assert "/api/deferred_diagnosis.js" in [route.path for route in routes]
+    expression = tunnel_path_expression(routes)
+    assert r"deferred_diagnosis\.js" in expression
+    assert "/api/deferred_diagnosis.js" in routes_from_expression(expression)
+    for unsafe in (
+        r"^/api/(deferred_diagnosis.*)$",
+        r"^/api/(deferred_diagnosis[.]js)$",
+        r"^/api/(deferred_diagnosis.js)$",
+        r"^/api/(admin/secret)$",
+    ):
+        with pytest.raises(ContractError):
+            routes_from_expression(unsafe)
+
     """Preserve every shared-tunnel field except the stale DEV path expression."""
     routes = load_inventory(INVENTORY)
     before = tunnel_config()

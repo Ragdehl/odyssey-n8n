@@ -1,0 +1,102 @@
+{
+  "title": "Odyssey C4 post-receipt fake-provider Raspberry measurements",
+  "captured_local": "2026-10-29T23:10:50+01:00",
+  "hostname_redacted": true,
+  "device": "Raspberry Pi 5 Model B Rev 1.1",
+  "kernel_arch": "aarch64",
+  "source_commit_at_measurement": "ab9a62efd1072e7c48f69b457b67a4a8f0b7cf54",
+  "tooling": [
+    "scripts/odyssey_c4_deferred_perf_pi.py",
+    "scripts/odyssey_c4_deferred_concurrency_pi.py"
+  ],
+  "mode": "fake_provider_only",
+  "no_paid_provider": true,
+  "baseline_vs_deferred": {
+    "environment": "Pi runtime, synthetic FakeClient, no API calls",
+    "sync": {
+      "mode": "sync",
+      "samples": 8,
+      "response_p50_ms": 367.6,
+      "response_p95_ms": 368.5,
+      "diag_p50_ms": null,
+      "diag_p95_ms": null,
+      "provider_fake_delay_ms_each": 180,
+      "calls_fake_provider": 16,
+      "peak_threads": 0,
+      "start": {
+        "VmRSS": "78528 kB",
+        "VmSwap": "0 kB",
+        "Threads": "1",
+        "MemAvailable": "2288288 kB",
+        "SwapFree": "983136 kB",
+        "temperature_c": 47.95,
+        "cpu_process_s": 1.202
+      },
+      "end": {
+        "VmRSS": "79888 kB",
+        "VmSwap": "0 kB",
+        "Threads": "1",
+        "MemAvailable": "2294304 kB",
+        "SwapFree": "983168 kB",
+        "temperature_c": 46.85,
+        "cpu_process_s": 1.263
+      },
+      "synthetic_vault_unchanged": true
+    },
+    "deferred": {
+      "mode": "deferred",
+      "samples": 8,
+      "response_p50_ms": 11.1,
+      "response_p95_ms": 11.2,
+      "diag_p50_ms": 380.1,
+      "diag_p95_ms": 388.4,
+      "provider_fake_delay_ms_each": 180,
+      "calls_fake_provider": 16,
+      "peak_threads": 2,
+      "start": {
+        "VmRSS": "80640 kB",
+        "VmSwap": "0 kB",
+        "Threads": "1",
+        "MemAvailable": "2294304 kB",
+        "SwapFree": "983168 kB",
+        "temperature_c": 46.3,
+        "cpu_process_s": 1.28
+      },
+      "end": {
+        "VmRSS": "82160 kB",
+        "VmSwap": "0 kB",
+        "Threads": "1",
+        "MemAvailable": "2298192 kB",
+        "SwapFree": "983168 kB",
+        "temperature_c": 45.75,
+        "cpu_process_s": 1.477
+      },
+      "synthetic_vault_unchanged": true
+    }
+  },
+  "concurrent_three_requests": {
+    "mode": "synthetic Pi concurrency",
+    "requests": 3,
+    "provider_call_delay_ms": 180,
+    "initial_response_ms": [
+      8.88,
+      7.5,
+      6.55
+    ],
+    "peak_concurrent_provider_calls": 2,
+    "sidecar_states": [
+      "completed",
+      "completed",
+      "unavailable"
+    ],
+    "fake_provider_calls": 4,
+    "no_knowledge_changes": true
+  },
+  "not_measured": [
+    "real GPT",
+    "browser HTTPS",
+    "Android performance",
+    "sustained load",
+    "approved numeric product budget"
+  ]
+}

@@ -10,6 +10,27 @@ def _answerer_key(request_id: str) -> str:
     return f"odyssey-answer-{request_id}"
 
 
+def test_e5_verified_continuation_uses_strict_write_receipt_not_readonly_c3() -> None:
+    """Source guard must not convert arbitrary 'saved' prose to a write receipt."""
+    source = SOURCE.read_text(encoding="utf-8")
+    e5 = source.index("if (r.product_control === 'CANDIDATE_CONTINUATION_SAVED')")
+    c3 = source.index("if (Object.hasOwn(r, 'conversation_reply'))")
+    assert e5 < c3
+    body = source[e5:c3]
+    for invariant in (
+        "r.product_outcome === 'ANSWER'",
+        "c.kind === 'saved' && c.status === 'completed'",
+        "c.message === 'He guardado la información pendiente.'",
+        "Array.isArray(affected) && affected.length >= 1",
+        "new Set(affected).size === affected.length",
+        "r.selected_pending_request_id",
+        "Array.isArray(r.actions) && r.actions.length === 0",
+        "if (!valid) return [{json:error}]",
+        "kind:'acknowledgement'",
+    ):
+        assert invariant in body
+
+
 def test_direct_product_response_omits_internal_route_marker() -> None:
     """Keep direct n8n routing metadata out of the browser response contract."""
     source = SOURCE.read_text(encoding="utf-8")
@@ -303,10 +324,11 @@ def test_conversation_routes_preserve_the_existing_authenticated_boundary() -> N
     """Expose only the one actor-owned main conversation through the existing boundary."""
     source = SOURCE.read_text(encoding="utf-8")
     assert "path: 'conversation'" in source
-    assert "['main', 'turn', 'progress', 'presence']" in source
+    assert "['main', 'turn', 'progress', 'diagnosis', 'presence']" in source
     assert "'active', 'heartbeat', 'inactive'" in source
     assert "operation === 'presence' ? { session_id, state }" in source
-    assert "operation === 'progress' && !request_id" in source
+    assert "['progress', 'diagnosis'].includes(operation)" in source
+    assert "operation === 'diagnosis' && Object.keys(body).some" in source
     assert "Execute conversation operation" in source
     assert "runtimeBaseUrl}/conversation/{{ $json.operation }}" in source
     assert "...(operation === 'turn' ? { conversation_id: 'main' } : {})" in source

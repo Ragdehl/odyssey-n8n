@@ -18,7 +18,11 @@ from .application import (
 )
 from .atomic_facts import AtomicFactError, normalize_atomic_fact, parse_atomic_facts
 from .candidate_context import CoreCandidateContext
-from .candidate_write_observation import observe_candidate_write_outcomes
+from .candidate_write_observation import (
+    ObservedCoreWriteUnit,
+    observe_candidate_write_outcomes,
+    observe_core_write_units,
+)
 from .known_fact_equivalence import KnownFactReviewError, validate_current_known_fact
 from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
 from .reference_binding import ReferenceBindingError, _wikilink_target
@@ -174,40 +178,18 @@ def _canonical_rendered_fact_text(
     return rendered
 
 
-def readback_core_facts(
-    source: str,
-    context: CoreCandidateContext,
+def _readback_core_write_units(
     plan: RequestPlan,
     result: ApplicationResult,
     repository: VaultRepository,
     schema: dict[str, Any],
+    observed_core_write_units: tuple[ObservedCoreWriteUnit, ...],
     *,
     incoming_reference: DependentReferenceGuard | None = None,
-) -> CandidateFactReadback:
-    """Cross-check Core's own success receipts with current canonical fact markers.
-
-    Args:
-        source: Unchanged current message.
-        context: Core-validated, unverified Router candidate hints.
-        plan: Independently validated Core RequestPlan for that message.
-        result: Core execution result using the same plan and request ID.
-        repository: Root-bound canonical Markdown repository (tests use tmp_path).
-        schema: Current canonical NoteSchema used to validate readback notes.
-
-    Returns:
-        At most 128 individual fact receipts. Only an unambiguous atomic marker,
-        matching Core result stable ID, exact request ID, ordinal and fact text
-        counts as physically verified. Source candidate coverage stays unknown.
-
-    Raises:
-        ValueError: Wrong/mismatched envelopes, oversized note scan or invalid
-            repository/schema. Nothing is persisted or executed here.
-    """
-    if not isinstance(repository, VaultRepository) or not isinstance(schema, dict):
-        raise ValueError("Canonical repository and NoteSchema required")
-    observed = observe_candidate_write_outcomes(source, context, plan, result)
+) -> tuple[PersistedFactEvidence, ...]:
+    """Existing canonical Markdown/linked-target verifier shared across consumers."""
     expected: dict[int, tuple[str, str | None, int, int]] = {}
-    for receipt in observed.observed_core_write_units:
+    for receipt in observed_core_write_units:
         action = plan.actions[receipt.action_index]
         if not isinstance(action, WriteAction):
             raise ValueError("Internal write unit type mismatch")
@@ -339,10 +321,82 @@ def readback_core_facts(
                     candidates[0][2] if unique else None,
                 )
             )
+    return tuple(receipts)
+
+
+def readback_core_write_plan_facts(
+    plan: RequestPlan,
+    result: ApplicationResult,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    *,
+    incoming_reference: DependentReferenceGuard | None = None,
+) -> tuple[PersistedFactEvidence, ...]:
+    """Verify physical Core write outcomes without inventing Router candidates.
+
+    Continuation has source-bound plan inspection and an independently reviewed
+    remainder instead of a fresh Router candidate manifest. Use the *same*
+    provenance, canonical-link and duplicate-ID checker as the existing source
+    readback. Results are physical observations, NOT semantic authorization or
+    durable delivery receipts.
+    """
+    if not isinstance(repository, VaultRepository) or not isinstance(schema, dict):
+        raise ValueError("Canonical repository and NoteSchema required")
+    observed = observe_core_write_units(plan, result)
+    return _readback_core_write_units(
+        plan,
+        result,
+        repository,
+        schema,
+        observed,
+        incoming_reference=incoming_reference,
+    )
+
+
+def readback_core_facts(
+    source: str,
+    context: CoreCandidateContext,
+    plan: RequestPlan,
+    result: ApplicationResult,
+    repository: VaultRepository,
+    schema: dict[str, Any],
+    *,
+    incoming_reference: DependentReferenceGuard | None = None,
+) -> CandidateFactReadback:
+    """Cross-check Core's own success receipts with current canonical fact markers.
+
+    Args:
+        source: Unchanged current message.
+        context: Core-validated, unverified Router candidate hints.
+        plan: Independently validated Core RequestPlan for that message.
+        result: Core execution result using the same plan and request ID.
+        repository: Root-bound canonical Markdown repository (tests use tmp_path).
+        schema: Current canonical NoteSchema used to validate readback notes.
+
+    Returns:
+        At most 128 individual fact receipts. Only an unambiguous atomic marker,
+        matching Core result stable ID, exact request ID, ordinal and fact text
+        counts as physically verified. Source candidate coverage stays unknown.
+
+    Raises:
+        ValueError: Wrong/mismatched envelopes, oversized note scan or invalid
+            repository/schema. Nothing is persisted or executed here.
+    """
+    if not isinstance(repository, VaultRepository) or not isinstance(schema, dict):
+        raise ValueError("Canonical repository and NoteSchema required")
+    observed = observe_candidate_write_outcomes(source, context, plan, result)
+    receipts = _readback_core_write_units(
+        plan,
+        result,
+        repository,
+        schema,
+        observed.observed_core_write_units,
+        incoming_reference=incoming_reference,
+    )
     return CandidateFactReadback(
         request_id=result.request_id,
         core_request_status=observed.core_request_status,
-        persisted_facts=tuple(receipts),
+        persisted_facts=receipts,
         candidate_ids=observed.candidate_ids,
         candidate_progress=tuple(
             CandidateCoverageItem(

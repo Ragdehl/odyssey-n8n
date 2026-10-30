@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from odyssey_core.application import ApplicationResult, ApplicationStatus, PendingWorkStatus
 from odyssey_core.candidate_pending_state import CandidatePendingRepository
 from odyssey_core.clarification import ClarificationOption
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_runtime.composition import RuntimeComposition
+from odyssey_runtime.delivery_results import DeliveryResultError
 from odyssey_runtime.routing import route_execution_id
 from tests.runtime.test_candidate_pending_state import NOW, _ready
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import SCHEMA
@@ -99,6 +102,7 @@ def test_product_delivers_v2_options_once_and_records_selected_review_without_wr
     assert initial["product_outcome"] == "CLARIFY"
     assert initial["clarification"] == {
         "request_id": initial_id,
+        "source_pending": True,
         "requested_reference": "él",
         "explanation": "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
         "options": [{"id": "eric-id", "label": "Eric"}, {"id": "luis-id", "label": "Luis"}],
@@ -265,3 +269,215 @@ def test_v2_refuses_a_changed_canonical_option_without_writing(tmp_path: Path) -
     pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
     assert pending.read(initial_id)["status"] == "open"
     assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
+
+
+def test_durable_option_can_be_selected_after_unrelated_turn_using_exact_pending_id(
+    tmp_path: Path,
+) -> None:
+    """An older card addresses its own actor-scoped, source-exact v2 record."""
+    runtime, resolver, vault, calls, source, initial_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    route_id = route_execution_id(initial_id, 0)
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    original = pending.read(route_id)
+    original_notes = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    runtime._conversation_store(ACTOR.stable_user_id).append_turn(
+        request_id="another-turn",
+        role="assistant",
+        text="Una respuesta diferente.",
+        created_at=NOW,
+    )
+    # The former implicit path refuses a stale reply, as before.
+    stale = runtime.execute_product("Luis", "stale-implicit-v2", "main", ACTOR)
+    assert stale["product_control"] == "CANDIDATE_EXPLICIT_REQUEST_REQUIRED"
+    # The explicit card ID is not an identity selector: Core validates the
+    # chosen label and current canonical revision before recording a choice.
+    selected = runtime.execute_product(
+        "He elegido a Luis.",
+        "explicit-v2",
+        "main",
+        ACTOR,
+        reply_to_request_id=route_id,
+    )
+    assert selected["product_reason"] == "CONTINUATION_REVIEW_REQUIRED"
+    assert selected["selected_pending_request_id"] == route_id
+    assert selected["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    assert pending.read(route_id)["original_request"] == original["original_request"]
+    assert pending.read(route_id)["created_at"] == original["created_at"]
+    assert pending.read(route_id)["selected_note_id"] == "luis-id"
+    assert (
+        runtime.execute_product(
+            "He elegido a Luis.",
+            "explicit-v2",
+            "main",
+            ACTOR,
+            reply_to_request_id=route_id,
+        )["delivery_replayed"]
+        is True
+    )
+    assert len(calls) == 1
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original_notes
+
+
+def test_explicit_candidate_id_cannot_select_other_actor_or_unknown_record(tmp_path: Path) -> None:
+    runtime, resolver, vault, calls, source, initial_id = _runtime(tmp_path)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    original_notes = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    # Actor B must never use actor A's existing source record as a write or
+    # identity authority, regardless of the supplied source identifier.
+    foreign = runtime.execute_product(
+        "Con Luis",
+        "actor-b-cross",
+        "main",
+        OTHER_ACTOR,
+        reply_to_request_id=initial_id,
+    )
+    assert foreign["product_control"] == "CANDIDATE_UNAVAILABLE"
+    unknown = runtime.execute_product(
+        "Con Luis",
+        "wrong-v2",
+        "main",
+        ACTOR,
+        reply_to_request_id="nonexistent-v2",
+    )
+    assert unknown["product_control"] == "CANDIDATE_UNAVAILABLE"
+    assert pending.read(initial_id)["status"] == "open"
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original_notes
+    assert calls == [(source, initial_id)]
+
+
+def test_reloaded_main_conversation_restores_only_live_actor_verified_pending_cards(
+    tmp_path: Path,
+) -> None:
+    """Read-only restart projection does not grant identity or write authority."""
+    from odyssey_runtime.composition import RuntimeComposition
+
+    runtime, resolver, vault, calls, source, first_id = _runtime(tmp_path, routed=True)
+    result = runtime.execute_product(source, first_id, "main", ACTOR)
+    pending_id = route_execution_id(first_id, 0)
+    assert result["clarification"]["request_id"] == pending_id
+    original = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    # A new Runtime composition reads the same actor-local disk state after restart.
+    rebooted = RuntimeComposition(
+        core_execute=lambda *_: (_ for _ in ()).throw(AssertionError("No writes allowed")),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+        vault_repository=vault,
+        canonical_schema=SCHEMA,
+        hybrid_candidate_execute=runtime.hybrid_candidate_execute,
+    )
+    page = rebooted.main_conversation(ACTOR)
+    assert page["pending_clarifications"] == [
+        {
+            "request_id": pending_id,
+            "source_pending": True,
+            "requested_reference": "él",
+            "explanation": "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
+            "options": [{"id": "eric-id", "label": "Eric"}, {"id": "luis-id", "label": "Luis"}],
+        }
+    ]
+    assert (
+        "pending_clarifications" not in rebooted.main_conversation(ACTOR, before=page["before"])
+        if page["before"] is not None
+        else True
+    )
+    other_page = rebooted.main_conversation(OTHER_ACTOR)
+    assert not other_page.get("pending_clarifications")
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original
+    assert calls == [(source, first_id)]
+
+    answer = rebooted.execute_product(
+        "Con Luis",
+        "from-reloaded-card",
+        "main",
+        ACTOR,
+        reply_to_request_id=pending_id,
+    )
+    assert answer["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    assert rebooted.main_conversation(ACTOR).get("pending_clarifications") == []
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original
+
+
+def test_stale_identity_cannot_be_redisplayed_as_current_pending_card(tmp_path: Path) -> None:
+    runtime, _resolver, vault, _calls, source, first_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, first_id, "main", ACTOR)
+    note = vault.root / "Luis.md"
+    note.write_text(note.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    assert runtime.main_conversation(ACTOR)["pending_clarifications"] == []
+    # The pending source is not destroyed by stale evidence, so explicit
+    # recovery remains possible only after another Core-supported review.
+    assert (
+        runtime.execute_product(
+            "Con Luis",
+            "stale-after-reload",
+            "main",
+            ACTOR,
+            reply_to_request_id=route_execution_id(first_id, 0),
+        )["product_control"]
+        == "STALE_CANDIDATE_SELECTION"
+    )
+
+
+def test_same_delivery_id_cannot_switch_to_other_pending_record(tmp_path: Path) -> None:
+    """A retry cannot silently switch the user's old-card target."""
+    runtime, resolver, _vault, calls, source, initial_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    route_id = route_execution_id(initial_id, 0)
+    first = runtime.execute_product(
+        "Con Luis",
+        "same-target-delivery",
+        "main",
+        ACTOR,
+        reply_to_request_id=route_id,
+    )
+    assert first["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    with pytest.raises(DeliveryResultError):
+        runtime.execute_product(
+            "Con Luis",
+            "same-target-delivery",
+            "main",
+            ACTOR,
+            reply_to_request_id="another-pending-id",
+        )
+    with pytest.raises(DeliveryResultError):
+        runtime.execute_product(
+            "Con Luis",
+            "same-target-delivery",
+            "main",
+            ACTOR,
+        )
+    repo = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert repo.read(route_id)["selected_note_id"] == "luis-id"
+    assert calls == [(source, initial_id)]
+
+
+def test_missing_candidate_seam_never_routes_explicit_reply_into_legacy_writer(tmp_path):
+    resolver = ConversationRootResolver(tmp_path / "state")
+
+    def forbidden(*_args):
+        pytest.fail("Explicit pending response must not become a normal write")
+
+    runtime = RuntimeComposition(
+        core_execute=forbidden,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    result = runtime.execute_product(
+        "Con Luis",
+        "missing-v2-seam",
+        "main",
+        ACTOR,
+        reply_to_request_id="absent-pending",
+    )
+    assert result["product_control"] == "CANDIDATE_UNAVAILABLE"
+    assert (
+        runtime.execute_product(
+            "Con Luis",
+            "missing-v2-seam",
+            "main",
+            ACTOR,
+            reply_to_request_id="absent-pending",
+        )["delivery_replayed"]
+        is True
+    )

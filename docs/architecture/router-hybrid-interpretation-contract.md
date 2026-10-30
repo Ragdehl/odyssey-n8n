@@ -482,3 +482,546 @@ an exact timestamp, and no unsupported identity is linked.
 Evidence, pending four cases, technical budget, no deployment and the
 incremental Clean Architecture future direction are recorded in the
 canonical functional roadmap.
+
+
+## E5 — Correlación explícita de una aclaración fuente v2, 30-10-2026 (solo rama fuente)
+
+La infraestructura de pendiente **ya existía**: `CandidatePendingRepository`
+guarda por actor/conversación fuente original, spans, instante con huso horario,
+opciones de Core y sus guards físicos, sin crear un `RequestPlan`. La
+elección se registra con `CONTINUATION_REVIEW_REQUIRED` y no escribe
+ningún hecho nuevo; la validación semántica de la continuación debe seguir
+separada de la elección.
+
+La UI antigua generaba una elección textual sin el ID de su tarjeta. Tras
+otra respuesta del chat, la regla de seguimiento inmediato bloqueaba esa
+elección (`CANDIDATE_EXPLICIT_REQUEST_REQUIRED`), aunque el pendiente
+estuviera intacto en disco. El cliente HTTP ya preveía un campo opcional
+`reply_to_request_id`, pero no estaba conectado. Ahora:
+
+- Core solo añade `source_pending: true` a sus propias tarjetas de
+  pendientes fuente v2, **no a aclaraciones v1**. n8n lo proyecta
+  únicamente en listas básicas verificadas y el cliente exige tipo
+  booleano literal y forma compatible.
+- Los botones «Elegir» y «Cancelar» de esas tarjetas envían el
+  `reply_to_request_id` original. El compositor conserva intacto un
+  mensaje nuevo sin marcador. n8n valida que el ID sea acotado antes
+  de transmitirlo y el HTTP privado repite la validación. Un `reply_to_request_id`
+  exige también ID de entrega nuevo y conversación explícita; el servidor
+  **omite** el argumento opcional para llamadas antiguas sin correlación.
+- El runtime reutiliza la **misma** `CandidatePendingRepository.reply`
+  y sus protecciones: actor, conversación, ID exacto, respuesta nueva con
+  ID propio, opciones y revisiones canónicas vigentes, hecho anterior
+  verificado y replay idempotente. Un ID inexistente o de otro actor
+  devuelve un control seguro, nunca cae al writer ni al router.
+- **No** se activa la continuación semántica ni se vuelve a escribir la
+  petición original automáticamente. La identidad seleccionada queda
+  almacenada para una revisión posterior; las notas anteriores permanecen
+  intactas. El guard experimental F14/F27 sigue sin generalizarse a
+  peticiones arbitrarias.
+
+Evidencia: pruebas con bóveda temporal y servidor HTTP auténtico para
+selección tras un turno no correlacionado, respuesta repetida, actor ajeno,
+IDs inválidos y ausencia de nuevas escrituras; contratos JS del
+cliente, tarjeta y validador n8n. Son pruebas offline con datos
+sintéticos, **no** aceptación navegador desplegado/Cloudflare/GPT real.
+
+
+**Recuperación tras recarga, añadida en fuente:** el endpoint actor-autenticado
+`conversation/main` consulta los registros v2 `open` en la raíz privada ya
+existente, verifica **otra vez** los guards de todas las identidades y los
+hechos previamente escritos y proyecta como máximo cuatro tarjetas con
+`source_pending: true`, sin enviar fuente completa, guards ni datos de
+otros perfiles. Las tarjetas usan el mismo botón correlacionado y el
+frontend valida la forma del resultado antes de mostrarlo. La consulta
+no crea planes ni toca Markdown. Si la lectura del estado resulta
+corrupta/no verificable, no bloquea el histórico; comunica que la
+recuperación requiere atención. Una identidad obsoleta no se ofrece
+como opción válida. La paginación antigua del chat no repite tarjetas.
+
+**Límites aún reales:** no se muestran todos los pendientes si existen
+más de cuatro; los pendientes sin opciones canónicas actuales requieren
+revisión en vez de una tarjeta; una elección ya guardada sigue esperando
+una continuación semántica para convertirse en hecho. El recorrido
+completo con navegador autenticado/HTTPS y la reanudación de escritura
+todavía no están aceptados. Pruebas actuales con Runtime reiniciado,
+bóveda sintética, HTTP privado y DOM/cliente simulado, no GPT real.
+**Gate fuente del cambio:** 2.465 Python (+7 subtests), 292 JS,
+Ruff/Docs Guard PASS. La seguridad de selección se vuelve a validar
+cuando el usuario responde, no solo cuando se dibuja la tarjeta.
+
+**Siguiente bloqueo funcional:** `selected_for_core_review` ya da
+identidad seleccionada, fuente literal y reloj original; el guard de
+continuación actual aún compara frases concretas del corpus F14/F27.
+No convertir ese guard en una autorización genérica mediante búsqueda y
+sustitución de pronombres. Hacen falta propuesta Core con semántica
+revisada independientemente (fechas, polaridad, participantes, hechos
+N:M, roles y referencias), guardas de CAS e idempotencia antes de E3,
+más evaluación real acotada del prompt cuando se autorice gasto.
+
+## E5 — integridad de replay de la aclaración correlacionada (30-10-2026)
+
+Antes, el digest de una entrega asociaba solo el texto de respuesta y la conversación. Dos tarjetas diferentes enviadas accidentalmente con el mismo ID de entrega y el mismo texto podían intentar compartir el resultado de una elección con otro registro pendiente. El contrato de replay ahora incorpora el identificador original de la aclaración, **solo cuando está presente**, conservando exactamente el digest histórico de todas las entregas anteriores. El mismo ID con distinto pendiente se rechaza como conflicto, no se interpreta de nuevo, y una respuesta correlacionada sin almacén de pendientes configurado no puede pasar al Router o al Core legacy como una petición ordinaria.
+
+Pruebas con dos pendientes sintéticos y reintento conflictivo; la ruta sin dependencia de aclaraciones sigue siendo compatible y conserva su digest original. Esto fortalece la seguridad de la respuesta, **no** acredita la continuación semántica del hecho pendiente. Sigue faltando una propuesta Core genérica, revisión independiente de significado/temporalidad, E3/readback con semántica revisada, prueba GPT real autorizada y aceptación en DEV.
+
+## E5 — Handoff Core fuente-exacto tras elegir identidad (30-10-2026, solo fuente)
+
+Se reutiliza el registro duradero v2 existente con `prepare_selected_candidate_continuation`
+(`odyssey_core/candidate_continuation_context.py`). El compositor ejecuta esta
+preparación después de registrar una elección, pero **no llama al Planner ni escribe
+ninguna nota**. Solo admite un candidato `ambiguous_identity` seleccionado,
+con las posiciones originales exactas de su fuente y referencia, identidad actual
+Core `id + guard + nombre canónico`, reloj con zona horaria original y el
+conjunto inmutable de marcadores físicos ya escritos. No reconvierte los hechos
+anteriores en operaciones de un nuevo plan. Una solicitud con candidato pendiente
+sin seleccionar, cancelada, identidad obsoleta o hechos previos alterados se
+rechaza como no preparada.
+
+`CoreCandidateContinuationContext.review_payload()` ofrece al futuro revisor
+semántico una vista acotada: fuente completa original, subfrase pendiente, spans
+exactos, referencia literal, nombre canónico seleccionado, tiempo original y
+ordinales de hechos ya almacenados. No expone ids/guards físicos al modelo.
+La estructura Core conserva por separado hashes y marcadores de origen, estado
+y hechos, y `validate_selected_continuation_current` revalida todo con el
+registro/vault actuales antes de que pueda existir una futura vía E3.
+
+Este handoff **no** es un dictamen semántico y `may_execute=False`: faltan
+proponer un plan que cubra toda la parte pendiente con el reloj original,
+verificar independientemente que preserva polaridad, participantes, fecha,
+tipo, destino y cardinalidad, aceptar solo los hechos no escritos, validar el
+plan exacto y su identidad elegida y conectar E3 con recibo y readback.
+No activar el guard piloto F14/F27 basado en la frase de cine como sustituto.
+No se ha hecho una campaña nueva GPT ni prueba desplegada.
+
+Pruebas offline con hechos E3/Git reales en bóveda desechable y recuperación
+tras reinicio; rechazo de selección inexistente o cancelada, conversación
+distinta, cambio de identidad o de hechos anteriores y tamper de fuente;
+contextos en español, inglés y francés, con subfrases y referencias de tamaño
+variable, pero sin afirmar semántica revisada por modelo.
+
+## E5 — inspección de la propuesta Core antes de revisión semántica (30-10-2026; fuente)
+
+`odyssey_core/candidate_continuation_plan.py` introduce
+`inspect_selected_candidate_plan(context, plan)`, una comprobación
+**read-only** de los `RequestPlan/WriteAction` tipados del Core existente.
+No invoca un proveedor, no sustituye el Planner, no autoriza E3 y no cambia
+el contrato público/DEV. Conserva cardinalidad variable: un único candidato
+pendiente puede producir varios hechos y varios `WriteAction`, con
+`plan_fact_ordinals` como autoridad de numeración de la nueva propuesta,
+no con ordinales de candidatos ni de hechos ya persistidos.
+
+La inspección rechaza recuperación/delegación mezclada, planes con
+limitaciones, modificaciones de propiedades/etiquetas, creación forzada,
+helpers que escribirían o no se utilizarían, y referencias al elegido que
+no apunten a un helper Core read-only con su nombre canónico. Exige que
+la referencia original aparezca de verdad como marcador en algún hecho
+propuesto y comprueba que ningún nuevo hecho duplique **literalmente**
+el digest normalizado de una anotación Core ya confirmada. Este filtro
+de duplicados exactos **no** detecta paráfrasis; esa es responsabilidad del
+revisor semántico. Ninguna de esas comprobaciones demuestra quién es
+el actor, la fecha correcta o el significado de la frase.
+
+`CoreContinuationPlanInspection.review_payload(context)` entrega fuente
+original y fuente pendiente, spans, hora original, nombre elegido, hechos
+nuevos, tipos/destinos, anclas temporales y menciones de referencias,
+con digest de fuente/plan. No envía stable IDs, guards canónicos ni digest
+privado del registro pendiente al proveedor; este último sí se conserva
+internamente para una futura comparación de estado. La salida siempre
+tiene `may_execute=False`, incluso si hay varios hechos plausibles.
+La comprobación `validate_inspected_candidate_plan_current` compara de
+nuevo el registro v2, la selección canónica y los hechos físicos con la
+instantánea preparada y vuelve a inspeccionar el `RequestPlan` exacto.
+Rechaza cualquier cambio entre inspección y el eventual prewrite; **no
+evalúa la semántica ni habilita E3**, incluso si todas las guardas pasan.
+
+**Matriz mínima de evaluación semántica antes de activar escritura:**
+frase pendiente simple con persona elegida; referencia a otra persona que
+no coincide con la elección; dos hechos distintos apoyados por una cláusula;
+dos cláusulas con contexto compartido; corrección explícita; negación;
+condición; fecha relativa con respuesta al día siguiente; día/hora
+aproximados; uso de pronombres en ES/FR/EN y variantes morfológicas; actor
+`SELF` implícito; mezcla con evento/tarea; propuesta que repite una
+anotación previa reformulada; cambio de identidad entre revisión y E3;
+replay de delivery ID y conflicto de otro actor. Contrastar textos,
+identidades, polaridad, destinos, fechas y cobertura sin añadir un parche por
+frase. El siguiente trabajo debe reutilizar, y adaptar solo si es preciso,
+los contratos existentes de revisión Core/cobertura N:M y el Planner de Core;
+el revisor debe evaluar el **plan completo** y devolver abstención ante
+cobertura incompleta o sospecha de tergiversación. Sin esa evidencia, la
+selección sigue terminando en `CONTINUATION_REVIEW_REQUIRED`.
+
+No existen prompt de continuación ni aceptación de modelo nuevo ni ruta
+automática de escritura. Los tests de esta inspección prueban exclusivamente
+estructura y read-only con datos desechables, no confianza semántica.
+
+## E5 — dictamen semántico independiente y acotado de continuación (30-10-2026, fuente inactiva)
+
+**Contrato reutilizado, no nuevo proveedor:** se parte del prompt
+`PROMPT_SOURCE_REVIEW_CORE_ANCHORED` y esquema JSON
+`REVIEW_CORE_ANCHORED_SCHEMA` de `whole_source_model_contract.py`.
+`odyssey_runtime/candidate_continuation_review.py` prepara solamente la
+entrada, añade una explicación de alcance que diferencia **hechos fuente
+ya confirmados por E3** frente a **hechos pendientes** y devuelve el esquema
+existente. El original entero, reloj de captura original, candidato exacto,
+referencia y nombre elegido se conservan para poder comprobar correferencias
+sin reescribir la solicitud ni reutilizar un plan inicial ambiguo.
+El *modelo* tiene que dictaminar la totalidad de hechos de la parte pendiente
+y revisar su dependencia de contexto previo; no debe solicitar duplicar los
+hechos ya persistidos. En esta fase no se crea cliente/proveedor activo ni se
+cambia la versión aceptada del prompt general: el prompt de continuación
+es una variante **NO aceptada en producción**.
+
+`odyssey_core/candidate_continuation_semantic.py` valida de forma cerrada
+el resultado del revisor independiente, manteniendo idéntico formato
+`approved,complete,reason,facts` con orden de ordinales, `record`,
+`reviewed_text`, `date`, `reference_names` y `supported`. Exige
+`approved=true`, `complete=true`, revisión de **cada** hecho nuevo,
+texto, fecha y referencias congruentes con las del `RequestPlan`, y no
+admite actores mencionados en otra cláusula, participantes extra, falso
+`supported`, pérdida de un hecho, órdenes cambiados ni `source_quote`
+inventado por el reviewer. La inspección estructural reforzada verifica
+todas las apariciones de `{{ref:N}}` y las vincula al helper Core
+de solo lectura que le corresponde, sin asumir un número fijo de hechos.
+Fechas múltiples/parciales no representables en el campo temporal escalar
+de este revisor se **rechazan** hasta tener evidencia equivalente.
+La validación adicional `validate_independent_continuation_verdict_current`
+recomprueba registro pendiente, plan, identidad, hechos físicos y digest del
+dictamen si se usan más adelante.
+
+**Límite explícito:** el dictamen + checks deterministas **no certifican
+verdad semántica**; un modelo que responda falsamente `approved=true`
+puede seguir equivocándose en negación, fecha relativa, cardinalidad,
+completitud o paráfrasis. El resultado `may_execute=False` siempre.
+`validate_whole_message_coverage` no puede aplicarse sin cambios:
+presupone que todas las aserciones del mensaje entero son hechos *nuevos*,
+mientras que la continuación contiene recibos de hechos ya escritos.
+No migrar su autorización E3 por copiar un esquema JSON. Esta etapa no
+habilita automáticamente el revisor ni crea otra cola/Writer.
+
+**Matriz obligatoria del prompt de continuación antes de activar un
+proveedor/modelo y luego escritura** (evidencia por caso con modelo,
+esfuerzo, prompt hash, respuesta del proveedor, coste y latencia):
+(1) sujeto/identidad elegida sin cambio y misma cláusula pendiente;
+(2) correferencia errónea a nombre de otra frase; (3) pasado vs futuro;
+(4) fecha relativa resuelta contra captura original, no fecha de respuesta;
+(5) dos acciones separables en el mismo candidato y referencia compartida;
+(6) un solo hecho con apoyo N:M de varias cláusulas; (7) negación;
+(8) condición; (9) autocorrección; (10) fecha parcial/duración/franja;
+(11) intención de tarea vs experiencia pasada/evento; (12) SELF implícito
+en ES, FR y EN; (13) duplicación literal y paráfrasis de hechos previos;
+(14) fuente ambigua o cambio de target; (15) selector de otro actor;
+(16) replay, modificación de fuente, plan, Markdown o guard de identidad.
+El conjunto incluye positivos, abstenciones obligatorias y adversariales;
+no cambiar esperados para ocultar falsos positivos.
+
+**Pruebas de este corte:** entradas sintéticas, dictámenes congelados
+(aceptado/no admitido/malformado/extra/reordenado), referencias simbólicas
+inválidas, drift de plan, elección y notas físicas. No se ha consultado
+ningún GPT en vivo; los dictámenes son entradas controladas por las pruebas.
+El adaptador de llamada `review_selected_candidate_with_provider` reutiliza
+el método estricto `WholeSourceLightExecutor._ask` sin otro cliente ni
+otro servicio; recibe explícitamente el modelo, valida el dictamen y
+devuelve la copia del JSON junto al sello inejecutable. Tests con cliente
+Responses simulado prueban sobre HTTP lógico la envoltura strict/store=false,
+el reloj original, resultado incompleto y dictámenes inválidos, sin escrituras.
+**No está conectado a la ejecución de producción, y no ha llamado al modelo real.**
+**Revisión de reutilización (30-10-2026):** el piloto F14/F27 ya
+persistía el cine enlazado en Core/E3 desde los commits `89cffb5` y
+`1df352d` del 10-10. No era una funcionalidad nueva del ensayo actual.
+La diferencia de éste es el contrato de plan completo + dictamen independiente
+para otros enunciados, todavía sin aceptación semántica real. El piloto
+`SelectedCandidateWriteGuard` no está conectado a runtime ordinario y
+continúa exclusivamente como centinela histórico, sin autorización general.
+Ambos guards comparten ahora exactamente la misma función de comprobación
+canónica de helpers y la identidad seleccionada, sin duplicar la resolución
+de targets, la autorización ni el Writer Core/E3. Sus comprobaciones del
+significado difieren por el límite de seguridad: frase fija antigua frente
+a dictamen revisado general. No ampliar ni activar el piloto.
+
+**Ensayo Core/E3 aislado de continuación revisada (sin activar, 30-10-2026):**
+`ReviewedCandidateContinuationWriteGuard` conecta solo en tests sintéticos el
+plan inspeccionado y el dictamen completo con el guard de Core existente.
+Recomprueba el mismo plan (una acción para evitar escrituras parciales fuera
+del futuro recibo), la selección/nota y los hechos previamente persistidos
+antes de la primera escritura y de nuevo tras preflight de targets; exige
+que helpers reference-only sean actualizaciones verificadas y que la
+referencia elegida resuelva al ID de la persona seleccionada. Una acción
+puede llevar varios hechos sin fijar una cardinalidad. El Writer Core/E3
+real ha creado Day Markdown con el enlace canónico; se comprobó el texto
+físico, que el diario anterior quedaba intacto, que un segundo hecho puede
+compartir la identidad y que replay y cambios de plan/dictamen/identidad
+no autorizan una escritura extra en la bóveda temporal.
+Estos ensayos NO prueban que el revisor entienda el lenguaje; su dictamen
+es sintético y puede afirmar falsamente `approved`. El guard no se
+inyecta en Runtime/n8n/DEV/PROD ni concede permiso general para escribir.
+**Ensayo de entrega recuperable (30-10-2026, solo fuente):** el readback
+de continuación utiliza ahora la misma implementación de verificación
+física de Markdown, IDs únicos, ordinales y enlaces canónicos que los
+hechos ya escritos del mensaje inicial. `deliver_reviewed_candidate_continuation`
+reutiliza `LocalDeliveryResultStore`: ID determinista asociado a aclaración,
+claim exclusivo antes de ejecutar Core/E3, guard de plan y referencia elegida,
+comprobación de los recibos de referencia y de TODOS los hechos físicos,
+recibo inmutable y replay sin segunda llamada a Core. Una caída tras
+escribir, un resultado parcial o un hecho Markdown alterado bloquea el
+reintento, no se considera éxito. Pruebas verticales sobre vault sintético
+incluyen cambio de texto, marcador, duplicate note ID, error post-escritura,
+conversación errónea y corrupción del recibo del ayudante.
+**No hay una segunda base de datos, otro Writer o motor de resolución.**
+Para preservar el aislamiento de los validadores de frase heredados,
+el guard semántico general está separado en
+`odyssey_core/reviewed_continuation_guard.py` y la antigua ruta F14/F27
+importa únicamente su comprobación canónica compartida de referencias.
+El runtime no importa `candidate_continuation_guard.py`; su puerta
+histórica sigue sin ser un consumidor del producto. La regresión
+`test_semantic_validator_isolation_p4` verifica esta frontera.
+La coordinación no está invocada por RuntimeComposition ni recibe GPT real,
+ni pone el candidato en estado completado. Una revisión sintética aprobada
+no prueba el significado y no permite adoptar el flujo. El código fuente
+no equivale a un recorrido funcional desde la aplicación.
+
+**Siguiente bloqueo operativo único:** evaluar con modelo real y campaña
+acotada la semántica del prompt heredado; después habilitar de forma
+controlada la continuación en el chat sobre los propietarios existentes,
+probar Chromium→n8n→Core/E3→Markdown→UI en DEV matching-SHA y obtener
+los cuatro dictámenes finales. No fusionar ni activar automáticamente.
+
+
+### E5 — semantic live acceptance and product bridge (30-10-2026)
+
+Real reviewer gate, synthetic only, GPT-5.6 Luna low, strict schema,
+store=false. V1: 11/16 (all eleven required negative refusals correct,
+five positive structured-field mismatches); one diagnostic identified
+unwanted relative-date expansion in reviewed_text. V2: 15/16 (the
+English-positive case); independent diagnostics showed the reviewer
+sometimes objected to a missing kind in the proposal. Core now explicitly
+reports kind=record in each already-typed proposed fact, without adding
+a new kind or weakening schema validation. V3: **16/16 PASS**, five
+positive ES/FR/EN and eleven adversarial negative cases, prompt SHA256
+e27c13afbff564736fe6f32f56589c0dc6ed02ff2679d27042f4f66fc89fa2c9.
+Reports were flushed per call; past FAIL reports remain evidence.
+This proves only a reviewer of supplied proposals, not a general
+production planner or E3 write pipeline.
+
+Source-only product bridge: RuntimeComposition has an internal optional
+candidate_continuation_execute callback using the existing actor-scoped
+pending state, Core/E3, strict reviewer, canonical readback and immutable
+LocalDeliveryResultStore. Failed planning or model review before a
+write-claim returns CONTINUATION_REVIEW_REQUIRED; a failure at/after
+the claim requires reconciliation and never blindly retries. Normal
+product remains OFF. The feature flag
+ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED=1 is DEV-only and requires
+the existing light-source configuration. Product tests use a synthetic
+reviewer and vault and do not prove a live browser flow.
+
+Historical 30-10 blocker: Core Planner emitted an out-of-range reference
+marker; Luna failed semantic WRITE compilation. Neither reached E3.
+The shared canonical_reference prompt now covers one exact selected mention
+as well as finite groups, retaining strict markers and Note-ID safety;
+Luna's semantic variant preserves compiler ownership of helpers. No second
+Planner, Writer, identity store, or example-specific branch was introduced.
+
+Source SHA 3a6cbd7: two follow-up prompt commits and an inspection fix passed
+Ruff, formatting, official cross-surface Python/Node gate and NoteSchema.
+Core's ordinary empty optional temporal-anchor rows are accepted for
+read-only inspection; partially populated rows still fail closed. One fresh
+GPT-5.6 Luna/low planner call with synthetic vault and original clock returned
+one RequestPlan fact with the selected reference; structural inspection PASS.
+The proposed fact had no explicit temporal anchor. This is not proof that the
+independent reviewer accepts the exact plan, destination/date and original
+source, nor that Core/E3 writes and replays the correct canonical note.
+After the follow-up repair, read-only inspection projects an already typed and validated calendar_day destination date as temporal review evidence even when Core supplies no optional fact temporal rows. Explicit different anchors stay visible as multiple dates and are rejected by the unchanged independent semantic validator; invalid Day target dates reject before review. This reuses Core's canonical date and the previously accepted reviewer schema, without any new Temporal stage. 63 focused continuation/review/delivery tests PASS with no provider call. Ordinary Core Planner has not been retested after prompt changes.
+DEV remains at 4ba8bb8 with the feature OFF, PR #161 is DRAFT, and neither
+DEV, PROD nor personal Markdown was modified. New disposable Core/E3 delivery tests check ordinary empty-anchor Day
+plans with two selected identities, physical Markdown, idempotent replay,
+and preclaim rejection of contradictory dates (66 focused Python PASS).
+A read-only Codex Generalidad audit on the earlier source delta
+660974d..22bc4cb returned PASS; this is not a four-role final audit.
+
+Normal RuntimeComposition ALREADY uses LunaFirstRequestPlanner, with the
+shared semantic compiler and bounded Sol fallback; no alternate planner
+is necessary. A standalone legacy Sol-only model probe failed but did not
+represent the actual E5 planner. In a two-case real Luna-first probe without
+Temporal evidence, the positive request lost its verified date/destination
+and the independent reviewer vetoed it. A question in French did not write.
+
+The continuation callback now calls the established Temporal interpreter
+with the ORIGINAL capture clock and combines its exact source-bound date
+evidence with canonical identity evidence in the SAME Core DomainInterpretation.
+Unavailable or non-exact Temporal results fail before any write claim.
+A small opt-in extension of the SAME Temporal contract now permits a successful
+zero-mention result for a source without time expressions. The existing
+Temporal nonempty schema, parser and prompt stay the default for Calendar,
+Tasks and Events; this continuation explicitly requests allow_empty_mentions
+and only a returned validated TemporalInterpretation with the explicit
+verified_no_mentions=True marker can contribute zero date evidence. The
+historical direct constructor still rejects unmarked empty interpretations.
+None remains a failed call/validation and is
+never downgraded to "no date". This introduces no independent temporal
+resolver or keyword/list-of-phrases date detector.
+No new resolver, writer, note schema or phrase-specific branch was added.
+The continuation source-evidence seam additionally rejects a Temporal output
+whose source_text differs from the EXACT selected pending source, including
+an otherwise well-shaped empty result. A successful model-produced empty list
+is a claim about absence, not standalone E3 authorization: the independent
+reviewer still sees the original source and proposed destination/date and can
+veto before any claim. A bounded real GPT-5.6 Luna adversarial review verified
+this: false empty for "Mañana iré al cine con él" with an incorrect same-day
+plan was rejected (CandidateContinuationSemanticError), zero Markdown writes.
+The revised source check and a no-claim regression prevent accidental replay
+of another source's no-date result. An independent read-only focused re-audit
+on b2d4921 returned PASS for this E5 source-bound Temporal→review→E3 safety
+seam, with no externally reachable forged empty-result path found. The
+model-origin claim can still be wrong; independent semantic review is a
+separate evidence boundary, not formal mathematical proof of absence. This
+is NOT four-role product acceptance.
+The previously implemented P4 Day-journal route is covered by 6/6 source
+tests in tests/runtime/test_p4_general_day_journal_fallback.py; E5 did not
+create that feature. The shared Core semantic planner now applies the
+same natural ownership rule for completed autobiographical recollections.
+Root cause: planner_authorized_calendar_dates had suppressed the ordinary
+captured local Day whenever ANY DomainInterpretation existed, even if it
+contained only canonical identity evidence and no temporal values.
+Core now preserves the captured Day if the DomainInterpretation has NO
+Temporal references; explicit verified Temporal dates still take precedence.
+Independent reviewer sees calendar_day destination_query separately from
+temporal_values: the captured Day can index an undated journal ENTRY without
+asserting the experience occurred then. Other dates remain asserted time
+coordinates subject to independent source review; contradictory anchors
+remain visible and reject. This is a shared contract, not a literal phrase,
+person or language override.
+Fresh synthetic read-only Temporal→Luna-first→GPT-5.6 Luna review:
+no-date recollection PASSED (one Luna planner call), calendar_day target
+2026-10-04 and no asserted temporal_values. Independent persisted-state
+tests used *synthetic review responses* to prove existing Core/E3 physical
+Day Markdown readback and replay without duplicate write for TWO selected
+identities; 72 focused continuation/semantic/delivery tests PASS.
+This combines distinct proof types and is NOT one authenticated DEV browser
+end-to-end. Four independent supervised roles ran on SHA 584ffd0 (source
+equivalent to 5318b0a, base 660974d) in e5-journal-four-role-20261030.
+Trusted host cross-surface, acceptance and Ruff gates PASS, 287180/300000
+Codex-reported tokens; supervisor ended blocked_repair_budget: Generality
+PASS (no duplicate Writer/Router; warning for missing third-person, future,
+hypothetical and mixed-App coverage), Quality BLOCKED only by missing DEV
+E2E, Testing BLOCKED by a genuine callback-level test gap AND DEV E2E,
+Performance BLOCKED for no measured E5 p50/p95, CPU/RAM/swap/temp/fan
+and concurrency. No four-PASS product acceptance is implied.
+
+The callback-level gap found by the Testing auditor now has a direct
+regression in tests/runtime/test_candidate_continuation_factory_callback.py.
+It constructs the UNMODIFIED production closure via
+build_runtime_from_environment against a disposable actor/state/vault and
+freezes only Temporal/Planner/reviewer provider replies. The same callback
+vetoes a dated original source after a false Temporal empty, vetoes Temporal
+provider failure BEFORE Planner/review, and writes a true no-date recollection
+through real Core/E3, exact Markdown readback and same-ID replay. No duplicate
+closure or independent Writer is introduced. The test also exposed a real
+pre-existing mismatch in ReviewedCandidateContinuationWriteGuard: Core's
+planning_schema_for_capability deep-copies an unchanged canonical schema
+but the guard compared schema by Python object identity. The bound repository
+MUST remain the same instance; the projected schema now requires exact
+CONTENT equality, and changed schema or repository is rejected. This is
+tested on the actual callback plus a separate tampering/copy regression.
+36 guard/continuation/E3 focused tests PASS before the new complete gate.
+The already completed 4-role review is pinned to the PRE-FIX SHA.
+An independent read-only scoped review of the guard/callback repair on
+05047dd returned PASS, severity none: verified Core's intentional schema
+deepcopy, strict vault identity and full E3/physical readback/replay in the
+synthetic-provider factory test. It is NOT four fresh product-role PASS or
+authenticated deployed-browser acceptance.
+
+One bounded Raspberry synthetic-provider local callback timing sample (8
+independent fixture runs per case; FROZEN no API calls): journal success
+median 27.49 ms, nearest-rank p95 27.69 ms; false-empty veto median 3.05 ms,
+p95 3.11 ms; provider failure median 2.72 ms, p95 2.75 ms. Observed process
+max RSS about 86.1 MiB, MemAvailable ~2564→2560 MiB, SwapFree 870 MiB.
+These are measurements of the local callback only, excluding fixture setup,
+GPT latency, HTTPS/browser/n8n, concurrent load and sustained Pi conditions.
+NOT acceptance of real-world latency or scaling.
+Additional bounded one-shot **actual model+Core/E3 integration** on 7012d3f
+(2026-10-30, disposable synthetic vault) PASS in 18.53 seconds:
+existing factory callback, actual OpenAI Temporal, real shared LunaFirst
+planner, real independent semantic reviewer, unchanged Core/E3 and physical
+Markdown readback. A no-date first-person memory was filed in captured
+calendar_day 2026-10-04 with exactly one verified canonical person wikilink;
+all other Markdown notes remained byte-for-byte unchanged. The success
+receipt is /tmp/e5-one-real-callback-20261030.json, a single-use bounded
+probe. The negative callback and same-ID replay had already passed in the
+separate deterministic production callback test; these are not claimed
+as real-provider replay. This new combined proof supersedes the need to
+repeat the previous isolated provider/Planner/Core positive checks.
+The final isolated browser route revealed a DIFFERENT actual product defect:
+Core/E3 returned product_control=CANDIDATE_CONTINUATION_SAVED, but the
+workflow route treated its conversation_reply as read-only C3 and rejected
+a completed write with a generic error. Fixed in workflows/odyssey-online.ts
+by an explicit tightly validated E3 receipt projection BEFORE the read-only
+C3 branch; no generic saved-message acceptance or alternate Writer.
+The existing scripts/odyssey_e4_live_browser_n8n.py and its Docker
+network=none n8n fixture were reused, not cloned. A new Chromium E5
+interaction script clicks the actual recovered choice, checks confirmation,
+reload and Notes UI. Source TS Code is used instead of the OLD deployed
+DEV renderer; no runtime/n8n/Cloudflare deployment was changed.
+
+Evidence on current source (2026-10-30, same isolated actor/vault fixture):
+- Real Chromium + offline Docker n8n + recorded providers + actual Core/E3
+  PASS, 38.64 s; selected card «Eric/Luis», click «Luis», physically verified
+  Day wikilink, persisted reply, Notes UI and immutable same-ID replay.
+- The exact browser→n8n→host REAL Temporal, LunaFirst and independent
+  reviewer→Core/E3→Markdown→UI PASS, 50.37 s. One real end-to-end
+  sample, no repeated model calls or p95/concurrency acceptance.
+- Both use a synthetic local authenticated cookie; NOT Cloudflare Access,
+  NOT the currently deployed DEV SHA, and NOT a real personal vault.
+  Existing DEV shares one actor across Cloudflare principals, so a
+  matching-SHA isolated deployment and explicit environment authorization
+  remain needed before public DEV/PROD adoption or enablement.
+The prior 18.53 s source-only real-model callback proof remains historical;
+do not re-run it merely because this broader isolated browser E2E passed.
+Existing Events/Tasks and other recorded semantic regressions remain valid.
+Do not confuse this new source with the older four-role audit SHA.
+No measured p95 or concurrency SLA is claimed; keep E5 OFF in existing DEV.
+Prior targeted temporal security PASS is separate from these four verdicts.
+Three language variants of the combined-domain contract passed local tests.
+Fresh read-only real Temporal + Luna-first + independent review PASS; a second
+bounded synthetic-vault vertical also reached the existing Core/E3, physically
+verified one canonical Markdown link, preserved the previous Day and replayed
+without duplicate write in 10.81 seconds. Neither proof is a deployed browser
+session or four-role integrated audit.
+
+Independent code review on 4d2431a (base 22bc4cb) returned FAIL: P1
+provider-failure-as-no-date and P1 original IANA zone lost, plus P2 preclaim
+misclassification and missing adverse tests. The source repair stores the
+original IANA zone beside the existing v2 pending capture timestamp,
+checks the matching local clock/offset including DST folds, and reuses
+this exact frozen clock on resume. Legacy records lacking IANA remain
+readable but are not eligible for automatic continuation; no re-dating
+from the server environment. The shared Temporal interpreter must provide
+a typed exact result; none/unspecified fails before any E3 claim.
+Existing delivery preclaim semantic/context/plan failures are reclassified
+as non-executable review failures; uncertain after-claim outcomes remain
+reconciliation-only. Independent re-audit of 860ffee confirmed the two
+P1 Temporal/IANA repairs but reported FAIL on one remaining preclaim
+boundary and missing callback-level negative coverage. Subsequent source
+repair encloses source/actor/state checks in the preclaim boundary and
+classifies known pending state errors before E3 claim; no error at or
+after claim is treated as a harmless replan. Source regression tests
+check stale selected Markdown refuses with zero E3 operations. Re-review
+the final repaired SHA; no four-role acceptance yet.
+
+Fresh shared Temporal provider evidence on the opt-in schema (2026-10-30):
+5/5 real GPT-6 Luna/low results PASS; three no-date ES/FR/EN sources returned
+empty mentions, an explicit Spanish relative date returned EXACT_DATE, and
+a French uncertain time expression returned UNSPECIFIED. The exact source and
+prompt/schema hashes are in the nonsecret one-time /tmp gate receipt.
+A second bounded real-provider two-case continuation without explicit dates
+gave 2/2 expected behavior: Core Luna-first planned one ES statement using
+the selected reference, and the independent GPT-5.6 Luna reviewer accepted
+the read-only proposal; an ES question could not pass the record-only gate.
+The positive planner selected a person destination, NOT a Calendar Day:
+this is not proof of the general daily-journal fallback. Neither two-case
+check invoked E3; the previous dated-source synthetic-vault E3 readback/replay
+remains the only full real-provider E3 vertical.
+Remaining E5 acceptance: additional factual daily-journal placement and
+negative source variations, final four independent audits on a pinned SHA,
+and authenticated Chromium→HTTPS→n8n→provider→Core/E3→Markdown→UI on
+an isolated matching deployed DEV SHA, including replay, performance and
+any corrections from the gates. Keep feature OFF until proven.

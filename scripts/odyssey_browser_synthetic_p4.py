@@ -96,7 +96,7 @@ def real_result_browser_detail(value: dict, request_id: str) -> dict:
 def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
     if viewport not in {"mobile", "desktop"}:
         raise ValueError("Only fixed synthetic browser viewports are allowed")
-    if case not in {"maya", "e4_person_task"}:
+    if case not in {"maya", "e4_person_task", "issue157_day"}:
         raise ValueError("Only fixed synthetic source cases are allowed")
     from odyssey_core.note_queries import NotesQueryService
     from odyssey_core.notes import parse_note
@@ -123,6 +123,21 @@ def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
                     _speaker(source, proposal),
                 ]
             )
+        elif case == "issue157_day":
+            # Real browser clicks + isolated canonical Day/E3 and verified
+            # existing family relationships. The original model responses are
+            # recorded, never a fresh billable provider execution.
+            from tests.runtime.test_issue157_family_day_recollection import (
+                SOURCE as FAMILY_SOURCE,
+            )
+            from tests.runtime.test_issue157_family_day_recollection import (
+                _family,
+                _model_responses,
+            )
+
+            repo, actor, executor, runtime = _family(root)
+            source = FAMILY_SOURCE
+            executor.client = RecordedClient(_model_responses())
         else:
             # Exact E4 vertical fixture: real Core and Tasks write paths,
             # source reviewers and temporal interpretation with recorded models.
@@ -282,6 +297,8 @@ def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
                 "ODYSSEY_SYNTHETIC_BROWSER_URL": f"http://127.0.0.1:{public_server.server_port}/",
                 "ODYSSEY_SYNTHETIC_SOURCE": source,
                 "ODYSSEY_SYNTHETIC_VIEWPORT": viewport,
+                "ODYSSEY_SYNTHETIC_EXPECTED_RECEIPTS": ("1" if case == "issue157_day" else "2"),
+                "ODYSSEY_SYNTHETIC_MIN_NOTE_RESULTS": ("1" if case == "issue157_day" else "2"),
             }
             result = subprocess.run(
                 ["node", str(BROWSER)],
@@ -318,6 +335,15 @@ def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
                 assert "(yo:" in days[0].content, (
                     "Implicit speaker SELF missing in physical Markdown"
                 )
+            elif case == "issue157_day":
+                assert len(days) == 1 and len(tasks) == 0
+                assert len([n for n in physical if n.metadata["type"] == "event"]) == 0
+                assert days[0].content.count("odyssey:fact request=") == 2
+                assert "jardín" in days[0].content and "museo" in days[0].content
+                for known_person in ("Nora", "Ivo", "Vera"):
+                    assert "[[" + known_person in days[0].content
+                assert len([n for n in physical if n.metadata["type"] == "person"]) == 4
+                person = []  # The already-known family must not be created twice.
             else:
                 person = [
                     note
@@ -362,7 +388,7 @@ def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
                 "physical_new_people": len(person),
                 "physical_new_tasks": len(tasks),
                 "person_task_link_verified": case == "e4_person_task",
-                "self_binding_verified": case == "maya",
+                "self_binding_verified": case in {"maya", "issue157_day"},
                 "http_stats": proxy_stats,
                 "vault_root": "temporary_only",
                 "cloudflare_access_checked": False,
@@ -381,7 +407,7 @@ def run_synthetic_browser(viewport: str = "mobile", case: str = "maya") -> dict:
 if __name__ == "__main__":
     args = argparse.ArgumentParser(description=__doc__)
     args.add_argument("--viewport", choices=("mobile", "desktop"), default="mobile")
-    args.add_argument("--case", choices=("maya", "e4_person_task"), default="maya")
+    args.add_argument("--case", choices=("maya", "e4_person_task", "issue157_day"), default="maya")
     options = args.parse_args()
     try:
         print(

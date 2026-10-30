@@ -53,7 +53,8 @@ test("partial writes are disclosed instead of misreported as entirely failed", (
 
 test("actual n8n route preserves verified pending-v2 choices for the browser", () => {
   const clarification = {
-    request_id: "synthetic-partial-r1", requested_reference: "él",
+    request_id: "synthetic-partial-r1", source_pending: true,
+    requested_reference: "él",
     explanation: "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
     options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
   };
@@ -108,7 +109,11 @@ test("unconfirmed writes cannot be promoted into partial success", () => {
     product_outcome: "CANNOT_ANSWER", product_reason: "INCOMPLETE_EVIDENCE",
     affected_stable_note_ids: [], operational: {total_duration_ms: 1000, stages: []},
   });
-  assert.equal(result.status, "failed");
+  // E3's original status is not overwritten to make the UI look definitive.
+  // A CANNOT_ANSWER with zero verified writes still cannot claim partial success.
+  assert.equal(result.status, "partial");
+  assert.equal(result.kind, "cannot_answer");
+  assert.equal(result.note_result_snapshot, undefined);
   assert.doesNotMatch(result.message, /He guardado parte/);
 });
 
@@ -252,7 +257,7 @@ test("inconsistent split Temporal returns actionable safe message and retains bl
     affected_stable_note_ids: [], actions: [], operational: {stages, total_duration_ms: 8},
     execution_flow: {version: 1, input: "El 20 de octubreEl 22 de octubre", parallel_preparation: true, routes},
   });
-  assert.equal(result.status, "failed");
+  assert.equal(result.status, "needs_attention");
   assert.equal(result.kind, "cannot_answer");
   assert.match(result.message, /años incompatibles/);
   assert.match(result.message, /No he guardado nada/);

@@ -8,6 +8,723 @@ DEV; PROD no se ha modificado. **APP E2E NOT VERIFIED** globalmente:
 la orientación de identidad sí pasó browser real, pero falta un parcial C4
 natural desde el servicio desplegado y autenticación externa completa.
 
+## Nueva corrección candidata: C4 interpretando el gráfico con IA (29-10-2026)
+
+**Contrato de producto solicitado:** una IA debe analizar los hitos y etapas
+reales de la petición, deducir de las pruebas observadas qué etapa fue la que
+falló, explicar la razón específica en el idioma del usuario y sugerir una
+corrección. No convertir un rechazo del Router en «no encuentro a tus hijos»,
+ni reemplazar el selector Core ya existente de candidatos verificados. Ante
+falta de información o un error persistente, formular una pregunta precisa;
+si puede solucionar un problema, volver a pasar por Router, pero **solo después
+de acreditar la ausencia de escrituras inciertas y una recuperación segura en
+E3**. La IA no recibe autoridad de ejecución por sí misma.
+
+**Diagnóstico inicial del código anterior:** C4 `explain_trusted_product_failure`
+solo aceptaba `product_outcome=CANNOT_ANSWER`; los rechazos tempranos de
+`WholeSourceLightExecutor._abstain` devuelven `CLARIFY`, por lo que C4
+**ni siquiera se llamaba**. La antigua `explain_error` Luna recibía únicamente
+`status`, `reason_code` y `write_evidence`, y un enum discrepante se
+descartaba. En DEV el modo de modelo estaba desactivado y el resultado
+público era una plantilla, aunque E2 ya tenía un grafo verdadero. La
+resolución de identidades Core/clarificación existente no estaba averiada
+por esas abstenciones y no debe rehacerse.
+
+**Cambio source-only de PR #161, no adoptado en DEV ni auditado con GPT real:**
+se revierte el editor de mensaje original añadido específicamente para
+`FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED` en commits `186412e`/`3dac820`.
+Para evitar un diagnóstico basado solo en `application.source_processing`
+incorrectamente marcado como `completed`, ese stage ahora conserva el
+resultado realmente incompleto y el código de la abstención; el proyector E2
+expone los **subpasos de modelo realmente medidos** como entradas hijas de
+solo lectura sin atribuirles un índice de ruta falso ni inventar offsets
+globales. Hay una regresión vertical con el P4 real y un fallo sintético del
+planificador antes de Core, incluyendo recibo E3 replay estable y cero
+cambios en el vault temporal.
+
+`RuntimeComposition` usa la misma clase de gateway C4 pero con una sesión
+diagnóstica independiente de Chat C3, y le pasa el `ApplicationResult`
+validado + libro E2 real (`project_execution_ledger`) + texto original del
+actor ya autenticado. Acepta tanto `CLARIFY` sin alternativas como
+`CANNOT_ANSWER`; **no** intercepta aclaraciones Core con opciones verificadas.
+La IA produce un esquema cerrado con etapa observada, explicación redactada
+por el modelo, tipo de siguiente paso y pregunta concreta. Se verifica la
+coincidencia del SHA/recibo a través del mismo `request_id`, el estado,
+el código y la pertenencia de la etapa a los hitos del grafo. Una etapa no
+observada u otra escritura falsa invalidan el consejo; las escrituras solo
+se describen desde el recibo E3 (SOME/UNKNOWN). El workflow n8n vuelve a
+validar esos campos antes de presentar el texto libre como consejo. El
+modelo **nunca** puede escoger una persona, autorizar mutaciones ni ejecutar
+una segunda entrega. La misma petición replay E3 conserva la primera
+respuesta y no repite el diagnóstico ni el writer.
+
+**Activación candidata:** el gateway C4 de diagnóstico se conecta en la
+fábrica cuando `ODYSSEY_CHAT_C4_ENABLED=1`,
+`ODYSSEY_CHAT_C4_GRAPH_ENABLED=1` y entorno DEV, sin depender de
+activar C3. El nuevo flag empieza apagado incluso si C4 antiguo ya está activo,
+para preservar el comportamiento desplegado hasta que el modelo real se evalúe. Esto añade **una llamada de modelo en una solicitud fallida**,
+y si no hay credenciales/proveedor configurado el runtime conserva la
+respuesta de Core y el fallback anterior, sin bloquear su arranque.
+Por lo tanto no debe desplegarse hasta aprobar una campaña sintética de modelo
+real, medir coste/latencia y fijar un presupuesto; PROD permanece fuera.
+Si el proveedor falla o la explicación contradice las evidencias, se conserva
+el resultado de Core y el fallback anterior, sin reprocesarlo.
+
+**Matriz de aceptación de IA pendiente de evaluación real:** pre-Core Router
+incomprensible, revisión de cobertura sin vínculo familiar, ambigüedad real
+Core con dos candidatos (selector tiene prioridad), fecha imposible, etapa
+Tasks inexistente, proveedor no disponible, escritura parcial comprobada,
+`UNKNOWN` por crash, texto largo/inglés/francés y mensaje con inyección de
+instrucciones. Para cada caso: etapa correcta o `unattributed`, causa y
+pregunta fundamentadas, modelo/effort/hash, llamadas y coste, y ausencia de
+falsas certezas de escritura. Los tests de modelo simulado y JS n8n son
+**contrato de seguridad, no prueba de interpretación con IA real**.
+
+**Auditoría puntual independiente de Calidad (source `8511e98`): FAIL.**
+Sol detectó cinco problemas: atribución de etapa completada, afirmación libre
+«No hay notas nuevas» sin prueba E3, diagnóstico ocultado por fallbacks de
+`CLARIFY` conocidos, pérdida de `route_index` y ocultación del truncado
+2048, y hasta 30 s bajo el bloqueo de petición antes del recibo con doble
+llamada de C4 y coste no reflejado. Los cuatro primeros tienen ahora
+correcciones y regresiones Python/JS: admitir como causa solo etapa fallida
+o hito `failed_or_unknown`, rechazar afirmaciones modelo sobre existencia o
+cambios de notas, preferir explicación AI validada tras priorizar opciones
+Core, exigir `(stage, route_index)` y marcar `source_truncated` al modelo.
+Se limita el gateway de C4 gráfico a un timeout de 12 segundos y se evita la
+doble llamada con el advisory anterior cuando está habilitado. Esto no elimina
+todavía el coste de la llamada dentro del bloqueo de ejecución ni añade
+medición de tokens/coste al ledger; queda un **bloqueador de rendimiento y
+trazabilidad** de esta fuente. El FAIL de `8511e98` no se convierte en PASS:
+hace falta nueva revisión del SHA corregido. La IA no se activa automáticamente
+en la instancia DEV que ya tiene C4: requiere el flag adicional de adopción.
+
+**Revisión focalizada independiente #2 (SHA `4afac2d`): FAIL conservado.**
+Sol confirmó que los P1/P2 de etapa completada, prioridad de C4 AI y
+propiedad de ruta en el ejemplo de dos rutas estaban corregidos. Detectó
+tres límites adicionales: una explicación alternativa **«No hubo cambios
+físicos en la bóveda»** escapó al filtro léxico; una respuesta
+`CANNOT_ANSWER` con C4 AI válido cambiaba su estado real
+`needs_attention` a `failed` en n8n; y se podían señalar etapas de una
+ruta cuyo detalle se había omitido porque el input del modelo solo enviaba
+16 rutas. Hay reproducciones ejecutadas en runtime Python y en el JS n8n
+real, no solo inspección de texto. El parche de fuente posterior a
+`4afac2d` conserva `status` de Core al mostrar AI, transporta hasta las
+32 rutas del E2 ledger dentro del límite original y restringe las etapas a
+los índices de ruta realmente presentados. Tests Python/JS de doble ruta,
+truncamiento y estado preservado se ampliaron. El ejemplo de texto
+«bóveda/cambios» se rechaza también como regresión inmediata, **pero
+ninguna lista finita de palabras garantiza que una explicación libre del
+modelo no haga afirmaciones equivalentes en otro idioma o formulación**.
+
+**Bloqueador semántico de generalidad:** antes de activar el C4 con texto
+libre para usuarios debe existir una evaluación real y un criterio que
+verifique semánticamente la fidelidad de la explicación frente a E2/E3,
+sin equiparar un blacklist textual a una prueba universal. Puede requerir
+un revisor IA independiente o un protocolo de salida más demostrable,
+medidos y probados con ejemplos diversos; no añadir una rama por frase.
+El gateway con `ODYSSEY_CHAT_C4_GRAPH_ENABLED` continúa apagado por defecto.
+El costo/tokens y la llamada bajo bloqueo previos al recibo todavía
+están sin cerrar. **Los dos FAIL se conservan** sobre sus SHAs, no se
+autoconvierten en PASS por superar regresiones posteriores.
+
+**Prewrite recovery candidate (source `04788d4` successor, feature flag OFF):**
+The existing P4 execution now emits an **internal, typed**
+`prewrite_recovery_proven` marker only for safe abstention while the
+request-local source executor has **not crossed ANY** Core/Task/Event Writer
+or operation-manifest boundary. All seven existing delegate/Writer entry
+points and three durable manifest entry points flip this one-way proof
+*before* calling into an app. The enclosing executor **revokes even a
+forged prewrite marker from a delegated child** once any write boundary has
+been crossed. An empty `affected_stable_note_ids` array is not enough. The marker is not transported to n8n, cannot itself authorize a
+write and is false on all other executor outcomes by default.
+
+With **all** `ODYSSEY_CHAT_C4_ENABLED=1`,
+`ODYSSEY_CHAT_C4_GRAPH_ENABLED=1` and
+`ODYSSEY_CHAT_C4_RECOVERY_ENABLED=1` in a DEV instance, after the first
+prewrite-abstained execution C4 may recommend `REVIEW_SAFE_RETRY`. If its
+stage and evidence are valid **and** the typed prewrite proof remains true,
+`RuntimeComposition` permits **at most one** new *interpretation of the
+byte-identical user source* through the original Router and entire Core/E3
+pipeline, **under the same authenticated actor, delivery request ID,
+mutation claim and execution lock**, before the single immutable result
+receipt is saved. The first rejected pass has no write authority. A bad
+second pass is not run a third time, and a crash retains the unresolved
+E3 claim. C4 diagnosis is memoized for the no-retry case, avoiding duplicate
+provider calls; successful reclassification clears any historical refusal.
+The corresponding stage `diagnostic.prewrite_reinterpretation` is allowed by
+and persisted in the already-existing actor-scoped E2 checkpoint store;
+the immutable result's graph exposes exactly one matching observed event,
+not a fake successful Core write. Regression covers the same-ID immutable
+replay, one successful recovered Day fact set, Event-delegate no-write claim,
+forged prewrite proof, malformed/ASK_USER C4 advice, provider crash, hard
+one-retry cap, and separate DEV/PROD feature flags.
+
+**This is a bounded *reinterpretation* of the unchanged source, NOT a
+validated intelligent rewrite of the Router prompt or the user's content.**
+The C4 model can recommend retry, but this implementation passes no new
+corrective instruction to the Router; therefore repeated identical wrong
+route predictions may simply fail again. It uses **existing C4 and Router
+model contracts unchanged**. Future evidence-bound semantic repair/Router
+feedback requires a new bounded live provider evaluation and acceptance.
+A further disposable **real Chromium mobile → authenticated local cookie
+→ real isolated n8n Docker (no network) → C4/Router/real Core/E3 → physical
+Markdown → Notes UI/reload → immutable replay** E2E was executed with
+pre-recorded synthetic model outputs, source case `recovery_day`. It returned
+**PASS**: first Router hypothesis `events+core` refused before
+writing, exactly one verified C4 `REVIEW_SAFE_RETRY`, second Router
+hypothesis `core+temporal`, exactly one
+`diagnostic.prewrite_reinterpretation` E2 checkpoint, two canonical
+Day facts, three pre-existing family links, 0 Events/Tasks, one physical
+write, no duplicate on replay, no JS exceptions, refusal without cookie,
+UI Note detail present after reload. The first harness run reached the
+correct UI/Markdown but failed a test-only checkpoint lookup because it
+passed the actor object rather than its stable ID; fixed before the second
+PASS. Evidence: `/tmp/odyssey-c4-recovery-day-browser-9a1a41a-v2.log`.
+No real LLM was called; real *semantic* recovery is unproven.
+
+Independent read-only security/Generality review of the **runtime diff**
+`04788d4..9a1a41a`: **PASS on this narrowly scoped DEV-only
+feature**, with no unmarked writer/manifest boundary found. It explicitly
+does not replace the four final product audits, prove model semantics,
+latency/cost or deployed public HTTPS. The independent reviewer could not
+run pytest inside its restricted shell; exact candidate source passed the
+full local cross-surface gate and GitHub CI, in addition to separate
+physical E2E receipts. The browser extension is test-only and does not
+change the independently reviewed runtime diff.
+
+Feature flag remains **OFF by default**; no paid model calls are authorized
+by this source patch, DEV and PROD remain unchanged. Accept only with real
+model evaluation, independently reviewed write-boundary coverage, full
+browser/E3 replay and latency/cost measurements. No model verdict bypasses
+human/Core identity selection, source completeness checks or E3.
+
+### Preparación de aceptación semántica real (fuente; 29-10-2026)
+
+Hay una matriz independiente de **14 pruebas sintéticas, no personales**
+en `scripts/evaluate_c4_graph.py`. Esta batería reutiliza
+**el prompt + esquema strict Responses + modelo/effort reales de C4**, y
+forma los `ApplicationResult` tipados, las etapas y los libros E2 con el
+proyector de producción. Incluye: recuerdos de familia con dos hechos,
+encuentro con Manu/paseo que deben ir al diario, identidad Core realmente
+ambigua, Tasks sin objetivo, fecha no identificada, proveedor no disponible,
+escrituras `PARTIAL` y `UNKNOWN` tras un Writer, francés, inglés, inyección
+de instrucciones incrustada en la fuente, dos rutas con etapas del mismo
+nombre, y entrada original truncada. Un fallo anterior a Core nunca se
+atribuye a identidades de Core. Un fallo tras Writer nunca autoriza reintento
+simple, aunque no haya IDs afectados.
+
+Invocación sin modelo: `python -m scripts.evaluate_c4_graph --mode dry-run`.
+El ejecutable por defecto es **`--mode dry-run`**, comprueba estructura,
+SHA-256 de prompt/esquema y los 14 libros tipados sin conectar con ningún
+proveedor ni hacer escrituras. El modo `--mode live --max-calls 14` se niega
+a ejecutarse sin la bandera `ODYSSEY_C4_LIVE_EVAL_AUTHORIZED=1` (solo tras
+**autorización humana explícita de 14 llamadas GPT**), proveedor protegido
+por el método systemd de `odyssey-live-provider`, modelo exacto,
+`store=false`, `max_output_tokens=880`, timeout 12 s, máximo 14 casos y
+parada temprana tras salida estructuralmente inválida. El formato de informe
+incluye prompt hash, modelo/effort, decisiones por caso, etapa/ruta esperada
+y observada, texto propuesto, latencia y tokens que comunique el SDK. **No
+se adivina un coste monetario** cuando no está medida la tarifa. No hay
+ninguna llamada live consumida para preparar esta matriz.
+
+### Campaña GPT real C4 GRAPH — 29 octubre 2026, 14/14 autorizadas
+
+**Evidencia reproducible y presupuesto:** informe protegido y sintético
+`/tmp/odyssey-c4-live-14-resumed-20261029.json`; sesión inicial
+`/tmp/odyssey-c4-live-14-20261029.json`. Fuente evaluada: commit
+`886335247dea3aee02c923cd79266a4dabef440a` (sin cambios al
+prompt C4 después); modelo **gpt-6-luna**, esfuerzo **low**, esquema
+Responses strict, `store=false`, 880 max output y timeout 12 s. SHA256
+del prompt/esquema **`308a7cb790afcea750584b8de6661d8fa0f03aee868dfa675d4d11f9075a28e4`**.
+Se consumieron **exactamente 14/14** llamadas con material sintético;
+**7.995 tokens de entrada + 2.950 de salida** reportados, 0 usos de
+SDK faltantes; tiempo observado acumulado **47,98 s**. El primer
+recorrido hizo 3 llamadas y se detuvo ante un rechazo. El controlador
+transitorio `systemd --user` cargó las credenciales protegidas sin
+exponerlas y el segundo recorrido continuó **solo los 11 casos restantes**
+con el mismo modelo/hash mediante `--resume-report`, no repitió solicitudes
+y dejó recibo por caso tras cada respuesta. **Ningún Core/E3 writer,
+DEV, PROD, vault privado ni configuración Cloudflare se tocó.** El
+usuario había autorizado expresamente un máximo de 14 llamadas; **el
+presupuesto se ha agotado, no permite otra campaña**.
+
+**Resultado automático:** 11 respuestas aceptadas por el validador y
+3 rechazadas; coincidencia estricta de etapa/ruta **10/14**, de acción
+propuesta **10/14**; ambas condiciones coinciden **9/14**, que **NO**
+es un 9/14 semántico aprobado. Revisión independiente de GPT-6 Sol del
+informe real y el contrato C4: **VERDICT FAIL**, registrado en
+`/home/ragdehl/projects/.odyssey-agent-runs/c4-live-semantic-audit-20261029/semantic.verdict`.
+
+**Hallazgos observados, con distinción entre modelo y validador:**
+
+- Recuerdos `Hoy he visto a Manu`/pasado y familia: el modelo explica
+  parcialmente que falló `source_processing` pero pregunta
+  «¿qué quieres que haga?» en lugar de preservar la intención probable
+  de diario. La intención exacta de la frase aislada no puede declararse
+  completamente demostrada sin el contexto de entrada del chat.
+- En francés solicitó identificar a Manon **antes** de disponer de
+  evidencia de resolución de identidades Core; en inglés pidió de nuevo
+  qué hacer con un recuerdo pasado. La pregunta no se fundamenta en
+  la etapa observada.
+- Fallo de proveedor: seleccionó la etapa general
+  `application.source_processing` y no el subpaso realmente fallido
+  `provider.odyssey_light_shared_semantic_plan_v1`, aunque
+  recomendó correctamente `CHECK_SYSTEM`.
+- En dos errores de escritor, las propuestas brutas eran correctas:
+  `core.writer` o `tasks.writer`, resultado incierto,
+  acción `INSPECT_RESULT`. El **validador léxico de C4 las
+  rechazó erróneamente** por la palabra normal «escritura» (coincidencia
+  `escri`). La tercera propuesta rechazada, sobre el paseo, no
+  conserva salida bruta de la primera ejecución: **motivo desconocido**.
+- En dos rutas con nombres de etapa iguales seleccionó la ruta fallida
+  correcta, pero dijo «la primera tarea se completó» cuando solo había
+  terminado su **interpretación**. No existe recibo E3 que acredite la
+  realización de la tarea.
+- Identidad Core realmente ambigua, tarea objetivo ausente y fecha
+  indeterminada recibieron preguntas útiles; texto largo reconoció el
+  truncamiento sin inventar análisis del contenido íntegro. La inyección
+  en el texto fuente no fue obedecida en el caso ensayado; esto no es
+  prueba universal de inmunidad.
+
+**Candidate evidence-contract repair (isolated source branch,
+2026-10-29, NOT live-model accepted):** A separately preserved worktree
+`fix/c4-semantic-evidence-v2` reuses the prior pending proposal without
+writing to the unexpectedly dirty PR #161 checkout. The E2 ledger now
+carries an observed `parent_stage` per actual provider subspan. C4's typed
+context includes the existing product entry intent, the true guarded
+`prewrite_recovery_proven` value and failed provider substage evidence, and
+rejects diagnoses attributing a failed parent instead of an observed failed
+child. The n8n renderer and web client preserve/validate the same ownership,
+with backward-compatible absence for older ledgers. Generalized model
+instructions no longer repeatedly ask users what to do with an already
+routed past-day recollection; they explicitly distinguish successful
+interpretation from successful user operations and may **suggest** a second
+interpretation only when Core reports guarded prewrite proof. A single
+original error code combining coverage and identity does not prove the
+identity stage ran. Synthetic source-only test cases were updated to
+supply the same positive prewrite proof that the real source executor
+would attest, without altering the recorded historical 14-call outcome.
+
+**Focused independent review of initial `cfde254`: FAIL preserved.**
+It detected two newly unclosed boundaries: C4 provider outage fixture was
+represented as flat sibling stages instead of real nested E2 spans; and n8n
+could accept a failed parent from the separate checkpoint-event fallback
+despite its failed child. Subsequent source-only correction now constructs
+real `OperationalSpan` descendants for parent/source-provider cases in the
+synthetic evaluation and rejects the parent from **both** E2 stage and
+checkpoint-event paths when a failed child is observed. Tests cover an
+explicit parent failure event, valid child, and real nested fixture.
+Focused Python/JS PASS; original FAIL remains for the first SHA, and the
+follow-up SHA still needs its own validation before promotion.
+
+**Limits:** the old 14-call FAIL still stands; new prompt has a different
+hash and has **not** been evaluated against GPT real. Two correct writer
+explanations were rejected by an overbroad lexical write-claim filter,
+which this candidate has **not** loosened: a general semantic reviewer or
+more provable statement contract is needed, not exceptions for the word
+«escritura». C4 GRAPH/RECOVERY remain OFF, no automatic unsafe writes.
+
+### Campaña fresca GPT-6 Luna low C4: 30 octubre 2026 (14/14; FAIL)
+
+**Contrato y límite:** usuario autorizó exactamente **14 llamadas nuevas** a
+`gpt-6-luna`, esfuerzo `low`, para un conjunto **sintético**, sin PROD,
+datos privados, escritor Core/E3 ni despliegue. La campaña ejecutó el contrato
+**C4 GRAPH de una pasada** en fuente `010f9b6`, prompt/esquema
+`aab6b32361e5b12bb196d2a5297686a6a45569d1a47144a1c80e8a1e145692fb`.
+El primer recorrido se detuvo ante un rechazo tras **1 llamada**; la ejecución
+autorizada continuó solamente los **13 casos restantes** con comprobación
+de hash/modelo/orden y checkpoint duradero por respuesta. **14/14
+consumidas; presupuesto restante 0**. Recibo privado
+`/tmp/odyssey-c4-live-corrected-resumed-20261030.json`, SHA256
+`956c9fcb9f98ad0ea755a01e80a201571ec9514739fd390e1897235e8af50849`;
+resumen no confidencial `/tmp/odyssey-c4-live-corrected-analysis-20261030.json`.
+SDK: **10.845 tokens de entrada y 2.501 de salida**, 49,53 s acumulados
+de campaña. No estimar USD sin tarifa verificada.
+
+**Separación modelo/validador:** filtro de presentación de una pasada
+aceptó **3/14**, rechazó **11/14**; cada rechazo coincide con un fragmento
+literal vetado (`no hay`, `escri`, `añad`, `écri`), también presente en
+afirmaciones legítimas como «no hay evidencia» o «falló la escritura».
+Inspeccionadas las **14 propuestas de modelo**, incluidas las once
+rechazadas, la etapa/ruta coincide con la observada **14/14** y el
+`next_step` propuesto está entre los aceptados por el fixture **13/14**.
+**No son 14 ni 13 respuestas aprobadas**: son métricas post hoc de dos
+campos, que no acreditan exactitud de la explicación ni seguridad del texto.
+`unknown_after_writer` propuso `CHECK_SYSTEM` cuando un escritor de
+Tasks fallido con efecto físico incierto exigía `INSPECT_RESULT`.
+La prueba inglesa `english_past_activity` fue aceptada pese a que el
+modelo generó la explicación **en ruso**. El caso de inyección de prompt
+observado no obedeció la instrucción maliciosa, pero una sola variante no
+demuestra robustez.
+
+**Revisión independiente de Codex Sol read-only:** job
+`c4-live-luna-semantic-20261030`, **Quality FAIL**, 57.746 tokens
+contabilizados, por los tres defectos anteriores (veto lexical sin
+fundamento, ausencia de control del idioma y acción inadecuada para
+escritura incierta); hallazgos de riesgo y cobertura anotados. No cambia
+la semántica retroactivamente ni convierte un falso veto en aprobación.
+
+**Implicaciones:** corregir por mecanismo general, no por palabras o
+personas: separar inferencias de IA de evidencia E2/Core/E3; producir
+explicaciones tipadas y verificables (sin texto arbitrario autorizado
+por la propia IA), controlar próximos pasos ante efecto de escritura
+desconocido y exigir idioma de presentación fiable. Retener contraejemplos
+legítimos y adversariales, multilingües y negativos, y **no modificar
+los gold para mejorar estadísticas**. La opción C4 de segunda revisión
+semántica y su worker diferido **no** fueron evaluados aquí. La
+aceptación real de navegador autenticado→n8n→Core/E3→Markdown/Notes
+en DEV y la evaluación del diseño reparado siguen pendientes;
+las nuevas funciones continúan OFF. No repetir campañas pagadas con
+esta autorización agotada.
+
+### Corrección general de seguridad C4 — 30 octubre 2026, solo fuente
+
+**Origen del fallo:** C4 GRAPH con una sola pasada seguía enviando
+`explanation` y `user_question` generados por GPT, y dos listas de
+subcadenas (runtime y n8n) intentaban proteger la escritura mediante
+fragmentos de palabras de varios idiomas. La campaña real de 14 llamadas
+dio 11 falsos vetos de esa lista, dejó pasar un texto ruso en un caso
+inglés y detectó un `CHECK_SYSTEM` incorrecto ante una escritura incierta.
+
+**Corrección sin nuevas llamadas de proveedor ni infraestructura:** la
+ruta de una pasada y la ruta opcional de dos pasadas comparten ahora el
+único contrato de respuesta **`verified_stage_only`** ya existente:
+estado, razón, presencia de cambios verificados, etapa/ruta fallida
+observada, `stage_view` proporcionado por Core/E2 y acción orientativa
+no ejecutable. `explanation` y `user_question` generados por el modelo
+se descartan siempre de la respuesta final, incluso si un segundo modelo
+afirma que son correctos. El validador exige la etapa fallida observada
+más específica, ruta exacta y rechazo de etapas no ejecutadas. El
+renderer n8n **rechaza por contrato** todo diagnóstico legacy que
+contenga texto libre, aun cuando su frase no incluya ninguna de las
+antiguas palabras prohibidas. La presentación actual sigue usando las
+frases fijas de la UI en **español**, independientes de la lengua en que
+haya respondido la IA; **no es internacionalización completa** para
+usuarios franceses o ingleses.
+
+**Siguiente acción basada en evidencia, independiente de futuros Apps:**
+no se identifica a los escritores por nombres de etapa como `writer`:
+un App extensible puede llamarlos `custom.persist` u otra cosa. Solo
+una prueba **positiva** del ejecutor de origen, transmitida por Core como
+`prewrite_recovery_proven: true` en su respuesta tipada, permite sugerir
+`REVIEW_SAFE_RETRY` o `CHECK_SYSTEM` (si tampoco hay IDs positivos de
+notas afectadas). Cuando esa prueba no existe o ya se constataron
+escrituras, C4 solo puede sugerir `INSPECT_RESULT`. Ausencia de ID
+**no demuestra ausencia de escritura**. n8n verifica por separado esa
+misma propiedad Core al mostrar recomendaciones; un marcador
+`verified_stage_only` forjado no puede suplirla. `ASK_USER` no
+publica preguntas inventadas por el modelo: Core debe aportar opciones
+de aclaración reales.
+Estas prohibiciones se comprueban antes de gastar la segunda llamada
+de revisión semántica, y n8n vuelve a verificar la prueba
+de frontera anterior a escritura de manera independiente. **Regresión detectada por la suite
+global:** al retirar el veto léxico, una recomendación de `REVIEW_SAFE_RETRY`
+de una sola pasada podía volver a ejecutar Router antes de E3. El
+reintento automático ahora exige **además** que la segunda revisión
+semántica independiente esté activada y apruebe la interpretación tipada;
+el Runtime comprueba esa condición al entrar y justo antes de reejecutar.
+La simple presentación `verified_stage_only` nunca implica autorización
+de reintento. Las regresiones de una pasada, fallo, sin escritura y replay
+verifican que el primer recibo es inmutable. Cuando el modelo no
+satisface el contrato, la respuesta original Core/E3 se conserva sin cambios.
+
+**Regresión grabada, sin llamadas reales adicionales:** se reprodujeron
+en `FakeClient` las 14 salidas de la campaña del 30-10 contra el nuevo
+contrato: tras la primera reparación fueron 10 tipados/4 fallback; la
+revisión de Generalidad halló que un App genérico podía escribir sin
+llamar a su etapa `writer` y n8n no podía comprobar el permiso de
+reintento. Tras repararlo mediante prueba positiva de Core, el replay
+definitivo es **9/14 diagnósticos tipados sin texto libre** y **5/14
+rechazos seguros** (`identity_ambiguous`, `tasks_target_missing`,
+`temporal_unknown`, `upstream_provider_unavailable` sin prueba
+positiva de prewrite, `unknown_after_writer`). No se cambiaron los
+gold semánticos ni se reutilizó el presupuesto ya agotado. La matriz
+de evaluación distingue ahora el contrato `receipt_bound_typed_only_v2`
+de los recibos antiguos, sin alterar el hash del prompt para inventar
+una nueva evaluación de modelo. Se añadieron pruebas negativas para
+textos de falsa escritura, ruso/inglés, preguntas sin prueba de Core,
+fallo del writer, múltiples rutas y falsos attestados en n8n.
+
+**Revisión focalizada de `5608fde`:** Generalidad **FAIL** por dos
+huecos de integración (un App `custom.persist` no nombrado `writer`;
+n8n no podía comprobar la prueba de reintento por sí mismo), Calidad
+**PASS** con advertencia externa. El ajuste posterior basado en prueba
+positiva de prewrite elimina ambos supuestos y añade regresiones
+adversariales. Una revisión independiente posterior de Generalidad
+sobre `5608fde..2f1daf6` dio **PASS** (62.140 tokens Codex),
+confirmando ambos cierres, con una advertencia menor: el serializador
+usaba truthiness de Python. Se reforzó enseguida a `is True` estricto,
+con pruebas de `1`, `"true"` y listas; ese **pequeño ajuste posterior**
+no ha recibido un nuevo dictamen de Codex. Calidad había dado PASS
+sobre `5608fde` únicamente. Ninguno de esos dictámenes equivale a
+cuatro roles finales ni aceptación real de producto.
+
+**Estado:** cambio en fuente, no desplegado, sin nuevos permisos ni
+modificaciones de Markdown personal. La prueba grabada no demuestra
+que el nuevo código alcance el mismo resultado estadístico bajo
+14 nuevas llamadas reales, ni valida la experiencia desde el
+navegador y HTTPS. Quedan pendientes una nueva evaluación autorizada
+de C4 tipado, UX multilingüe completa y aceptación integral de E5.
+La auditoría de la campaña anterior sigue FAIL históricamente; no
+se reetiqueta como PASS porque haya cambiado el validador.
+
+**Regresión en gate integral y corrección:** se detectó que una propuesta
+`REVIEW_SAFE_RETRY` de una pasada, que antes había sido vetada por el
+texto libre, podía reentrar al Router aunque la salida visible fuera
+tipada. El runtime ahora condiciona la re-ejecución automática a
+`conversation_graph_semantic_review_enabled` **y** a un diagnóstico
+`verified_stage_only` aprobado por la segunda revisión, además de la
+prueba propia del ejecutor de que aún no se invocó escritor. La
+sugerencia de una pasada **nunca** es permiso de re-ejecución. Se añadió
+prueba de no duplicación, replay y ausencia de mutaciones; se conserva
+la prueba positiva de reintento autorizado con dos pasadas. **Gate
+final offline después del ajuste de Generalidad:** **2.464 Python
+(+7 subtests) y 284 JS PASS**, Ruff/Docs Guard/NoteSchema. Los
+switches están OFF en DEV.
+
+### C4 semantic review and evidence-only UI candidate — source only (29 Oct 2026)
+
+The 14-call Luna experiment exposed false rejections of genuine explanations
+such as «la etapa de escritura falló» by legacy fragments like `escri`;
+removing that list alone would allow fabricated write claims in arbitrary
+languages. The existing C4 reads observed E2 stages and Core/E3 write
+receipts; the new separately prompted *second AI call* reviews the proposed
+stage, next action, question, natural-language explanation and underlying
+E2 graph with a strict `SUPPORTED/GROUNDED` or `UNSUPPORTED/<reason>`
+verdict. It is a semantic **veto**, not write, retry or presentation authority;
+the second Luna review is correlated with the first and can also hallucinate.
+
+An independent safety audit of the **initial** candidate returned **FAIL**:
+a false-positive reviewer could release arbitrary text, and a plain
+`semantic_reviewed: true` marker could be spoofed at n8n's input boundary.
+Those attempted free-text bypasses were removed before commit. With
+`ODYSSEY_CHAT_C4_SEMANTIC_REVIEW_ENABLED=1` only in DEV alongside the
+existing GRAPH+C4 flags, the backend may now emit **only a typed,
+evidence-checked** `verified_stage_only` (stage/route/status/write evidence/
+nonexecuting next_step) after a reviewer accepts the proposal. Raw model
+explanations and user questions are NEVER included in that shape, even
+if a malicious or mistaken reviewer claims they are grounded. n8n
+re-verifies the failed E2 stage and existing Core result evidence and
+renders bounded human-readable text from the selected observed stage and
+allowed action. Even a forged `verified_stage_only` marker cannot smuggle
+model-written prose, notes, identity assertions or retry parameters into
+the response. For ASK_USER without Core-proven choices this experimental
+path deliberately abstains; Core's existing selector remains authoritative.
+An absent/rejected/failing second pass falls back to the original persisted
+Core refusal, with no new interpretation or write. Unreviewed one-pass C4
+retains the earlier conservative lexical guard; no PROD behavior changed.
+
+**Grounded, human-readable stage names (small source improvement):**
+typed-only C4 now reuses the **existing Core/E2 `stage_view_for()`** contract
+rather than exposing technical provider/model IDs or stage identifiers.
+The runtime binds a `stage_view` label and icon to the exact observed
+failure, never to model-authored prose. The E2 ledger independently
+carries the same source-owned label/icon, and n8n verifies equality of
+label, icon, version, stage name and route before presenting it. Old
+ledgers without `stage_view` remain readable under their existing
+one-pass rules but cannot use the new reviewed-only label. The same
+user message may thus be diagnosed as «Core · revisión de la división»
+for observed source-boundary failure, or «Consulta al servicio de IA»
+for an observed provider failure, while the original technical stage
+remains inspectable in the E2 graph. Injected mismatching labels and
+unobserved stages cannot display arbitrary user-facing claims. This
+reuses a single general presentation owner without per-person or
+sample-text rules. A focused independent reviewer returned PASS for this
+narrow source-only change and requested a route-collision regression, now
+included. **Trust boundary:** E2 and the typed product response both come
+from the authenticated Core runtime. A party who compromises the runtime
+or can forge the **entire** backend ledger and diagnosis can potentially
+make matching labels: equality is NOT cryptographic attestation and must
+not be represented as protection against upstream/backend compromise.
+The independent validator does protect against a mistaken or malicious
+**model proposal**, an incorrect route owner, and one-sided label
+corruption at n8n's presentation boundary. Unsafe `ASK_USER` suggestions and retries without
+positive Core prewrite proof are rejected before paying for a second
+semantic-review call. **None of this proves rich model-authored
+explanations semantically safe**; the real-model gate remains open.
+
+**This is a safe intermediate, not full natural-language AI acceptance.**
+AI chooses a grounded stage and suggested action, but the sensitive
+user-facing sentence in this branch is generated from typed verified
+fields rather than unrestricted AI prose. Delivering richer prose requires
+a general evidence-linked **claim-level** representation and acceptance;
+model approval alone cannot be a proof of physical changes or missing
+identity. No new Odyssey GPT calls were authorized or spent after the old
+14/14 campaign. All new features remain OFF in deployed DEV and PROD.
+
+The reusable synthetic Raspberry probe now accepts
+`python -m scripts.odyssey_chat_c4_perf_gate --semantic-review` and
+exercises both actual strict Responses contracts with 180 ms artificial
+delay *per pass*, seven requests and three overlapping: 14 fake calls,
+**p50 362.6 ms, nearest-rank p95 1087.1 ms**, no writes, immutable replay,
+0 observed process swap. One pass had p50 182 ms/p95 546 ms. These are **not**
+real provider latencies or prices. The optional second call currently runs
+under the delivery lock; its critical-path overhead needs an actor-scoped,
+receipt-safe background/presentation redesign before DEV acceptance.
+
+
+### Diagnóstico posterior al recibo: prototipo local acotado (29-10-2026)
+
+**Comportamiento aprobado por el usuario:** el resultado y el recibo E3 se
+entregan primero; el consejo adicional de C4 puede aparecer después en el
+chat, sin editar la respuesta ni el turno de conversación persistido. La
+recuperación PRE-write que puede decidir una segunda interpretación sigue
+sincronizada con el mismo claim antes del recibo; NO se delega a este worker.
+
+Con el nuevo flag `ODYSSEY_CHAT_C4_DEFERRED_ENABLED=1`, que además exige
+C4 GRAPH + SEMANTIC_REVIEW y entorno DEV, `_finish_product_result` guarda
+el resultado base sin esperar al diagnóstico post-write. Después de finalizar
+el claim y registrar el checkpoint, un hilo local daemon limitado a dos
+llamadas simultáneas consulta a C4 **sin ejecutar Router/Core ni escritores**.
+La reserva duradera se prepara en un fichero temporal completo y se
+publica atómicamente con enlace+fsync del directorio, evitando que dos
+solicitudes concurrentes observen una reserva a medio escribir. Se crea
+previamente en el estado local del mismo actor, con un vínculo a fingerprint
+y SHA256 del recibo inmutable. No contiene el
+texto fuente. Un reinicio entre reserva y respuesta conserva `pending` y
+**no repite la llamada**: es *at most once*, no una garantía de entrega del
+consejo. El proveedor rechazado o una falta de capacidad dejan visible el
+fallback original. No se añaden servicios, SQLite ni cambios NoteSchema.
+
+`POST /conversation/diagnosis`, a través del endpoint n8n ya autenticado
+`operation=diagnosis`, lee solamente el diagnóstico vinculado al actor y
+al recibo final. La web consulta de manera limitada y muestra la explicación
+como añadido, nunca como reemplazo del turno guardado. El formato transporta
+únicamente la interpretación C4 **tipada y revisada**; la etiqueta se
+comprueba contra el gráfico E2 de la misma solicitud y se construye con
+`textContent`. Preguntas o texto libre del modelo, IDs de notas, órdenes de
+escritura y reintentos ejecutables no forman parte del sidecar. Las últimas
+respuestas fallidas pueden recuperar su añadido tras recargar, sin nueva
+petición al proveedor.
+
+**Correcciones tras auditoría de cuatro roles, fuente aún sin reauditar:**
+Generalidad, Calidad y Pruebas reprodujeron defectos de integración
+reales en el SHA `51151b0`: el browser eliminaba `stage_view`; el
+sidecar aceptaba `SOME` sin prueba de notas afectadas; n8n reescribía
+`needs_attention` como `failed`; el historial deliberadamente omitía E2
+y la paginación antigua no consultaba el sidecar. El runtime ahora recupera
+una proyección mínima de etapas fallidas, razón, estado y presencia/ausencia
+de escrituras **desde el recibo original E3 verificado por SHA256 y actor**.
+Se omiten fuente, nombres de notas e IDs de notas; el navegador cruza esta
+prueba con el diagnóstico C4 y, para respuestas inmediatas, también con
+el ledger E2 validado. Las respuestas históricas no vuelven a consultar
+a GPT ni necesitan añadir E2 al schema persistente. n8n conserva el estado
+Core y la UI recupera el añadido en las páginas antiguas. Se incluyen
+regresiones positivas/negativas de proyección, confirmaciones falsas,
+recarga, paginación y lectura HTTP autenticada. En `CANNOT_ANSWER` n8n
+conserva `partial` o `needs_attention` exactamente como Core: las respuestas
+sin efectos confirmados siguen siendo `cannot_answer`, sin snapshot, sin
+afirmar éxito parcial. Las dos expectativas históricas que convertían
+artificialmente estos estados en `failed` se ajustaron con comprobaciones
+positivas de ausencia de éxito/snapshot. **Estos arreglos no convierten
+los dictámenes previos FAIL en PASS:** requieren nueva auditoría en otro SHA.
+Rendimiento quedó BLOCKED por falta de medición Pi de latencias/recursos.
+
+**Medición específica en Raspberry Pi 5 Model B Rev 1.1 (4 GiB;
+fuente reparada, proveedor simulado):** la identificación fue leída
+directamente de `/proc/device-tree/model` al archivar los recibos. Las
+cifras no demuestran rendimiento en Raspberry Pi 4, pese a referencias
+históricas del proyecto. Recibos sintéticos reproducibles en
+`docs/architecture/c4-deferred-pi-synthetic-20261029.json`.
+`PYTHONPATH=. python scripts/odyssey_c4_deferred_perf_pi.py`
+usa 8 entregas por modo, 2 respuestas `FakeClient` con retardo fijo
+de 180 ms cada una, notas/actores descartables y comparación física antes y
+después. El modo síncrono observó respuesta p50 **367,6 ms**, p95
+**368,5 ms**; el modo diferido p50 **11,1 ms**, p95 **11,2 ms**, y
+diagnóstico final p50 **380,1 ms**, p95 **388,4 ms**. Memoria RSS del
+proceso ~78,5–82,2 MiB; swap del proceso 0; temperatura observada
+45,75–47,95 °C; sin cambios de Markdown sintético; valores de MemAvailable
+2,29 GiB en esa ejecución. En una sonda adicional
+`PYTHONPATH=. python scripts/odyssey_c4_deferred_concurrency_pi.py`,
+tres entregas iniciales tardaron 8,65/7,35/6,81 ms: máximo dos
+llamadas falsas concurrentes, dos diagnósticos `completed` y uno
+`unavailable` por límite de slots, preservando el fallback y cero notas
+modificadas. **No** se extrapolan a proveedor GPT real, cola de navegador,
+uso bajo carga sostenida, red o rendimiento de móvil. La auditoría de
+Rendimiento original sigue BLOCKED hasta nueva comprobación de esta
+evidencia y aceptación del proveedor real.
+
+**Segunda revisión independiente sobre `ab9a62e` (29-10):**
+Generalidad FAIL, Calidad FAIL y Pruebas BLOCKED confirmaron dos nuevos
+fallos de navegador: cuando el E2 original sí estaba presente, un subpaso
+fallido podía quedar oculto por su padre; y el límite `slice(-4)` omitía
+respuestas fallidas en páginas con más casos. Rendimiento BLOCKED: hay
+mediciones sintéticas reproducibles, pero no presupuesto numérico aprobado
+ni recibos brutos incorporados a la revisión, y ningún benchmark GPT real.
+Los resultados originales se conservan, sin convertirlos retrospectivamente
+en PASS. La corrección posterior rechaza padres con hijos fallidos en el E2
+original y añade una cola global de máximo cuatro consultas históricas
+simultáneas, con una única lectura por respuesta antigua. Las cuatro
+respuestas fallidas recientes pueden seguir consultándose mientras el
+diagnóstico aún está `pending`; las anteriores también se consultan una
+vez, sin excepciones por posición. Nuevas regresiones de siete respuestas
+antiguas, seis respuestas de la página inicial, padre/hijo contradictorios
+y solicitudes sin reintento de escritura cubren estas rutas. La evidencia
+sintética no autoriza activación, merge ni despliegue sin revisión nueva.
+
+**Alcance y cautelas:** source-only, *flags OFF en DEV*, sin llamadas GPT
+reales de Odyssey ni despliegue. La decisión de recuperación prewrite sigue
+potencialmente en el camino crítico cuando se activa por separado.
+Una caída tras una reserva puede dejar consejo `pending` indefinidamente;
+la UI deja de consultar tras un límite y conserva la respuesta base. El
+modelo revisado no tiene aún un PASS semántico real. Faltan auditoría
+independiente del nuevo diseño, prueba Chromium/n8n aislada con consulta
+posterior y medición de latencia/concurrencia con proveedor real bajo nueva
+autorización.
+
+**Aceptación: BLOQUEADA.** Antes de activar C4 GRAPH/RECOVERY en DEV,
+corregir de forma GENERAL la granularidad del grafo y la pregunta sobre
+el hecho fallido (Router/coverage vs identidad Core), la diferencia entre
+interpretación terminada y operación escrita, y el **contrato semántico
+para afirmaciones de escritura**. La lista de fragmentos prohibidos
+actual produce falsos rechazos y tampoco puede garantizar seguridad ante
+paráfrasis o idiomas nuevos: **no** resolverlo añadiendo una palabra o
+excepción para este corpus. Se necesita una revisión independiente de
+significado vinculada a E2/E3 o un contrato de afirmaciones más
+verificable y una nueva campaña real **con nueva autorización** para
+cualquier prompt modificado. No actualizar la expectativa de los casos
+para maquillar fallos. La CI verde de este SHA demuestra contrato técnico,
+no calidad diagnóstica de Luna.
+
+**Umbral de aceptación:** la métrica automática de coincidencia de etapa
+es solo un control; un evaluador independiente debe revisar en la salida
+que *cada* explicación está respaldada por la etapa/error concreto, en el
+idioma pertinente, que ninguna presenta identidades/fechas/escrituras sin
+prueba, que una pregunta pide solo la información realmente faltante y que
+no se recomienda reintentar después de cruzar un Writer. Cualquier
+falsa certeza de escritura, reintento inseguro o pérdida de la intención de
+guardar es **bloqueante**, aunque una decisión JSON sea válida. Los casos
+inestables necesitan repetición autorizada con presupuesto aparte. Mientras
+no exista este recibo real y la revisión de significado, **C4 GRAPH y
+C4 RECOVERY siguen apagados en DEV**.
+
+**Sonda de rendimiento de diagnóstico gráfico (29-10, fuente):** se ha
+ampliado la herramienta **ya existente**
+`python -m scripts.odyssey_chat_c4_perf_gate --graph-diagnosis`, sin crear
+un segundo benchmark. Ejecuta el **gateway y validador C4 reales** sobre
+siete solicitudes sintéticas con 180 ms de latencia artificial del
+proveedor, tres concurrentes y actor/E3/replay aislados. Raspberry: p50
+**182,4 ms**; p95 por nearest-rank **546,3 ms**, 7/7 llamadas C4 y 0
+escrituras; swap observado 0 KiB. La demora de tres concurrentes es
+esperable porque el `execute_product` actual serializa entregas.
+Se ejecutaron también los dos modos antiguos de la sonda y siguen en PASS:
+7 solicitudes sin advisory (0 llamadas) y 7 con advisory antiguo (7).
+Este benchmark **NO** mide una llamada OpenAI real: latencias y coste
+modelos permanecen pendientes; un C4 bajo el lock con timeout 12 s puede
+acumular demoras relevantes. La sonda nueva está controlada por una
+regresión en la CI.
+
+
+**Recuperación automática:** aún NO incorporada como corrección semántica completa. Reenvío automático con
+nuevo request ID después de una ejecución incierta podría repetir acciones.
+La recuperación exige prueba independiente de que no hay escrituras, decisión
+de si la interpretación puede corregirse sin alterar el texto fuente,
+solicitud nueva o un replay planificado E3 con actor y revisión protegidos,
+un solo intento acotado y una salida humana si no se puede garantizar. Nunca
+convertir `affected_ids=[]` en `ZERO_CONFIRMED` ni reusar el mismo ID como si
+fueran nuevas instrucciones (solo devuelve el recibo inmutable). Este punto
+sigue siendo un **bloqueador de la aceptación completa** solicitada.
+
 ## Problema y límites
 
 C1 ya incluía `VerifiedFailure`, el prompt `ERROR_INSTRUCTIONS`, Luna

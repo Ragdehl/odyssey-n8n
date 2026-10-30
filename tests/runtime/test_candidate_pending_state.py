@@ -42,7 +42,13 @@ def _existing_identity(root: Path, name: str, stable_id: str, kind: str = "perso
     (root / f"{name}.md").write_text(serialize_note(note), encoding="utf-8")
 
 
-def _ready(tmp_path: Path, *, options: bool = True, conversation: str = "chat-1"):
+def _ready(
+    tmp_path: Path,
+    *,
+    options: bool = True,
+    conversation: str = "chat-1",
+    captured_timezone: str | None = None,
+):
     """Create a real partially written Markdown request and v2 pending record."""
     case, context, plan, manifest, result, readback, vault = _case_with_pending(tmp_path)
     preview = project_unresolved_candidate_preview(
@@ -60,6 +66,7 @@ def _ready(tmp_path: Path, *, options: bool = True, conversation: str = "chat-1"
         preview,
         conversation_id=conversation,
         created_at=NOW,
+        created_timezone=captured_timezone,
         options=choices,
         vault=vault,
         schema=SCHEMA,
@@ -410,3 +417,86 @@ def test_capture_clock_must_include_timezone_offset(tmp_path: Path) -> None:
             conversation_id="chat-2",
             created_at="2026-10-04T17:35:00",
         )
+
+
+@pytest.mark.parametrize(
+    ("timezone", "expected"),
+    [
+        ("Europe/Paris", True),
+        ("Africa/Johannesburg", True),  # Same wall clock and offset, distinct IANA zone.
+        ("America/New_York", False),
+        ("UTC", False),
+        ("Not/A_Timezone", False),
+        ("", False),
+        (123, False),
+    ],
+)
+def test_original_timezone_requires_existing_iana_zone_and_matching_local_offset(
+    timezone: object,
+    expected: bool,
+) -> None:
+    from odyssey_core.candidate_pending_state import valid_captured_timezone
+
+    assert valid_captured_timezone(NOW, timezone) is expected
+
+
+@pytest.mark.parametrize(
+    ("instant", "timezone", "expected"),
+    [
+        ("2026-10-25T02:30:00+02:00", "Europe/Paris", True),
+        ("2026-10-25T02:30:00+01:00", "Europe/Paris", True),
+        ("2026-03-29T02:30:00+01:00", "Europe/Paris", False),
+    ],
+)
+def test_captured_zone_rejects_dst_gaps_without_guessing_folds(
+    instant: str,
+    timezone: str,
+    expected: bool,
+) -> None:
+    from odyssey_core.candidate_pending_state import valid_captured_timezone
+
+    assert valid_captured_timezone(instant, timezone) is expected
+
+
+def test_zone_capture_is_persisted_without_rewriting_legacy_pending_records(
+    tmp_path: Path,
+) -> None:
+    preview, repository, vault, root = _ready(tmp_path, captured_timezone="Europe/Paris")
+    saved = CandidatePendingRepository(root).read(preview.request_id)
+    assert saved["created_timezone"] == "Europe/Paris"
+    _reply(repository, vault, "Con Luis")
+    from odyssey_core.candidate_continuation_context import prepare_selected_candidate_continuation
+
+    context = prepare_selected_candidate_continuation(
+        repository,
+        conversation_id="chat-1",
+        request_id=preview.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    assert context.captured_timezone == "Europe/Paris"
+    saved["created_timezone"] = "America/New_York"
+    (root / "candidates" / f"{preview.request_id}.json").write_text(
+        json.dumps(saved), encoding="utf-8"
+    )
+    with pytest.raises(CandidatePendingStateError, match="metadata invalid"):
+        repository.read(preview.request_id)
+
+
+def test_legacy_pending_without_zone_remains_readable_but_not_automatically_eligible(
+    tmp_path: Path,
+) -> None:
+    preview, repository, vault, _root = _ready(tmp_path)
+    _reply(repository, vault, "Con Luis")
+    from odyssey_core.candidate_continuation_context import prepare_selected_candidate_continuation
+    from odyssey_core.candidate_pending_state import valid_captured_timezone
+
+    context = prepare_selected_candidate_continuation(
+        repository,
+        conversation_id="chat-1",
+        request_id=preview.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    assert context.captured_timezone is None
+    assert not valid_captured_timezone(context.captured_at, context.captured_timezone)

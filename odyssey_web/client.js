@@ -43,13 +43,20 @@ export function createRequestId(cryptoImpl = globalThis.crypto) {
  * @returns {{request: string, requestId: string}} Submission ready for transport.
  * @throws {ProductRequestError} When the request is empty.
  */
-export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, conversationId = null) {
+export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, conversationId = null, replyToRequestId = null) {
   const request = String(rawRequest ?? "").trim();
   if (!request) {
     throw new ProductRequestError("The request is empty.");
   }
   const submission = {request, requestId: createRequestId(cryptoImpl)};
   if (typeof conversationId === "string" && conversationId) submission.conversationId = conversationId;
+  if (replyToRequestId !== null) {
+    if (typeof replyToRequestId !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(replyToRequestId)) {
+      throw new ProductRequestError("Invalid clarification reference.");
+    }
+    submission.replyToRequestId = replyToRequestId;
+  }
   return submission;
 }
 
@@ -102,7 +109,21 @@ export async function requestConversation({endpoint = "/api/conversation", opera
   if (!Array.isArray(value.turns)) {
     throw new ProductRequestError("Odyssey devolvió una conversación inválida.", false);
   }
-  return {...value, turns: value.turns.map(validateConversationTurn)};
+  const cards = value.pending_clarifications;
+  if (cards !== undefined && (
+    operation !== "main" || payload.before || !Array.isArray(cards) || cards.length > 4
+  )) throw new ProductRequestError("Odyssey devolvió aclaraciones pendientes inválidas.");
+  const verified = cards?.map(validateClarification);
+  if (verified?.some(card => card.source_pending !== true) ||
+    (verified && new Set(verified.map(card => card.request_id)).size !== verified.length)) {
+    throw new ProductRequestError("Odyssey devolvió una aclaración sin verificar.");
+  }
+  if (value.pending_recovery_unavailable !== undefined &&
+    (operation !== "main" || payload.before || value.pending_recovery_unavailable !== true)) {
+    throw new ProductRequestError("Odyssey devolvió un estado de aclaración inválido.");
+  }
+  return {...value, turns: value.turns.map(validateConversationTurn),
+    ...(verified === undefined ? {} : {pending_clarifications: verified})};
 }
 
 function validateConversationTurn(value) {
@@ -239,8 +260,11 @@ function hasExactKeys(value, keys) {
 }
 
 function validClarificationKeys(value, shape) {
-  const allowed = new Set(["request_id", "options", "requested_reference", "explanation"]);
+  const allowed = new Set(["request_id", "options", "requested_reference", "explanation", "source_pending"]);
   if (!Object.keys(value).every((key) => allowed.has(key))) return false;
+  if (Object.hasOwn(value, "source_pending") &&
+    (value.source_pending !== true || shape !== "basic" ||
+      !Object.hasOwn(value, "requested_reference"))) return false;
   const hasReference = Object.hasOwn(value, "requested_reference");
   const hasExplanation = Object.hasOwn(value, "explanation");
   // v2 source-scoped choices have basic canonical labels with a bounded question;
@@ -355,7 +379,11 @@ export function validateExecutionLedger(value, requestId, changes) {
         (st.error_category === null || typeof st.error_category === "string" && st.error_category.length <= 120) &&
         Number.isInteger(st.provider_call_count) && st.provider_call_count >= 0 && st.provider_call_count <= 64 &&
         (st.route_index === null || Number.isSafeInteger(st.route_index) &&
-          st.route_index >= 0 && st.route_index < value.routes.length)) ||
+          st.route_index >= 0 && st.route_index < value.routes.length) &&
+        (st.parent_stage == null || safeId(st.parent_stage) &&
+          st.parent_stage !== st.name && value.stages.some(parent =>
+            parent !== st && parent.name === st.parent_stage &&
+            parent.route_index === st.route_index))) ||
       !value.routes.every((rt,i) => rt && rt.route_index === i && typeof rt.capability === "string" &&
         rt.capability.length <= 40 && typeof rt.status === "string" && rt.status.length <= 40 &&
         (rt.depends_on === null || Number.isSafeInteger(rt.depends_on) && rt.depends_on >= 0 && rt.depends_on < i)) ||
@@ -373,7 +401,8 @@ export function validateExecutionLedger(value, requestId, changes) {
     stages: value.stages.map(st => ({name: st.name, outcome: st.outcome,
       duration_ms: st.duration_ms, start_offset_ms: st.start_offset_ms,
       error_category: st.error_category, provider_call_count: st.provider_call_count,
-      route_index: st.route_index})),
+      route_index: st.route_index, parent_stage: st.parent_stage ?? null,
+      ...(validateStageView(st.stage_view) ? {stage_view: validateStageView(st.stage_view)} : {})})),
     routes: value.routes.map(rt => ({route_index: rt.route_index,
       capability: rt.capability, status: rt.status, depends_on: rt.depends_on})),
     write_receipts: value.write_receipts.map(item => ({action_index: item.action_index,

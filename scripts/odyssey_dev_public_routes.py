@@ -55,7 +55,7 @@ def load_inventory(path: Path) -> tuple[ProductRoute, ...]:
         method, route_path, kind = parts
         if method not in {"GET", "POST"} or kind not in {"static", "api"}:
             raise ContractError(f"invalid route inventory contract on line {line_number}")
-        if not re.fullmatch(r"/api/[A-Za-z0-9.-]+", route_path):
+        if not re.fullmatch(r"/api/[A-Za-z0-9._-]+", route_path):
             raise ContractError(f"unsafe route inventory path on line {line_number}")
         routes.append(ProductRoute(method=method, path=route_path, kind=kind))
     if not routes or len({route.path for route in routes}) != len(routes):
@@ -81,7 +81,9 @@ def routes_from_expression(expression: str) -> tuple[str, ...]:
     paths: list[str] = []
     for alternative in encoded.split("|"):
         decoded = alternative.replace(r"\.", ".")
-        if "\\" in decoded or not re.fullmatch(r"[A-Za-z0-9.-]+", decoded):
+        if not re.fullmatch(r"[A-Za-z0-9._-]+", decoded) or alternative != decoded.replace(
+            ".", r"\."
+        ):
             raise ContractError("DEV tunnel path contains unsupported regex semantics")
         paths.append(f"/api/{decoded}")
     if len(set(paths)) != len(paths):

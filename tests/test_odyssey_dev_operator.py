@@ -73,6 +73,16 @@ def test_dev_runtime_service_loads_the_approved_provider_environment() -> None:
     assert "ODYSSEY_ENABLED_APPLICATIONS=calendar" not in service
 
 
+def test_e5_continuation_opt_in_is_confined_to_dev_service() -> None:
+    """Enable E5 only for the single-user DEV pilot, never production."""
+    root = Path(__file__).parents[1] / "deploy"
+    dev = (root / "odyssey-dev-runtime.service").read_text(encoding="utf-8")
+    prod = (root / "odyssey-prod-runtime.service").read_text(encoding="utf-8")
+    assert "Environment=ODYSSEY_DEPLOYMENT_ENV=DEV" in dev
+    assert "Environment=ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED=1" in dev
+    assert "ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED" not in prod
+
+
 def test_dev_provenance_binds_host_and_mounted_web_assets_to_the_commit() -> None:
     """Prevent MATCH when the served DEV web mount belongs to another deployment."""
     source = SCRIPT.read_text(encoding="utf-8")
@@ -303,9 +313,12 @@ def valid_publication_rows() -> list[dict[str, object]]:
                 ("GET", "client.js"),
                 ("GET", "notes.js"),
                 ("GET", "notes-client.js"),
+                ("GET", "schema-model.js"),
+                ("GET", "schema-scan.js"),
                 ("GET", "calendar.js"),
                 ("GET", "calendar-client.js"),
                 ("GET", "progress.js"),
+                ("GET", "deferred_diagnosis.js"),
                 ("GET", "presence.js"),
             ),
         },

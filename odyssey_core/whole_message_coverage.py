@@ -117,6 +117,7 @@ def validate_whole_message_coverage(
     capabilities: Sequence[str],
     *,
     verified_relationship_members: Sequence[str] = (),
+    verified_relationship_groups: Sequence[tuple[str, tuple[str, ...]]] = (),
     core_anchored_evidence: bool = False,
 ) -> ReviewedFullSource:
     """Verify semantic proposal/reviewer agreement and literal source provenance.
@@ -150,9 +151,69 @@ def validate_whole_message_coverage(
     verified = set(verified_relationship_members)
     if not all(isinstance(name, str) and name.strip() for name in verified):
         raise WholeMessageCoverageError("Invalid relationship evidence")
+    # Core supplies each source-quoted relation AND its verified members.
+    # Names known somewhere in SELF do not prove membership in every fact.
+    groups = tuple(verified_relationship_groups)
+    if len(groups) > 8 or any(
+        not isinstance(phrase, str)
+        or phrase not in source
+        or not isinstance(members, (tuple, list))
+        or not members
+        or not all(isinstance(name, str) and name in verified for name in members)
+        for phrase, members in groups
+    ):
+        raise WholeMessageCoverageError("Invalid source-bound relationship groups")
     output: list[ReviewedFullSourceFact] = []
     evidence_spans: list[tuple[int, int]] = []
     anchored = anchor_planned_source_evidence(source, proposal) if core_anchored_evidence else ()
+    # A model may cite an entire message as ONE fact while also planning a
+    # narrower, independently asserted fact inside it. Literal containment
+    # alone then cannot assign a person to either atomic fact. Build original
+    # primary occurrence offsets (not reviewer-controlled broad quote spans)
+    # before deciding which source mentions each fact can safely claim.
+    primary_spans: tuple[tuple[int, int], ...] = ()
+    if groups or any(
+        isinstance(claim, Mapping)
+        and isinstance(claim.get("reference_names"), list)
+        and bool(claim["reference_names"])
+        for claim in judgments
+    ):
+        try:
+            primary_spans = tuple(
+                (e.primary.start, e.primary.end)
+                for e in (
+                    anchored
+                    if core_anchored_evidence
+                    else tuple(
+                        anchor_literal_evidence(source, f.get("source_evidence")) for f in facts
+                    )
+                )
+            )
+        except (SourceEvidenceError, TypeError, AttributeError) as error:
+            raise WholeMessageCoverageError("Ambiguous atomic identity evidence") from error
+
+    def owned_mention(literal: str, index: int, *, insensitive: bool = False) -> bool:
+        """Recognize source mentions exclusive to this fact's primary anchor.
+
+        Overlapping evidence owned by another independently planned fact is
+        not authority to borrow that fact's people. Equal primary anchors
+        with multiple different groups are separately rejected as ambiguous.
+        """
+        owner = primary_spans[index]
+        expression = r"(?<!\w)" + re.escape(literal) + r"(?!\w)"
+        for match in re.finditer(expression, source, re.IGNORECASE if insensitive else 0):
+            start, end = match.span()
+            if (
+                owner[0] <= start
+                and end <= owner[1]
+                and not any(
+                    other != owner and start < other[1] and other[0] < end
+                    for position, other in enumerate(primary_spans)
+                    if position != index
+                )
+            ):
+                return True
+        return False
 
     for index, (fact, claim) in enumerate(zip(facts, judgments, strict=True)):
         if not isinstance(fact, Mapping) or not isinstance(claim, Mapping):
@@ -227,6 +288,70 @@ def validate_whole_message_coverage(
                 and name not in verified
             ):
                 raise WholeMessageCoverageError("Participant absent from original source")
+            # An explicit person is either named in this assertion or safely
+            # handed off by the EXISTING typed preceding-fact dependency. The
+            # latter preserves reviewed co-reference ("Maya ... ella") without
+            # letting an unrelated previous/future person enter another fact.
+            # SELF-collective membership requires its separate proof below.
+            dependency_index = fact.get("dependent_on_fact_index")
+            proven_prior_reference = (
+                type(dependency_index) is int
+                and 0 <= dependency_index < index
+                and name in output[dependency_index].reference_names
+            )
+            if (
+                name not in verified
+                and not owned_mention(name, index, insensitive=True)
+                and not proven_prior_reference
+            ):
+                raise WholeMessageCoverageError(
+                    "Person name unsupported by this atomic source fact"
+                )
+        if names and any(
+            primary_spans[index] != other
+            and primary_spans[index][0] < other[1]
+            and other[0] < primary_spans[index][1]
+            for position, other in enumerate(primary_spans)
+            if position != index
+        ):
+            # Distinct overlapping atomic claims cannot exchange identity
+            # authority, even when another fact quotes only its verb and not
+            # the relationship phrase. A literal fact with no person links can
+            # still proceed. This deliberately fails closed until independently
+            # reviewed fact-to-fact attribution evidence is available.
+            raise WholeMessageCoverageError("Ambiguous overlapping atomic identity evidence")
+        if groups:
+            # Multiple group memberships inside the very same primary source
+            # excerpt cannot be independently assigned to two different facts.
+            # The source may still be saved literally without unsafe links.
+            if (
+                names
+                and len({phrase for phrase, _members in groups}) > 1
+                and any(
+                    other == primary_spans[index]
+                    for position, other in enumerate(primary_spans)
+                    if position != index
+                )
+            ):
+                raise WholeMessageCoverageError("Shared primary relationship evidence ambiguous")
+            # Neither a broad Reviewer quote, a broad Planner primary, nor an
+            # auxiliary context may transfer identities between atomic facts.
+            # Literal personal names obey the SAME occurrence ownership rule.
+            direct = {
+                name
+                for phrase, members in groups
+                if owned_mention(phrase, index)
+                for name in members
+            }
+            for name in names:
+                if (
+                    name in verified
+                    and name not in direct
+                    and not owned_mention(name, index, insensitive=True)
+                ):
+                    raise WholeMessageCoverageError(
+                        "Verified group member unsupported by this atomic source fact"
+                    )
         references = [int(x) for x in _REF.findall(text)]
         if sorted(references) != list(range(len(names))) or len(references) != len(names):
             raise WholeMessageCoverageError("Symbolic Core references missing or repeated")
