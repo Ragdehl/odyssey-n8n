@@ -869,7 +869,18 @@ veto before any claim. A bounded real GPT-5.6 Luna adversarial review verified
 this: false empty for "Mañana iré al cine con él" with an incorrect same-day
 plan was rejected (CandidateContinuationSemanticError), zero Markdown writes.
 The revised source check and a no-claim regression prevent accidental replay
-of another source's no-date result. This does NOT prove universal model safety.
+of another source's no-date result. An independent read-only focused re-audit
+on b2d4921 returned PASS for this E5 source-bound Temporal→review→E3 safety
+seam, with no externally reachable forged empty-result path found. The
+model-origin claim can still be wrong; independent semantic review is a
+separate evidence boundary, not formal mathematical proof of absence. This
+is NOT four-role product acceptance.
+The previously implemented P4 general Day-journal fallback is covered by
+tests/runtime/test_p4_general_day_journal_fallback.py (6/6 PASS in the current
+source). It was NOT created by this E5 change. E5 selected-source continuation
+still needs a generic shared disposition contract: a no-date recollection's
+observed live Core proposal wrote to person, not Calendar Day. Do not insert
+a name, language or date-word-specific override to force the journal target.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
 bounded synthetic-vault vertical also reached the existing Core/E3, physically
