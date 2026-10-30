@@ -83,6 +83,7 @@ from odyssey_core.application import (
 from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
 from odyssey_core.candidate_continuation_context import (
     CandidateContinuationContextError,
+    CoreCandidateContinuationContext,
     prepare_selected_candidate_continuation,
 )
 from odyssey_core.candidate_pending_state import (
@@ -169,6 +170,7 @@ from odyssey_core.temporal_resolution import TemporalResolutionKind
 from odyssey_core.verified_source_inventory import verified_context_source_inventory
 from odyssey_runtime.application_bindings import bind_registered_executors
 
+from .candidate_continuation_delivery import CandidateContinuationPrewriteError
 from .candidate_route_dispatch import execute_candidate_routed_message
 from .context_planner_ports import OpenAILunaContextPlannerFactory
 from .conversation_chat import deployed_chat_help_capabilities
@@ -661,6 +663,12 @@ class RuntimeComposition:
     # The injected gateway only classifies/answers and cannot authorize Core writes.
     conversation_gateway: OpenAIConversationGateway | None = None
     conversation_deployed_capabilities: frozenset[str] = frozenset()
+    # A semantically accepted continuation can optionally delegate through
+    # the actor-scoped Core/E3 delivery. Disabled unless deliberately wired
+    # by the DEV composition; no new Writer, store, or public planner input.
+    candidate_continuation_execute: (
+        Callable[[CoreCandidateContinuationContext, str], dict[str, Any]] | None
+    ) = None
     # C4 stays separately off even on a DEV instance running C3.
     conversation_error_guidance_enabled: bool = False
     # The deterministic Core reason code fully determines the public C4 hint.
@@ -1710,6 +1718,63 @@ class RuntimeComposition:
                 return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
             if prepared.may_execute:
                 return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
+            if self.candidate_continuation_execute is not None:
+                # The injected callback owns the existing Core/E3 claim,
+                # review and physical receipt. Its output cannot grant
+                # authority merely by claiming "completed".
+                try:
+                    delivered = self.candidate_continuation_execute(prepared, actor)
+                except CandidateContinuationPrewriteError:
+                    # A false/invalid planning or semantic review BEFORE claim
+                    # is not a write incident and needs no recovery fiction.
+                    return {
+                        **self._control_response(request_id, "CANDIDATE_REVIEW_NOT_APPROVED"),
+                        "product_reason": "CONTINUATION_REVIEW_REQUIRED",
+                        "selected_pending_request_id": reply.request_id,
+                    }
+                except Exception:
+                    # A crash after the Core write has an uncertain delivery
+                    # claim; never retry it blindly or claim nothing was saved.
+                    return {
+                        **self._control_response(request_id, "CANDIDATE_CONTINUATION_UNCERTAIN"),
+                        "product_reason": "CONTINUATION_REQUIRES_RECONCILIATION",
+                        "selected_pending_request_id": reply.request_id,
+                    }
+                facts = delivered.get("facts") if isinstance(delivered, dict) else None
+                if (
+                    not isinstance(delivered, dict)
+                    or delivered.get("status") != "completed"
+                    or delivered.get("kind") != "reviewed_candidate_continuation"
+                    or delivered.get("original_request_id") != prepared.original_request_id
+                    or not isinstance(facts, list)
+                    or not facts
+                    or any(
+                        not isinstance(item, dict)
+                        or item.get("status")
+                        not in {"verified_in_markdown", "verified_existing_knowledge"}
+                        or not isinstance(item.get("note_id"), str)
+                        or not item["note_id"]
+                        or not isinstance(item.get("fact_sha256"), str)
+                        or len(item["fact_sha256"]) != 64
+                        for item in facts
+                    )
+                ):
+                    return self._control_response(request_id, "CANDIDATE_CONTINUATION_UNCERTAIN")
+                return {
+                    "request_id": request_id,
+                    "status": "completed",
+                    "product_outcome": "ANSWER",
+                    "product_control": "CANDIDATE_CONTINUATION_SAVED",
+                    "selected_pending_request_id": reply.request_id,
+                    "actions": [],
+                    "affected_stable_note_ids": sorted({item["note_id"] for item in facts}),
+                    "conversation_reply": {
+                        "status": "completed",
+                        "kind": "saved",
+                        "message": "He guardado la información pendiente.",
+                    },
+                    "operational": {"total_duration_ms": 0.0, "stages": []},
+                }
             return {
                 **self._control_response(request_id, "CANDIDATE_SELECTION_RECORDED"),
                 "status": "needs_attention",
@@ -6279,6 +6344,116 @@ def _build_runtime_from_environment_unlocked(
             else None,
         )
 
+    # Explicitly gated DEV integration; no product caller imports the frozen
+    # F14/F27 legacy validator or supplies a second Writer. Successful live
+    # semantic review is necessary but cannot bypass the existing E3 guard.
+    candidate_continuation_execute = None
+    if os.environ.get("ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED") == "1":
+        if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") != "DEV" or light_source_execute is None:
+            raise ValueError("E5 continuation requires isolated DEV reviewed-source ownership")
+
+        from odyssey_core.candidate_continuation_context import (
+            validate_selected_continuation_current,
+        )
+        from odyssey_core.candidate_continuation_plan import inspect_selected_candidate_plan
+        from odyssey_runtime.candidate_continuation_delivery import (
+            deliver_reviewed_candidate_continuation,
+        )
+        from odyssey_runtime.candidate_continuation_review import (
+            review_selected_candidate_with_provider,
+        )
+
+        def candidate_continuation_execute(
+            prepared: CoreCandidateContinuationContext, stable_actor: str
+        ) -> dict[str, Any]:
+            """Plan/review before one guarded E3 delivery; never a second Core writer."""
+            state = conversation_root_resolver.resolve(stable_actor)
+            pending_root = state / "pending"
+            pending = CandidatePendingRepository(pending_root)
+            validate_selected_continuation_current(
+                prepared,
+                pending,
+                vault=repository,
+                schema=schema,
+            )
+            captured = datetime.fromisoformat(prepared.captured_at)
+            captured_clock = {
+                "date": captured.date().isoformat(),
+                "time": captured.time().replace(microsecond=0).isoformat(),
+                "timezone": getattr(captured.tzinfo, "key", os.environ.get("TZ", "Europe/Paris")),
+                "timestamp": captured.isoformat(timespec="seconds"),
+            }
+            # The user's selected name is a Core-verified planning HINT, not
+            # provider-granted canonical write authority. E3 re-grounds the ID.
+            evidence = DomainInterpretation(
+                "core",
+                prepared.pending_source,
+                "CANONICAL_REFERENCE",
+                (
+                    DomainEvidence(
+                        "canonical_reference",
+                        prepared.reference_text,
+                        f"person:{prepared.selected_name}",
+                    ),
+                ),
+            )
+            try:
+                planned = prepare_core_plan(prepared.pending_source, captured_clock, (), evidence)
+                plan = planned.planner.plan(prepared.pending_source)
+                if not isinstance(plan, RequestPlan):
+                    raise ValueError("E5 continuation Core planner did not propose a complete plan")
+                inspection = inspect_selected_candidate_plan(prepared, plan)
+                review, _review_verdict = review_selected_candidate_with_provider(
+                    prepared,
+                    inspection,
+                    ask=light_source_execute._ask,
+                    model="gpt-5.6-luna",
+                )
+            except Exception as error:
+                # Nothing in this block mutates Markdown or takes an E3 claim.
+                raise CandidateContinuationPrewriteError(
+                    "The continuation planner/reviewer did not pass independent review"
+                ) from error
+
+            def run_existing_core(
+                current: CoreCandidateContinuationContext,
+                current_plan: RequestPlan,
+                delivery_id: str,
+                guard: WritePreflightGuard,
+            ) -> ApplicationResult:
+                return core_execute(
+                    current.pending_source,
+                    delivery_id,
+                    AuthenticatedActorContext(stable_actor),
+                    resume_plan=current_plan,
+                    write_preflight_guard=guard,
+                    captured_request_instant=datetime.fromisoformat(current.captured_at),
+                )
+
+            receipt = deliver_reviewed_candidate_continuation(
+                pending=pending,
+                deliveries=LocalDeliveryResultStore(state / "delivery-results"),
+                conversation_id=prepared.conversation_id,
+                original_request_id=prepared.original_request_id,
+                plan=plan,
+                independent_review=review,
+                vault=repository,
+                schema=schema,
+                run_existing_core=run_existing_core,
+            )
+            affected = tuple(
+                sorted(
+                    {
+                        item["note_id"]
+                        for item in receipt["facts"]
+                        if item["status"] == "verified_in_markdown"
+                    }
+                )
+            )
+            if affected:
+                index_refresh_coordinator.schedule(affected)
+            return receipt
+
     return RuntimeComposition(
         core_execute=core_execute,
         refresh_indexes=refresh_indexes,
@@ -6334,6 +6509,7 @@ def _build_runtime_from_environment_unlocked(
             execute_hybrid_proven_read if light_source_enabled or hybrid_dev_enabled else None
         ),
         full_source_mutation_guard=light_source_enabled,
+        candidate_continuation_execute=candidate_continuation_execute,
         conversation_gateway=(
             OpenAIConversationGateway.from_environment()
             if os.environ.get("ODYSSEY_CHAT_C3_ENABLED") == "1"

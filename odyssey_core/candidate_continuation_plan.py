@@ -79,6 +79,7 @@ class CoreContinuationPlanInspection:
             "proposed_facts": [
                 {
                     "ordinal": item.ordinal,
+                    "kind": "record",
                     "text": item.text,
                     "destination_type": item.destination_type,
                     "destination_query": item.destination_query,

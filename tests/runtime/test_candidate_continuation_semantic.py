@@ -68,6 +68,8 @@ def test_reuses_existing_strict_review_schema_and_full_source_safety_prompt(tmp_
     assert model_data["source"] == context.original_source
     assert model_data["clock"] == context.captured_at
     assert model_data["pending_source"] == context.pending_source
+    assert model_data["proposed_facts"][0]["kind"] == "record"
+    assert "IMPORTANT STRUCTURED FIELD RULE" in instructions
     assert model_data["selected_identity_name"] == context.selected_name
     assert model_data["already_written_fact_ordinals"] == [0, 1]
     assert not any("selected_note_id" in key for key in model_data)

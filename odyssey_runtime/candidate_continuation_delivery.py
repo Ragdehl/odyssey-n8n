@@ -30,6 +30,11 @@ from odyssey_core.storage import VaultRepository
 
 from .delivery_results import DeliveryResultError, LocalDeliveryResultStore
 
+
+class CandidateContinuationPrewriteError(ValueError):
+    """Independent model planning/review blocked before ANY E3 claim or write."""
+
+
 RunExistingCore = Callable[
     [CoreCandidateContinuationContext, RequestPlan, str, ReviewedCandidateContinuationWriteGuard],
     ApplicationResult,

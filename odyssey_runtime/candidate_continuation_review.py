@@ -49,7 +49,20 @@ CONTINUATION_SEMANTIC_REVIEW_PROMPT = PROMPT_SOURCE_REVIEW_CORE_ANCHORED + (
     "If ANY meaning, reference, ownership, source-span partition, cardinality, "
     "polarity or time is unresolved, approved=false or complete=false. "
     "Return the same existing strict output schema, with one verdict for "
-    "each proposed new atomic fact; do NOT output source_quote."
+    "each proposed new atomic fact; do NOT output source_quote. "
+    "IMPORTANT STRUCTURED FIELD RULE: reviewed_text is an exact ECHO of "
+    "the corresponding proposed_facts[i].text, byte for byte, including "
+    "capitalization, punctuation, tense and every {{ref:N}} marker. NEVER "
+    "rewrite, paraphrase, translate, add a relative date such as mañana, "
+    "or expand the proposed text in reviewed_text; the meaning check "
+    "belongs in approved, complete, supported, date and reason instead. "
+    "The proposed_facts[i].kind field is explicitly provided as record, "
+    "matching the only admissible Core continuation action. Do not reject "
+    "a proposal for an absent kind field when it is present. "
+    "Copy ordinal, kind, reference_names, and date faithfully from the "
+    "reviewed proposal when supported; report approved=false / "
+    "complete=false whenever the proposal is semantically wrong. "
+    "DO NOT manufacture a more accurate reviewed_text to repair a bad proposal."
 )
 
 

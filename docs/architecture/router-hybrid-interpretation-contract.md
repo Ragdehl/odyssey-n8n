@@ -785,3 +785,42 @@ acotada la semántica del prompt heredado; después habilitar de forma
 controlada la continuación en el chat sobre los propietarios existentes,
 probar Chromium→n8n→Core/E3→Markdown→UI en DEV matching-SHA y obtener
 los cuatro dictámenes finales. No fusionar ni activar automáticamente.
+
+
+### E5 — semantic live acceptance and product bridge (30-10-2026)
+
+Real reviewer gate, synthetic only, GPT-5.6 Luna low, strict schema,
+store=false. V1: 11/16 (all eleven required negative refusals correct,
+five positive structured-field mismatches); one diagnostic identified
+unwanted relative-date expansion in reviewed_text. V2: 15/16 (the
+English-positive case); independent diagnostics showed the reviewer
+sometimes objected to a missing kind in the proposal. Core now explicitly
+reports kind=record in each already-typed proposed fact, without adding
+a new kind or weakening schema validation. V3: **16/16 PASS**, five
+positive ES/FR/EN and eleven adversarial negative cases, prompt SHA256
+e27c13afbff564736fe6f32f56589c0dc6ed02ff2679d27042f4f66fc89fa2c9.
+Reports were flushed per call; past FAIL reports remain evidence.
+This proves only a reviewer of supplied proposals, not a general
+production planner or E3 write pipeline.
+
+Source-only product bridge: RuntimeComposition has an internal optional
+candidate_continuation_execute callback using the existing actor-scoped
+pending state, Core/E3, strict reviewer, canonical readback and immutable
+LocalDeliveryResultStore. Failed planning or model review before a
+write-claim returns CONTINUATION_REVIEW_REQUIRED; a failure at/after
+the claim requires reconciliation and never blindly retries. Normal
+product remains OFF. The feature flag
+ODYSSEY_E5_CANDIDATE_CONTINUATION_ENABLED=1 is DEV-only and requires
+the existing light-source configuration. Product tests use a synthetic
+reviewer and vault and do not prove a live browser flow.
+
+Blocking discovery from two bounded real read-only planner probes:
+the production Core Planner rejected its own proposed fact with
+KnowledgeUnit fact reference marker is out of range; the already
+existing Luna experimental planner independently rejected its proposal
+with Luna semantic WRITE failed local compilation. Both refused
+before any E3 execution or Markdown write. The separate review model
+PASS cannot override either planner failure; next investigate the
+generic chosen-identity guidance of the existing Core planner rather
+than constructing an example-specific planner. DEV real browser+n8n+
+provider+Core and complete independent four-role review remain pending.
