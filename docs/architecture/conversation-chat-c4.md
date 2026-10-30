@@ -450,8 +450,14 @@ huecos de integración (un App `custom.persist` no nombrado `writer`;
 n8n no podía comprobar la prueba de reintento por sí mismo), Calidad
 **PASS** con advertencia externa. El ajuste posterior basado en prueba
 positiva de prewrite elimina ambos supuestos y añade regresiones
-adversariales; **estos dictámenes son históricos y el nuevo delta debe
-revisarse independientemente**.
+adversariales. Una revisión independiente posterior de Generalidad
+sobre `5608fde..2f1daf6` dio **PASS** (62.140 tokens Codex),
+confirmando ambos cierres, con una advertencia menor: el serializador
+usaba truthiness de Python. Se reforzó enseguida a `is True` estricto,
+con pruebas de `1`, `"true"` y listas; ese **pequeño ajuste posterior**
+no ha recibido un nuevo dictamen de Codex. Calidad había dado PASS
+sobre `5608fde` únicamente. Ninguno de esos dictámenes equivale a
+cuatro roles finales ni aceptación real de producto.
 
 **Estado:** cambio en fuente, no desplegado, sin nuevos permisos ni
 modificaciones de Markdown personal. La prueba grabada no demuestra

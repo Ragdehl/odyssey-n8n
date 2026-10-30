@@ -208,6 +208,24 @@ def test_uncertain_writer_allows_only_inspection_and_never_model_text(proposed_s
         assert len(fake.responses.calls) == 2
 
 
+def test_prewrite_evidence_serialization_requires_literal_boolean_true():
+    from dataclasses import replace
+
+    typed = rejected()
+    assert "prewrite_recovery_proven" not in application_result_to_response(typed)
+    assert (
+        application_result_to_response(replace(typed, prewrite_recovery_proven=True))[
+            "prewrite_recovery_proven"
+        ]
+        is True
+    )
+    # Legacy/inconsistent executor values must never gain a public proof by
+    # Python truthiness, even though the runtime itself also requires is True.
+    for forged in (1, "true", ["true"]):
+        invalid = replace(typed, prewrite_recovery_proven=forged)
+        assert "prewrite_recovery_proven" not in application_result_to_response(invalid)
+
+
 def test_custom_app_persistence_stage_requires_inspection_without_core_prewrite_proof():
     # Future App writers have no obligation to use "writer" in stage names.
     typed = ApplicationResult(
