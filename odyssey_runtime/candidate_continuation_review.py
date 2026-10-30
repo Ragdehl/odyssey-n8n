@@ -9,11 +9,16 @@ cannot be applied unchanged because earlier E3 facts are already committed.
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from typing import Any
 
 from odyssey_core.candidate_continuation_context import CoreCandidateContinuationContext
 from odyssey_core.candidate_continuation_plan import (
     CoreContinuationPlanInspection,
+)
+from odyssey_core.candidate_continuation_semantic import (
+    CoreContinuationSemanticVerdict,
+    validate_independent_continuation_verdict,
 )
 
 from .whole_source_model_contract import (
@@ -63,3 +68,33 @@ def prepare_continuation_semantic_review_call(
         {"source": context.original_source, "clock": context.captured_at, **payload},
         copy.deepcopy(REVIEW_CORE_ANCHORED_SCHEMA),
     )
+
+
+def review_selected_candidate_with_provider(
+    context: CoreCandidateContinuationContext,
+    inspection: CoreContinuationPlanInspection,
+    *,
+    ask: Callable[[str, str, dict[str, Any], dict[str, Any], str], dict[str, Any]],
+    model: str,
+) -> tuple[dict[str, Any], CoreContinuationSemanticVerdict]:
+    """Run one independent review via the existing strict provider adapter.
+
+    The caller supplies WholeSourceLightExecutor._ask (or a compatible fake).
+    This creates no new OpenAI client, bypasses no delivery guard and never
+    invokes the Core writer. Model selection/spend must be authorized by the
+    caller; this helper is NOT wired into the live runtime or E3.
+    """
+    if not isinstance(model, str) or not model.strip() or len(model) > 128:
+        raise ValueError("Explicit bounded continuation reviewer model required")
+    instructions, payload, schema = prepare_continuation_semantic_review_call(context, inspection)
+    review = ask(
+        model,
+        instructions,
+        payload,
+        schema,
+        "odyssey_e5_candidate_continuation_v1",
+    )
+    verdict = validate_independent_continuation_verdict(context, inspection, review)
+    # The post-review checkpoint requires the exact reviewed dict. Return an
+    # independent copy rather than the provider's mutable response object.
+    return copy.deepcopy(review), verdict

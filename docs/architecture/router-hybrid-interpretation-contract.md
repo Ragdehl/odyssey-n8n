@@ -719,7 +719,13 @@ no cambiar esperados para ocultar falsos positivos.
 (aceptado/no admitido/malformado/extra/reordenado), referencias simbólicas
 inválidas, drift de plan, elección y notas físicas. No se ha consultado
 ningún GPT en vivo; los dictámenes son entradas controladas por las pruebas.
-El siguiente bloqueo operativo consiste en crear un adaptador del proveedor
-existente y evaluar la *variante* completa del prompt con la campaña acotada
-autorizada. Solo entonces valorar integración Core E3 (recibo durable,
+El adaptador de llamada `review_selected_candidate_with_provider` reutiliza
+el método estricto `WholeSourceLightExecutor._ask` sin otro cliente ni
+otro servicio; recibe explícitamente el modelo, valida el dictamen y
+devuelve la copia del JSON junto al sello inejecutable. Tests con cliente
+Responses simulado prueban sobre HTTP lógico la envoltura strict/store=false,
+el reloj original, resultado incompleto y dictámenes inválidos, sin escrituras.
+**No está conectado a la ejecución de producción, y no ha llamado al modelo real.**
+El siguiente bloqueo operativo es evaluar la *variante* completa del prompt
+con una campaña real acotada y autorizada. Solo entonces valorar integración Core E3 (recibo durable,
 escritura única del candidato y readback físico), 4 auditores y E2E real en DEV.

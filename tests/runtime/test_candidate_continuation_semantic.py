@@ -6,9 +6,11 @@ No actual model, note mutation, or production write gate is exercised here.
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,7 +22,9 @@ from odyssey_core.candidate_continuation_semantic import (
 from odyssey_core.request_planning import RequestPlan, WriteAction
 from odyssey_runtime.candidate_continuation_review import (
     prepare_continuation_semantic_review_call,
+    review_selected_candidate_with_provider,
 )
+from odyssey_runtime.whole_source_light import WholeSourceLightError, WholeSourceLightExecutor
 from odyssey_runtime.whole_source_model_contract import (
     PROMPT_SOURCE_REVIEW_CORE_ANCHORED,
     REVIEW_CORE_ANCHORED_SCHEMA,
@@ -318,3 +322,108 @@ def test_symbolic_references_must_match_core_typed_bindings(tmp_path: Path, prop
 
     with pytest.raises(CandidateContinuationPlanError):
         inspect_selected_candidate_plan(context, modified)
+
+
+def test_provider_adapter_reuses_strict_existing_ask_and_never_writes(tmp_path: Path):
+    context, inspection, expected, vault = _case(tmp_path)
+    before = {path: vault.read_text(path) for path in vault.list_markdown_paths()}
+    calls = []
+
+    def fake_ask(model, instructions, payload, schema, name):
+        calls.append((model, instructions, payload, schema, name))
+        return expected
+
+    result, verdict = review_selected_candidate_with_provider(
+        context, inspection, ask=fake_ask, model="synthetic-model"
+    )
+    assert len(calls) == 1
+    model, instructions, payload, schema, name = calls[0]
+    assert model == "synthetic-model"
+    assert instructions.startswith(PROMPT_SOURCE_REVIEW_CORE_ANCHORED)
+    assert schema == REVIEW_CORE_ANCHORED_SCHEMA
+    assert name == "odyssey_e5_candidate_continuation_v1"
+    assert payload["source"] == context.original_source
+    assert payload["clock"] == context.captured_at
+    assert payload["already_written_fact_ordinals"] == [0, 1]
+    assert not any("guard" in key or "note_id" in key for key in payload)
+    assert result == expected
+    assert result is not expected
+    assert not verdict.may_execute
+    result["facts"][0]["reviewed_text"] = "Altered by caller"
+    assert expected["facts"][0]["reviewed_text"] != "Altered by caller"
+    assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
+
+
+@pytest.mark.parametrize("failure", ["denied", "missing", "invented", "malformed"])
+def test_provider_adapter_rejects_unsafe_review_without_any_write(tmp_path: Path, failure: str):
+    context, inspection, baseline, vault = _case(tmp_path)
+    before = {path: vault.read_text(path) for path in vault.list_markdown_paths()}
+    answer = deepcopy(baseline)
+    if failure == "denied":
+        answer["approved"] = False
+    elif failure == "missing":
+        answer["facts"].clear()
+    elif failure == "invented":
+        answer["facts"][0]["reference_names"].append("Someone else")
+    else:
+        answer = {"approved": "true"}
+    with pytest.raises(CandidateContinuationSemanticError):
+        review_selected_candidate_with_provider(
+            context, inspection, ask=lambda *_: answer, model="synthetic-model"
+        )
+    assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
+
+
+def test_provider_adapter_does_not_call_provider_without_explicit_model(tmp_path: Path):
+    context, inspection, _, _vault = _case(tmp_path)
+    called = []
+    with pytest.raises(ValueError):
+        review_selected_candidate_with_provider(
+            context, inspection, ask=lambda *_: called.append(True), model=""
+        )
+    assert not called
+
+
+def test_adapter_with_existing_responses_client_strict_envelope(tmp_path: Path):
+    context, inspection, expected, vault = _case(tmp_path)
+    calls = []
+
+    def create(**arguments):
+        calls.append(arguments)
+        return SimpleNamespace(
+            status="completed", output_text=json.dumps(expected, ensure_ascii=False)
+        )
+
+    executor = object.__new__(WholeSourceLightExecutor)
+    executor.client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    before = {path: vault.read_text(path) for path in vault.list_markdown_paths()}
+    actual, verdict = review_selected_candidate_with_provider(
+        context, inspection, ask=executor._ask, model="synthetic-model"
+    )
+    assert actual == expected
+    assert verdict.reviewed_ordinals == (0,)
+    assert not verdict.may_execute
+    assert len(calls) == 1
+    args = calls[0]
+    assert args["model"] == "synthetic-model"
+    assert args["store"] is False
+    assert args["reasoning"] == {"effort": "low"}
+    assert args["text"]["format"]["strict"] is True
+    assert args["text"]["format"]["schema"] == REVIEW_CORE_ANCHORED_SCHEMA
+    assert args["text"]["format"]["name"] == "odyssey_e5_candidate_continuation_v1"
+    assert json.loads(args["input"][1]["content"])["source"] == context.original_source
+    assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
+
+
+def test_existing_provider_incomplete_response_cannot_pass_adapter(tmp_path: Path):
+    context, inspection, _expected, _vault = _case(tmp_path)
+    executor = object.__new__(WholeSourceLightExecutor)
+    executor.client = SimpleNamespace(
+        responses=SimpleNamespace(
+            create=lambda **_kwargs: SimpleNamespace(status="incomplete", output_text="{}")
+        )
+    )
+    with pytest.raises(WholeSourceLightError, match="not complete"):
+        review_selected_candidate_with_provider(
+            context, inspection, ask=executor._ask, model="synthetic-model"
+        )
