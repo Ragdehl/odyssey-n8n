@@ -832,7 +832,6 @@ independent reviewer accepts the exact plan, destination/date and original
 source, nor that Core/E3 writes and replays the correct canonical note.
 After the follow-up repair, read-only inspection projects an already typed and validated calendar_day destination date as temporal review evidence even when Core supplies no optional fact temporal rows. Explicit different anchors stay visible as multiple dates and are rejected by the unchanged independent semantic validator; invalid Day target dates reject before review. This reuses Core's canonical date and the previously accepted reviewer schema, without any new Temporal stage. 63 focused continuation/review/delivery tests PASS with no provider call. Ordinary Core Planner has not been retested after prompt changes.
 DEV remains at 4ba8bb8 with the feature OFF, PR #161 is DRAFT, and neither
-DEV, PROD nor personal Markdown was modified. Remaining E5 acceptance:
-source/clock/date and negative semantic cases on real Planner output,
+DEV, PROD nor personal Markdown was modified. New disposable Core/E3 delivery test checks ordinary empty-anchor Day plans for two independently selected identities, physical Markdown and idempotent replay; contradictory Day/anchor plans fail before claim. 66 focused Python tests PASS. A separate read-only Codex Generalidad review of source delta 660974d..22bc4cb plus the new test returned PASS with no actionable findings on name-specific branches, duplicate owners or weakened Core guards; this is NOT four-role final approval.\nRemaining E5 acceptance:\nsource/clock/date and negative semantic cases on real Planner output,
 readback/replay through existing Core/E3, four independent integrated audit
 roles, and authenticated Chromium HTTPS/n8n E2E matching deployed SHA.

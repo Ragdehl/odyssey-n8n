@@ -74,6 +74,77 @@ def test_reviewed_continuation_reuses_delivery_receipt_with_no_second_writer(
     assert day.count("Iré al cine con [[Luis|Luis]]") == 1
 
 
+@pytest.mark.parametrize("selected_identity", ("Luis", "Eric"))
+def test_canonical_day_target_without_optional_anchors_reuses_core_e3_and_replay(
+    tmp_path: Path, selected_identity: str
+) -> None:
+    """Ordinary Planner-shaped Day records reuse independent review and E3."""
+    from odyssey_core.candidate_continuation_plan import inspect_selected_candidate_plan
+    from odyssey_core.candidate_continuation_semantic import (
+        validate_independent_continuation_verdict,
+    )
+    from odyssey_core.request_planning import RequestPlan, WriteAction
+    from tests.runtime.test_candidate_continuation_reviewed_core_e3 import _prepared
+
+    preview, pending, vault, context, plan, guard = _prepared(
+        tmp_path, chosen_name=selected_identity
+    )
+    prior = vault.read_text("calendar/days/2026-10-03.md")
+    writer, helper = plan.actions[0].units
+    # Real Planner output does not always carry optional internal anchor rows.
+    # The Day target is canonical Core identity, not an inferred test date.
+    plan = RequestPlan((WriteAction((replace(writer, fact_temporal_anchors=()), helper)),), ())
+    inspected = inspect_selected_candidate_plan(context, plan)
+    assert inspected.proposed_facts[0].temporal_values == ("2026-10-05",)
+    validate_independent_continuation_verdict(context, inspected, guard.review)
+    store = LocalDeliveryResultStore(tmp_path / "ordinary-delivery-results")
+    calls: list[str] = []
+
+    def core(prepared, proposal, request_id, write_guard):
+        calls.append(request_id)
+        return _execute(vault, prepared, proposal, write_guard, request_id=request_id)
+
+    kwargs = dict(
+        pending=pending,
+        deliveries=store,
+        conversation_id=context.conversation_id,
+        original_request_id=preview.request_id,
+        plan=plan,
+        independent_review=guard.review,
+        vault=vault,
+        schema=SCHEMA,
+        run_existing_core=core,
+    )
+    delivered = deliver_reviewed_candidate_continuation(**kwargs)
+    assert delivered["status"] == "completed"
+    assert delivered["facts"][0]["note_id"] == "date:2026-10-05"
+    assert len(calls) == 1
+    day = vault.read_text("calendar/days/2026-10-05.md")
+    assert day.count(f"Iré al cine con [[{selected_identity}|{selected_identity}]]") == 1
+    assert vault.read_text("calendar/days/2026-10-03.md") == prior
+    replay = deliver_reviewed_candidate_continuation(
+        **{**kwargs, "run_existing_core": lambda *_: pytest.fail("duplicate E3")}
+    )
+    assert replay == {**delivered, "delivery_replayed": True}
+    assert len(calls) == 1
+
+
+def test_inconsistent_day_and_explicit_anchor_refuse_before_any_e3_claim(
+    tmp_path: Path,
+) -> None:
+    """Conflicting temporal coordinates may not enter the reviewed write path."""
+    from odyssey_core.request_planning import RequestPlan, WriteAction
+
+    kwargs, calls = _inputs(tmp_path)
+    writer, helper = kwargs["plan"].actions[0].units
+    mismatched = replace(writer, target=replace(writer.target, query="2026-10-07"))
+    altered = RequestPlan((WriteAction((mismatched, helper)),), ())
+    with pytest.raises(CandidateContinuationSemanticError, match="Multi-temporal"):
+        deliver_reviewed_candidate_continuation(**{**kwargs, "plan": altered})
+    assert calls == []
+    assert not (kwargs["vault"].root / "calendar/days/2026-10-07.md").exists()
+
+
 def test_reviewer_rejects_before_claim_or_any_core_write(tmp_path: Path):
     kwargs, calls = _inputs(tmp_path)
     bad = dict(kwargs["independent_review"])
