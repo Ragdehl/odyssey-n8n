@@ -52,6 +52,7 @@ class CoreCandidateContinuationContext:
     captured_at: str
     completed_facts: tuple[CoreCompletedFactMarker, ...]
     pending_record_digest: str
+    captured_timezone: str | None = None
 
     @property
     def pending_source(self) -> str:
@@ -174,6 +175,7 @@ def prepare_selected_candidate_continuation(
             captured_at=decision.captured_at,
             completed_facts=markers,
             pending_record_digest=digest,
+            captured_timezone=record.get("created_timezone"),
         )
     except CandidatePendingStateError as error:
         raise CandidateContinuationContextError("Candidate evidence is unavailable") from error

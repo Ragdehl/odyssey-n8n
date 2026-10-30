@@ -848,8 +848,9 @@ and the independent reviewer vetoed it. A question in French did not write.
 The continuation callback now calls the established Temporal interpreter
 with the ORIGINAL capture clock and combines its exact source-bound date
 evidence with canonical identity evidence in the SAME Core DomainInterpretation.
-Non-exact Temporal results fail before claim; if no Temporal interpretation
-is available, the independent whole-source reviewer still has veto authority.
+Non-exact or unavailable Temporal results now fail before any write claim;
+the strict Temporal contract cannot represent a verified zero-mention output.
+There is no guess-based fallback to identity-only plans.
 No new resolver, writer, note schema or phrase-specific branch was added.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
@@ -857,6 +858,19 @@ bounded synthetic-vault vertical also reached the existing Core/E3, physically
 verified one canonical Markdown link, preserved the previous Day and replayed
 without duplicate write in 10.81 seconds. Neither proof is a deployed browser
 session or four-role integrated audit.
+
+Independent code review on 4d2431a (base 22bc4cb) returned FAIL: P1
+provider-failure-as-no-date and P1 original IANA zone lost, plus P2 preclaim
+misclassification and missing adverse tests. The source repair stores the
+original IANA zone beside the existing v2 pending capture timestamp,
+checks the matching local clock/offset including DST folds, and reuses
+this exact frozen clock on resume. Legacy records lacking IANA remain
+readable but are not eligible for automatic continuation; no re-dating
+from the server environment. The shared Temporal interpreter must provide
+a typed exact result; none/unspecified fails before any E3 claim.
+Existing delivery preclaim semantic/context/plan failures are reclassified
+as non-executable review failures; uncertain after-claim outcomes remain
+reconciliation-only. These corrections are not independently re-audited yet.
 
 Remaining E5 acceptance: multi-case real semantic testing with both positive
 and negative variants, the four independent audit roles on the final SHA,

@@ -89,6 +89,7 @@ from odyssey_core.candidate_continuation_context import (
 from odyssey_core.candidate_pending_state import (
     CandidatePendingRepository,
     CandidatePendingStateError,
+    valid_captured_timezone,
 )
 from odyssey_core.clarification import (
     ClarificationChoice,
@@ -4557,6 +4558,7 @@ def _build_runtime_from_environment_unlocked(
                 preview,
                 conversation_id=conversation_id,
                 created_at=clock["timestamp"],
+                created_timezone=clock["timezone"],
                 options=options,
                 vault=repository,
                 schema=schema,
@@ -6376,34 +6378,17 @@ def _build_runtime_from_environment_unlocked(
                 vault=repository,
                 schema=schema,
             )
-            captured = datetime.fromisoformat(prepared.captured_at)
-            captured_clock = {
-                "date": captured.date().isoformat(),
-                "time": captured.time().replace(microsecond=0).isoformat(),
-                "timezone": getattr(captured.tzinfo, "key", os.environ.get("TZ", "Europe/Paris")),
-                "timestamp": captured.isoformat(timespec="seconds"),
-            }
+            captured_clock = _continuation_original_clock(prepared)
             # The user's selected name is a Core-verified planning HINT, not
             # provider-granted canonical write authority. E3 re-grounds the ID.
             try:
                 # Reuse the SAME Temporal interpreter and captured request clock
                 # as ordinary routed writes. Identity resolution alone cannot
                 # authorize guessed dates in a continuation plan.
-                temporal = prepare_temporal_interpretation(
+                prepared_temporal = prepare_temporal_interpretation(
                     prepared.pending_source, (), captured_clock=captured_clock
-                ).value
-                temporal_evidence = ()
-                if isinstance(temporal, TemporalInterpretation):
-                    if not all(
-                        kind
-                        in {
-                            TemporalResolutionKind.EXACT_DATE,
-                            TemporalResolutionKind.EXACT_DATETIME,
-                        }
-                        for kind in temporal.kinds()
-                    ):
-                        raise ValueError("Continuation Temporal interpretation is not exact")
-                    temporal_evidence = temporal.core_domain_interpretation().evidence
+                )
+                temporal_evidence = _continuation_exact_temporal_evidence(prepared_temporal.value)
                 evidence = DomainInterpretation(
                     "core",
                     prepared.pending_source,
@@ -6813,6 +6798,39 @@ def _positive_int_env(name: str, default: int) -> int:
     if value <= 0:
         raise ValueError(f"{name} must be a positive integer")
     return value
+
+
+def _continuation_original_clock(prepared: CoreCandidateContinuationContext) -> dict[str, str]:
+    """Preserve the captured IANA local clock; never substitute the current TZ."""
+    if not valid_captured_timezone(prepared.captured_at, prepared.captured_timezone):
+        raise CandidateContinuationPrewriteError(
+            "Original request IANA timezone is unavailable or inconsistent"
+        )
+    captured = datetime.fromisoformat(prepared.captured_at)
+    return {
+        "date": captured.date().isoformat(),
+        "time": captured.time().replace(microsecond=0).isoformat(),
+        "timezone": cast(str, prepared.captured_timezone),
+        "timestamp": captured.isoformat(timespec="seconds"),
+    }
+
+
+def _continuation_exact_temporal_evidence(
+    temporal: TemporalInterpretation | None,
+) -> tuple[DomainEvidence, ...]:
+    """Project ONLY existing Temporal's fully validated exact source evidence."""
+    # Temporal's current strict schema cannot encode a successful empty list.
+    # A None is a provider/validation failure, not proof of no time in source.
+    if not isinstance(temporal, TemporalInterpretation):
+        raise CandidateContinuationPrewriteError("Continuation Temporal evidence is unavailable")
+    if not all(
+        kind in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
+        for kind in temporal.kinds()
+    ):
+        raise CandidateContinuationPrewriteError(
+            "Continuation Temporal interpretation is not exact"
+        )
+    return temporal.core_domain_interpretation().evidence
 
 
 def _current_time() -> dict[str, str]:

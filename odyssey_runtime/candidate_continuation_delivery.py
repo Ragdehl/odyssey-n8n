@@ -15,13 +15,25 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from odyssey_core.application import ApplicationResult, ApplicationStatus, UnitStatus
+from odyssey_core.application import (
+    ApplicationResult,
+    ApplicationStatus,
+    UnitStatus,
+    WritePreflightGuardError,
+)
 from odyssey_core.candidate_continuation_context import (
+    CandidateContinuationContextError,
     CoreCandidateContinuationContext,
     prepare_selected_candidate_continuation,
 )
-from odyssey_core.candidate_continuation_plan import inspect_selected_candidate_plan
-from odyssey_core.candidate_continuation_semantic import validate_independent_continuation_verdict
+from odyssey_core.candidate_continuation_plan import (
+    CandidateContinuationPlanError,
+    inspect_selected_candidate_plan,
+)
+from odyssey_core.candidate_continuation_semantic import (
+    CandidateContinuationSemanticError,
+    validate_independent_continuation_verdict,
+)
 from odyssey_core.candidate_fact_readback import readback_core_write_plan_facts
 from odyssey_core.candidate_pending_state import CandidatePendingRepository
 from odyssey_core.request_planning import RequestPlan, WriteAction
@@ -100,27 +112,39 @@ def deliver_reviewed_candidate_continuation(
     if deliveries.inspect_mutation_claim(delivery_id, fingerprint)["state"] == "unresolved_attempt":
         raise DeliveryResultError("Continuation has an unresolved prior E3 attempt")
 
-    context = prepare_selected_candidate_continuation(
-        pending,
-        conversation_id=conversation_id,
-        request_id=original_request_id,
-        vault=vault,
-        schema=schema,
-    )
-    inspection = inspect_selected_candidate_plan(context, plan)
-    review = copy.deepcopy(independent_review)
-    verdict = validate_independent_continuation_verdict(context, inspection, review)
-    guard = ReviewedCandidateContinuationWriteGuard(
-        pending,
-        context,
-        inspection,
-        verdict,
-        review,
-        plan,
-        vault,
-        schema,
-    )
-    guard.validate_request_plan(plan)
+    try:
+        context = prepare_selected_candidate_continuation(
+            pending,
+            conversation_id=conversation_id,
+            request_id=original_request_id,
+            vault=vault,
+            schema=schema,
+        )
+        inspection = inspect_selected_candidate_plan(context, plan)
+        review = copy.deepcopy(independent_review)
+        verdict = validate_independent_continuation_verdict(context, inspection, review)
+        guard = ReviewedCandidateContinuationWriteGuard(
+            pending,
+            context,
+            inspection,
+            verdict,
+            review,
+            plan,
+            vault,
+            schema,
+        )
+        guard.validate_request_plan(plan)
+    except (
+        CandidateContinuationContextError,
+        CandidateContinuationPlanError,
+        CandidateContinuationSemanticError,
+        WritePreflightGuardError,
+    ) as error:
+        # Every operation above precedes the durable mutation claim. The
+        # exact same exception AFTER claim must never be reclassified.
+        raise CandidateContinuationPrewriteError(
+            "Continuation source/plan/independent review is not current"
+        ) from error
     # This immutable claim is the recovery boundary. Never execute Core
     # without it; on a timeout or uncertain write the claim stays unresolved.
     deliveries.claim_mutation(delivery_id, fingerprint)

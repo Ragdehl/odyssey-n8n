@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from odyssey_core.application import ApplicationStatus
-from odyssey_core.candidate_continuation_semantic import CandidateContinuationSemanticError
 from odyssey_runtime.candidate_continuation_delivery import (
+    CandidateContinuationPrewriteError,
     deliver_reviewed_candidate_continuation,
 )
 from odyssey_runtime.delivery_results import DeliveryResultError, LocalDeliveryResultStore
@@ -139,7 +139,7 @@ def test_inconsistent_day_and_explicit_anchor_refuse_before_any_e3_claim(
     writer, helper = kwargs["plan"].actions[0].units
     mismatched = replace(writer, target=replace(writer.target, query="2026-10-07"))
     altered = RequestPlan((WriteAction((mismatched, helper)),), ())
-    with pytest.raises(CandidateContinuationSemanticError, match="Multi-temporal"):
+    with pytest.raises(CandidateContinuationPrewriteError, match="not current"):
         deliver_reviewed_candidate_continuation(**{**kwargs, "plan": altered})
     assert calls == []
     assert not (kwargs["vault"].root / "calendar/days/2026-10-07.md").exists()
@@ -149,7 +149,7 @@ def test_reviewer_rejects_before_claim_or_any_core_write(tmp_path: Path):
     kwargs, calls = _inputs(tmp_path)
     bad = dict(kwargs["independent_review"])
     bad["approved"] = False
-    with pytest.raises(CandidateContinuationSemanticError):
+    with pytest.raises(CandidateContinuationPrewriteError):
         deliver_reviewed_candidate_continuation(**{**kwargs, "independent_review": bad})
     assert not calls
     assert not (kwargs["vault"].root / "calendar/days/2026-10-05.md").exists()
@@ -157,6 +157,23 @@ def test_reviewer_rejects_before_claim_or_any_core_write(tmp_path: Path):
     completed = deliver_reviewed_candidate_continuation(**kwargs)
     assert completed["status"] == "completed"
     assert len(calls) == 1
+
+
+def test_stale_preclaim_plan_or_review_is_not_reported_as_uncertain_write(
+    tmp_path: Path,
+) -> None:
+    """Reviewer or stale plan errors are tagged prewrite; E3 is never called."""
+    kwargs, calls = _inputs(tmp_path)
+    plan = kwargs["plan"]
+    writer, helper = plan.actions[0].units
+    from odyssey_core.request_planning import RequestPlan, WriteAction
+
+    changed = replace(writer, facts=("Iré al museo con {{ref:0}}.",))
+    mutated_plan = RequestPlan((WriteAction((changed, helper)),), ())
+    with pytest.raises(CandidateContinuationPrewriteError):
+        deliver_reviewed_candidate_continuation(**{**kwargs, "plan": mutated_plan})
+    assert calls == []
+    assert not (kwargs["vault"].root / "calendar/days/2026-10-05.md").exists()
 
 
 def test_missing_or_wrong_conversation_refuses_without_claim(tmp_path: Path):

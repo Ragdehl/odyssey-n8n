@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .atomic_facts import AtomicFactError, normalize_atomic_fact, parse_atomic_facts
 from .candidate_pending_projection import CandidatePendingPreview
@@ -137,7 +138,7 @@ class CandidatePendingRepository:
         }
         if (
             not isinstance(payload, dict)
-            or set(payload) != fields
+            or set(payload) not in (fields, fields | {"created_timezone"})
             or (payload["format"], payload["format_version"], payload["request_id"])
             != (_FORMAT, _VERSION, request_id)
         ):
@@ -148,6 +149,10 @@ class CandidatePendingRepository:
             or not isinstance(payload["created_at"], str)
             or not 1 <= len(payload["created_at"]) <= 64
             or not _valid_capture_time(payload["created_at"])
+            or (
+                "created_timezone" in payload
+                and not valid_captured_timezone(payload["created_at"], payload["created_timezone"])
+            )
             or not isinstance(payload["original_request"], str)
             or not payload["original_request"].strip()
             or len(payload["original_request"].encode("utf-8")) > 16384
@@ -301,6 +306,7 @@ class CandidatePendingRepository:
         *,
         conversation_id: str,
         created_at: str,
+        created_timezone: str | None = None,
         options: tuple[ClarificationOption, ...] = (),
         vault: VaultRepository | None = None,
         schema: dict[str, Any] | None = None,
@@ -345,6 +351,7 @@ class CandidatePendingRepository:
             "request_id": preview.request_id,
             "conversation_id": conversation_id,
             "created_at": created_at,
+            **({"created_timezone": created_timezone} if created_timezone is not None else {}),
             "status": "open",
             "original_request": preview.original_request,
             "pending": [
@@ -703,3 +710,26 @@ def _valid_capture_time(value: str) -> bool:
     except ValueError:
         return False
     return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def valid_captured_timezone(instant: str, timezone: object) -> bool:
+    """Require the original local instant and offset to agree with its IANA zone.
+
+    A fixed-offset ISO value alone cannot reconstruct its original IANA zone
+    after restart, and a different current process timezone must never replace it.
+    Old v2 records lacking an explicit zone stay readable but are not automatically
+    eligible for time-dependent resumed writes.
+    """
+    if not isinstance(timezone, str) or not 1 <= len(timezone) <= 128:
+        return False
+    try:
+        parsed = datetime.fromisoformat(instant)
+        if parsed.utcoffset() is None:
+            return False
+        zoned = parsed.astimezone(ZoneInfo(timezone))
+    except (ValueError, TypeError, ZoneInfoNotFoundError, OverflowError):
+        return False
+    return (
+        parsed.replace(tzinfo=None) == zoned.replace(tzinfo=None)
+        and parsed.utcoffset() == zoned.utcoffset()
+    )
