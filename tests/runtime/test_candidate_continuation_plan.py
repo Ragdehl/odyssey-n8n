@@ -78,8 +78,31 @@ def test_regular_core_plan_without_optional_temporal_rows_is_inspectable(tmp_pat
     result = inspect_selected_candidate_plan(
         evidence, RequestPlan((WriteAction((without_anchors, helper)),), ())
     )
-    assert result.proposed_facts[0].temporal_values == ()
+    assert result.proposed_facts[0].temporal_values == ("2026-10-05",)
     assert not result.may_execute
+
+
+def test_day_target_and_different_temporal_anchor_require_separate_review(tmp_path: Path):
+    """A mismatched Day destination cannot be disguised by optional anchors."""
+    evidence, plan, _ = _ready_inspector(tmp_path)
+    writer, helper = plan.actions[0].units
+    moved = replace(writer, target=replace(writer.target, query="2026-10-07"))
+    inspected = inspect_selected_candidate_plan(
+        evidence, RequestPlan((WriteAction((moved, helper)),), ())
+    )
+    assert inspected.proposed_facts[0].temporal_values == (
+        "2026-10-07",
+        "2026-10-05",
+    )
+    assert not inspected.may_execute
+
+
+def test_invalid_day_target_rejected_before_semantic_review(tmp_path: Path):
+    evidence, plan, _ = _ready_inspector(tmp_path)
+    writer, helper = plan.actions[0].units
+    moved = replace(writer, target=replace(writer.target, query="2026-10-99"))
+    with pytest.raises(CandidateContinuationPlanError, match="Day target date is invalid"):
+        inspect_selected_candidate_plan(evidence, RequestPlan((WriteAction((moved, helper)),), ()))
 
 
 def test_partial_temporal_rows_are_still_rejected(tmp_path: Path):

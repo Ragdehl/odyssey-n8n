@@ -22,6 +22,7 @@ from .candidate_continuation_context import (
 from .candidate_pending_state import CandidatePendingRepository
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 from .storage import VaultRepository
+from .temporal import CALENDAR_DAY_TYPE, normalize_iso_date
 
 _MAX_FACTS = 128
 _REF_TOKEN = re.compile(r"\{\{ref:(\d+)\}\}")
@@ -207,13 +208,27 @@ def inspect_selected_candidate_plan(
                             "Proposed symbolic references are invalid or duplicated"
                         )
                     used_reference_indexes.update(slots)
+                    # Reuse the canonical Core Day target as temporal evidence
+                    # when ordinary Planner output has no optional per-fact row.
+                    # Never silently collapse a conflicting Day/anchor date:
+                    # the independent reviewer cannot accept multiple dates.
+                    temporal_values = [anchor.value for anchor in temporal]
+                    if unit.target.type == CALENDAR_DAY_TYPE:
+                        try:
+                            day = normalize_iso_date(unit.target.query)
+                        except (ValueError, TypeError) as error:
+                            raise CandidateContinuationPlanError(
+                                "Continuation Day target date is invalid"
+                            ) from error
+                        if day not in temporal_values:
+                            temporal_values.insert(0, day)
                     facts.append(
                         CoreContinuationProposedFact(
                             ordinal,
                             literal,
                             unit.target.type,
                             unit.target.query,
-                            tuple(anchor.value for anchor in temporal),
+                            tuple(temporal_values),
                             tuple(unit.references[slot].mention for slot in slots),
                             tuple(
                                 action.units[unit.references[slot].target_index].target.entity

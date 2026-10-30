@@ -830,7 +830,7 @@ one RequestPlan fact with the selected reference; structural inspection PASS.
 The proposed fact had no explicit temporal anchor. This is not proof that the
 independent reviewer accepts the exact plan, destination/date and original
 source, nor that Core/E3 writes and replays the correct canonical note.
-Ordinary Core Planner has not been retested after prompt changes.
+After the follow-up repair, read-only inspection projects an already typed and validated calendar_day destination date as temporal review evidence even when Core supplies no optional fact temporal rows. Explicit different anchors stay visible as multiple dates and are rejected by the unchanged independent semantic validator; invalid Day target dates reject before review. This reuses Core's canonical date and the previously accepted reviewer schema, without any new Temporal stage. 63 focused continuation/review/delivery tests PASS with no provider call. Ordinary Core Planner has not been retested after prompt changes.
 DEV remains at 4ba8bb8 with the feature OFF, PR #161 is DRAFT, and neither
 DEV, PROD nor personal Markdown was modified. Remaining E5 acceptance:
 source/clock/date and negative semantic cases on real Planner output,
