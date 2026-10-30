@@ -402,15 +402,22 @@ frases fijas de la UI en **español**, independientes de la lengua en que
 haya respondido la IA; **no es internacionalización completa** para
 usuarios franceses o ingleses.
 
-**Siguiente acción basada en evidencia:** cualquier etapa observada y
-fallida cuyo nombre de módulo incluya `writer` exige `INSPECT_RESULT`,
-pues no sabemos si hubo cambios físicos. `REVIEW_SAFE_RETRY` solo es
-admisible si el ejecutor Core certificó la frontera anterior a la
-escritura; `ASK_USER` no publica preguntas inventadas por el modelo,
-porque es Core quien debe proporcionar opciones de aclaración reales.
+**Siguiente acción basada en evidencia, independiente de futuros Apps:**
+no se identifica a los escritores por nombres de etapa como `writer`:
+un App extensible puede llamarlos `custom.persist` u otra cosa. Solo
+una prueba **positiva** del ejecutor de origen, transmitida por Core como
+`prewrite_recovery_proven: true` en su respuesta tipada, permite sugerir
+`REVIEW_SAFE_RETRY` o `CHECK_SYSTEM` (si tampoco hay IDs positivos de
+notas afectadas). Cuando esa prueba no existe o ya se constataron
+escrituras, C4 solo puede sugerir `INSPECT_RESULT`. Ausencia de ID
+**no demuestra ausencia de escritura**. n8n verifica por separado esa
+misma propiedad Core al mostrar recomendaciones; un marcador
+`verified_stage_only` forjado no puede suplirla. `ASK_USER` no
+publica preguntas inventadas por el modelo: Core debe aportar opciones
+de aclaración reales.
 Estas prohibiciones se comprueban antes de gastar la segunda llamada
-de revisión semántica, y n8n vuelve a verificar la restricción de
-escritura de manera independiente. **Regresión detectada por la suite
+de revisión semántica, y n8n vuelve a verificar la prueba
+de frontera anterior a escritura de manera independiente. **Regresión detectada por la suite
 global:** al retirar el veto léxico, una recomendación de `REVIEW_SAFE_RETRY`
 de una sola pasada podía volver a ejecutar Router antes de E3. El
 reintento automático ahora exige **además** que la segunda revisión
@@ -423,15 +430,28 @@ satisface el contrato, la respuesta original Core/E3 se conserva sin cambios.
 
 **Regresión grabada, sin llamadas reales adicionales:** se reprodujeron
 en `FakeClient` las 14 salidas de la campaña del 30-10 contra el nuevo
-contrato: **10/14 diagnósticos tipados, sin texto libre**, y **4/14
+contrato: tras la primera reparación fueron 10 tipados/4 fallback; la
+revisión de Generalidad halló que un App genérico podía escribir sin
+llamar a su etapa `writer` y n8n no podía comprobar el permiso de
+reintento. Tras repararlo mediante prueba positiva de Core, el replay
+definitivo es **9/14 diagnósticos tipados sin texto libre** y **5/14
 rechazos seguros** (`identity_ambiguous`, `tasks_target_missing`,
-`temporal_unknown`, `unknown_after_writer`). No se cambiaron los
+`temporal_unknown`, `upstream_provider_unavailable` sin prueba
+positiva de prewrite, `unknown_after_writer`). No se cambiaron los
 gold semánticos ni se reutilizó el presupuesto ya agotado. La matriz
 de evaluación distingue ahora el contrato `receipt_bound_typed_only_v2`
 de los recibos antiguos, sin alterar el hash del prompt para inventar
 una nueva evaluación de modelo. Se añadieron pruebas negativas para
 textos de falsa escritura, ruso/inglés, preguntas sin prueba de Core,
 fallo del writer, múltiples rutas y falsos attestados en n8n.
+
+**Revisión focalizada de `5608fde`:** Generalidad **FAIL** por dos
+huecos de integración (un App `custom.persist` no nombrado `writer`;
+n8n no podía comprobar la prueba de reintento por sí mismo), Calidad
+**PASS** con advertencia externa. El ajuste posterior basado en prueba
+positiva de prewrite elimina ambos supuestos y añade regresiones
+adversariales; **estos dictámenes son históricos y el nuevo delta debe
+revisarse independientemente**.
 
 **Estado:** cambio en fuente, no desplegado, sin nuevos permisos ni
 modificaciones de Markdown personal. La prueba grabada no demuestra
@@ -452,8 +472,9 @@ prueba propia del ejecutor de que aún no se invocó escritor. La
 sugerencia de una pasada **nunca** es permiso de re-ejecución. Se añadió
 prueba de no duplicación, replay y ausencia de mutaciones; se conserva
 la prueba positiva de reintento autorizado con dos pasadas. **Gate
-final offline:** **2.463 Python (+7 subtests) y 283 JS PASS**,
-Ruff/Docs Guard/NoteSchema. Los switches están OFF en DEV.
+final offline después del ajuste de Generalidad:** **2.464 Python
+(+7 subtests) y 284 JS PASS**, Ruff/Docs Guard/NoteSchema. Los
+switches están OFF en DEV.
 
 ### C4 semantic review and evidence-only UI candidate — source only (29 Oct 2026)
 

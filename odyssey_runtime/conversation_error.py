@@ -205,19 +205,15 @@ def diagnose_trusted_execution_graph(
         or any("\n" in text or "\r" in text for text in (explanation, question))
     ):
         return None
-    # A model never owns the next action. The response can only display an
-    # observed stage and a non-executable step supported by trusted evidence.
-    # Identity/date questions require Core's verified clarification contract,
-    # not an arbitrary model-written question. A failed writer cannot imply
-    # that a retry is safe, even if a model recommends checking a service.
-    uncertain_writer = any(
-        item["outcome"] in {"failed", "unavailable"} and "writer" in item["name"].split(".")
-        for item in stages
-    )
-    if (
-        next_step == "ASK_USER"
-        or (next_step == "REVIEW_SAFE_RETRY" and result.prewrite_recovery_proven is not True)
-        or (uncertain_writer and next_step != "INSPECT_RESULT")
+    # The only general proof of being BEFORE every possible App writer is
+    # owned by the source executor. Never infer a write boundary from a
+    # stage name (an extensible App can call its writer anything).
+    # A proposed CHECK_SYSTEM or REVIEW_SAFE_RETRY is harmless advice
+    # only with positive prewrite proof and zero known affected note IDs.
+    # Otherwise the only permitted typed advice is INSPECT_RESULT.
+    if next_step == "ASK_USER" or (
+        next_step in {"REVIEW_SAFE_RETRY", "CHECK_SYSTEM"}
+        and (result.prewrite_recovery_proven is not True or bool(result.affected_stable_note_ids))
     ):
         return None
     # Optional second AI pass checks ENTIRE meaning rather than banning

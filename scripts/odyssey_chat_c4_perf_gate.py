@@ -166,6 +166,7 @@ def main() -> None:
                     (),
                     (),
                     clarification_code="FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+                    prewrite_recovery_proven=True,  # synthetic source-only refusal, before Core/Writer
                     operational=OperationalEvidence(
                         2,
                         (

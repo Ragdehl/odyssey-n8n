@@ -362,8 +362,9 @@ const graphDiagnosisValid = gd && typeof gd === 'object' && !Array.isArray(gd) &
   gd.write_evidence === (Array.isArray(r.affected_stable_note_ids) && r.affected_stable_note_ids.length ? 'SOME' : 'UNKNOWN') &&
   ['failed','partial','needs_attention'].includes(r.status) &&
   graphStage(gd.evidence_stage, gd.route_index) &&
-  (!verifiedLedger.stages.some(st => ['failed','unavailable'].includes(st.outcome) &&
-    st.name.split('.').includes('writer')) || gd.next_step === 'INSPECT_RESULT') &&
+  (gd.next_step === 'INSPECT_RESULT' ||
+    (r.prewrite_recovery_proven === true &&
+      Array.isArray(r.affected_stable_note_ids) && r.affected_stable_note_ids.length === 0)) &&
   ['ASK_USER','REVIEW_SAFE_RETRY','CHECK_SYSTEM','INSPECT_RESULT'].includes(gd.next_step) &&
   gd.next_step !== 'ASK_USER';
 const graphDiagnosisMessage = graphDiagnosisValid ?

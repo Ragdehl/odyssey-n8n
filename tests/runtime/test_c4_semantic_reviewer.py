@@ -214,6 +214,7 @@ def test_reviewed_provider_substage_shows_generic_core_owned_label_without_ident
         (),
         (),
         clarification_code="FULL_SOURCE_PROVIDER_OR_CONTEXT_UNAVAILABLE",
+        prewrite_recovery_proven=True,  # observed provider failure before any writer
         operational=OperationalEvidence(
             14,
             (

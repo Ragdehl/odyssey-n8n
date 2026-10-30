@@ -81,8 +81,10 @@ def test_authorized_eval_with_recorded_provider_only_uses_real_schema(monkeypatc
     )
     result = evaluate_live(max_calls=14, continue_after_rejection=True)
     assert result["executed_calls"] == 14
-    assert result["stage_correct"] == 9  # Five AI questions lack Core-verified choices.
-    assert result["step_acceptable"] == 9
+    # Five AI questions lack Core-verified choices. A provider failure that
+    # lacks positive prewrite proof cannot request CHECK_SYSTEM, either.
+    assert result["stage_correct"] == 8
+    assert result["step_acceptable"] == 8
     assert result["validator_contract"] == "receipt_bound_typed_only_v2"
     assert all(row["explanation"] is None for row in result["cases"])
     assert len(recorded.responses.calls) == 14

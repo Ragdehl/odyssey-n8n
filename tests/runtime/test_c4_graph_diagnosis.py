@@ -208,6 +208,41 @@ def test_uncertain_writer_allows_only_inspection_and_never_model_text(proposed_s
         assert len(fake.responses.calls) == 2
 
 
+def test_custom_app_persistence_stage_requires_inspection_without_core_prewrite_proof():
+    # Future App writers have no obligation to use "writer" in stage names.
+    typed = ApplicationResult(
+        "app-writer-generic",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        clarification_code="OPERATIONAL_FAILURE",
+        operational=OperationalEvidence(
+            10, (OperationalStage("custom.persist", OperationalOutcome.FAILED, 9),)
+        ),
+    )
+    good = {
+        "evidence_stage": "custom.persist",
+        "route_index": None,
+        "explanation": "El estado final de la operación es incierto.",
+        "next_step": "INSPECT_RESULT",
+        "user_question": "",
+    }
+    response = application_result_to_response(typed)
+    ledger = project_execution_ledger(typed)
+    for step in ("CHECK_SYSTEM", "REVIEW_SAFE_RETRY", "INSPECT_RESULT"):
+        fake = FakeClient([{**good, "next_step": step}])
+        candidate = diagnose_trusted_execution_graph(
+            typed,
+            response,
+            ledger,
+            OpenAIConversationGateway(fake),
+            original_message="Actualiza un dato en un nuevo App.",
+        )
+        assert (candidate is not None) is (step == "INSPECT_RESULT")
+        if candidate is not None:
+            assert candidate["verified_stage_only"] is True
+
+
 def test_graph_ai_failure_preserves_existing_core_result_and_never_retries(tmp_path):
     actor = AuthenticatedActorContext(str(uuid4()))
     fake = FakeClient([RuntimeError("provider offline")])

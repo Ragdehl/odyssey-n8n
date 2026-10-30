@@ -275,3 +275,25 @@ test("a failed writer stage cannot carry CHECK_SYSTEM or unsafe retry through n8
     assert.doesNotMatch(refused.message, /No he podido completar la solicitud en «Escritura»/);
   }
 });
+
+
+test("n8n demands source-executor prewrite proof, never stage-name guesses", () => {
+  const stageName = "custom.persist";
+  const observed = {...ledger, stages: [{
+    ...ledger.stages[0], name: stageName,
+    stage_view: {version: 1, label: "Resultado de la operación", icon: "core"},
+  }]};
+  const candidate = {...diagnostic, evidence_stage: stageName,
+    stage_view: observed.stages[0].stage_view, next_step: "CHECK_SYSTEM"};
+  const unproven = render({execution_ledger: observed, error_diagnosis: candidate});
+  assert.doesNotMatch(unproven.message, /Resultado de la operación/);
+  const corroborated = render({execution_ledger: observed,
+    prewrite_recovery_proven: true, error_diagnosis: candidate});
+  assert.match(corroborated.message, /Resultado de la operación/);
+  const forgedRetry = render({execution_ledger: observed,
+    error_diagnosis: {...candidate, next_step: "REVIEW_SAFE_RETRY"}});
+  assert.doesNotMatch(forgedRetry.message, /Resultado de la operación/);
+  const inspect = render({execution_ledger: observed,
+    error_diagnosis: {...candidate, next_step: "INSPECT_RESULT"}});
+  assert.match(inspect.message, /Resultado de la operación/);
+});
