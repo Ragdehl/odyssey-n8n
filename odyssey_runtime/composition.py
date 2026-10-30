@@ -6369,19 +6369,22 @@ def _build_runtime_from_environment_unlocked(
             prepared: CoreCandidateContinuationContext, stable_actor: str
         ) -> dict[str, Any]:
             """Plan/review before one guarded E3 delivery; never a second Core writer."""
-            state = conversation_root_resolver.resolve(stable_actor)
-            pending_root = state / "pending"
-            pending = CandidatePendingRepository(pending_root)
-            validate_selected_continuation_current(
-                prepared,
-                pending,
-                vault=repository,
-                schema=schema,
-            )
-            captured_clock = _continuation_original_clock(prepared)
-            # The user's selected name is a Core-verified planning HINT, not
-            # provider-granted canonical write authority. E3 re-grounds the ID.
+            # All checks until the independent review precede any mutation
+            # claim. Classify failure here as prewrite even if the *selected
+            # identity/source* becomes stale before Temporal is invoked.
             try:
+                state = conversation_root_resolver.resolve(stable_actor)
+                pending_root = state / "pending"
+                pending = CandidatePendingRepository(pending_root)
+                validate_selected_continuation_current(
+                    prepared,
+                    pending,
+                    vault=repository,
+                    schema=schema,
+                )
+                captured_clock = _continuation_original_clock(prepared)
+                # The user's selected name is a Core-verified planning HINT,
+                # not provider-granted authority; E3 re-grounds its ID.
                 # Reuse the SAME Temporal interpreter and captured request clock
                 # as ordinary routed writes. Identity resolution alone cannot
                 # authorize guessed dates in a continuation plan.

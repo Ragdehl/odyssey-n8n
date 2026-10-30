@@ -870,7 +870,14 @@ from the server environment. The shared Temporal interpreter must provide
 a typed exact result; none/unspecified fails before any E3 claim.
 Existing delivery preclaim semantic/context/plan failures are reclassified
 as non-executable review failures; uncertain after-claim outcomes remain
-reconciliation-only. These corrections are not independently re-audited yet.
+reconciliation-only. Independent re-audit of 860ffee confirmed the two
+P1 Temporal/IANA repairs but reported FAIL on one remaining preclaim
+boundary and missing callback-level negative coverage. Subsequent source
+repair encloses source/actor/state checks in the preclaim boundary and
+classifies known pending state errors before E3 claim; no error at or
+after claim is treated as a harmless replan. Source regression tests
+check stale selected Markdown refuses with zero E3 operations. Re-review
+the final repaired SHA; no four-role acceptance yet.
 
 Remaining E5 acceptance: multi-case real semantic testing with both positive
 and negative variants, the four independent audit roles on the final SHA,

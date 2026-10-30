@@ -35,7 +35,10 @@ from odyssey_core.candidate_continuation_semantic import (
     validate_independent_continuation_verdict,
 )
 from odyssey_core.candidate_fact_readback import readback_core_write_plan_facts
-from odyssey_core.candidate_pending_state import CandidatePendingRepository
+from odyssey_core.candidate_pending_state import (
+    CandidatePendingRepository,
+    CandidatePendingStateError,
+)
 from odyssey_core.request_planning import RequestPlan, WriteAction
 from odyssey_core.reviewed_continuation_guard import ReviewedCandidateContinuationWriteGuard
 from odyssey_core.storage import VaultRepository
@@ -82,12 +85,17 @@ def deliver_reviewed_candidate_continuation(
         or not callable(run_existing_core)
     ):
         raise ValueError("Canonical continuation owners are required")
-    record = pending.read(original_request_id)
+    try:
+        record = pending.read(original_request_id)
+    except CandidatePendingStateError as error:
+        raise CandidateContinuationPrewriteError(
+            "Candidate pending state is unavailable"
+        ) from error
     if record["conversation_id"] != conversation_id or record["status"] != "selected":
-        raise ValueError("No selected candidate for this conversation")
+        raise CandidateContinuationPrewriteError("No selected candidate for this conversation")
     answer_id = record["answer_id"]
     if not isinstance(answer_id, str) or not answer_id:
-        raise ValueError("Selected candidate lacks answer correlation")
+        raise CandidateContinuationPrewriteError("Selected candidate lacks answer correlation")
     # The only identifier namespace is the existing actor-scoped delivery
     # store. Never tie this ID to a model-generated plan (which may vary on
     # retry), or reuse the user reply's already-finalized delivery ID.

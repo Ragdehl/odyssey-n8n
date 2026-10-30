@@ -176,9 +176,21 @@ def test_stale_preclaim_plan_or_review_is_not_reported_as_uncertain_write(
     assert not (kwargs["vault"].root / "calendar/days/2026-10-05.md").exists()
 
 
+def test_changed_selected_note_before_claim_rejects_without_touching_e3(
+    tmp_path: Path,
+) -> None:
+    kwargs, calls = _inputs(tmp_path)
+    note = kwargs["vault"].root / "Luis.md"
+    note.write_text(note.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(CandidateContinuationPrewriteError):
+        deliver_reviewed_candidate_continuation(**kwargs)
+    assert not calls
+    assert not (kwargs["vault"].root / "calendar/days/2026-10-05.md").exists()
+
+
 def test_missing_or_wrong_conversation_refuses_without_claim(tmp_path: Path):
     kwargs, calls = _inputs(tmp_path)
-    with pytest.raises(ValueError, match="No selected candidate"):
+    with pytest.raises(CandidateContinuationPrewriteError, match="No selected candidate"):
         deliver_reviewed_candidate_continuation(
             **{**kwargs, "conversation_id": "another-conversation"}
         )
