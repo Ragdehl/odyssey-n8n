@@ -74,7 +74,7 @@ test("known P4 blocker: existing n8n fallback for Ana and pronoun ambiguity is g
     assert.equal(converted.status, "needs_attention");
     assert.equal(converted.kind, "clarification");
     assert.equal(converted.clarification.options.length, 0);
-    assert.match(converted.message, /No puedo verificar la causa exacta/);
+    assert.match(converted.message, /No he podido interpretar este mensaje/);
     // This passing characterization is NOT UX acceptance. An actual valid
     // choice-based continuation has yet to be integrated with P4 and n8n.
   }
