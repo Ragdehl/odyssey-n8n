@@ -720,7 +720,9 @@ class RuntimeComposition:
             store = LocalDeliveryResultStore(
                 self.conversation_root_resolver.resolve(actor) / "delivery-results"
             )
-            fingerprint = store.fingerprint(user_request, conversation_id)
+            fingerprint = store.fingerprint(
+                user_request, conversation_id, reply_to_request_id=reply_to_request_id
+            )
         clarification_store = (
             LocalClarificationStore(self.conversation_root_resolver.resolve(actor), conversation_id)
             if conversation_id is not None and self.conversation_root_resolver is not None
@@ -1661,7 +1663,13 @@ class RuntimeComposition:
             return None
         try:
             repository = self._candidate_pending_repository(actor)
-            if repository is None or not repository.open_requests(conversation_id):
+            if repository is None:
+                # A correlated choice is never ordinary user source even when
+                # the v2 feature is currently disabled or state is missing.
+                if reply_to_request_id is not None:
+                    return self._control_response(request_id, "CANDIDATE_UNAVAILABLE")
+                return None
+            if not repository.open_requests(conversation_id):
                 if reply_to_request_id is not None:
                     return self._control_response(request_id, "CANDIDATE_UNAVAILABLE")
                 return None

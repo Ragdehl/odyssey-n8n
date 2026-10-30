@@ -30,7 +30,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 
 1. **Start/resume:** read top of `docs/architecture/functional-roadmap.md`, relevant normative contracts and this file; run `odyssey-start-work` / read-only context doctor, check source SHA, DEV checkout/marker, PRs and concurrent agents. Do not confuse branch, GitHub merge and deployed version.
 2. **Significant phase:** define objective, acceptance, out-of-scope and open decisions, then use `odyssey-architecture-challenge`. Stop for genuinely material unresolved product behavior, not routine mechanical details.
-3. **Implement generally:** minimal coherent diff, useful Python docstrings, typed contracts, no unrelated changes or permanent per-example exceptions. Ruff and pytest are authoritative for Python.
+3. **Implement generally:** explicitly read `odyssey-implement-change` for code changes; keep minimal coherent diff, useful Python docstrings, typed contracts, no unrelated changes or permanent per-example exceptions. Ruff and pytest are authoritative for Python.
 4. **Verify:** focused unit/contract **and vertical E2E regressions** for functional changes; before readiness use `odyssey-verify-change` and the full `scripts/odyssey_cross_surface_gate.py`. Model-facing changes need the live gate above. DEV adoption needs actual browser→n8n→GPT→Core/E3→Markdown→browser proof, synthetic data and matching deployed SHA. See `odyssey-dev-e2e`.
 5. **Review/PR:** default to **one active PR**, inspect existing PR feedback with `odyssey-pr-feedback`; keep CI/independent review separate from author. Human merges. `odyssey-post-merge` operates on the PR's **actual base branch**; never automatically assume `main`.
 6. **Close:** use `odyssey-results` for a consistent user-facing summary with a concrete example, evidence/4-role audit status, what remains in this phase and roadmap ahead. Record commit/PR, exact deployment state, limitations and next step in **one** canonical status owner. Capture user-requested future capabilities in the [near-term backlog](docs/architecture/near-term-product-backlog-20261025.md) with priority, clear examples and non-goals; do not treat an idea as an implemented feature or deployment permission. Record a reusable operational failure as symptom→cause→fix→verification→prevention in the appropriate runbook, not here. Do not claim completion or re-run all auditors when evidence is missing or stale; classify the blocker and close the narrow gap.
@@ -38,6 +38,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 ## Skill directory and canonical references
 
 - `odyssey-start-work`: every task/continuation, Git/worktrees/deployment state.
+- `odyssey-implement-change`: every coding/change task; find the right owner, reuse existing code, write negative/vertical tests and load scope-specific skills.
 - `odyssey-diagnose-first`: every reported bug, missing expected behavior or early refusal; trace existing owners, active flags and real failure before proposing implementation.
 - `odyssey-generality`: Router/Temporal/Core/Apps, future extensibility.
 - `odyssey-llm-stage`: creating/editing prompts, models, validators/reviewers.

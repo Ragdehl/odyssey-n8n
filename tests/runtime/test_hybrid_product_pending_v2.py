@@ -5,12 +5,15 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from odyssey_core.application import ApplicationResult, ApplicationStatus, PendingWorkStatus
 from odyssey_core.candidate_pending_state import CandidatePendingRepository
 from odyssey_core.clarification import ClarificationOption
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_runtime.composition import RuntimeComposition
+from odyssey_runtime.delivery_results import DeliveryResultError
 from odyssey_runtime.routing import route_execution_id
 from tests.runtime.test_candidate_pending_state import NOW, _ready
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import SCHEMA
@@ -413,4 +416,68 @@ def test_stale_identity_cannot_be_redisplayed_as_current_pending_card(tmp_path: 
             reply_to_request_id=route_execution_id(first_id, 0),
         )["product_control"]
         == "STALE_CANDIDATE_SELECTION"
+    )
+
+
+def test_same_delivery_id_cannot_switch_to_other_pending_record(tmp_path: Path) -> None:
+    """A retry cannot silently switch the user's old-card target."""
+    runtime, resolver, _vault, calls, source, initial_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    route_id = route_execution_id(initial_id, 0)
+    first = runtime.execute_product(
+        "Con Luis",
+        "same-target-delivery",
+        "main",
+        ACTOR,
+        reply_to_request_id=route_id,
+    )
+    assert first["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    with pytest.raises(DeliveryResultError):
+        runtime.execute_product(
+            "Con Luis",
+            "same-target-delivery",
+            "main",
+            ACTOR,
+            reply_to_request_id="another-pending-id",
+        )
+    with pytest.raises(DeliveryResultError):
+        runtime.execute_product(
+            "Con Luis",
+            "same-target-delivery",
+            "main",
+            ACTOR,
+        )
+    repo = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    assert repo.read(route_id)["selected_note_id"] == "luis-id"
+    assert calls == [(source, initial_id)]
+
+
+def test_missing_candidate_seam_never_routes_explicit_reply_into_legacy_writer(tmp_path):
+    resolver = ConversationRootResolver(tmp_path / "state")
+
+    def forbidden(*_args):
+        pytest.fail("Explicit pending response must not become a normal write")
+
+    runtime = RuntimeComposition(
+        core_execute=forbidden,
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=resolver,
+    )
+    result = runtime.execute_product(
+        "Con Luis",
+        "missing-v2-seam",
+        "main",
+        ACTOR,
+        reply_to_request_id="absent-pending",
+    )
+    assert result["product_control"] == "CANDIDATE_UNAVAILABLE"
+    assert (
+        runtime.execute_product(
+            "Con Luis",
+            "missing-v2-seam",
+            "main",
+            ACTOR,
+            reply_to_request_id="absent-pending",
+        )["delivery_replayed"]
+        is True
     )

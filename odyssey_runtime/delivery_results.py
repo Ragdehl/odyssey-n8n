@@ -56,14 +56,28 @@ class LocalDeliveryResultStore:
         self._manifest_capabilities = manifest_capabilities
 
     @staticmethod
-    def fingerprint(request: str, conversation_id: str) -> str:
-        """Return a non-reversible binding for one request and conversation pair."""
+    def fingerprint(
+        request: str, conversation_id: str, *, reply_to_request_id: str | None = None
+    ) -> str:
+        """Bind a delivery to its request, conversation and explicit pending target.
+
+        Keep the historical digest exactly unchanged when the optional field
+        is absent; older committed delivery receipts must still replay.
+        """
         if not isinstance(request, str) or not request.strip():
             raise DeliveryResultError("delivery request is invalid")
         if not isinstance(conversation_id, str) or not conversation_id:
             raise DeliveryResultError("delivery conversation is invalid")
+        if reply_to_request_id is not None and (
+            not isinstance(reply_to_request_id, str)
+            or _REQUEST_ID_PATTERN.fullmatch(reply_to_request_id) is None
+        ):
+            raise DeliveryResultError("pending request locator is invalid")
+        payload = {"conversation_id": conversation_id, "request": request}
+        if reply_to_request_id is not None:
+            payload["reply_to_request_id"] = reply_to_request_id
         encoded = json.dumps(
-            {"conversation_id": conversation_id, "request": request},
+            payload,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),

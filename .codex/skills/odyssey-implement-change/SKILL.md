@@ -1,0 +1,17 @@
+---
+name: odyssey-implement-change
+description: Implement or modify Odyssey Python, JavaScript, HTTP, Core, Apps, Runtime or n8n code with reuse-first owners, regression evidence and safe handoff. Use for ordinary coding, refactoring and bug fixes; specialized audits, LLM evaluations and deployment retain their own skills.
+---
+
+# Implement code in Odyssey
+
+Read this skill when writing code, after AGENTS.md and odyssey-start-work. It connects the normal coding workflow; do not copy the detailed procedures of specialized skills here. ChatGPT Remote Desktop workers must explicitly read applicable skills: discovery does not load them.
+
+1. **Define one observable change** from the user request and current roadmap, then inspect existing ownership, code, tests, flags, and the deployed SHA. For a bug or missing existing behavior, load odyssey-diagnose-first and reproduce the failing boundary before adding a path. For a significant new phase, load odyssey-architecture-challenge.
+2. **Choose the owner, not the easiest patch site.** Generic identities, source provenance, plans, validation and canonical Markdown writes belong to Core/E3; App lifecycle to Apps; actor isolation and composition to Runtime; n8n only orchestrates; web renders. Preserve local-first mobile ownership. Do not introduce competing Router, Writer, pending queue, database, or NoteSchema authority.
+3. **Read the skills needed by this change.** Router/Temporal/Core/App semantics: odyssey-generality; LLM prompt/parser/schema/reviewer: odyssey-llm-stage before coding and odyssey-live-provider only after separately authorized bounded spend; UI: odyssey-ux; DEV browser and deployment: odyssey-dev-e2e. Do not load unrelated skills. Read the App extensibility contract for changed Apps/shared semantics.
+4. **Implement a minimal coherent diff.** Reuse typed contracts, validators and synthetic fixtures. Preserve exact source spans, Core-grounded identities, checked E3 readback, actor ownership, replay/idempotence, partial-write receipts, concurrency, temporal ownership and fail-closed rejection. Never special-case a corpus phrase, a person's name, a pronoun, a language or a fixed candidate count. Do not silently change product semantics.
+5. **Prove both the positive and negative seams.** Add a failing reproduction, an ordinary successful case, adversarial/stale/cross-actor/replay scenarios and relevant physical-readback checks. Test Python and JS when crossing layers. Use synthetic or explicitly authorized data. During implementation use focused tests; at a meaningful checkpoint load odyssey-verify-change and run the official cross-surface gate. Frozen outputs or fake UI are not fresh GPT nor deployed browser evidence.
+6. **Finish without loops.** Review diff and secrets, update one normative status owner, commit reversible source on the isolated feature branch, and update the active draft PR when warranted. Never equate CI with deploy/merge authorization. Do not repeatedly poll unchanged checks or run full auditor cycles on tiny patches. Use odyssey-results with a concrete before/after, exact tested SHA, real PASS/FAIL evidence, remaining validations and DEV marker.
+
+Do not use for pure status (odyssey-results), PR feedback only (odyssey-pr-feedback), or skill authoring (odyssey-skill-steward plus official skill-creator). No new permissions are granted by this skill.

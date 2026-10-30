@@ -558,3 +558,9 @@ sustitución de pronombres. Hacen falta propuesta Core con semántica
 revisada independientemente (fechas, polaridad, participantes, hechos
 N:M, roles y referencias), guardas de CAS e idempotencia antes de E3,
 más evaluación real acotada del prompt cuando se autorice gasto.
+
+## E5 — integridad de replay de la aclaración correlacionada (30-10-2026)
+
+Antes, el digest de una entrega asociaba solo el texto de respuesta y la conversación. Dos tarjetas diferentes enviadas accidentalmente con el mismo ID de entrega y el mismo texto podían intentar compartir el resultado de una elección con otro registro pendiente. El contrato de replay ahora incorpora el identificador original de la aclaración, **solo cuando está presente**, conservando exactamente el digest histórico de todas las entregas anteriores. El mismo ID con distinto pendiente se rechaza como conflicto, no se interpreta de nuevo, y una respuesta correlacionada sin almacén de pendientes configurado no puede pasar al Router o al Core legacy como una petición ordinaria.
+
+Pruebas con dos pendientes sintéticos y reintento conflictivo; la ruta sin dependencia de aclaraciones sigue siendo compatible y conserva su digest original. Esto fortalece la seguridad de la respuesta, **no** acredita la continuación semántica del hecho pendiente. Sigue faltando una propuesta Core genérica, revisión independiente de significado/temporalidad, E3/readback con semántica revisada, prueba GPT real autorizada y aceptación en DEV.
