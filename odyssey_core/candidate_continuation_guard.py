@@ -27,6 +27,48 @@ from .storage import VaultRepository
 from .write_target import WriteTargetOutcome
 
 
+def _verify_selected_reference_preflight(
+    action: WriteAction,
+    preflight: tuple[UnitTargetPreflight, ...],
+    *,
+    reference_text: str,
+    selected_note_id: str,
+) -> None:
+    """One canonical-target proof shared by the frozen pilot and reviewed path.
+
+    The plan-level semantic guards remain separate: the old test-only pilot
+    permits its exact historical shape, whereas the general route requires a
+    source-bound independent review. Neither guard resolves an identity itself.
+    """
+    if not isinstance(action, WriteAction) or len(action.units) != len(preflight):
+        raise WritePreflightGuardError("CANDIDATE_CONTINUATION_PREFLIGHT_MISMATCH")
+    found_selected = False
+    for index, unit in enumerate(action.units):
+        if unit.reference_lookup_only:
+            resolved = preflight[index]
+            if (
+                resolved.unit_index != index
+                or not resolved.reference_only
+                or resolved.outcome is not WriteTargetOutcome.UPDATE
+                or not resolved.stable_id
+            ):
+                raise WritePreflightGuardError("CANDIDATE_CONTINUATION_HELPER_NOT_VERIFIED")
+        for reference in unit.references:
+            target_index = reference.target_index
+            if (
+                type(target_index) is not int
+                or not 0 <= target_index < len(action.units)
+                or not action.units[target_index].reference_lookup_only
+            ):
+                raise WritePreflightGuardError("CANDIDATE_CONTINUATION_REFERENCE_NOT_GROUNDED")
+            if reference.mention == reference_text:
+                found_selected = True
+                if preflight[target_index].stable_id != selected_note_id:
+                    raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SELECTED_ID_CHANGED")
+    if not found_selected:
+        raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SELECTED_REF_MISSING")
+
+
 @dataclass(frozen=True, slots=True)
 class SelectedCandidateWriteGuard:
     """Reject a linked Core plan not targeting the exact chosen, still-current note."""
@@ -137,7 +179,6 @@ class SelectedCandidateWriteGuard:
             raise WritePreflightGuardError("CANDIDATE_CONTINUATION_UNSUPPORTED_WRITE_SHAPE")
         fact_index, helper_index = consumers[0], helpers[0]
         fact_unit, helper_unit = action.units[fact_index], action.units[helper_index]
-        identity_target = preflight[helper_index]
         if (
             len(fact_unit.facts) != 1
             or fact_unit.intent != "record"
@@ -152,12 +193,14 @@ class SelectedCandidateWriteGuard:
             or helper_unit.properties
             or helper_unit.tag_changes
             or helper_unit.intent != "record"
-            or identity_target.unit_index != helper_index
-            or identity_target.outcome is not WriteTargetOutcome.UPDATE
-            or identity_target.stable_id != self.selected_note_id
-            or not identity_target.reference_only
         ):
             raise WritePreflightGuardError("CANDIDATE_CONTINUATION_IDENTITY_MISMATCH")
+        _verify_selected_reference_preflight(
+            action,
+            preflight,
+            reference_text=self.pending_reference_text,
+            selected_note_id=self.selected_note_id,
+        )
 
 
 def build_selected_candidate_guard(
@@ -265,22 +308,9 @@ class ReviewedCandidateContinuationWriteGuard:
             or len(action.units) != len(preflight)
         ):
             raise WritePreflightGuardError("CANDIDATE_CONTINUATION_ACTION_CHANGED")
-        used_chosen = False
-        for index, unit in enumerate(action.units):
-            if unit.reference_lookup_only:
-                resolved = preflight[index]
-                if (
-                    resolved.unit_index != index
-                    or not resolved.reference_only
-                    or resolved.outcome is not WriteTargetOutcome.UPDATE
-                    or not resolved.stable_id
-                ):
-                    raise WritePreflightGuardError("CANDIDATE_CONTINUATION_IDENTITY_NOT_VERIFIED")
-            for reference in unit.references:
-                helper = preflight[reference.target_index]
-                if reference.mention == self.context.reference_text:
-                    used_chosen = True
-                    if helper.stable_id != self.context.selected_note_id:
-                        raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SELECTED_ID_CHANGED")
-        if not used_chosen:
-            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SELECTED_REF_MISSING")
+        _verify_selected_reference_preflight(
+            action,
+            preflight,
+            reference_text=self.context.reference_text,
+            selected_note_id=self.context.selected_note_id,
+        )

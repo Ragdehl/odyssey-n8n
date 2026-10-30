@@ -726,6 +726,19 @@ devuelve la copia del JSON junto al sello inejecutable. Tests con cliente
 Responses simulado prueban sobre HTTP lógico la envoltura strict/store=false,
 el reloj original, resultado incompleto y dictámenes inválidos, sin escrituras.
 **No está conectado a la ejecución de producción, y no ha llamado al modelo real.**
+**Revisión de reutilización (30-10-2026):** el piloto F14/F27 ya
+persistía el cine enlazado en Core/E3 desde los commits `89cffb5` y
+`1df352d` del 10-10. No era una funcionalidad nueva del ensayo actual.
+La diferencia de éste es el contrato de plan completo + dictamen independiente
+para otros enunciados, todavía sin aceptación semántica real. El piloto
+`SelectedCandidateWriteGuard` no está conectado a runtime ordinario y
+continúa exclusivamente como centinela histórico, sin autorización general.
+Ambos guards comparten ahora exactamente la misma función de comprobación
+canónica de helpers y la identidad seleccionada, sin duplicar la resolución
+de targets, la autorización ni el Writer Core/E3. Sus comprobaciones del
+significado difieren por el límite de seguridad: frase fija antigua frente
+a dictamen revisado general. No ampliar ni activar el piloto.
+
 **Ensayo Core/E3 aislado de continuación revisada (sin activar, 30-10-2026):**
 `ReviewedCandidateContinuationWriteGuard` conecta solo en tests sintéticos el
 plan inspeccionado y el dictamen completo con el guard de Core existente.

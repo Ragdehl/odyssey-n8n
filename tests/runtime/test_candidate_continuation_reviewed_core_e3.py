@@ -30,9 +30,9 @@ from tests.runtime.test_temporal_user_path_e2e import (
 )
 
 
-def _prepared(tmp_path: Path):
+def _prepared(tmp_path: Path, *, chosen_name: str = "Luis"):
     preview, pending, vault, _state = _ready(tmp_path)
-    assert _reply(pending, vault, "Con Luis").outcome == "choice_recorded"
+    assert _reply(pending, vault, f"Con {chosen_name}").outcome == "choice_recorded"
     context = prepare_selected_candidate_continuation(
         pending,
         conversation_id="chat-1",
@@ -45,7 +45,7 @@ def _prepared(tmp_path: Path):
         "Iré al cine con {{ref:0}}.",
         "él",
         "2026-10-05",
-        target_name="Luis",
+        target_name=chosen_name,
     )
     inspected = inspect_selected_candidate_plan(context, plan)
     review = {
@@ -58,7 +58,7 @@ def _prepared(tmp_path: Path):
                 "kind": "record",
                 "reviewed_text": "Iré al cine con {{ref:0}}.",
                 "date": "2026-10-05",
-                "reference_names": ["Luis"],
+                "reference_names": [chosen_name],
                 "supported": True,
             }
         ],
@@ -210,3 +210,13 @@ def test_replayed_core_delivery_does_not_duplicate_synthetic_continuation(tmp_pa
     assert day.count("Iré al cine con [[Luis|Luis]]") == 1
     assert second.status in {ApplicationStatus.COMPLETED, ApplicationStatus.NEEDS_ATTENTION}
     assert third.status in {ApplicationStatus.COMPLETED, ApplicationStatus.NEEDS_ATTENTION}
+
+
+def test_reviewed_guard_reuses_canonical_preflight_for_another_identity(tmp_path: Path):
+    """Do not implement the same source-reference proof with name-based branches."""
+    _preview, _pending, vault, context, plan, guard = _prepared(tmp_path, chosen_name="Eric")
+    outcome = _execute(vault, context, plan, guard, request_id="selected-other-identity")
+    assert outcome.status is ApplicationStatus.COMPLETED
+    day = vault.read_text("calendar/days/2026-10-05.md")
+    assert day.count("Iré al cine con [[Eric|Eric]]") == 1
+    assert "[[Luis|Luis]]" not in day
