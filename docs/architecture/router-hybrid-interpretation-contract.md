@@ -599,3 +599,53 @@ tras reinicio; rechazo de selección inexistente o cancelada, conversación
 distinta, cambio de identidad o de hechos anteriores y tamper de fuente;
 contextos en español, inglés y francés, con subfrases y referencias de tamaño
 variable, pero sin afirmar semántica revisada por modelo.
+
+## E5 — inspección de la propuesta Core antes de revisión semántica (30-10-2026; fuente)
+
+`odyssey_core/candidate_continuation_plan.py` introduce
+`inspect_selected_candidate_plan(context, plan)`, una comprobación
+**read-only** de los `RequestPlan/WriteAction` tipados del Core existente.
+No invoca un proveedor, no sustituye el Planner, no autoriza E3 y no cambia
+el contrato público/DEV. Conserva cardinalidad variable: un único candidato
+pendiente puede producir varios hechos y varios `WriteAction`, con
+`plan_fact_ordinals` como autoridad de numeración de la nueva propuesta,
+no con ordinales de candidatos ni de hechos ya persistidos.
+
+La inspección rechaza recuperación/delegación mezclada, planes con
+limitaciones, modificaciones de propiedades/etiquetas, creación forzada,
+helpers que escribirían o no se utilizarían, y referencias al elegido que
+no apunten a un helper Core read-only con su nombre canónico. Exige que
+la referencia original aparezca de verdad como marcador en algún hecho
+propuesto y comprueba que ningún nuevo hecho duplique **literalmente**
+el digest normalizado de una anotación Core ya confirmada. Este filtro
+de duplicados exactos **no** detecta paráfrasis; esa es responsabilidad del
+revisor semántico. Ninguna de esas comprobaciones demuestra quién es
+el actor, la fecha correcta o el significado de la frase.
+
+`CoreContinuationPlanInspection.review_payload(context)` entrega fuente
+original y fuente pendiente, spans, hora original, nombre elegido, hechos
+nuevos, tipos/destinos, anclas temporales y menciones de referencias,
+con digest de fuente/plan. No envía stable IDs, guards canónicos ni digest
+privado del registro pendiente al proveedor; este último sí se conserva
+internamente para una futura comparación de estado. La salida siempre
+tiene `may_execute=False`, incluso si hay varios hechos plausibles.
+
+**Matriz mínima de evaluación semántica antes de activar escritura:**
+frase pendiente simple con persona elegida; referencia a otra persona que
+no coincide con la elección; dos hechos distintos apoyados por una cláusula;
+dos cláusulas con contexto compartido; corrección explícita; negación;
+condición; fecha relativa con respuesta al día siguiente; día/hora
+aproximados; uso de pronombres en ES/FR/EN y variantes morfológicas; actor
+`SELF` implícito; mezcla con evento/tarea; propuesta que repite una
+anotación previa reformulada; cambio de identidad entre revisión y E3;
+replay de delivery ID y conflicto de otro actor. Contrastar textos,
+identidades, polaridad, destinos, fechas y cobertura sin añadir un parche por
+frase. El siguiente trabajo debe reutilizar, y adaptar solo si es preciso,
+los contratos existentes de revisión Core/cobertura N:M y el Planner de Core;
+el revisor debe evaluar el **plan completo** y devolver abstención ante
+cobertura incompleta o sospecha de tergiversación. Sin esa evidencia, la
+selección sigue terminando en `CONTINUATION_REVIEW_REQUIRED`.
+
+No existen prompt de continuación ni aceptación de modelo nuevo ni ruta
+automática de escritura. Los tests de esta inspección prueban exclusivamente
+estructura y read-only con datos desechables, no confianza semántica.
