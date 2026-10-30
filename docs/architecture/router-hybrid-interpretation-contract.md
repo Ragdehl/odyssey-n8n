@@ -897,8 +897,30 @@ tests used *synthetic review responses* to prove existing Core/E3 physical
 Day Markdown readback and replay without duplicate write for TWO selected
 identities; 72 focused continuation/semantic/delivery tests PASS.
 This combines distinct proof types and is NOT one authenticated DEV browser
-end-to-end. Four final audit roles and matching-deployed DEV E2E still
-PENDING, as is larger real-model variation and performance acceptance.
+end-to-end. Four independent supervised roles ran on SHA 584ffd0 (source
+equivalent to 5318b0a, base 660974d) in e5-journal-four-role-20261030.
+Trusted host cross-surface, acceptance and Ruff gates PASS, 287180/300000
+Codex-reported tokens; supervisor ended blocked_repair_budget: Generality
+PASS (no duplicate Writer/Router; warning for missing third-person, future,
+hypothetical and mixed-App coverage), Quality BLOCKED only by missing DEV
+E2E, Testing BLOCKED by a genuine callback-level test gap AND DEV E2E,
+Performance BLOCKED for no measured E5 p50/p95, CPU/RAM/swap/temp/fan
+and concurrency. No four-PASS product acceptance is implied.
+
+The concrete Testing gap: product tests currently replace
+candidate_continuation_execute with an injected function; they never run
+the actual nested production composition callback through Temporal,
+LunaFirst, independent reviewer and E3 as one synthetic-host path. A
+false-empty Temporal test does not pass that result through the callback.
+Add that contract test reusing the real composition (not a second
+implementation), for fake-empty dated source, provider failure and valid
+undated journal source; verify no E3 claim on refusals and readback/replay
+on success. Then add source cases for third-person, future, negation and
+mixed Apps; collect representative Pi performance telemetry; test one
+isolated authenticated Chromium→HTTPS→n8n→real provider→Core/E3→Markdown→UI
+journey with matching deployed SHA and replay. A Cloudflare principal
+alone cannot isolate the existing DEV shared actor and vault. Keep E5 OFF.
+Prior targeted temporal security PASS is separate from these four verdicts.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
 bounded synthetic-vault vertical also reached the existing Core/E3, physically
