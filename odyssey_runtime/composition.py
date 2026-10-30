@@ -689,6 +689,8 @@ class RuntimeComposition:
         conversation_id: str | None = None,
         authenticated_actor: AuthenticatedActorContext | None = None,
         external_principal: ExternalPrincipal | None = None,
+        *,
+        reply_to_request_id: str | None = None,
     ) -> dict[str, object]:
         """Execute one delivery once and replay a durable completed mutation result.
 
@@ -699,6 +701,13 @@ class RuntimeComposition:
         another planner or mutation pass.
         """
         actor = self._resolve_actor(authenticated_actor, external_principal)
+        if reply_to_request_id is not None and (
+            not isinstance(reply_to_request_id, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", reply_to_request_id) is None
+            or request_id is None
+            or conversation_id is None
+        ):
+            raise ValueError("Explicit clarification needs a scoped delivery")
         checkpoint_store = self._checkpoint_store(actor)
         # A replay is a verified read of an existing delivery, not a new
         # execution. Do not register a fake "starting" milestone or reset its
@@ -746,6 +755,7 @@ class RuntimeComposition:
                 conversation_id,
                 request_id,
                 user_request,
+                reply_to_request_id=reply_to_request_id,
             )
             if candidate_response is not None:
                 if store is not None and fingerprint is not None:
@@ -1581,6 +1591,9 @@ class RuntimeComposition:
             pending = record["pending"]
             return {
                 "request_id": record["request_id"],
+                # Only this Core-projected v2 card may supply an explicit
+                # source-pending locator. Legacy v1 plans keep their path.
+                "source_pending": True,
                 "requested_reference": pending[0]["reference_text"],
                 "explanation": (
                     "No puedo identificar con seguridad a "
@@ -1635,6 +1648,8 @@ class RuntimeComposition:
         conversation_id: str | None,
         request_id: str | None,
         user_request: str,
+        *,
+        reply_to_request_id: str | None = None,
     ) -> dict[str, object] | None:
         """Consume a v2 selection/cancel before v1 or hybrid routing, never execute it.
 
@@ -1647,11 +1662,14 @@ class RuntimeComposition:
         try:
             repository = self._candidate_pending_repository(actor)
             if repository is None or not repository.open_requests(conversation_id):
+                if reply_to_request_id is not None:
+                    return self._control_response(request_id, "CANDIDATE_UNAVAILABLE")
                 return None
             reply = repository.reply(
                 conversation_id=conversation_id,
                 reply=user_request,
                 answer_id=request_id,
+                request_id=reply_to_request_id,
                 vault=self.vault_repository,
                 schema=cast(dict[str, Any], self.canonical_schema),
                 immediate_followup=self._candidate_reply_is_immediate(

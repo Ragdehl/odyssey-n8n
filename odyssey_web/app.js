@@ -673,6 +673,10 @@ function appendClarificationCard(article, clarification) {
       && option.evidence === clarification.options[0].evidence);
   const sameType = clarification.options.every((option) =>
     option.note_type === clarification.options[0].note_type);
+  // A server-owned v2 marker distinguishes source-pending choices from
+  // legacy plan clarification cards (which can have the same basic shape).
+  const sourcePendingId = clarification.source_pending === true
+    ? clarification.request_id : null;
   const list = document.createElement("div");
   list.className = "clarification-options";
   clarification.options.forEach((option) => {
@@ -699,7 +703,7 @@ function appendClarificationCard(article, clarification) {
     const controls = document.createElement("div");
     controls.className = "clarification-controls";
     const choose = actionButton("check", `Elegir a ${option.label}`, () => {
-      submitClarificationReply(`He elegido a ${option.label}.`);
+      submitClarificationReply(`He elegido a ${option.label}.`, sourcePendingId);
     }, "clarification-choose");
     const inspect = actionButton("openNote", `Ver nota de ${option.label}`, () => {
       selectSurface("notes");
@@ -718,14 +722,14 @@ function appendClarificationCard(article, clarification) {
     article.append(evidence);
   }
   const cancel = actionButton("close", "Cancelar selección", () => {
-    submitClarificationReply("cancel");
+    submitClarificationReply("cancel", sourcePendingId);
   }, "clarification-cancel");
   article.append(cancel);
 }
 
-function submitClarificationReply(reply) {
+function submitClarificationReply(reply, replyToRequestId = null) {
   try {
-    void sendSubmission(createSubmission(reply, globalThis.crypto, conversationId));
+    void sendSubmission(createSubmission(reply, globalThis.crypto, conversationId, replyToRequestId));
   } catch {
     input.focus();
   }

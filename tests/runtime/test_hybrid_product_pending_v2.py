@@ -99,6 +99,7 @@ def test_product_delivers_v2_options_once_and_records_selected_review_without_wr
     assert initial["product_outcome"] == "CLARIFY"
     assert initial["clarification"] == {
         "request_id": initial_id,
+        "source_pending": True,
         "requested_reference": "él",
         "explanation": "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
         "options": [{"id": "eric-id", "label": "Eric"}, {"id": "luis-id", "label": "Luis"}],
@@ -265,3 +266,79 @@ def test_v2_refuses_a_changed_canonical_option_without_writing(tmp_path: Path) -
     pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
     assert pending.read(initial_id)["status"] == "open"
     assert {path: vault.read_text(path) for path in vault.list_markdown_paths()} == before
+
+
+def test_durable_option_can_be_selected_after_unrelated_turn_using_exact_pending_id(
+    tmp_path: Path,
+) -> None:
+    """An older card addresses its own actor-scoped, source-exact v2 record."""
+    runtime, resolver, vault, calls, source, initial_id = _runtime(tmp_path, routed=True)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    route_id = route_execution_id(initial_id, 0)
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    original = pending.read(route_id)
+    original_notes = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    runtime._conversation_store(ACTOR.stable_user_id).append_turn(
+        request_id="another-turn",
+        role="assistant",
+        text="Una respuesta diferente.",
+        created_at=NOW,
+    )
+    # The former implicit path refuses a stale reply, as before.
+    stale = runtime.execute_product("Luis", "stale-implicit-v2", "main", ACTOR)
+    assert stale["product_control"] == "CANDIDATE_EXPLICIT_REQUEST_REQUIRED"
+    # The explicit card ID is not an identity selector: Core validates the
+    # chosen label and current canonical revision before recording a choice.
+    selected = runtime.execute_product(
+        "He elegido a Luis.",
+        "explicit-v2",
+        "main",
+        ACTOR,
+        reply_to_request_id=route_id,
+    )
+    assert selected["product_reason"] == "CONTINUATION_REVIEW_REQUIRED"
+    assert selected["selected_pending_request_id"] == route_id
+    assert selected["product_control"] == "CANDIDATE_SELECTION_RECORDED"
+    assert pending.read(route_id)["original_request"] == original["original_request"]
+    assert pending.read(route_id)["created_at"] == original["created_at"]
+    assert pending.read(route_id)["selected_note_id"] == "luis-id"
+    assert (
+        runtime.execute_product(
+            "He elegido a Luis.",
+            "explicit-v2",
+            "main",
+            ACTOR,
+            reply_to_request_id=route_id,
+        )["delivery_replayed"]
+        is True
+    )
+    assert len(calls) == 1
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original_notes
+
+
+def test_explicit_candidate_id_cannot_select_other_actor_or_unknown_record(tmp_path: Path) -> None:
+    runtime, resolver, vault, calls, source, initial_id = _runtime(tmp_path)
+    runtime.execute_product(source, initial_id, "main", ACTOR)
+    pending = CandidatePendingRepository(resolver.resolve(ACTOR.stable_user_id) / "pending")
+    original_notes = {p: vault.read_text(p) for p in vault.list_markdown_paths()}
+    # Actor B must never use actor A's existing source record as a write or
+    # identity authority, regardless of the supplied source identifier.
+    foreign = runtime.execute_product(
+        "Con Luis",
+        "actor-b-cross",
+        "main",
+        OTHER_ACTOR,
+        reply_to_request_id=initial_id,
+    )
+    assert foreign["product_control"] == "CANDIDATE_UNAVAILABLE"
+    unknown = runtime.execute_product(
+        "Con Luis",
+        "wrong-v2",
+        "main",
+        ACTOR,
+        reply_to_request_id="nonexistent-v2",
+    )
+    assert unknown["product_control"] == "CANDIDATE_UNAVAILABLE"
+    assert pending.read(initial_id)["status"] == "open"
+    assert {p: vault.read_text(p) for p in vault.list_markdown_paths()} == original_notes
+    assert calls == [(source, initial_id)]

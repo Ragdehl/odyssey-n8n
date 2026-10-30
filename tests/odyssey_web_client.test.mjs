@@ -39,6 +39,16 @@ test("new submissions trim text and receive a safe web request id", () => {
   });
 });
 
+test("explicit source clarification carries only a bounded correlated request id", () => {
+  const submitted = createSubmission("Con Luis", fakeCrypto, "main", "request-abc");
+  assert.equal(submitted.replyToRequestId, "request-abc");
+  assert.equal(submitted.conversationId, "main");
+  for (const ref of ["../secrets", "", "a b", "x".repeat(129), 42]) {
+    assert.throws(() => createSubmission("Con Luis", fakeCrypto, "main", ref),
+      ProductRequestError);
+  }
+});
+
 test("empty submissions fail before transport", () => {
   assert.throws(() => createSubmission("   ", fakeCrypto), ProductRequestError);
 });
@@ -1035,4 +1045,46 @@ test("browser product projection keeps receipt-backed stage labels without inven
   };
   const safe = validateProductResponse(invalid);
   assert.equal(safe.request_detail.execution_ledger.stages[0].stage_view, undefined);
+});
+
+test("browser POST forwards a correlated pending ID only when the source card provides it", async () => {
+  let captured;
+  const fetchImpl = async (_url, options) => {
+    captured = JSON.parse(options.body);
+    return response({payload: {
+      request_id: captured.request_id, status: "needs_attention", kind: "cannot_answer",
+      message: "He registrado tu elección; la escritura sigue pendiente de revisión.",
+    }});
+  };
+  const reply = createSubmission("Con Luis", fakeCrypto, "main", "original-r1");
+  await requestProductResult({
+    endpoint: "/api/request", submission: reply, fetchImpl,
+  });
+  assert.equal(captured.reply_to_request_id, "original-r1");
+  assert.equal(captured.request_id, reply.requestId);
+  assert.equal(captured.conversation_id, "main");
+  const next = createSubmission("Comprar pan", fakeCrypto, "main");
+  await requestProductResult({endpoint: "/api/request", submission: next, fetchImpl});
+  assert.equal(Object.hasOwn(captured, "reply_to_request_id"), false);
+});
+
+test("only Core source-pending basic cards may declare explicit reply correlation", () => {
+  const base = {request_id: "web-v2-source", requested_reference: "él",
+    explanation: "Necesito aclarar la referencia.",
+    options: [{id: "person-a", label: "A"}, {id: "person-b", label: "B"}]};
+  const product = clarification => ({
+    request_id: "web-answer", status: "needs_attention", kind: "clarification",
+    message: "Elige una opción.", clarification,
+  });
+  assert.equal(validateProductResponse(product({...base, source_pending: true}))
+    .clarification.source_pending, true);
+  for (const marker of [false, "true", 1, null]) {
+    assert.throws(() => validateProductResponse(product({...base, source_pending: marker})),
+      ProductRequestError);
+  }
+  const rich = {...base, source_pending: true, options: base.options.map(option =>
+    ({...option, note_type: "person", evidence: "Core"}))};
+  assert.throws(() => validateProductResponse(product(rich)), ProductRequestError);
+  assert.equal(Object.hasOwn(validateProductResponse(product(base)).clarification,
+    "source_pending"), false);
 });

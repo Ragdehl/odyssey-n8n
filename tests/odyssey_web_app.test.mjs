@@ -835,3 +835,38 @@ test("initial history also retains every eligible failure, with recent polling d
     ["history-3", 24], ["history-4", 24], ["history-5", 24],
   ]);
 });
+
+test("an older v2 source clarification card sends its exact pending request ID", async () => {
+  const submitted = [];
+  let deliverFirst;
+  const page = await mountApp({
+    turns: [{request_id: "web-initial-ambiguous", role: "user", text: "Hablé con dos personas"}],
+    createSubmission: (request, _crypto, _conversation, replyToRequestId) => ({
+      request, requestId: `v2-${request}`, replyToRequestId,
+    }),
+    requestProductResult: ({submission}) => {
+      submitted.push(submission);
+      return new Promise(resolve => { deliverFirst = resolve; });
+    },
+  });
+  page.elements.conversation.querySelector(".recovery-action").click();
+  await flush();
+  deliverFirst({
+    request_id: "web-initial-ambiguous", status: "needs_attention", kind: "clarification",
+    message: "Elige una persona.", clarification: {
+      request_id: "web-initial-ambiguous-r1", source_pending: true,
+      requested_reference: "él",
+      explanation: "No puedo identificar con seguridad a «él».",
+      options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
+    },
+  });
+  await flush();
+  page.elements.conversation.querySelector(".clarification-choose").click();
+  await flush();
+  assert.equal(submitted.at(-1).request, "He elegido a Eric.");
+  assert.equal(submitted.at(-1).replyToRequestId, "web-initial-ambiguous-r1");
+  page.elements.conversation.querySelector(".clarification-cancel").click();
+  await flush();
+  assert.equal(submitted.at(-1).request, "cancel");
+  assert.equal(submitted.at(-1).replyToRequestId, "web-initial-ambiguous-r1");
+});

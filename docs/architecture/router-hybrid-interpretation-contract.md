@@ -482,3 +482,53 @@ an exact timestamp, and no unsupported identity is linked.
 Evidence, pending four cases, technical budget, no deployment and the
 incremental Clean Architecture future direction are recorded in the
 canonical functional roadmap.
+
+
+## E5 — Correlación explícita de una aclaración fuente v2, 30-10-2026 (solo rama fuente)
+
+La infraestructura de pendiente **ya existía**: `CandidatePendingRepository`
+guarda por actor/conversación fuente original, spans, instante con huso horario,
+opciones de Core y sus guards físicos, sin crear un `RequestPlan`. La
+elección se registra con `CONTINUATION_REVIEW_REQUIRED` y no escribe
+ningún hecho nuevo; la validación semántica de la continuación debe seguir
+separada de la elección.
+
+La UI antigua generaba una elección textual sin el ID de su tarjeta. Tras
+otra respuesta del chat, la regla de seguimiento inmediato bloqueaba esa
+elección (`CANDIDATE_EXPLICIT_REQUEST_REQUIRED`), aunque el pendiente
+estuviera intacto en disco. El cliente HTTP ya preveía un campo opcional
+`reply_to_request_id`, pero no estaba conectado. Ahora:
+
+- Core solo añade `source_pending: true` a sus propias tarjetas de
+  pendientes fuente v2, **no a aclaraciones v1**. n8n lo proyecta
+  únicamente en listas básicas verificadas y el cliente exige tipo
+  booleano literal y forma compatible.
+- Los botones «Elegir» y «Cancelar» de esas tarjetas envían el
+  `reply_to_request_id` original. El compositor conserva intacto un
+  mensaje nuevo sin marcador. n8n valida que el ID sea acotado antes
+  de transmitirlo y el HTTP privado repite la validación. Un `reply_to_request_id`
+  exige también ID de entrega nuevo y conversación explícita; el servidor
+  **omite** el argumento opcional para llamadas antiguas sin correlación.
+- El runtime reutiliza la **misma** `CandidatePendingRepository.reply`
+  y sus protecciones: actor, conversación, ID exacto, respuesta nueva con
+  ID propio, opciones y revisiones canónicas vigentes, hecho anterior
+  verificado y replay idempotente. Un ID inexistente o de otro actor
+  devuelve un control seguro, nunca cae al writer ni al router.
+- **No** se activa la continuación semántica ni se vuelve a escribir la
+  petición original automáticamente. La identidad seleccionada queda
+  almacenada para una revisión posterior; las notas anteriores permanecen
+  intactas. El guard experimental F14/F27 sigue sin generalizarse a
+  peticiones arbitrarias.
+
+Evidencia: pruebas con bóveda temporal y servidor HTTP auténtico para
+selección tras un turno no correlacionado, respuesta repetida, actor ajeno,
+IDs inválidos y ausencia de nuevas escrituras; contratos JS del
+cliente, tarjeta y validador n8n. Son pruebas offline con datos
+sintéticos, **no** aceptación navegador desplegado/Cloudflare/GPT real.
+
+
+**Límite conocido de la interfaz:** las tarjetas v2 mantienen su ID mientras
+están representadas en la conversación actual. La bóveda operativa conserva
+la aclaración tras reinicios, pero la navegación de pendientes seleccionados
+y la restauración de **tarjetas interactivas tras recargar** aún necesitan
+integración; no afirmar UX de recuperación completa tras un reinicio.

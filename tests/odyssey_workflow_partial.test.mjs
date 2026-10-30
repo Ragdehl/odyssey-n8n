@@ -53,7 +53,8 @@ test("partial writes are disclosed instead of misreported as entirely failed", (
 
 test("actual n8n route preserves verified pending-v2 choices for the browser", () => {
   const clarification = {
-    request_id: "synthetic-partial-r1", requested_reference: "él",
+    request_id: "synthetic-partial-r1", source_pending: true,
+    requested_reference: "él",
     explanation: "No puedo identificar con seguridad a «él». Elige una persona o cancela.",
     options: [{id: "eric", label: "Eric"}, {id: "luis", label: "Luis"}],
   };

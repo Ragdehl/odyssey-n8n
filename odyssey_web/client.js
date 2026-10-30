@@ -43,13 +43,20 @@ export function createRequestId(cryptoImpl = globalThis.crypto) {
  * @returns {{request: string, requestId: string}} Submission ready for transport.
  * @throws {ProductRequestError} When the request is empty.
  */
-export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, conversationId = null) {
+export function createSubmission(rawRequest, cryptoImpl = globalThis.crypto, conversationId = null, replyToRequestId = null) {
   const request = String(rawRequest ?? "").trim();
   if (!request) {
     throw new ProductRequestError("The request is empty.");
   }
   const submission = {request, requestId: createRequestId(cryptoImpl)};
   if (typeof conversationId === "string" && conversationId) submission.conversationId = conversationId;
+  if (replyToRequestId !== null) {
+    if (typeof replyToRequestId !== "string" ||
+      !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(replyToRequestId)) {
+      throw new ProductRequestError("Invalid clarification reference.");
+    }
+    submission.replyToRequestId = replyToRequestId;
+  }
   return submission;
 }
 
@@ -239,8 +246,11 @@ function hasExactKeys(value, keys) {
 }
 
 function validClarificationKeys(value, shape) {
-  const allowed = new Set(["request_id", "options", "requested_reference", "explanation"]);
+  const allowed = new Set(["request_id", "options", "requested_reference", "explanation", "source_pending"]);
   if (!Object.keys(value).every((key) => allowed.has(key))) return false;
+  if (Object.hasOwn(value, "source_pending") &&
+    (value.source_pending !== true || shape !== "basic" ||
+      !Object.hasOwn(value, "requested_reference"))) return false;
   const hasReference = Object.hasOwn(value, "requested_reference");
   const hasExplanation = Object.hasOwn(value, "explanation");
   // v2 source-scoped choices have basic canonical labels with a bounded question;

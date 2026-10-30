@@ -463,6 +463,7 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     "conversation_id",
                     "authenticated_actor",
                     "external_principal",
+                    "reply_to_request_id",
                 }
                 if set(payload) - allowed:
                     raise ValueError("request payload has unsupported fields")
@@ -477,12 +478,22 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     or _REQUEST_ID_PATTERN.fullmatch(request_id) is None
                 ):
                     raise ValueError("request_id must be a safe non-empty identifier")
+                reply_to_request_id = payload.get("reply_to_request_id")
+                if reply_to_request_id is not None and (
+                    not isinstance(reply_to_request_id, str)
+                    or _REQUEST_ID_PATTERN.fullmatch(reply_to_request_id) is None
+                ):
+                    raise ValueError("reply_to_request_id must be a safe identifier")
                 conversation_id = payload.get("conversation_id")
                 if conversation_id is not None and (
                     not isinstance(conversation_id, str)
                     or _REQUEST_ID_PATTERN.fullmatch(conversation_id) is None
                 ):
                     raise ValueError("conversation_id must be a safe non-empty identifier")
+                if reply_to_request_id is not None and (
+                    request_id is None or conversation_id is None
+                ):
+                    raise ValueError("explicit clarification requires a scoped delivery")
                 actor_payload = payload.get("authenticated_actor")
                 authenticated_actor = (
                     None
@@ -506,6 +517,11 @@ def _handler_for(runtime: RuntimeComposition) -> type[BaseHTTPRequestHandler]:
                     conversation_id,
                     authenticated_actor,
                     external_principal,
+                    **(
+                        {"reply_to_request_id": reply_to_request_id}
+                        if reply_to_request_id is not None
+                        else {}
+                    ),
                 )
                 operational = response.get("operational")
                 if isinstance(operational, dict):
