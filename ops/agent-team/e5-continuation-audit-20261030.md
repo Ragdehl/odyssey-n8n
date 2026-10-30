@@ -1,52 +1,19 @@
-# E5 selected-source continuation — independent integration audit, 30 October 2026
+# E5 whole selected-source integration review, pinned 5318b0a on 2026-10-30
 
-Review the pinned PR #161 incremental changes after be7577e only. User explicitly
-authorized full four-role Codex audits and sufficient local reported-token budget.
-The **whole PR** is larger and has historic partial review; do not mistake this
-incremental four-role review for four PASS on all 680 KB of PR code.
+You are four INDEPENDENT read-only Codex reviewers (Generality, Quality, Testing, Performance) in the existing Odyssey supervisor. Read AGENTS.md, active E5 contract docs and the complete scoped diff 660974da6e9d147ee3c34602d2b4e715e351eea7..5318b0a646ff188a6c3008c553b3bbdd06be24fb (~111 KiB). This is NOT review of historical pre-660974d code in PR #161. Existing E3, P4, Events, Tasks and pending state must be reused; no per-name, per-phrase, language or pronoun workaround or duplicate Planner/Temporal/Writer.
 
-## Existing behavior and tested scope
-- The October 10 F14/F27 literal old pilot **already** linked a Luis fact to
-  a Day note in synthetic Core/E3; it is quarantined and not production-ready.
-  Do not count this as newly invented functionality.
-- The ordinary Core/E3 Writer, pending actor-local clarification, readback
-  validator and LocalDeliveryResultStore are reused.
-- New generic independent semantic review prompt: real GPT-5.6 Luna/low
-  16/16 scoped synthetic corpus (5 positives, 11 negative; ES/FR/EN), exact
-  prompt SHA e27c13afbff564736fe6f32f56589c0dc6ed02ff2679d27042f4f66fc89fa2c9.
-  Earlier v1 11/16 and v2 15/16 fail were addressed by exact echo of proposed
-  text and explicit typed fact kind. Evidence in docs and script.
-- New RuntimeComposition opt-in continuation callback is disabled by default.
-  Only isolated DEV with existing light source path may enable the flag.
-- Synthetic product tests show clarify -> injected reviewed-plan callback ->
-  original Core/E3 -> physical Markdown readback -> immutable delivery receipt
-  -> same-ID replay with zero duplicate writes. Failures before claim are
-  distinct from crash after claim. Old pending state stays selected.
-- **CRITICAL OPEN BLOCKER**: two independent genuine planner-only provider
-  probes both FAIL BEFORE WRITES: ordinary Core Planner produced
-  "KnowledgeUnit fact reference marker is out of range", experimental Luna
-  planner "Luna semantic WRITE failed local compilation", when presented
-  with selected pronoun identity hint. The reviewer 16/16 does not prove
-  the actual product's Planner can return any accepted plan.
-  The feature flag MUST stay OFF, product NOT ready, no real browser acceptance.
-- DEV still pinned 4ba8bb8; PR head not deployed; real DEV/PROD/personal vault
-  must not be read or touched by the reviewers.
+Current source reality:
+- The shared ordinary Planner is LunaFirst (gpt-5.6-luna first, bounded Sol fallback), NOT Sol-only.
+- Core pending clarification selected identity is bounded to exact source span and checked current actor/vault; original IANA zone is captured, older zone-less records readable but refuse automated continuation.
+- Existing Temporal interpretation opt-in now distinguishes a successfully validated zero-mention output from unavailability/unspecified; source equality and independent whole-source reviewer protect the no-date path. A real GPT-5.6 Luna adversarial wrong-day review returned NOT APPROVED.
+- Reused Core planner_authorized_calendar_dates now retains captured current Day if DomainInterpretation only has identity evidence; exact Temporal days still override. Shared semantic planner chooses the canonical journal Day for completed autobiographical recollections rather than a competing Person Note. Day destination at original captured local Day indexes the journal entry, not proof occurrence happened then. Independent reviewer sees separated date/index evidence.
+- Synthetic bounded real-model probes: gpt-6-luna Temporal 5/5 (three languages without date, date relative, date uncertain); no-date Luna-first PLAN to calendar_day 2026-10-04 and independent gpt-5.6-luna approval on source "He estado con él en el parque"; undated question rejected in prior read-only probe. Original dated example planner+review read-only PASS and real E3 synthetic source E2E PASS separately.
+- Physical synthetic Core/E3 review/delivery tests for new no-date journal scenario with TWO selected identities, Markdown readback and replay with zero duplicate writes PASS (reviews in this test are synthetically injected; do NOT conflate with the separate fresh model test). Historical P4 journal test 6/6 PASS. Focused Core/Planner tests 219 pass, 1 skip; continuation tests 72 pass; full local cross-surface gate PASS on 5318b0a including canonical NoteSchema. GitHub CI pending when last seen.
+- PR #161 DRAFT, base dev, not merged; DEV deployed SHA 4ba8bb8 (flag OFF), no product browser/HTTPS→n8n→provider→E3→UI E2E on this SHA. No real personal vault, PROD, Cloudflare or n8n changes. No deploy permission from this review.
 
-## Independent review expectations
-- Generality: no example-based workarounds or second Planner/Writer/DB.
-  Evaluate chosen identity hint and original date; type/shape compatibility
-  with the standard Core Planner; actor/conversation scoping.
-- Quality: strict no-double-write claim/replay, exact E3 guard/selection and
-  source/digest freshness. Whether product callback can claim completion before
-  verifying all physical evidence, crash/restart, multi-user and prewrite
-  versus postwrite errors. Verify feature OFF by default.
-- Testing: distinguish 16 live reviewer calls from two failed Planner calls,
-  synthetic product tests vs authenticated Chromium+n8n E2E and real model
-  integration. Find missing negative tests and gaps in source/clock handling.
-- Performance: check linear readback scan limits, repeated OpenAI calls,
-  when locked Product.execute calls held, partial reconstruction costs and
-  indexes. Do not invent bench measurements.
-- Provide specific exact file/function defects and safe targeted repairs.
-  Set BLOCKED/FAIL honestly for missing real planner or DEV browser evidence.
-  Do not modify code, personal notes, Cloudflare, DEV, PROD or n8n.
-  Four roles do not authorize merge/deploy.
+Generality: check reuse, semantic ownership vs journal indexing, negative/future/hypothetical/third-party distinctions, unexpected cross-consumer effects; exact source/candidate span and no unsupported special cases.
+Quality/security: actor isolation, captured-clock IANA/DST, signed selection, reviewer independent veto, dates vs Day index, exact E3 claim/replay after crash/readback, stale state before claim, no unauthorized writes from provider.
+Testing: assess actual / frozen / synthetic evidence distinctly, valid negative/ambiguity/date conflicts, other note types, multi-fact coverage, whether tests genuinely exercise E5 callback vs only helpers, missing authenticated real DEV vertical.
+Performance: Pi memory, latency, provider calls (Temporal+LunaFirst+review+E3), repeated full-source reconstruction, concurrency/locks and boundedness; no invented benchmarks.
+
+Return structured PASS/FAIL/BLOCKED per role with exact severity-ranked actionable findings. Missing DEV E2E makes full product acceptance BLOCKED, NOT a reason to recommend a new writer or indiscriminate prompt changes. Do NOT modify source, spend provider calls, read private data, merge, deploy, or change secrets. Keep audit scope and cited paths precise; do not confuse deletions in diff with current code.
