@@ -163,12 +163,14 @@ def test_model_route_hypothesis_alone_does_not_fabricate_day_note(tmp_path):
         ("Hoy han venido mis padres de visita a mi casa", "mis padres"),
         ("Hoy he ido al parque con mis primos", "mis primos"),
         ("Aujourd'hui mes parents sont venus à la maison", "mes parents"),
+        ("Hoy compré patatas fritas para mis compañeros", "mis compañeros"),
+        ("Hoy he ordenado mis cartas del cajón", "mis cartas"),
     ],
 )
-def test_completed_visit_with_unverified_family_reference_saves_literal_day(
+def test_untrusted_router_mentions_do_not_block_faithful_core_journal(
     tmp_path, source, relation_span
 ):
-    """Unverified plural relations remain literal in safe completed Day entries."""
+    """No Router mention can force identity linking or prevent a literal fact."""
     repo, actor, executor, runtime = _fixture(tmp_path)
     executor.event_delegate = lambda *_: pytest.fail(
         "Past visit is not an Events lifecycle operation"
@@ -231,5 +233,15 @@ def test_family_literal_fallback_rejects_unverified_writes(tmp_path, unsafe):
     executor.client = RecordedClient(rows)
     before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
     result = runtime.execute_product(source, "family-unsafe-" + unsafe, "main", actor)
-    assert result["status"] == "needs_attention"
-    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    if unsafe in {"invented_entity", "invented_participant"}:
+        # Discard unused untrusted suggestions rather than failing a valid
+        # journal: physical output remains literal, no invented Person.
+        assert result["status"] == "completed", result
+        notes = [parse_note(repo.read_text(path)) for path in repo.list_markdown_paths()]
+        assert len([n for n in notes if n.metadata.get("type") == "person"]) == 1
+        day = next(n for n in notes if n.metadata.get("type") == "calendar_day")
+        assert "Hoy han venido mis padres" in day.content
+        assert "Madre desconocida" not in day.content
+    else:
+        assert result["status"] == "needs_attention"
+        assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before

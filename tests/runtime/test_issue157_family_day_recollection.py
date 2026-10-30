@@ -167,11 +167,35 @@ def test_multiple_relation_proofs_fail_closed_without_any_write(tmp_path, case):
         rows[0]["self_relation_spans"] = ["mis hijos", "mis hijos"]
     if case == "excess_groups":
         rows[0]["self_relation_spans"] = ["mis hijos"] * 9
-    service.client = RecordedClient(rows[:1])
+    service.client = RecordedClient(rows if case == "missing_verified_partner" else rows[:1])
     before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
     result = runtime.execute_product(SOURCE, f"issue157-{case}", "main", actor)
     assert result["status"] == "needs_attention"
     assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+
+
+def test_verified_and_unverified_mentions_can_share_one_literal_day(tmp_path):
+    """Partial optional evidence is not an all-or-nothing write dependency."""
+    repo, actor, service, runtime = _family(tmp_path, include_partner=False)
+    rows = _model_responses()
+    for row in rows[1]["facts"]:
+        row["participants"] = []
+    for item, original in zip(rows[2]["facts"], FACTS, strict=True):
+        item["reviewed_text"] = original
+        item["reference_names"] = []
+    service.client = RecordedClient(rows)
+    result = runtime.execute_product(SOURCE, "partial-hint-literal", "main", actor)
+    assert result["status"] == "completed", result
+    days = [
+        parse_note(repo.read_text(p))
+        for p in repo.list_markdown_paths()
+        if parse_note(repo.read_text(p)).metadata.get("type") == "calendar_day"
+    ]
+    assert len(days) == 1
+    assert "mis hijos" in days[0].content and "mi pareja" in days[0].content
+    assert "[[Nora" not in days[0].content
+    assert "[[Ivo" not in days[0].content
+    assert "[[Vera" not in days[0].content
 
 
 def test_stale_second_relationship_abstains_before_any_physical_write(tmp_path):
