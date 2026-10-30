@@ -860,6 +860,16 @@ None remains a failed call/validation and is
 never downgraded to "no date". This introduces no independent temporal
 resolver or keyword/list-of-phrases date detector.
 No new resolver, writer, note schema or phrase-specific branch was added.
+The continuation source-evidence seam additionally rejects a Temporal output
+whose source_text differs from the EXACT selected pending source, including
+an otherwise well-shaped empty result. A successful model-produced empty list
+is a claim about absence, not standalone E3 authorization: the independent
+reviewer still sees the original source and proposed destination/date and can
+veto before any claim. A bounded real GPT-5.6 Luna adversarial review verified
+this: false empty for "Mañana iré al cine con él" with an incorrect same-day
+plan was rejected (CandidateContinuationSemanticError), zero Markdown writes.
+The revised source check and a no-claim regression prevent accidental replay
+of another source's no-date result. This does NOT prove universal model safety.
 Three language variants of the combined-domain contract passed local tests.
 Fresh read-only real Temporal + Luna-first + independent review PASS; a second
 bounded synthetic-vault vertical also reached the existing Core/E3, physically

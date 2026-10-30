@@ -145,6 +145,41 @@ def test_inconsistent_day_and_explicit_anchor_refuse_before_any_e3_claim(
     assert not (kwargs["vault"].root / "calendar/days/2026-10-07.md").exists()
 
 
+def test_false_empty_temporal_claim_cannot_inherit_a_wrong_day_review(
+    tmp_path: Path,
+) -> None:
+    """No date returned by a model cannot bypass the source-bound reviewer."""
+    from odyssey_core.request_planning import RequestPlan, WriteAction
+    from odyssey_core.temporal_interpretation import parse_temporal_interpretation
+    from odyssey_runtime.composition import _continuation_exact_temporal_evidence
+
+    kwargs, calls = _inputs(tmp_path)
+    before = {
+        path: kwargs["vault"].read_text(path) for path in kwargs["vault"].list_markdown_paths()
+    }
+    source = "Mañana iré al cine con él"
+    false_empty = parse_temporal_interpretation(
+        {"mentions": []},
+        source,
+        timezone="Europe/Paris",
+        allow_empty_mentions=True,
+    )
+    assert _continuation_exact_temporal_evidence(source, false_empty) == ()
+    writer, helper = kwargs["plan"].actions[0].units
+    false_day = replace(
+        writer,
+        target=replace(writer.target, query="2026-10-04"),
+        fact_temporal_anchors=(),
+    )
+    proposed = RequestPlan((WriteAction((false_day, helper)),), ())
+    with pytest.raises(CandidateContinuationPrewriteError):
+        deliver_reviewed_candidate_continuation(**{**kwargs, "plan": proposed})
+    assert calls == []
+    assert before == {
+        path: kwargs["vault"].read_text(path) for path in kwargs["vault"].list_markdown_paths()
+    }
+
+
 def test_reviewer_rejects_before_claim_or_any_core_write(tmp_path: Path):
     kwargs, calls = _inputs(tmp_path)
     bad = dict(kwargs["independent_review"])

@@ -6396,7 +6396,9 @@ def _build_runtime_from_environment_unlocked(
                     captured_clock=captured_clock,
                     allow_empty_mentions=True,
                 )
-                temporal_evidence = _continuation_exact_temporal_evidence(prepared_temporal.value)
+                temporal_evidence = _continuation_exact_temporal_evidence(
+                    prepared.pending_source, prepared_temporal.value
+                )
                 evidence = DomainInterpretation(
                     "core",
                     prepared.pending_source,
@@ -6824,13 +6826,16 @@ def _continuation_original_clock(prepared: CoreCandidateContinuationContext) -> 
 
 
 def _continuation_exact_temporal_evidence(
+    source_text: str,
     temporal: TemporalInterpretation | None,
 ) -> tuple[DomainEvidence, ...]:
-    """Project ONLY existing Temporal's fully validated exact source evidence."""
+    """Bind a trusted Temporal outcome to this exact continuation source."""
     # Only the opt-in Temporal schema can return a validated empty list.
     # None still means a provider/validation failure, not verified absence.
     if not isinstance(temporal, TemporalInterpretation):
         raise CandidateContinuationPrewriteError("Continuation Temporal evidence is unavailable")
+    if temporal.source_text != source_text:
+        raise CandidateContinuationPrewriteError("Temporal result belongs to another source")
     if not all(
         kind in {TemporalResolutionKind.EXACT_DATE, TemporalResolutionKind.EXACT_DATETIME}
         for kind in temporal.kinds()
