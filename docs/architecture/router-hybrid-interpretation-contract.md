@@ -654,3 +654,72 @@ selección sigue terminando en `CONTINUATION_REVIEW_REQUIRED`.
 No existen prompt de continuación ni aceptación de modelo nuevo ni ruta
 automática de escritura. Los tests de esta inspección prueban exclusivamente
 estructura y read-only con datos desechables, no confianza semántica.
+
+## E5 — dictamen semántico independiente y acotado de continuación (30-10-2026, fuente inactiva)
+
+**Contrato reutilizado, no nuevo proveedor:** se parte del prompt
+`PROMPT_SOURCE_REVIEW_CORE_ANCHORED` y esquema JSON
+`REVIEW_CORE_ANCHORED_SCHEMA` de `whole_source_model_contract.py`.
+`odyssey_runtime/candidate_continuation_review.py` prepara solamente la
+entrada, añade una explicación de alcance que diferencia **hechos fuente
+ya confirmados por E3** frente a **hechos pendientes** y devuelve el esquema
+existente. El original entero, reloj de captura original, candidato exacto,
+referencia y nombre elegido se conservan para poder comprobar correferencias
+sin reescribir la solicitud ni reutilizar un plan inicial ambiguo.
+El *modelo* tiene que dictaminar la totalidad de hechos de la parte pendiente
+y revisar su dependencia de contexto previo; no debe solicitar duplicar los
+hechos ya persistidos. En esta fase no se crea cliente/proveedor activo ni se
+cambia la versión aceptada del prompt general: el prompt de continuación
+es una variante **NO aceptada en producción**.
+
+`odyssey_core/candidate_continuation_semantic.py` valida de forma cerrada
+el resultado del revisor independiente, manteniendo idéntico formato
+`approved,complete,reason,facts` con orden de ordinales, `record`,
+`reviewed_text`, `date`, `reference_names` y `supported`. Exige
+`approved=true`, `complete=true`, revisión de **cada** hecho nuevo,
+texto, fecha y referencias congruentes con las del `RequestPlan`, y no
+admite actores mencionados en otra cláusula, participantes extra, falso
+`supported`, pérdida de un hecho, órdenes cambiados ni `source_quote`
+inventado por el reviewer. La inspección estructural reforzada verifica
+todas las apariciones de `{{ref:N}}` y las vincula al helper Core
+de solo lectura que le corresponde, sin asumir un número fijo de hechos.
+Fechas múltiples/parciales no representables en el campo temporal escalar
+de este revisor se **rechazan** hasta tener evidencia equivalente.
+La validación adicional `validate_independent_continuation_verdict_current`
+recomprueba registro pendiente, plan, identidad, hechos físicos y digest del
+dictamen si se usan más adelante.
+
+**Límite explícito:** el dictamen + checks deterministas **no certifican
+verdad semántica**; un modelo que responda falsamente `approved=true`
+puede seguir equivocándose en negación, fecha relativa, cardinalidad,
+completitud o paráfrasis. El resultado `may_execute=False` siempre.
+`validate_whole_message_coverage` no puede aplicarse sin cambios:
+presupone que todas las aserciones del mensaje entero son hechos *nuevos*,
+mientras que la continuación contiene recibos de hechos ya escritos.
+No migrar su autorización E3 por copiar un esquema JSON. Esta etapa no
+habilita automáticamente el revisor ni crea otra cola/Writer.
+
+**Matriz obligatoria del prompt de continuación antes de activar un
+proveedor/modelo y luego escritura** (evidencia por caso con modelo,
+esfuerzo, prompt hash, respuesta del proveedor, coste y latencia):
+(1) sujeto/identidad elegida sin cambio y misma cláusula pendiente;
+(2) correferencia errónea a nombre de otra frase; (3) pasado vs futuro;
+(4) fecha relativa resuelta contra captura original, no fecha de respuesta;
+(5) dos acciones separables en el mismo candidato y referencia compartida;
+(6) un solo hecho con apoyo N:M de varias cláusulas; (7) negación;
+(8) condición; (9) autocorrección; (10) fecha parcial/duración/franja;
+(11) intención de tarea vs experiencia pasada/evento; (12) SELF implícito
+en ES, FR y EN; (13) duplicación literal y paráfrasis de hechos previos;
+(14) fuente ambigua o cambio de target; (15) selector de otro actor;
+(16) replay, modificación de fuente, plan, Markdown o guard de identidad.
+El conjunto incluye positivos, abstenciones obligatorias y adversariales;
+no cambiar esperados para ocultar falsos positivos.
+
+**Pruebas de este corte:** entradas sintéticas, dictámenes congelados
+(aceptado/no admitido/malformado/extra/reordenado), referencias simbólicas
+inválidas, drift de plan, elección y notas físicas. No se ha consultado
+ningún GPT en vivo; los dictámenes son entradas controladas por las pruebas.
+El siguiente bloqueo operativo consiste en crear un adaptador del proveedor
+existente y evaluar la *variante* completa del prompt con la campaña acotada
+autorizada. Solo entonces valorar integración Core E3 (recibo durable,
+escritura única del candidato y readback físico), 4 auditores y E2E real en DEV.

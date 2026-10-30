@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -23,6 +24,7 @@ from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
 from .storage import VaultRepository
 
 _MAX_FACTS = 128
+_REF_TOKEN = re.compile(r"\{\{ref:(\d+)\}\}")
 _MAX_PAYLOAD_BYTES = 40_960
 
 
@@ -40,6 +42,7 @@ class CoreContinuationProposedFact:
     destination_query: str
     temporal_values: tuple[str, ...]
     reference_mentions: tuple[str, ...]
+    reference_names: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +84,7 @@ class CoreContinuationPlanInspection:
                     "destination_query": item.destination_query,
                     "temporal_values": list(item.temporal_values),
                     "reference_mentions": list(item.reference_mentions),
+                    "reference_names": list(item.reference_names),
                 }
                 for item in self.proposed_facts
             ],
@@ -148,7 +152,7 @@ def inspect_selected_candidate_plan(
                     raise CandidateContinuationPlanError("Empty continuation writer")
                 if len(unit.facts) != len(unit.fact_temporal_anchors):
                     raise CandidateContinuationPlanError("Missing temporal fact positions")
-                mentions: list[str] = []
+                used_reference_indexes: set[int] = set()
                 selected_reference_indexes: set[int] = set()
                 for reference_index, reference in enumerate(unit.references):
                     if (
@@ -158,7 +162,6 @@ def inspect_selected_candidate_plan(
                     ):
                         raise CandidateContinuationPlanError("Unresolved continuation lookup")
                     referred_helpers.add(reference.target_index)
-                    mentions.append(reference.mention)
                     if reference.mention == context.reference_text:
                         helper = action.units[reference.target_index]
                         if (
@@ -186,6 +189,16 @@ def inspect_selected_candidate_plan(
                         raise CandidateContinuationPlanError(
                             "Proposal repeats previously verified atomic knowledge"
                         )
+                    slots = [int(match) for match in _REF_TOKEN.findall(literal)]
+                    if (
+                        len(set(slots)) != len(slots)
+                        or any(slot >= len(unit.references) for slot in slots)
+                        or "{{ref:" in _REF_TOKEN.sub("", literal)
+                    ):
+                        raise CandidateContinuationPlanError(
+                            "Proposed symbolic references are invalid or duplicated"
+                        )
+                    used_reference_indexes.update(slots)
                     facts.append(
                         CoreContinuationProposedFact(
                             ordinal,
@@ -193,14 +206,19 @@ def inspect_selected_candidate_plan(
                             unit.target.type,
                             unit.target.query,
                             tuple(anchor.value for anchor in temporal),
-                            tuple(mentions),
+                            tuple(unit.references[slot].mention for slot in slots),
+                            tuple(
+                                action.units[unit.references[slot].target_index].target.entity
+                                for slot in slots
+                            ),
                         )
                     )
-                    if any(
-                        "{{ref:" + str(index) + "}}" in literal
-                        for index in selected_reference_indexes
-                    ):
+                    if any(slot in selected_reference_indexes for slot in slots):
                         bound.append(ordinal)
+                if used_reference_indexes != set(range(len(unit.references))):
+                    raise CandidateContinuationPlanError(
+                        "Continuation source references are not consumed by facts"
+                    )
             if referred_helpers != helper_indexes:
                 raise CandidateContinuationPlanError("Unreferenced continuation identity helper")
         if not 1 <= len(facts) <= _MAX_FACTS or not bound:
