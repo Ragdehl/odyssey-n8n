@@ -937,7 +937,24 @@ p95 3.11 ms; provider failure median 2.72 ms, p95 2.75 ms. Observed process
 max RSS about 86.1 MiB, MemAvailable ~2564→2560 MiB, SwapFree 870 MiB.
 These are measurements of the local callback only, excluding fixture setup,
 GPT latency, HTTPS/browser/n8n, concurrent load and sustained Pi conditions.
-NOT acceptance of real-world latency or scaling. Next: more varied semantic
+NOT acceptance of real-world latency or scaling.
+Additional bounded one-shot **actual model+Core/E3 integration** on 7012d3f
+(2026-10-30, disposable synthetic vault) PASS in 18.53 seconds:
+existing factory callback, actual OpenAI Temporal, real shared LunaFirst
+planner, real independent semantic reviewer, unchanged Core/E3 and physical
+Markdown readback. A no-date first-person memory was filed in captured
+calendar_day 2026-10-04 with exactly one verified canonical person wikilink;
+all other Markdown notes remained byte-for-byte unchanged. The success
+receipt is /tmp/e5-one-real-callback-20261030.json, a single-use bounded
+probe. The negative callback and same-ID replay had already passed in the
+separate deterministic production callback test; these are not claimed
+as real-provider replay. This new combined proof supersedes the need to
+repeat the previous isolated provider/Planner/Core positive checks.
+Remaining feature acceptance requires isolated matching-SHA authenticated
+browser→n8n→real provider→Core/E3→Notes/Calendar/UI. Real latency is only
+one point (18.53 s), not p95 or a concurrency guarantee. Reuse existing
+Events/Tasks E5 evidence; avoid scope growth and unnecessary repeat audits.
+Earlier open concerns include more varied semantic
 sources (third-person, future, negated, mixed Apps), representative full
 provider/performance and concurrent-resource measurements, fresh scoped audit,
 and isolated authenticated Chromium→HTTPS→n8n→actual provider→Core/E3→Markdown
