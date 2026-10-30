@@ -14,8 +14,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from .atomic_facts import normalize_atomic_fact
-from .candidate_continuation_context import CoreCandidateContinuationContext
+from .candidate_continuation_context import (
+    CoreCandidateContinuationContext,
+    validate_selected_continuation_current,
+)
+from .candidate_pending_state import CandidatePendingRepository
 from .request_planning import RequestPlan, WriteAction, plan_fact_ordinals
+from .storage import VaultRepository
 
 _MAX_FACTS = 128
 _MAX_PAYLOAD_BYTES = 40_960
@@ -214,3 +219,31 @@ def inspect_selected_candidate_plan(
         if isinstance(error, CandidateContinuationPlanError):
             raise
         raise CandidateContinuationPlanError("Invalid typed Core proposal") from error
+
+
+def validate_inspected_candidate_plan_current(
+    inspection: CoreContinuationPlanInspection,
+    context: CoreCandidateContinuationContext,
+    plan: RequestPlan,
+    repository: CandidatePendingRepository,
+    *,
+    vault: VaultRepository,
+    schema: dict[str, Any],
+) -> None:
+    """Refresh every source/identity/fact guard and the exact submitted plan.
+
+    A valid snapshot is never reusable after the source state or proposal
+    changes. Neither this last-moment integrity check nor its success is an
+    independent semantic approval or an authorization to execute E3.
+    """
+    if not isinstance(inspection, CoreContinuationPlanInspection):
+        raise CandidateContinuationPlanError("Typed Core plan inspection required")
+    try:
+        validate_selected_continuation_current(context, repository, vault=vault, schema=schema)
+        current = inspect_selected_candidate_plan(context, plan)
+    except (ValueError, TypeError) as error:
+        raise CandidateContinuationPlanError(
+            "Continuation plan context is no longer current"
+        ) from error
+    if current != inspection:
+        raise CandidateContinuationPlanError("Inspected continuation plan changed")

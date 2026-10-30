@@ -629,6 +629,11 @@ con digest de fuente/plan. No envía stable IDs, guards canónicos ni digest
 privado del registro pendiente al proveedor; este último sí se conserva
 internamente para una futura comparación de estado. La salida siempre
 tiene `may_execute=False`, incluso si hay varios hechos plausibles.
+La comprobación `validate_inspected_candidate_plan_current` compara de
+nuevo el registro v2, la selección canónica y los hechos físicos con la
+instantánea preparada y vuelve a inspeccionar el `RequestPlan` exacto.
+Rechaza cualquier cambio entre inspección y el eventual prewrite; **no
+evalúa la semántica ni habilita E3**, incluso si todas las guardas pasan.
 
 **Matriz mínima de evaluación semántica antes de activar escritura:**
 frase pendiente simple con persona elegida; referencia a otra persona que

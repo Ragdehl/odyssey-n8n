@@ -185,3 +185,79 @@ def test_wrong_relative_date_stays_non_executable_pending_independent_semantics(
     assert not inspected.may_execute
     # Source/plan digest plus exact quote can validate integrity; ONLY the
     # next independent semantic review can reject a false day interpretation.
+
+
+def test_current_plan_guard_rejects_changed_proposal_and_stale_identity(tmp_path: Path):
+    from odyssey_core.candidate_continuation_plan import (
+        validate_inspected_candidate_plan_current,
+    )
+
+    preview, repo, vault, _state = _ready(tmp_path)
+    _reply(repo, vault, "Con Luis")
+    context = prepare_selected_candidate_continuation(
+        repo,
+        conversation_id="chat-1",
+        request_id=preview.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    plan = _linked_day_plan(
+        "2026-10-05",
+        "Iré al cine con {{ref:0}}.",
+        "él",
+        "2026-10-05",
+        target_name="Luis",
+    )
+    inspected = inspect_selected_candidate_plan(context, plan)
+    validate_inspected_candidate_plan_current(
+        inspected, context, plan, repo, vault=vault, schema=SCHEMA
+    )
+    writer, helper = plan.actions[0].units
+    changed = RequestPlan(
+        (WriteAction((replace(writer, facts=("Iré a otro lugar con {{ref:0}}.",)), helper)),), ()
+    )
+    with pytest.raises(CandidateContinuationPlanError):
+        validate_inspected_candidate_plan_current(
+            inspected, context, changed, repo, vault=vault, schema=SCHEMA
+        )
+    note = vault.root / "Luis.md"
+    note.write_text(note.read_text(encoding="utf-8") + chr(10), encoding="utf-8")
+    with pytest.raises(CandidateContinuationPlanError):
+        validate_inspected_candidate_plan_current(
+            inspected, context, plan, repo, vault=vault, schema=SCHEMA
+        )
+
+
+def test_current_plan_guard_rejects_modified_pending_record(tmp_path: Path):
+    from odyssey_core.candidate_continuation_plan import (
+        validate_inspected_candidate_plan_current,
+    )
+
+    preview, repo, vault, state = _ready(tmp_path)
+    _reply(repo, vault, "Con Luis")
+    context = prepare_selected_candidate_continuation(
+        repo,
+        conversation_id="chat-1",
+        request_id=preview.request_id,
+        vault=vault,
+        schema=SCHEMA,
+    )
+    plan = _linked_day_plan(
+        "2026-10-05",
+        "Iré al cine con {{ref:0}}.",
+        "él",
+        "2026-10-05",
+        target_name="Luis",
+    )
+    inspected = inspect_selected_candidate_plan(context, plan)
+    record_path = state / "candidates" / (preview.request_id + ".json")
+    import json
+
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    record["original_request"] = record["original_request"].replace("cine", "casa")
+    record["pending"][0]["text"] = record["pending"][0]["text"].replace("cine", "casa")
+    record_path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(CandidateContinuationPlanError):
+        validate_inspected_candidate_plan_current(
+            inspected, context, plan, repo, vault=vault, schema=SCHEMA
+        )
