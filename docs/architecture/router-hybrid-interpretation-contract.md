@@ -564,3 +564,38 @@ más evaluación real acotada del prompt cuando se autorice gasto.
 Antes, el digest de una entrega asociaba solo el texto de respuesta y la conversación. Dos tarjetas diferentes enviadas accidentalmente con el mismo ID de entrega y el mismo texto podían intentar compartir el resultado de una elección con otro registro pendiente. El contrato de replay ahora incorpora el identificador original de la aclaración, **solo cuando está presente**, conservando exactamente el digest histórico de todas las entregas anteriores. El mismo ID con distinto pendiente se rechaza como conflicto, no se interpreta de nuevo, y una respuesta correlacionada sin almacén de pendientes configurado no puede pasar al Router o al Core legacy como una petición ordinaria.
 
 Pruebas con dos pendientes sintéticos y reintento conflictivo; la ruta sin dependencia de aclaraciones sigue siendo compatible y conserva su digest original. Esto fortalece la seguridad de la respuesta, **no** acredita la continuación semántica del hecho pendiente. Sigue faltando una propuesta Core genérica, revisión independiente de significado/temporalidad, E3/readback con semántica revisada, prueba GPT real autorizada y aceptación en DEV.
+
+## E5 — Handoff Core fuente-exacto tras elegir identidad (30-10-2026, solo fuente)
+
+Se reutiliza el registro duradero v2 existente con `prepare_selected_candidate_continuation`
+(`odyssey_core/candidate_continuation_context.py`). El compositor ejecuta esta
+preparación después de registrar una elección, pero **no llama al Planner ni escribe
+ninguna nota**. Solo admite un candidato `ambiguous_identity` seleccionado,
+con las posiciones originales exactas de su fuente y referencia, identidad actual
+Core `id + guard + nombre canónico`, reloj con zona horaria original y el
+conjunto inmutable de marcadores físicos ya escritos. No reconvierte los hechos
+anteriores en operaciones de un nuevo plan. Una solicitud con candidato pendiente
+sin seleccionar, cancelada, identidad obsoleta o hechos previos alterados se
+rechaza como no preparada.
+
+`CoreCandidateContinuationContext.review_payload()` ofrece al futuro revisor
+semántico una vista acotada: fuente completa original, subfrase pendiente, spans
+exactos, referencia literal, nombre canónico seleccionado, tiempo original y
+ordinales de hechos ya almacenados. No expone ids/guards físicos al modelo.
+La estructura Core conserva por separado hashes y marcadores de origen, estado
+y hechos, y `validate_selected_continuation_current` revalida todo con el
+registro/vault actuales antes de que pueda existir una futura vía E3.
+
+Este handoff **no** es un dictamen semántico y `may_execute=False`: faltan
+proponer un plan que cubra toda la parte pendiente con el reloj original,
+verificar independientemente que preserva polaridad, participantes, fecha,
+tipo, destino y cardinalidad, aceptar solo los hechos no escritos, validar el
+plan exacto y su identidad elegida y conectar E3 con recibo y readback.
+No activar el guard piloto F14/F27 basado en la frase de cine como sustituto.
+No se ha hecho una campaña nueva GPT ni prueba desplegada.
+
+Pruebas offline con hechos E3/Git reales en bóveda desechable y recuperación
+tras reinicio; rechazo de selección inexistente o cancelada, conversación
+distinta, cambio de identidad o de hechos anteriores y tamper de fuente;
+contextos en español, inglés y francés, con subfrases y referencias de tamaño
+variable, pero sin afirmar semántica revisada por modelo.

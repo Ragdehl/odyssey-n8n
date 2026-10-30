@@ -81,6 +81,10 @@ from odyssey_core.application import (
     execute_request,
 )
 from odyssey_core.candidate_attribution import OpenAICoreCandidateAttributor
+from odyssey_core.candidate_continuation_context import (
+    CandidateContinuationContextError,
+    prepare_selected_candidate_continuation,
+)
 from odyssey_core.candidate_pending_state import (
     CandidatePendingRepository,
     CandidatePendingStateError,
@@ -1691,15 +1695,20 @@ class RuntimeComposition:
             return None
         self._append_clarification_reply(actor, conversation_id, request_id, user_request)
         if reply.outcome == "choice_recorded":
-            # Re-check under the repository lock before making even the
-            # non-executing acknowledgement visible to the caller.
-            review = repository.selected_for_core_review(
-                conversation_id=conversation_id,
-                request_id=cast(str, reply.request_id),
-                vault=self.vault_repository,
-                schema=cast(dict[str, Any], self.canonical_schema),
-            )
-            if review.outcome != "choice_ready_for_core_review":
+            # Compose source-exact read-only Core input from the persisted
+            # choice, original clock and physically verified previous facts.
+            # This handoff does NOT replan or authorize any new mutation.
+            try:
+                prepared = prepare_selected_candidate_continuation(
+                    repository,
+                    conversation_id=conversation_id,
+                    request_id=cast(str, reply.request_id),
+                    vault=cast(VaultRepository, self.vault_repository),
+                    schema=cast(dict[str, Any], self.canonical_schema),
+                )
+            except CandidateContinuationContextError:
+                return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
+            if prepared.may_execute:
                 return self._control_response(request_id, "STALE_CANDIDATE_SELECTION")
             return {
                 **self._control_response(request_id, "CANDIDATE_SELECTION_RECORDED"),
