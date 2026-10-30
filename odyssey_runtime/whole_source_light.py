@@ -925,16 +925,30 @@ class WholeSourceLightExecutor:
         # Reuse already-verified identities, never deduce an ID from grammar.
         relationships = []
         verified_members: dict[str, str] = {}
+        # Unverified family/group wording can still be recorded as literal
+        # source in a completed Core journal. It must NEVER become a linked
+        # Person, a guessed member set, or an Event/Task operation.
+        literal_only_spans: list[str] = []
         try:
             for relation_span in proposed_relation_spans:
-                proof = verify_self_relationship(
-                    source,
-                    relation_span,
-                    repository=self.repository,
-                    schema=self.schema,
-                    actor=actor,
-                    bindings=self.bindings,
-                )
+                try:
+                    proof = verify_self_relationship(
+                        source,
+                        relation_span,
+                        repository=self.repository,
+                        schema=self.schema,
+                        actor=actor,
+                        bindings=self.bindings,
+                    )
+                except WholeSourceRelationshipError:
+                    if (
+                        independent_scope is None
+                        and "core" in capabilities
+                        and set(capabilities) <= {"core", "temporal"}
+                    ):
+                        literal_only_spans.append(relation_span)
+                        continue
+                    raise
                 # Two distinct relation phrases in one canonical atomic fact
                 # may project the SAME combined target set. Its target list
                 # cannot prove which member belongs to which phrase. Refuse
@@ -954,6 +968,11 @@ class WholeSourceLightExecutor:
             if len(set(verified_members.values())) != len(verified_members):
                 raise WholeSourceRelationshipError("Ambiguous member names")
         except (WholeSourceRelationshipError, ValueError):
+            return self._abstain(delivery)
+        # A partly verified group cannot lose its existing proven members
+        # while another member group is silently kept literal. Only a fully
+        # literal, unlinked Core recollection may proceed without SELF proof.
+        if relationships and literal_only_spans:
             return self._abstain(delivery)
         group_members = [{"name": name} for name in verified_members.values()]
         if "events" in capabilities:
@@ -1393,6 +1412,41 @@ class WholeSourceLightExecutor:
         if not reviewed_ok:
             self._observe_prewrite(delivery, "coverage_retry_exhausted")
             return self._abstain(delivery)
+        if literal_only_spans:
+            # The same Core compiler/reviewer and E3 still own the write.
+            # A reviewer may preserve an unverified group as literal prose,
+            # but cannot silently invent names, links, entities or an action.
+            plan_facts = proposed.get("facts")
+            reviewed_facts = review.get("facts")
+            if (
+                proposed.get("entities")
+                or proposed.get("unresolved")
+                or not isinstance(plan_facts, list)
+                or not plan_facts
+                or not isinstance(reviewed_facts, list)
+                or len(reviewed_facts) != len(plan_facts)
+                or any(
+                    not isinstance(fact, dict)
+                    or fact.get("kind") != "record"
+                    or fact.get("needs_clarification") is not False
+                    or fact.get("participants") != []
+                    for fact in plan_facts
+                )
+                or any(
+                    not isinstance(fact, dict)
+                    or fact.get("kind") != "record"
+                    or fact.get("reference_names") != []
+                    or not isinstance(fact.get("reviewed_text"), str)
+                    or "{{ref:" in fact["reviewed_text"]
+                    for fact in reviewed_facts
+                )
+                or any(
+                    span not in " ".join(fact["reviewed_text"] for fact in reviewed_facts)
+                    for span in literal_only_spans
+                )
+            ):
+                self._observe_prewrite(delivery, "unverified_group_literal_rejected")
+                return self._abstain(delivery)
         try:
             validate_whole_message_coverage(
                 source,

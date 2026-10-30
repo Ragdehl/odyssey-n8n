@@ -35,7 +35,14 @@ def _exact_text(fact: AtomicFact, reviewed: Mapping[str, Any], speaker: bool) ->
     visible = _INLINE_LINK.sub(lambda match: match.group(1), fact.text)
     if speaker and reviewed["kind"] == "record" and reviewed["date"] is not None:
         visible = re.sub(r" \(yo: [^\n)]+\)(?=\.$)", "", visible)
-    return visible.strip() == expected.strip()
+    actual = visible.strip()
+    source_text = expected.strip()
+    # Core's canonical atomic-fact renderer appends one final period to a
+    # sentence supplied without punctuation. That formatting is not a
+    # semantic mismatch; any other change must still fail exact readback.
+    return actual == source_text or (
+        bool(source_text) and source_text[-1].isalnum() and actual == source_text + "."
+    )
 
 
 def assert_reviewed_markdown(

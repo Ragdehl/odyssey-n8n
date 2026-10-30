@@ -165,7 +165,7 @@ test("semantically reviewed writer-stage explanation bypasses obsolete lexical r
   assert.doesNotMatch(vetted.message, /La etapa de escritura falló/);
   // Even a forged semantic attestation in n8n cannot lift the write-claim
   // guard; verified stage membership is necessary but insufficient.
-  assert.match(vetted.message, /No puedo verificar la causa exacta/);
+  assert.match(vetted.message, /No he podido interpretar este mensaje/);
   const invalid = render({error_diagnosis: {...diagnostic, explanation: text,
     semantic_reviewed: false}});
   assert.doesNotMatch(invalid.message, /La etapa de escritura falló/);
@@ -296,4 +296,29 @@ test("n8n demands source-executor prewrite proof, never stage-name guesses", () 
   const inspect = render({execution_ledger: observed,
     error_diagnosis: {...candidate, next_step: "INSPECT_RESULT"}});
   assert.match(inspect.message, /Resultado de la operación/);
+});
+
+
+test("a routine journal failure never directs an ordinary user to admin graphs", () => {
+  const result = render({
+    error_diagnosis: null,
+    error_guidance: null,
+    product_reason: "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+    clarification_code: "FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED",
+    prewrite_recovery_proven: true,
+  });
+  assert.equal(result.kind, "clarification");
+  assert.match(result.message, /No he podido interpretar este mensaje/);
+  assert.doesNotMatch(result.message, /gr[aá]fico|diagrama|etapa|inspecciona/i);
+  assert.equal(validateProductResponse(result).kind, "clarification");
+});
+
+test("a coverage-review refusal never sends the user to the internal graph", () => {
+  const result = render({
+    error_diagnosis: null,
+    product_reason: "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+    clarification_code: "CANDIDATE_COVERAGE_REVIEW_REQUIRED",
+  });
+  assert.equal(result.kind, "clarification");
+  assert.doesNotMatch(result.message, /gr[aá]fico|diagrama/i);
 });

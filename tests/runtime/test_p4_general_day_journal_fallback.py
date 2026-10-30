@@ -155,3 +155,81 @@ def test_model_route_hypothesis_alone_does_not_fabricate_day_note(tmp_path):
     assert result["status"] == "needs_attention"
     assert not result["affected_stable_note_ids"]
     assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+
+
+@pytest.mark.parametrize(
+    ("source", "relation_span"),
+    [
+        ("Hoy han venido mis padres de visita a mi casa", "mis padres"),
+        ("Hoy he ido al parque con mis primos", "mis primos"),
+        ("Aujourd'hui mes parents sont venus à la maison", "mes parents"),
+    ],
+)
+def test_completed_visit_with_unverified_family_reference_saves_literal_day(
+    tmp_path, source, relation_span
+):
+    """Unverified plural relations remain literal in safe completed Day entries."""
+    repo, actor, executor, runtime = _fixture(tmp_path)
+    executor.event_delegate = lambda *_: pytest.fail(
+        "Past visit is not an Events lifecycle operation"
+    )
+    rows = _reviewed_day(source, "2026-10-16")
+    rows[0]["self_relation_spans"] = [relation_span]
+    executor.client = RecordedClient(rows)
+    result = runtime.execute_product(source, "family-literal-day", "main", actor)
+    assert result["status"] == "completed", result
+    assert len(executor.client.calls) == 5
+    days = [
+        parse_note(repo.read_text(p))
+        for p in repo.list_markdown_paths()
+        if parse_note(repo.read_text(p)).metadata.get("type") == "calendar_day"
+    ]
+    assert len(days) == 1
+    assert relation_span in days[0].content
+    assert days[0].content.count("[[") == 2  # Added Day and authenticated SELF only
+    assert (
+        len(
+            [
+                p
+                for p in repo.list_markdown_paths()
+                if parse_note(repo.read_text(p)).metadata.get("type") == "person"
+            ]
+        )
+        == 1
+    )
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    assert runtime.execute_product(source, "family-literal-day", "main", actor)["delivery_replayed"]
+    assert before == {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        "fabricated_reference",
+        "invented_entity",
+        "wrong_app",
+        "rewritten_relation",
+        "invented_participant",
+    ],
+)
+def test_family_literal_fallback_rejects_unverified_writes(tmp_path, unsafe):
+    source = "Hoy han venido mis padres de visita a mi casa"
+    repo, actor, executor, runtime = _fixture(tmp_path)
+    rows = _reviewed_day(source, "2026-10-16")
+    rows[0]["self_relation_spans"] = ["mis padres"]
+    if unsafe == "fabricated_reference":
+        rows[2]["facts"][0]["reference_names"] = ["Madre desconocida"]
+        rows[2]["facts"][0]["reviewed_text"] = "Hoy han venido {{ref:0}} de visita a mi casa"
+    elif unsafe == "invented_entity":
+        rows[1]["entities"] = [{"name": "Madre desconocida"}]
+    elif unsafe == "rewritten_relation":
+        rows[2]["facts"][0]["reviewed_text"] = "Hoy han venido de visita a mi casa"
+    elif unsafe == "invented_participant":
+        rows[1]["facts"][0]["participants"] = ["Madre desconocida"]
+    else:
+        rows[0]["capabilities"] = ["events"]
+    executor.client = RecordedClient(rows)
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "family-unsafe-" + unsafe, "main", actor)
+    assert result["status"] == "needs_attention"
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
