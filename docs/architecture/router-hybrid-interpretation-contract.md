@@ -923,8 +923,12 @@ MUST remain the same instance; the projected schema now requires exact
 CONTENT equality, and changed schema or repository is rejected. This is
 tested on the actual callback plus a separate tampering/copy regression.
 36 guard/continuation/E3 focused tests PASS before the new complete gate.
-The already completed 4-role review is pinned to the PRE-FIX SHA and remains
-historical until a fresh review of this change.
+The already completed 4-role review is pinned to the PRE-FIX SHA.
+An independent read-only scoped review of the guard/callback repair on
+05047dd returned PASS, severity none: verified Core's intentional schema
+deepcopy, strict vault identity and full E3/physical readback/replay in the
+synthetic-provider factory test. It is NOT four fresh product-role PASS or
+authenticated deployed-browser acceptance.
 
 One bounded Raspberry synthetic-provider local callback timing sample (8
 independent fixture runs per case; FROZEN no API calls): journal success
