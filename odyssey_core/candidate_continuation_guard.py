@@ -13,6 +13,13 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .application import WritePreflightGuardError
+from .candidate_continuation_context import CoreCandidateContinuationContext
+from .candidate_continuation_plan import CoreContinuationPlanInspection
+from .candidate_continuation_semantic import (
+    CandidateContinuationSemanticError,
+    CoreContinuationSemanticVerdict,
+    validate_independent_continuation_verdict_current,
+)
 from .candidate_pending_state import CandidatePendingRepository
 from .reference_preflight import UnitTargetPreflight
 from .request_planning import RequestPlan, WriteAction
@@ -196,3 +203,84 @@ def build_selected_candidate_guard(
         decision.captured_at,
         record["pending"][0]["text"],
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewedCandidateContinuationWriteGuard:
+    """Experimental E3 preflight for a complete, independently checked Core plan.
+
+    It has no runtime wiring or model authorization. This exists solely to
+    exercise the eventual write boundary with synthetic reviewed decisions.
+    Live adoption additionally needs fresh model-semantic acceptance, a
+    durable completion receipt and replay/readback lifecycle.
+    """
+
+    pending: CandidatePendingRepository
+    context: CoreCandidateContinuationContext
+    inspection: CoreContinuationPlanInspection
+    verdict: CoreContinuationSemanticVerdict
+    review: dict[str, Any]
+    original_plan: RequestPlan
+    _bound_vault: VaultRepository
+    _bound_schema: dict[str, Any]
+
+    def validate_request_plan(self, plan: RequestPlan) -> None:
+        """Veto the *entire* altered plan before the first Core write action."""
+        if (
+            not isinstance(plan, RequestPlan)
+            or plan != self.original_plan
+            or len(plan.actions) != 1
+            or not isinstance(plan.actions[0], WriteAction)
+        ):
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_PLAN_CHANGED")
+        try:
+            # No semantic authority is granted by this local validity check.
+            validate_independent_continuation_verdict_current(
+                self.verdict,
+                self.context,
+                self.inspection,
+                self.review,
+                plan,
+                self.pending,
+                vault=self._bound_vault,
+                schema=self._bound_schema,
+            )
+        except CandidateContinuationSemanticError as error:
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_REVIEW_STALE") from error
+
+    def __call__(
+        self,
+        action: WriteAction,
+        preflight: tuple[UnitTargetPreflight, ...],
+        repository: VaultRepository,
+        schema: dict[str, Any],
+    ) -> None:
+        """Recheck current selection and actual Core target IDs after preflight."""
+        if repository is not self._bound_vault or schema is not self._bound_schema:
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_CONTEXT_MISMATCH")
+        self.validate_request_plan(self.original_plan)
+        if (
+            not isinstance(action, WriteAction)
+            or action != self.original_plan.actions[0]
+            or len(action.units) != len(preflight)
+        ):
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_ACTION_CHANGED")
+        used_chosen = False
+        for index, unit in enumerate(action.units):
+            if unit.reference_lookup_only:
+                resolved = preflight[index]
+                if (
+                    resolved.unit_index != index
+                    or not resolved.reference_only
+                    or resolved.outcome is not WriteTargetOutcome.UPDATE
+                    or not resolved.stable_id
+                ):
+                    raise WritePreflightGuardError("CANDIDATE_CONTINUATION_IDENTITY_NOT_VERIFIED")
+            for reference in unit.references:
+                helper = preflight[reference.target_index]
+                if reference.mention == self.context.reference_text:
+                    used_chosen = True
+                    if helper.stable_id != self.context.selected_note_id:
+                        raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SELECTED_ID_CHANGED")
+        if not used_chosen:
+            raise WritePreflightGuardError("CANDIDATE_CONTINUATION_SELECTED_REF_MISSING")

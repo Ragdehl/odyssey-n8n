@@ -726,6 +726,23 @@ devuelve la copia del JSON junto al sello inejecutable. Tests con cliente
 Responses simulado prueban sobre HTTP lógico la envoltura strict/store=false,
 el reloj original, resultado incompleto y dictámenes inválidos, sin escrituras.
 **No está conectado a la ejecución de producción, y no ha llamado al modelo real.**
-El siguiente bloqueo operativo es evaluar la *variante* completa del prompt
-con una campaña real acotada y autorizada. Solo entonces valorar integración Core E3 (recibo durable,
-escritura única del candidato y readback físico), 4 auditores y E2E real en DEV.
+**Ensayo Core/E3 aislado de continuación revisada (sin activar, 30-10-2026):**
+`ReviewedCandidateContinuationWriteGuard` conecta solo en tests sintéticos el
+plan inspeccionado y el dictamen completo con el guard de Core existente.
+Recomprueba el mismo plan (una acción para evitar escrituras parciales fuera
+del futuro recibo), la selección/nota y los hechos previamente persistidos
+antes de la primera escritura y de nuevo tras preflight de targets; exige
+que helpers reference-only sean actualizaciones verificadas y que la
+referencia elegida resuelva al ID de la persona seleccionada. Una acción
+puede llevar varios hechos sin fijar una cardinalidad. El Writer Core/E3
+real ha creado Day Markdown con el enlace canónico; se comprobó el texto
+físico, que el diario anterior quedaba intacto, que un segundo hecho puede
+compartir la identidad y que replay y cambios de plan/dictamen/identidad
+no autorizan una escritura extra en la bóveda temporal.
+Estos ensayos NO prueban que el revisor entienda el lenguaje; su dictamen
+es sintético y puede afirmar falsamente `approved`. El guard no se
+inyecta en Runtime/n8n/DEV/PROD ni concede permiso general para escribir.
+**Siguiente bloqueo operativo único:** campaña semántica real y acotada
+del prompt heredado; después conectar el flujo de autorización, recibo
+duradero de terminación y readback confirmado con el E3 ordinario,
+auditoría final y aceptación desde navegador en DEV matching-SHA.

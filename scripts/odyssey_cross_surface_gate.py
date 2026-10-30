@@ -162,6 +162,9 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/benchmarks/test_p4_physical_readback_checks.py",
         "tests/core/test_whole_source_task_readback_p4.py",
         "tests/runtime/test_general_source_fact_graph_e2e.py",
+        "tests/runtime/test_candidate_continuation_semantic.py",
+        "tests/runtime/test_candidate_continuation_plan.py",
+        "tests/runtime/test_candidate_continuation_reviewed_core_e3.py",
     ),
     "runtime_http_and_isolation": (
         "tests/runtime/test_runtime_boundary.py",
