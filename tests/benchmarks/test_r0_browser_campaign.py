@@ -111,4 +111,4 @@ def test_append_only_fixtures_are_validated_before_paid_campaign_arming(tmp_path
         "ADDITIONAL",
         campaign.ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json",
     )
-    assert [case.id for case in campaign.additional_cases()] == ["R28", "R29", "R30"]
+    assert [case.id for case in campaign.additional_cases()] == ["R28", "R29", "R30", "R31"]

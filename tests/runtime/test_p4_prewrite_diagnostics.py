@@ -106,6 +106,9 @@ def test_reason_codes_are_static_and_never_include_person_name():
         code(UnprovenPersonIdentityError("UNPROVEN_PARTIAL_CANONICAL_IDENTITY: name private")) == 31
     )
     assert code(UnprovenPersonIdentityError("AMBIGUOUS_CANONICAL_PERSON: name private")) == 32
+    # The live generic guard emits ENTITY, not the old PERSON-only prefix.
+    assert code(UnprovenPersonIdentityError("AMBIGUOUS_CANONICAL_ENTITY: Atlas")) == 32
+    assert code(UnprovenPersonIdentityError("UNSUPPORTED_CANONICAL_TYPE_CHOICE: Atlas")) == 33
     assert code(UnprovenPersonIdentityError("USER INPUT CAN NEVER BE LOGGED")) == 0
 
 

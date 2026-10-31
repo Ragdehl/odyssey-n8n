@@ -87,6 +87,23 @@
           "state": "candidate"
         }
       ]
+    },
+    {
+      "id": "R31",
+      "source": "El proyecto Atlas tiene prioridad alta.",
+      "expectation": "Save the knowledge on the canonically selected Project note (or safely create that Project if absent); do not silently put it in the current Day/SELF or turn it into a Task/Event. Replay must not duplicate the assertion.",
+      "offline_coverage": "tests/runtime/test_p4_generic_owner_gap.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [],
+      "expected_units": [
+        {
+          "reading": "The priority assertion belongs to the selected Atlas Project note, not a journal Day or SELF; no unsupported identity or duplicate operation",
+          "source_anchors": [
+            "El proyecto Atlas tiene prioridad alta"
+          ],
+          "state": "candidate"
+        }
+      ]
     }
   ]
 }

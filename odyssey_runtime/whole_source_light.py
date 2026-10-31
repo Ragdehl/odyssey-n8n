@@ -336,8 +336,15 @@ class WholeSourceLightExecutor:
         message = str(error)
         if message.startswith("UNPROVEN_PARTIAL_CANONICAL_IDENTITY: "):
             return 31
-        if message.startswith("AMBIGUOUS_CANONICAL_PERSON: "):
+        if message.startswith(
+            (
+                "AMBIGUOUS_CANONICAL_ENTITY: ",
+                "AMBIGUOUS_CANONICAL_PERSON: ",  # Older persisted diagnostic records.
+            )
+        ):
             return 32
+        if message.startswith("UNSUPPORTED_CANONICAL_TYPE_CHOICE: "):
+            return 33
         return fixed.get(message, 0)
 
     def _observe_prewrite(self, delivery: str, gate: str, **values: int | bool) -> None:
