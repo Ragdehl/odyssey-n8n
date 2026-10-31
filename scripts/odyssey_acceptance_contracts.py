@@ -15,6 +15,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .odyssey_stage_acceptance import inspect_stage_acceptance
+else:
+    from odyssey_stage_acceptance import inspect_stage_acceptance
+
 # Support both `python scripts/file.py` in CI and package import in pytest.
 if __package__:
     from .odyssey_cross_surface_gate import GROUPS
@@ -153,7 +158,9 @@ def inspect_contracts(
             evidence += 1
         if contract["blocks_p4_dev"]:
             blocked.append(code)
+    stage_evidence = inspect_stage_acceptance(root=root)
     return {
+        "stage_acceptance": stage_evidence,
         "schema": "odyssey-acceptance-integrity-v1",
         "contract_count": len(contracts),
         "existing_offline_test_anchors": evidence,
@@ -168,9 +175,20 @@ def inspect_contracts(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--require-stage-accepted", choices=["R0", "R1", "R2", "R3", "R4"])
+    parser.add_argument("--require-review-stage-accepted", action="store_true")
     args = parser.parse_args()
     try:
         result = inspect_contracts()
+        required_stage = (
+            result["stage_acceptance"]["review_stage"]
+            if args.require_review_stage_accepted
+            else args.require_stage_accepted
+        )
+        if required_stage and required_stage not in result["stage_acceptance"]["accepted_stages"]:
+            raise AcceptanceContractError(
+                "STAGE_E2E_NOT_VERIFIED: live browser/model/27 cases/4 audits absent"
+            )
     except (AcceptanceContractError, ValueError, SyntaxError, OSError) as error:
         print("ACCEPTANCE_LEDGER_INTEGRITY_BLOCKED:", error)
         return 1
@@ -180,7 +198,9 @@ def main() -> int:
         print(
             f"ACCEPTANCE_LEDGER_INTEGRITY_PASS: {result['contract_count']} invariants; "
             f"{result['existing_offline_test_anchors']} required offline anchors; "
-            "P4 DEV UNAUTHORIZED (real product gate incomplete)"
+            "P4 DEV UNAUTHORIZED (real product gate incomplete); "
+            f"STAGE {result['stage_acceptance']['stage'].upper()} "
+            f"({result['stage_acceptance']['cases']} cases)"
         )
     return 0
 

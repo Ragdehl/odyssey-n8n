@@ -92,6 +92,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e3_complete_reference_set_enrichment.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",
+        "tests/benchmarks/test_odyssey_stage_acceptance.py",
+        "tests/benchmarks/test_odyssey_acceptance_contracts.py",
     ),
     "task_chat_core": (
         "tests/apps/tasks/test_core_interop.py",

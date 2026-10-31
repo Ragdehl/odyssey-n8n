@@ -90,6 +90,8 @@ def test_dev_pull_requests_receive_an_independent_offline_contract_gate():
     legacy_ci = (ROOT / ".github/workflows/python-ci.yml").read_text()
     assert "pull_request:" in dev_workflow and "branches: [dev]" in dev_workflow
     assert "python scripts/odyssey_acceptance_contracts.py" in dev_workflow
+    assert "--require-review-stage-accepted" in dev_workflow
+    assert "!github.event.pull_request.draft" in dev_workflow
     assert "python scripts/odyssey_cross_surface_gate.py" in dev_workflow
     assert "workflow_dispatch:" in dev_workflow
     assert "without credentials" in dev_workflow
