@@ -6,6 +6,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from scripts.odyssey_r0_browser_campaign import frozen_cases
 
 
@@ -300,3 +302,120 @@ def test_appended_generic_read_case_has_preexisting_canonical_self_relationship(
             )
             assert proof.members == (("fixture-person-eric", "Eric"),)
             assert len(repo.list_markdown_paths()) == 13
+
+
+@pytest.mark.parametrize("rebuild_after_fixture", [False, True])
+def test_r32_actual_core_read_recovers_current_canonical_member_without_writing(
+    tmp_path, rebuild_after_fixture
+):
+    """Full real Core retrieval, index and serialization with a fake relevance AI only.
+
+    The planner is replaced by one typed, verified read plan; the semantic-set
+    relevance provider is replaced by the existing test selector, NOT Core's
+    real relational resolver, Markdown source projection, context index or E3.
+    This is offline integration proof, never a fresh GPT/browser acceptance.
+    """
+    from unittest.mock import patch
+
+    from odyssey_core.request_planning import (
+        RelationalReference,
+        RequestPlan,
+        RetrieveAction,
+        SelectionCriteria,
+    )
+    from odyssey_runtime import composition
+    from odyssey_runtime.serialization import application_result_to_response
+    from scripts.odyssey_r0_real_browser_case import (
+        _prepare_additional_test_fixture,
+        _r0_product,
+    )
+    from tests.core.test_relational_application import RelevantFactSelector
+
+    original = "¿Quién es mi padre?"
+    plan = RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None,
+                    "mi padre",
+                    "person",
+                    (),
+                    None,
+                    relational_reference=RelationalReference("mi padre", "self", None, "one"),
+                )
+            ),
+        ),
+        (),
+    )
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "FAKE_NO_PROVIDER"}),
+        patch.object(
+            composition,
+            "OpenAILunaSemanticSetSelector",
+            side_effect=lambda: RelevantFactSelector("mi padre"),
+        ),
+    ):
+        with _r0_product(tmp_path) as (repo, actor, product):
+            assert _prepare_additional_test_fixture("R32", repo, product) == 1
+            before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+            if rebuild_after_fixture:
+                product.refresh_indexes()
+            result = product.core_execute(original, "r32-read", actor, None, fixed_plan=plan)
+            projected = application_result_to_response(result)
+            assert projected["product_outcome"] == "ANSWER"
+            assert projected["status"] == "completed"
+            assert len(result.action_results) == 1
+            retrieval = result.action_results[0].retrieval
+            assert retrieval is not None
+            assert [item.id for item in retrieval.items] == ["fixture-person-eric"]
+            assert [item.primary_name for item in retrieval.items] == ["Eric"]
+            assert projected["actions"][0]["retrieval"]["items"][0]["primary_name"] == "Eric"
+            assert not result.affected_stable_note_ids
+            assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+
+
+def test_generic_core_read_abstention_keeps_its_observed_stage_through_safe_fallback(tmp_path):
+    """A Core planner clarification must not disappear when P4 also declines.
+
+    This test deliberately has no provider call, no personal vault and no
+    per-relationship router. The fake model merely abstains at the existing
+    planner boundary; source fallback remains separately guarded.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from odyssey_core.application import ApplicationResult, ApplicationStatus
+    from odyssey_core.request_planning import PlannerClarification
+    from odyssey_runtime import composition
+    from scripts.odyssey_r0_real_browser_case import _r0_product
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "FAKE_NO_PROVIDER"}):
+        with _r0_product(tmp_path) as (_repo, actor, product):
+            captured = []
+            product.hybrid_candidate_execute = lambda *args: (
+                captured.append(args[0])
+                or ApplicationResult(
+                    args[1],
+                    ApplicationStatus.NEEDS_ATTENTION,
+                    (),
+                    (),
+                    clarification_code="INCOMPLETE_EVIDENCE",
+                )
+            )
+            planner = SimpleNamespace(
+                plan=lambda *_args: PlannerClarification("UNREPRESENTABLE_REQUEST")
+            )
+            with patch.object(
+                composition.OpenAIRequestPlanner,
+                "from_environment",
+                return_value=planner,
+            ):
+                answer = product.execute("¿Quién es mi padre?", "read-abstained", "main", actor)
+            assert captured == ["¿Quién es mi padre?"]
+            assert answer.status is ApplicationStatus.NEEDS_ATTENTION
+            assert not answer.affected_stable_note_ids
+            read_stage = next(
+                item for item in answer.operational.stages if item.name == "core.read_preflight"
+            )
+            assert read_stage.outcome.value == "unavailable"
+            assert read_stage.error_category == "CoreReadPreflightUnavailable"

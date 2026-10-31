@@ -132,3 +132,64 @@ def test_existing_core_can_target_a_note_but_p4_must_not_claim_unowned_fact_save
     assert not parse_note(repo.read_text("Atlas.md")).content
     replay = runtime.execute_product(source, f"owner-gap-{note_type}", "main", actor)
     assert replay["delivery_replayed"] is True
+
+
+@pytest.mark.parametrize("note_type", ["project", "document", "concept"])
+def test_existing_core_owner_plan_writes_to_its_real_note_and_reuses_e3(tmp_path, note_type):
+    """Positive R31 control: existing Core, not a second P4 writer, owns delivery."""
+    from types import SimpleNamespace
+
+    from odyssey_core.application import ApplicationStatus, execute_request
+    from odyssey_core.request_planning import RequestPlan
+
+    repo, actor, service, _runtime = _fixture(tmp_path)
+    create_entity(
+        repo,
+        service.schema,
+        path="Atlas.md",
+        entity_id="atlas-id",
+        metadata={"name": "Atlas", "type": note_type},
+        content="",
+        actor="fixture",
+        now="2026-10-16T11:00:00+02:00",
+    )
+    service.refresh_affected_indexes(("atlas-id",))
+    semantic = SemanticWriteIntent(
+        (
+            SemanticWriteOperation(
+                IdentityIntent("Atlas", IdentityBinding.DESCRIBED, "Atlas", note_type),
+                ApplyTo.ONE,
+                "record",
+                (SemanticFact((LiteralPart("Tiene prioridad alta."),)),),
+                (),
+                (),
+                None,
+            ),
+        )
+    )
+    action = compile_semantic_write(semantic, service.schema)
+    before_self = repo.read_text("self.md")
+    result = execute_request(
+        "El proyecto Atlas tiene prioridad alta.",
+        planner=SimpleNamespace(plan=lambda *_args: RequestPlan((action,), ())),
+        repository=repo,
+        schema=service.schema,
+        context_index=service.context_index,
+        semantic_index=service.semantic_index,
+        embedder=service.embedder,
+        contextual_reasoner=service.reasoner,
+        actor=actor.stable_user_id,
+        now="2026-10-16T15:30:00+02:00",
+        context_limit=10,
+        authenticated_actor=actor,
+        self_binding_repository=service.bindings,
+        request_id_factory=lambda: f"core-owner-{note_type}",
+    )
+    assert result.status is ApplicationStatus.COMPLETED, result
+    assert result.affected_stable_note_ids == ("atlas-id",)
+    assert "Tiene prioridad alta." in parse_note(repo.read_text("Atlas.md")).content
+    assert repo.read_text("self.md") == before_self
+    assert repo.list_markdown_paths() == ["Atlas.md", "calendar/days/2026-10-16.md", "self.md"]
+    # The extra Day is Core's canonical capture backlink, not a second
+    # owner for the statement or an invented identity.
+    assert "Tiene prioridad alta." not in repo.read_text("self.md")

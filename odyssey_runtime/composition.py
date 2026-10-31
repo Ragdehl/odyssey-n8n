@@ -3095,12 +3095,14 @@ class RuntimeComposition:
                         else None
                     )
                 except CoreReadPreflightUnavailable as error:
-                    # An unreadable/non-validated model call is not proof of
-                    # READ_ONLY, so the existing guarded router still owns
-                    # fallback. Preserve the failed boundary for diagnosis.
+                    # A failed call and a model abstention are both NOT proof
+                    # of READ_ONLY. Preserve the distinction in the ledger;
+                    # the existing guarded router retains all write authority.
                     read_preflight_failure = OperationalStage(
                         "core.read_preflight",
-                        OperationalOutcome.FAILED,
+                        OperationalOutcome.FAILED
+                        if error.__cause__ is not None
+                        else OperationalOutcome.UNAVAILABLE,
                         max(0.0, (self.monotonic() - read_started) * 1000),
                         error_category=type(error.__cause__).__name__
                         if error.__cause__ is not None
@@ -4652,7 +4654,10 @@ def _build_runtime_from_environment_unlocked(
             # a later unsuccessful delivery's E2/graph evidence.
             raise CoreReadPreflightUnavailable("Core read planning unavailable") from error
         if isinstance(plan, PlannerClarification) or not isinstance(plan, RequestPlan):
-            return None
+            # A non-executable Core interpretation is not a write intent.
+            # The guarded candidate route may still independently succeed,
+            # but its failure must not erase this earlier abstention.
+            raise CoreReadPreflightUnavailable("Core read disposition was not proven")
         disposition = request_disposition(plan)
         if disposition is RequestDisposition.READ_ONLY:
             return core_execute(
