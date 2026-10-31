@@ -36,6 +36,18 @@
         ],
         "note": "R0-F024 DEV CI scope audit remains open; all G01 findings require independent review before closure.",
         "offline_cross_surface": "2687 Python, 7 subtests, 296 JS PASS at source working tree; not live model/browser acceptance"
+      },
+      "full_ci_checkpoint": {
+        "change": "Existing strict Python CI full suite now runs on PR to dev and main; push to main unchanged; Sonar main only; no continue-on-error or special test list.",
+        "host_offline_result": "FAIL: 118 failed, 5454 passed, 80 skipped, 52 subtests passed (229.48 sec); run from source b5416f4 with CI workflow change in working tree.",
+        "failure_buckets": {
+          "historical_or_frozen_benchmarks": 56,
+          "agent_supervisor_tests": 53,
+          "embedding_worker_or_presence": 9
+        },
+        "isolated_crosscheck": "Embedding worker plus agent builder resume: 22 pass in isolation, indicating at least some run-order/environment interaction; cause not yet proven.",
+        "evidence": "/tmp/odyssey-r0-g01-full-suite-before-ci-20261031.log (host-only; NOT committed because logs may include local environment details)",
+        "next": "Classify failures by root cause; repair outdated contracts using existing owners, resource/fixture isolation; never suppress failing tests; validate hosted full suite before G01 close."
       }
     },
     {
@@ -467,7 +479,7 @@
       "severity": "warning",
       "reference": ".github/workflows/odyssey-dev-contract-gate.yml:61",
       "workstream_id": "G01",
-      "state": "open",
+      "state": "in_progress",
       "closure": null
     }
   ],

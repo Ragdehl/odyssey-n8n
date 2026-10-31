@@ -1,8 +1,10 @@
 name: Python CI
 
 "on":
+  # Reuse the same strict full-suite job for both integration PRs. The DEV
+  # cross-surface job is a selected regression subset, not full-suite proof.
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
     branches: [main]
 
@@ -63,7 +65,10 @@ jobs:
       - name: Validate canonical note schema
         run: python scripts/validate_note_schema.py
 
+      # Sonar is a main-branch quality service; the full offline test job is
+      # independent and mandatory on dev PRs, with no continue-on-error.
       - name: SonarQube Cloud scan
+        if: ${{ github.event_name == 'push' || github.base_ref == 'main' }}
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -95,7 +95,8 @@ def test_dev_pull_requests_receive_an_independent_offline_contract_gate():
     assert "python scripts/odyssey_cross_surface_gate.py" in dev_workflow
     assert "workflow_dispatch:" in dev_workflow
     assert "without credentials" in dev_workflow
-    assert "branches: [main]" in legacy_ci
+    assert "branches: [main, dev]" in legacy_ci
+    assert "  push:\n    branches: [main]" in legacy_ci
 
 
 def test_ci_cli_runs_with_no_pythonpath_or_provider_credential(monkeypatch):
@@ -119,3 +120,18 @@ def test_ci_cli_runs_with_no_pythonpath_or_provider_credential(monkeypatch):
     assert result.returncode == 0, result.stderr
     assert "ACCEPTANCE_LEDGER_INTEGRITY_PASS" in result.stdout
     assert "P4 DEV UNAUTHORIZED" in result.stdout
+
+
+def test_dev_pr_runs_the_existing_full_python_suite_without_silent_waiver():
+    """A selected contract suite must not masquerade as the full pytest suite."""
+    import re
+
+    full = (ROOT / ".github/workflows/python-ci.yml").read_text()
+    dev = (ROOT / ".github/workflows/odyssey-dev-contract-gate.yml").read_text()
+    pull = re.search(r"(?m)^  pull_request:\s*\n\s+branches:\s*\[([^]]+)\]", full)
+    assert pull is not None
+    assert {part.strip() for part in pull.group(1).split(",")} == {"main", "dev"}
+    assert "pytest --cov=odyssey_apps --cov=odyssey_core --cov=odyssey_runtime" in full
+    assert "continue-on-error: true" not in full
+    assert "python scripts/odyssey_cross_surface_gate.py" in dev
+    assert "branches: [dev]" in dev
