@@ -35,11 +35,10 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "odyssey_web"
 CLOCK = "2026-10-04T17:35:00+02:00"
 SELF = "fixture-person-alex"
-# The campaign reserves the full per-case ceiling before invocation.  Treat one
-# SDK request as consuming that whole ceiling unless a future, versioned price
-# table can prove a smaller upper bound *before* the request.  This is strict
-# enough to prevent an unnoticed planner/reviewer retry from overspending.
-MAX_CALLS = 1
+# A normal multi-stage message requires multiple real provider calls.
+# Bound their *aggregate* pessimistic cost to the reserved amount before each
+# attempt; a one-call cap incorrectly blocked every R0 message after Planner.
+MAX_CALLS = 16
 RESERVE_USD = 0.25
 
 
@@ -48,9 +47,9 @@ class Refused(RuntimeError):
 
 
 def _case(case_id: str, source_sha256: str) -> str:
-    from scripts.odyssey_r0_browser_campaign import frozen_cases
+    from scripts.odyssey_r0_browser_campaign import campaign_cases
 
-    matches = [item for item in frozen_cases() if item.id == case_id]
+    matches = [item for item in campaign_cases() if item.id == case_id]
     if len(matches) != 1 or matches[0].source_sha256 != source_sha256:
         raise Refused("case/source SHA does not match the frozen R0 corpus")
     return matches[0].source
@@ -484,6 +483,30 @@ def run(case: str, digest: str, receipt: Path) -> dict[str, Any]:
                             evidence["runtime_status"] = (
                                 results[0].get("status") if results else "none"
                             )
+                            if results:
+                                original_result = results[0]
+                                detail = original_result.get("request_detail") or {}
+                                evidence["product_diagnostic"] = {
+                                    "status": original_result.get("status"),
+                                    "kind": original_result.get("kind"),
+                                    "clarification_code": original_result.get("clarification_code"),
+                                    "message": str(original_result.get("message") or "")[:240],
+                                    "detail_issue": detail.get("diagnostic_issue"),
+                                    "routes": [
+                                        {
+                                            "capability": row.get("capability"),
+                                            "status": row.get("status"),
+                                            "reason": str(row.get("reason") or "")[:180],
+                                            "writes": len(row.get("writes") or []),
+                                        }
+                                        for row in (
+                                            (original_result.get("execution_flow") or {}).get(
+                                                "routes"
+                                            )
+                                            or []
+                                        )
+                                    ],
+                                }
                             browser_ok = browser.returncode == 0 and observed.get("pass") is True
                             visible = browser_ok and observed.get("sourceShown") is True
                             ui = (
@@ -539,7 +562,10 @@ def run(case: str, digest: str, receipt: Path) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--case", required=True, choices=[f"F{i:02d}" for i in range(1, 28)])
+    parser.add_argument(
+        "--case",
+        required=True,
+    )
     parser.add_argument("--source-sha256", required=True)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()

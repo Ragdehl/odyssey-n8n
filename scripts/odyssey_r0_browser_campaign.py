@@ -30,6 +30,38 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 CORPUS = ROOT / "tests/fixtures/full_message_corpus_v1/manifest.json"
 DESIGN = ROOT / "benchmarks/application_router/fact_units_v2.design.json"
+ADDITIONAL = ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json"
+# Immutable acceptance baseline. Appending R31+ is allowed; silently editing,
+# removing or rewriting any prior source is not. These are test-data hashes,
+# NEVER branches in the Odyssey runtime/semantic interpreter.
+ORIGINAL_SOURCE_DIGEST = "350424ac788725911fe2c309ac1d0a90d6cbd3881f625f311280aed833bb8241"
+ADDITIONAL_SOURCE_PREFIX = (
+    "e107fe15284565462a40867437b32f3f8c0ed9eefdd7b7dc67d68ab4d5cecce3",
+    "adcaf7b78d6c92e1169e335a486ef2e502f4ded4e74c884ae820aa3958763c48",
+    "3453a74012626729a444323b7b4ce6d597c18eb8190e821bad4953d76da16769",
+)
+
+
+def verify_source_anchors(original_rows: list[dict], additional_rows: list[dict]) -> None:
+    digest = hashlib.sha256(
+        json.dumps(
+            [(row["id"], row["source"]) for row in original_rows],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    extra_hashes = tuple(
+        hashlib.sha256(row["source"].encode("utf-8")).hexdigest() for row in additional_rows
+    )
+    if (
+        digest != ORIGINAL_SOURCE_DIGEST
+        or extra_hashes[: len(ADDITIONAL_SOURCE_PREFIX)] != ADDITIONAL_SOURCE_PREFIX
+    ):
+        raise CampaignError("Frozen 27-message sources or accepted additional prefix changed")
+    if len(extra_hashes) < len(ADDITIONAL_SOURCE_PREFIX):
+        raise CampaignError("Previously added regressions were removed")
+
+
 SCHEMA = "odyssey-r0-browser-campaign-v1"
 APPROVAL_FLAG = "ODYSSEY_R0_LIVE_APPROVED"
 # The supplied history says five fresh calls were made for F11 but lacks an
@@ -67,10 +99,47 @@ def frozen_cases() -> tuple[Case, ...]:
         or [item.get("id") for item in design["cases"]] != expected
     ):
         raise CampaignError("R0 corpus manifest/design is not the immutable 27-case contract")
+    # The original corpus is frozen independently from the extendable set.
+    verify_source_anchors(
+        design["cases"], json.loads(ADDITIONAL.read_text(encoding="utf-8"))["cases"]
+    )
     cases = tuple(Case(item["id"], item["source"]) for item in design["cases"])
     if any(not case.source.strip() for case in cases):
         raise CampaignError("R0 corpus has an empty original source")
     return cases
+
+
+def additional_cases() -> tuple[Case, ...]:
+    """Independent append-only real-journey regressions after the original 27."""
+    value = json.loads(ADDITIONAL.read_text(encoding="utf-8"))
+    rows = value.get("cases")
+    if (
+        value.get("schema") != "odyssey-additional-regressions-v1"
+        or not isinstance(rows, list)
+        or not rows
+    ):
+        raise CampaignError("Additional regression catalog missing or empty")
+    ids = [f"R{i:02d}" for i in range(28, 28 + len(rows))]
+    if [row.get("id") for row in rows if isinstance(row, dict)] != ids:
+        raise CampaignError("Additional regressions must be append-only and sequential")
+    if any(
+        not isinstance(row.get("source"), str)
+        or not row["source"].strip()
+        or not isinstance(row.get("expectation"), str)
+        or not row["expectation"].strip()
+        or row.get("live_acceptance") != "pending"
+        or not isinstance(row.get("offline_coverage"), str)
+        or not row["offline_coverage"].startswith("tests/")
+        or not (ROOT / row["offline_coverage"]).is_file()
+        for row in rows
+    ):
+        raise CampaignError("Additional regressions require a grounded test and expected behavior")
+    verify_source_anchors(json.loads(DESIGN.read_text(encoding="utf-8"))["cases"], rows)
+    return tuple(Case(row["id"], row["source"]) for row in rows)
+
+
+def campaign_cases() -> tuple[Case, ...]:
+    return (*frozen_cases(), *additional_cases())
 
 
 def _money(value: object, field: str) -> float:
@@ -234,7 +303,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--receipts", type=Path, required=True)
     parser.add_argument(
-        "--case", action="append", dest="case_ids", choices=[x.id for x in frozen_cases()]
+        "--case", action="append", dest="case_ids", choices=[x.id for x in campaign_cases()]
     )
     parser.add_argument(
         "--live", action="store_true", help="arm and invoke an external approved case adapter"
@@ -245,7 +314,7 @@ def main() -> int:
     parser.add_argument("--cap-usd", type=float, default=DEFAULT_CAP_USD)
     parser.add_argument("--case-reserve-usd", type=float, default=DEFAULT_CASE_RESERVE_USD)
     args = parser.parse_args()
-    cases = frozen_cases()
+    cases = campaign_cases()
     selected = [case for case in cases if not args.case_ids or case.id in args.case_ids]
     total = accounted_spend(args.receipts, cases)
     if not args.live:

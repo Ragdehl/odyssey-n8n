@@ -34,9 +34,12 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
   checkpoint='visible_submit';
   await page.click('#send-button');
   checkpoint='await_reply';
-  await page.waitForFunction(() => !!document.querySelector('.message-acknowledgement') ||
-    !!document.querySelector('.message-error') ||
-    !!document.querySelector('.message-clarification'),{timeout:195000});
+  // A valid needs_attention reply is a plain .message-odyssey: it does NOT
+  // have an acknowledgement/clarification/error class. Await the removal of
+  // the loading placeholder, then inspect the actual assistant text/status.
+  await page.waitForFunction(() => !document.querySelector('.message-loading') &&
+    [...document.querySelectorAll('.message-odyssey')].some(m =>
+      !!m.querySelector('.message-text')?.textContent?.trim()),{timeout:195000});
   const before=await page.evaluate(()=>({
     userMessages:[...document.querySelectorAll('.message-user')].map(x=>x.textContent),
     ack:!!document.querySelector('.message-acknowledgement'),
@@ -44,6 +47,7 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
     clarification:!!document.querySelector('.message-clarification'),
     details:document.querySelectorAll('.detail-button').length,
     noteSetButtons:document.querySelectorAll('.note-set-button').length,
+    assistantTexts:[...document.querySelectorAll('.message-odyssey .message-text')].map(x=>x.textContent.slice(0,350)),
   }));
   checkpoint='reload';
   await page.reload({waitUntil:'domcontentloaded',timeout:18000});
@@ -55,6 +59,7 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
     error:!!document.querySelector('.message-error'),
     details:document.querySelectorAll('.detail-button').length,
     noteSetButtons:document.querySelectorAll('.note-set-button').length,
+    assistantTexts:[...document.querySelectorAll('.message-odyssey .message-text')].map(x=>x.textContent.slice(0,350)),
   }));
   checkpoint='notes_ui';
   let notesChecked=false, calendarChecked=false, notesCount=null;

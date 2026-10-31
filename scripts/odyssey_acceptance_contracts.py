@@ -187,7 +187,7 @@ def main() -> int:
         )
         if required_stage and required_stage not in result["stage_acceptance"]["accepted_stages"]:
             raise AcceptanceContractError(
-                "STAGE_E2E_NOT_VERIFIED: live browser/model/27 cases/4 audits absent"
+                f"STAGE_E2E_NOT_VERIFIED: live browser/model/{result['stage_acceptance']['cases']} cases/4 audits absent"
             )
     except (AcceptanceContractError, ValueError, SyntaxError, OSError) as error:
         print("ACCEPTANCE_LEDGER_INTEGRITY_BLOCKED:", error)

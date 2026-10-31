@@ -15,6 +15,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .odyssey_r0_browser_campaign import CampaignError, verify_source_anchors
+else:
+    from odyssey_r0_browser_campaign import CampaignError, verify_source_anchors
+
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "docs/architecture/odyssey-phase-acceptance.json"
 ROLES = frozenset({"generality", "quality", "testing", "performance"})
@@ -66,7 +71,7 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
         or stage["original_case_design"]
         != "benchmarks/application_router/fact_units_v2.design.json"
         or stage["additional_regression_source"]
-        != "docs/architecture/thin-orchestrator-block-ownership-plan.md"
+        != "tests/fixtures/odyssey_additional_regressions_v1.json"
         or not isinstance(stage["evidence_rule"], str)
         or not all(
             marker in stage["evidence_rule"]
@@ -111,6 +116,33 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
         )
     ):
         raise StageAcceptanceError("Original 27-case source corpus is missing or changed")
+    extra = _json(root, stage["additional_regression_source"])
+    additional = extra.get("cases")
+    if (
+        extra.get("schema") != "odyssey-additional-regressions-v1"
+        or not isinstance(additional, list)
+        or not additional
+        or [row.get("id") for row in additional if isinstance(row, dict)]
+        != [f"R{i:02d}" for i in range(28, 28 + len(additional))]
+        or any(
+            not isinstance(row, dict)
+            or not isinstance(row.get("source"), str)
+            or not row["source"].strip()
+            or not isinstance(row.get("expectation"), str)
+            or not row["expectation"].strip()
+            or row.get("live_acceptance") != "pending"
+            for row in additional
+        )
+    ):
+        raise StageAcceptanceError("Additional regression case catalog is missing or invalid")
+    # Preserve the 27 source IDs byte-for-byte; append-only regressions may
+    # grow after them. No earlier failure may disappear from phase acceptance.
+    try:
+        verify_source_anchors(design["cases"], additional)
+    except (CampaignError, KeyError, TypeError) as error:
+        raise StageAcceptanceError("The original or added regression sources changed") from error
+    all_ids = (*ids, *(row["id"] for row in additional))
+    full_design = {"cases": [*design["cases"], *additional]}
     accepted_stages = []
     for item in stages:
         if item["status"] != "accepted":
@@ -146,7 +178,9 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
             or receipt.get("trace_provenance_reviewed") is not True
         ):
             raise StageAcceptanceError("Live E2E receipt lacks mandatory product evidence")
-        _verify_case_rows(receipt, design, ids, root)
+        if receipt["provider_calls"] < len(all_ids):
+            raise StageAcceptanceError("Fresh provider-call count cannot cover every case")
+        _verify_case_rows(receipt, full_design, all_ids, root)
         _verify_auditors(receipt, source_sha, root)
         if root.resolve() == ROOT.resolve():
             code_diff = subprocess.run(
@@ -177,7 +211,7 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
         "stage": current,
         "accepted_stages": accepted_stages,
         "review_stage": stage["review_stage"],
-        "cases": len(ids),
+        "cases": len(all_ids),
         "accepted": len(accepted_stages) == 5,
     }
 
@@ -187,7 +221,9 @@ def _verify_case_rows(receipt: dict, design: dict, ids: tuple[str, ...], root: P
     # replay, a simulated UI, or one successful request as a complete 27-case run.
     rows = receipt.get("cases")
     if not isinstance(rows, list) or len(rows) != len(ids):
-        raise StageAcceptanceError("All 27 cases require a fresh per-case browser trace")
+        raise StageAcceptanceError(
+            "All 27 original plus appended cases require a fresh per-case browser trace"
+        )
     expected_ambiguous = {
         case["id"]
         for case in design["cases"]

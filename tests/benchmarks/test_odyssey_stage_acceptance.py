@@ -28,7 +28,7 @@ def test_r0_is_unaccepted_but_original_27_sources_remain_anchored():
         "stage": "R0",
         "review_stage": "R0",
         "accepted_stages": [],
-        "cases": 27,
+        "cases": 30,
         "accepted": False,
     }
 
@@ -70,9 +70,11 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
     """Test the validator with synthetic records; NEVER call this a live run."""
     design = json.loads((ROOT / STAGE["original_case_design"]).read_text())
     corpus = json.loads((ROOT / STAGE["corpus_manifest"]).read_text())
+    extra = json.loads((ROOT / STAGE["additional_regression_source"]).read_text())
     for relative, document in (
         (STAGE["original_case_design"], design),
         (STAGE["corpus_manifest"], corpus),
+        (STAGE["additional_regression_source"], extra),
     ):
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -81,7 +83,7 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
     evidence.mkdir(parents=True)
     sha = "e" * 40
     rows = []
-    for case in design["cases"]:
+    for case in [*design["cases"], *extra["cases"]]:
         ident = case["id"]
         trace = evidence / (ident + ".json")
         trace.write_text(json.dumps({"synthetic_validator_fixture": ident}))
@@ -120,7 +122,7 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
         "source_sha": sha,
         "deployed_sha": sha,
         "provider_mode": "fresh_real_model",
-        "provider_calls": 27,
+        "provider_calls": 30,
         "provider_model": "test-model",
         "browser_mode": "visible_authenticated_user_actions",
         "n8n_mode": "real",
@@ -168,4 +170,49 @@ def test_missing_genuine_stage_evidence_blocks_completion(tmp_path: Path):
     target.write_text(json.dumps(receipt))
     (tmp_path / receipt["cases"][0]["trace_artifact"]).write_text("altered")
     with pytest.raises(StageAcceptanceError, match="Altered browser trace"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_additional_regressions_cannot_disappear_from_an_accepted_stage(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    additional_path = tmp_path / STAGE["additional_regression_source"]
+    extra = json.loads(additional_path.read_text())
+    extra["cases"].pop()
+    additional_path.write_text(json.dumps(extra))
+    # The prior 30-case receipt has more cases than the altered 29-case catalog;
+    # a supposed complete stage must now fail rather than silently ignore one.
+    with pytest.raises(StageAcceptanceError, match="regression sources changed"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_frozen_source_rewrite_is_not_accepted_even_with_new_receipts(tmp_path: Path):
+    manifest, _receipt = _evidence(tmp_path)
+    cases = tmp_path / STAGE["additional_regression_source"]
+    additional = json.loads(cases.read_text())
+    additional["cases"][0]["source"] = "He visto a alguien."
+    cases.write_text(json.dumps(additional))
+    with pytest.raises(StageAcceptanceError, match="regression sources changed"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_additional_regression_ids_cannot_be_reordered_or_reused():
+    from scripts.odyssey_r0_browser_campaign import additional_cases, campaign_cases
+
+    addition = additional_cases()
+    assert [case.id for case in addition] == ["R28", "R29", "R30"]
+    assert [case.id for case in campaign_cases()] == [
+        *(f"F{i:02d}" for i in range(1, 28)),
+        "R28",
+        "R29",
+        "R30",
+    ]
+    assert len({case.source_sha256 for case in campaign_cases()}) == 30
+
+
+def test_real_model_call_count_must_cover_all_appended_cases(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    receipt["provider_calls"] = 29
+    path = tmp_path / manifest["stages"][0]["acceptance_receipt"]
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="provider-call count"):
         inspect_stage_acceptance(root=tmp_path, manifest=manifest)
