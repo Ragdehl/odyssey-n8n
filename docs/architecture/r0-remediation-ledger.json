@@ -1,0 +1,464 @@
+{
+  "schema": "odyssey-r0-findings-ledger-v1",
+  "audit_snapshot_sha": "e336d1d8607f28c04ec25577e7b2ce044741f9bc",
+  "audit_evidence": "docs/architecture/r0-whole-repository-source-audit-evidence-20261031.json",
+  "plan": "docs/architecture/r0-remediation-plan.md",
+  "policy": {
+    "immutable_origins": true,
+    "states": [
+      "open",
+      "in_progress",
+      "code_verified",
+      "closed",
+      "deferred_after_r0"
+    ],
+    "closure_minimum": "A reviewer-approved nonempty source commit and tangible before/after, tests and independent evidence; code_verified never means E2E accepted.",
+    "r0_completion": "Every pre-R0 finding has reviewed closure AND final 32 case live browser/model/n8n/physical Markdown/reload/replay with four final SHA auditors. Deferred G13 is a separately tracked future delivery gap, not an excuse for R0 architectural blockers."
+  },
+  "workstreams": [
+    {
+      "id": "G01",
+      "title": "Acceptance and proof integrity",
+      "existing_owner": "Core QA/CI",
+      "phase": "guardrails",
+      "depends_on": [],
+      "change_contract": "Fail closed on changed run/oracle/test definitions; real case-specific Notes/Calendar readback and nonzero unsuccessful campaign status.",
+      "verification": "Automated tamper/negative tests, selected+full offline gate, external E2E remains separate.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G02",
+      "title": "Audit mode and scope accuracy",
+      "existing_owner": "Agent supervisor and existing four roles",
+      "phase": "guardrails",
+      "depends_on": [
+        "G01"
+      ],
+      "change_contract": "Distinguish diff review from whole-repo scans; record honest coverage and require pinned immutable source.",
+      "verification": "Negative documentation-only diff with known pre-existing source defect; four roles independently assert scope.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G03",
+      "title": "Source semantic coverage/provenance",
+      "existing_owner": "Core coverage and evidence contracts",
+      "phase": "core",
+      "depends_on": [
+        "G01"
+      ],
+      "change_contract": "Remove candidate-shape and semantic max-8 constraints, retaining authenticated evidence, bounded memory/resources, provenance and no invented relation.",
+      "verification": "0/1/N and N:M facts, >8 references, ambiguous/hallucinated names refused, physical readback.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G04",
+      "title": "Typed relations and complete groups",
+      "existing_owner": "Core relation evidence + Tasks lifecycle",
+      "phase": "core",
+      "depends_on": [
+        "G03"
+      ],
+      "change_contract": "Interpret arbitrary source group through AI, verify existing Core canonical memberships, no hard-coded Person/2–8/grammar handling.",
+      "verification": "0/1/2/3/5/9+ typed groups, cross-actor and unknown members safe pending, E3/Tasks replay.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G05",
+      "title": "Generic owner of facts",
+      "existing_owner": "Core RequestPlan + semantic_write + E3",
+      "phase": "core",
+      "depends_on": [
+        "G03"
+      ],
+      "change_contract": "P4 carries Core-selected natural canonical owner, without Day/SELF-only semantics.",
+      "verification": "R31 positive P4→correct Markdown owner→Notes; arbitrary NoteSchema type, ambiguous/unknown owner negatives.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G06",
+      "title": "One E2 context shared across active stages",
+      "existing_owner": "Core ExecutionContext/Stage ports + Runtime composition",
+      "phase": "core",
+      "depends_on": [
+        "G01"
+      ],
+      "change_contract": "No P4 history reset; exact original source, actor, bounded history, timing and evidence go to relevant blocks unchanged.",
+      "verification": "R32 and mixed multi-turn; verified actor isolation, no history-derived write privilege.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G07",
+      "title": "Registered App operation composition",
+      "existing_owner": "ApplicationCatalog + Task/Event lifecycle ports",
+      "phase": "apps",
+      "depends_on": [
+        "G05",
+        "G06"
+      ],
+      "change_contract": "No fixed Core→Tasks, Events→Tasks, or CREATE-only branch in generic coordinator; Apps enforce only own rules.",
+      "verification": "F22 mixed Work Sessions; create/edit/cancel/query, synthetic third App, partial receipts, no premature writes.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G08",
+      "title": "TaskCorePlanner boundary",
+      "existing_owner": "Core semantic links/identity + Task lifecycle",
+      "phase": "apps",
+      "depends_on": [
+        "G04",
+        "G07"
+      ],
+      "change_contract": "Remove Task-specific construction of generic Person facts without losing assignee/parent/work-session policy.",
+      "verification": "Generic links to arbitrary Note types, ambiguous owner and replay negatives.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G09",
+      "title": "Language and semantic routing without keyword lists",
+      "existing_owner": "LLM typed plan + Temporal evidence + App ports",
+      "phase": "apps",
+      "depends_on": [
+        "G06",
+        "G07"
+      ],
+      "change_contract": "Replace event keyword/finite multilingual date lexical routing only when equivalent source provenance and time bounds are proved.",
+      "verification": "Paraphrased read/mutate Event, date qualifier omission negative, no source word-specific production branch.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G10",
+      "title": "Calendar occurrence generic projection",
+      "existing_owner": "Calendar typed occurrence contract + Event adapter",
+      "phase": "apps",
+      "depends_on": [
+        "G07"
+      ],
+      "change_contract": "Calendar projects arbitrary registered occurrence types, Event lifecycle stays in Events.",
+      "verification": "Second synthetic occurrence producer, recurrence/cancellation/readback.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G11",
+      "title": "One thin coordinator (no parallel semantic engine)",
+      "existing_owner": "Existing Runtime E2 candidate/Core/App chain",
+      "phase": "cleanup",
+      "depends_on": [
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09"
+      ],
+      "change_contract": "Consolidate P4 and legacy dispatcher after dual-run parity; delete redundant routes not move them to another file.",
+      "verification": "32 full-source cases, mixed 0/1/N, replay, source/N:M, owned writes, bounded performance, four final SHA auditors.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G12",
+      "title": "Historical and competing-path retirement",
+      "existing_owner": "Core module owners + E3 canonical Writer",
+      "phase": "cleanup",
+      "depends_on": [
+        "G01",
+        "G11"
+      ],
+      "change_contract": "Prove inactive callers, optional launches and tests; archive/delete only if not a distinct security boundary or user-supported path.",
+      "verification": "Import/feature flag/test caller inventory, no direct Markdown writer outside Core/E3, regression before deletion.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G13",
+      "title": "Mobile device-local delivery target",
+      "existing_owner": "Existing local-first architecture/backlog",
+      "phase": "post_r0",
+      "depends_on": [
+        "G11"
+      ],
+      "change_contract": "Do not confuse Raspberry DEV with installable offline mobile. No scope creep into R0 base simplification.",
+      "verification": "Separately reviewed offline-first mobile acceptance, not used to accept R0 or silently forgotten.",
+      "status": "deferred_after_r0",
+      "review_decision": "pending_review"
+    }
+  ],
+  "findings": [
+    {
+      "id": "R0-F001",
+      "audit_role": "core",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "07311c13bc478d632df373e46a5e6f6e0442026c553ecdc8983884f3e9e3ab91",
+      "severity": "blocking",
+      "reference": "odyssey_core/candidate_coverage.py:612",
+      "workstream_id": "G03",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F002",
+      "audit_role": "core",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "6cf216b2b473059183076a95beb555611af58be7f81fa13124be9b8a42ca978e",
+      "severity": "blocking",
+      "reference": "odyssey_core/dependent_reference_form.py:39",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F003",
+      "audit_role": "core",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "80644c351e552f9de2a2808a5077bbcd3892b7988c05f9c9abdc4429bd950725",
+      "severity": "blocking",
+      "reference": "odyssey_core/whole_message_coverage.py:154",
+      "workstream_id": "G03",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F004",
+      "audit_role": "core",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "3347077da580b4e46cdf07d79cbe413ad38d4b068c7a7c38165b02873fd65a3f",
+      "severity": "warning",
+      "reference": "odyssey_core/candidate_scoped_handoff.py:116",
+      "workstream_id": "G12",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F005",
+      "audit_role": "core",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "61a266733b12f89faf2f29dfe25665b5193ca53b190d35d38a06dfad2fe7c337",
+      "severity": "warning",
+      "reference": "odyssey_core/candidate_attribution.py:107",
+      "workstream_id": "G12",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F006",
+      "audit_role": "runtime",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "125487734597388f055925b8896a632fb8c6297b8180c88a01fb6e9b35b42a6c",
+      "severity": "blocking",
+      "reference": "odyssey_core/whole_source_compiler.py:216",
+      "workstream_id": "G05",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F007",
+      "audit_role": "runtime",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "8eb310c670ac4052c14cb1d585e70d7b970a979c462c14a91aa793e5457461c7",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:1954",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F008",
+      "audit_role": "runtime",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "d1a51beb06c9e819977fbfed385fe498e50909f53cac9cc608a2bf2ed21ebc36",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/composition.py:6253",
+      "workstream_id": "G06",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F009",
+      "audit_role": "runtime",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "cf895cdd57c4f3e2b147a491995b7072d5153b2d3211dc2b30640d696c140252",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:1185",
+      "workstream_id": "G07",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F010",
+      "audit_role": "runtime",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "e7461fa19c5659ed4d7574647744cdb3fef6a296beb8d23a2b6d36c5e2a33eba",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:2805",
+      "workstream_id": "G07",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F011",
+      "audit_role": "runtime",
+      "audit_index": 6,
+      "audit_fingerprint_sha256": "5dee62a271927390f81d0048107f77c610efbcabdb59de6e47f8e25c3a503800",
+      "severity": "warning",
+      "reference": "odyssey_runtime/composition.py:4635",
+      "workstream_id": "G09",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F012",
+      "audit_role": "runtime",
+      "audit_index": 7,
+      "audit_fingerprint_sha256": "dbd730e7879fbe398b24d657e027b33f4be3d42baa9ef6ca4d0c4c0576be7d6e",
+      "severity": "warning",
+      "reference": "odyssey_runtime/composition.py:6513",
+      "workstream_id": "G11",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F013",
+      "audit_role": "apps_ui",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "6a74bd63619a18ce0f99352eb262080cf1041a1ae0ea212818ae80e3f0ffe815",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:2707",
+      "workstream_id": "G07",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F014",
+      "audit_role": "apps_ui",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "53c2f0b17025c0895ccff50f9a0b555a2dc57d84569f3860443c1794ef6ac3b2",
+      "severity": "blocking",
+      "reference": "odyssey_apps/tasks/dependent_target.py:65",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F015",
+      "audit_role": "apps_ui",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "e8ed8badb40e851948b9ab089e969a981126b32f703337fb4b282dce886041fa",
+      "severity": "blocking",
+      "reference": "odyssey_apps/tasks/planning.py:90",
+      "workstream_id": "G08",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F016",
+      "audit_role": "apps_ui",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "faee55f6ca09cc6bc2b446d5c478f2c96affc5f0955d4f3fabc2226f8095d0a0",
+      "severity": "warning",
+      "reference": "workflows/storage-write.ts:123",
+      "workstream_id": "G12",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F017",
+      "audit_role": "apps_ui",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "09318884681904d5eb78f42f58cbc57382e1c3ca50a481cf4126b63d9f43ed09",
+      "severity": "warning",
+      "reference": "odyssey_apps/calendar/queries.py:218",
+      "workstream_id": "G10",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F018",
+      "audit_role": "apps_ui",
+      "audit_index": 6,
+      "audit_fingerprint_sha256": "d47191bb954c6ecf43ca51e773a65aaef17a14f4744d6e8cb5884c68d4fd1bcb",
+      "severity": "warning",
+      "reference": "odyssey_apps/events/execution.py:108",
+      "workstream_id": "G09",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F019",
+      "audit_role": "apps_ui",
+      "audit_index": 7,
+      "audit_fingerprint_sha256": "553ef8fdeb79ec0d42ee021f6c86f6d5ee8bcae8f6aa627aacc407ec4843d599",
+      "severity": "warning",
+      "reference": "deploy/odyssey-dev-runtime.service:7",
+      "workstream_id": "G13",
+      "state": "deferred_after_r0",
+      "closure": null
+    },
+    {
+      "id": "R0-F020",
+      "audit_role": "qa_ops",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "ebdfbf9012943be5af5493316880f5471fb7768950532d046ac168ad2bcac951",
+      "severity": "blocking",
+      "reference": "scripts/odyssey_stage_acceptance.py:211",
+      "workstream_id": "G01",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F021",
+      "audit_role": "qa_ops",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "52284043750eef6ffa29bb20f116fecbedfcacb1e465986ee341acbe0cd6cde9",
+      "severity": "blocking",
+      "reference": "scripts/odyssey_agent_cycle.py:985",
+      "workstream_id": "G02",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F022",
+      "audit_role": "qa_ops",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "70422e3a8c89356087c9dfeddb6f7063f2dc0a12aaf389c597a3eff631f4278a",
+      "severity": "warning",
+      "reference": "scripts/odyssey_r0_browser_campaign.py:438",
+      "workstream_id": "G01",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F023",
+      "audit_role": "qa_ops",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "64610e0fcbadd956921eebfcba551a870d70c384e530e0de3ffe59921eee91fe",
+      "severity": "warning",
+      "reference": "scripts/odyssey_r0_real_browser_case.cjs:64",
+      "workstream_id": "G01",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F024",
+      "audit_role": "qa_ops",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "94dedba0bd8ee45b15e84ac767e12daae4612953be098fe5c8952c839434e0c1",
+      "severity": "warning",
+      "reference": ".github/workflows/odyssey-dev-contract-gate.yml:61",
+      "workstream_id": "G01",
+      "state": "open",
+      "closure": null
+    }
+  ],
+  "followups": []
+}

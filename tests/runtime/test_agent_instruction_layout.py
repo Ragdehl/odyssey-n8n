@@ -76,3 +76,98 @@ def test_doctor_marker_requires_exact_full_sha(tmp_path: Path) -> None:
     assert doctor._marker(marker) is None
     marker.write_text("a" * 40 + "\n", encoding="utf-8")
     assert doctor._marker(marker) == "a" * 40
+
+
+def _r0_ledger_fixture(tmp_path: Path) -> tuple[object, Path, dict]:
+    """Use a real immutable audit, but a disposable, locally writable ledger."""
+    guard = _load_script("odyssey_docs_guard.py")
+    relative = Path("docs/architecture")
+    (tmp_path / relative).mkdir(parents=True)
+    for name in (
+        "r0-whole-repository-source-audit-evidence-20261031.json",
+        "r0-remediation-plan.md",
+        "r0-remediation-ledger.json",
+    ):
+        (tmp_path / relative / name).write_bytes((ROOT / relative / name).read_bytes())
+    path = tmp_path / relative / "r0-remediation-ledger.json"
+    return guard, path, json.loads(path.read_text())
+
+
+def test_global_r0_findings_are_all_tracked_and_originals_immutable(tmp_path: Path) -> None:
+    """A report or PR cleanup cannot silently remove one of the 24 findings."""
+    guard, path, ledger = _r0_ledger_fixture(tmp_path)
+    assert guard.check_r0_findings(tmp_path) == []
+    assert len(ledger["findings"]) == 24
+    assert len(ledger["workstreams"]) == 13
+    assert sum(f["severity"] == "blocking" for f in ledger["findings"]) == 13
+
+    ledger["findings"].pop()
+    path.write_text(json.dumps(ledger))
+    assert any("24 original" in x for x in guard.check_r0_findings(tmp_path))
+
+
+def test_r0_guard_blocks_severity_or_owner_drift_and_fake_closure(tmp_path: Path) -> None:
+    """Changing labels or marking solved without evidence cannot green CI."""
+    guard, path, ledger = _r0_ledger_fixture(tmp_path)
+    ledger["findings"][0]["severity"] = "warning"
+    path.write_text(json.dumps(ledger))
+    assert any("origin/severity/reference" in x for x in guard.check_r0_findings(tmp_path))
+    ledger["findings"][0]["severity"] = "blocking"
+    ledger["findings"][0]["workstream_id"] = "G13"
+    path.write_text(json.dumps(ledger))
+    assert any("assignment changed" in x for x in guard.check_r0_findings(tmp_path))
+    ledger["findings"][0]["workstream_id"] = "G03"
+    ledger["findings"][0]["state"] = "closed"
+    path.write_text(json.dumps(ledger))
+    assert any("closure evidence missing" in x for x in guard.check_r0_findings(tmp_path))
+
+
+def test_r0_guard_requires_closure_proof_and_no_premature_group_done(tmp_path: Path) -> None:
+    """Even a verified component test does not automatically finish R0."""
+    guard, path, ledger = _r0_ledger_fixture(tmp_path)
+    proof = {
+        "commit_sha": "a" * 40,
+        "before_after": "Observed failure and physically verified result on a synthetic vault",
+        "tests": ["tests/runtime/test_r0_finding_fixture.py"],
+    }
+    path_to_test = tmp_path / proof["tests"][0]
+    path_to_test.parent.mkdir(parents=True)
+    path_to_test.write_text("def test_something(): pass\n")
+    ledger["findings"][0].update(state="code_verified", closure=proof)
+    path.write_text(json.dumps(ledger))
+    assert guard.check_r0_findings(tmp_path) == []
+    ledger["findings"][0]["state"] = "closed"
+    path.write_text(json.dumps(ledger))
+    assert any("incomplete closure" in x for x in guard.check_r0_findings(tmp_path))
+    proof["independent_reviews"] = ["read-only generality review on the pinned code"]
+    ledger["workstreams"][0]["status"] = "closed"
+    path.write_text(json.dumps(ledger))
+    assert any("group closed with unresolved" in x for x in guard.check_r0_findings(tmp_path))
+
+
+def test_r0_append_only_followup_has_consistent_id_and_expected_effect(tmp_path: Path) -> None:
+    guard, path, ledger = _r0_ledger_fixture(tmp_path)
+    case = {
+        "id": "R0-N001",
+        "source": "Caso sintético anónimo",
+        "observed_failure": "Se perdió el hecho",
+        "expected_effect": "Debería verse en la nota",
+        "workstream_id": "G03",
+        "state": "open",
+        "closure": None,
+    }
+    ledger["followups"].append(case)
+    path.write_text(json.dumps(ledger))
+    assert guard.check_r0_findings(tmp_path) == []
+    ledger["followups"][0]["expected_effect"] = ""
+    path.write_text(json.dumps(ledger))
+    assert any("invalid appended" in x for x in guard.check_r0_findings(tmp_path))
+
+
+def test_r0_original_audit_cannot_be_silently_rewritten(tmp_path: Path) -> None:
+    guard, _, _ = _r0_ledger_fixture(tmp_path)
+    audit = tmp_path / "docs/architecture/r0-whole-repository-source-audit-evidence-20261031.json"
+    audit.write_bytes(audit.read_bytes() + b"\n")
+    assert any(
+        "original whole-repository audit changed" in x for x in guard.check_r0_findings(tmp_path)
+    )
