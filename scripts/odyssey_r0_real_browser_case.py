@@ -71,6 +71,36 @@ def _snapshot(repo: Any) -> dict[str, str]:
     return {path: repo.read_text(path) for path in repo.list_markdown_paths()}
 
 
+def _synthetic_markdown_delta(
+    before: dict[str, str], after: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Retain physical before/after proof only from the disposable R0 fixture.
+
+    No real DEV/PROD vault ever enters this adapter. Note excerpts are bounded
+    so reviewers can inspect missed or invented facts, not merely file counts.
+    """
+    changes = []
+    for path in sorted(set(before) | set(after)):
+        old, new = before.get(path), after.get(path)
+        if old == new:
+            continue
+        changes.append(
+            {
+                "path": path,
+                "before_sha256": hashlib.sha256(old.encode()).hexdigest()
+                if old is not None
+                else None,
+                "after_sha256": hashlib.sha256(new.encode()).hexdigest()
+                if new is not None
+                else None,
+                "after_markdown_excerpt": new[:1800] if new is not None else None,
+                "new_file": old is None,
+                "deleted_file": new is None,
+            }
+        )
+    return changes
+
+
 @contextmanager
 def _r0_product(root: Path):
     """Compose the real runtime around exactly the committed 13-note fixture."""
@@ -233,6 +263,25 @@ def _attach_prewrite_diagnostics(product: Any, evidence: dict[str, Any]) -> None
             previous(delivery, gate, values)
 
     executor.prewrite_diagnostic = observed
+    # This is an isolated synthetic-vault diagnostic: preserve the exact
+    # existing reason classification, while retaining the unrecognized
+    # contract error that would otherwise collapse to reason_code=0.
+    original_reason = executor._prewrite_reason_code
+    evidence["core_rejection_details"] = []
+
+    def explain_without_changing_verdict(error: Exception) -> int:
+        code = original_reason(error)
+        if len(evidence["core_rejection_details"]) < 12:
+            evidence["core_rejection_details"].append(
+                {
+                    "error_class": type(error).__name__,
+                    "reason": str(error)[:240],
+                    "unchanged_reason_code": code,
+                }
+            )
+        return code
+
+    executor._prewrite_reason_code = explain_without_changing_verdict
 
 
 def _record_usage(receipt: Path, usage: list[dict[str, Any]]) -> None:
@@ -570,9 +619,10 @@ def run(case: str, digest: str, receipt: Path) -> dict[str, Any]:
                             evidence["markdown_after_sha256"] = hashlib.sha256(
                                 json.dumps(after, sort_keys=True).encode()
                             ).hexdigest()
-                            evidence["changed_notes"] = sum(
-                                before.get(path) != text for path, text in after.items()
+                            evidence["physical_note_deltas"] = _synthetic_markdown_delta(
+                                before, after
                             )
+                            evidence["changed_notes"] = len(evidence["physical_note_deltas"])
                             replay_ok = False
                             if results:
                                 replay = product.execute_product(
@@ -618,6 +668,9 @@ def run(case: str, digest: str, receipt: Path) -> dict[str, Any]:
                                 browser_ok
                                 and observed.get("notesChecked") is True
                                 and observed.get("calendarChecked") is True
+                                and isinstance(observed.get("notesCount"), int)
+                                and observed["notesCount"] > 0
+                                and len(observed.get("openedNoteText") or "") > 35
                             )
                             source_proof = bool(results) and any(
                                 (result.get("execution_flow") or {}).get("input") == source

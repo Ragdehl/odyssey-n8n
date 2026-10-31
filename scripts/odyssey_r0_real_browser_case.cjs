@@ -63,30 +63,43 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
   }));
   checkpoint='notes_ui';
   let notesChecked=false, calendarChecked=false, notesCount=null;
+  let notesListTexts=[], openedNoteText='';
   const noteSet=await page.$('.note-set-button');
   if(noteSet){
     await noteSet.click();
-    await page.waitForFunction(()=>document.querySelector('#notes-surface')?.hidden===false,
-      {timeout:12000});
-    notesChecked=true;
-    notesCount=await page.evaluate(()=>document.querySelector('#notes-list')?.children.length||0);
   }else{
     const tab=await page.$('#notes-tab');
-    if(tab){await tab.click();notesChecked=true;}
+    if(!tab)throw Error('No real Notes navigation button was found');
+    await tab.click();
   }
-  const calendar=await page.$(notesChecked?'#notes-calendar-tab':'#calendar-tab');
-  if(calendar){
-    checkpoint='calendar_ui';
-    await calendar.click();
-    await page.waitForFunction(()=>document.querySelectorAll('.calendar-day-cell').length>0,
-      {timeout:13000});
-    calendarChecked=true;
-  }
+  await page.waitForFunction(()=>document.querySelector('#notes-surface')?.hidden===false,
+    {timeout:12000});
+  // An opened Notes surface is NOT evidence that the note was read. Await a
+  // real result returned by NotesQueryService and click it like a user.
+  await page.waitForSelector('#notes-list .note-row:not(.note-unavailable)',
+    {visible:true,timeout:25000});
+  notesListTexts=await page.$$eval('#notes-list .note-row:not(.note-unavailable)',
+    els=>els.slice(0,12).map(e=>e.textContent.slice(0,170)));
+  notesCount=notesListTexts.length;
+  await page.click('#notes-list .note-row:not(.note-unavailable)');
+  await page.waitForFunction(()=>{
+    const detail=document.querySelector('#note-detail');
+    return detail && detail.hidden===false && (detail.textContent||'').trim().length>35;
+  },{timeout:20000});
+  openedNoteText=await page.$eval('#note-detail',e=>e.textContent.slice(0,2500));
+  notesChecked=notesCount>0 && openedNoteText.trim().length>35;
+  const calendar=await page.$('#notes-calendar-tab');
+  if(!calendar)throw Error('No Notes-to-Calendar navigation button');
+  checkpoint='calendar_ui';
+  await calendar.click();
+  await page.waitForFunction(()=>document.querySelectorAll('.calendar-day-cell').length>0,
+    {timeout:13000});
+  calendarChecked=true;
   const sourceShown=before.userMessages.some(x=>x.includes(source)) &&
     after.userMessages.some(x=>x.includes(source));
   const pass=sourceShown && notesChecked && calendarChecked && jsErrors.length===0;
   console.log(JSON.stringify({pass,sourceShown,before,after,notesChecked,
-    notesCount,calendarChecked,jsErrors}));
+    notesCount,notesListTexts,openedNoteText,calendarChecked,jsErrors}));
   if(!pass)process.exitCode=2;
  }catch(e){console.log(JSON.stringify({pass:false,checkpoint,error:String(e.message).slice(0,230)}));process.exitCode=1;}
  finally{if(browser)await browser.close();}

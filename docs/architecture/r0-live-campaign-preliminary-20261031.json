@@ -50,6 +50,26 @@
       "explanation": "Aborted by preflight fixture path before provider calls; conservative $0.25 reservation remains"
     },
     {
+      "case": "F09",
+      "outcome": "failed",
+      "charged_or_reserved_usd": 0.0036672,
+      "usage_complete": true,
+      "actual_provider_calls_recorded": 6,
+      "provider_schemas": [
+        "odyssey_luna_first_planner_result",
+        "odyssey_light_capability_route_events_v1",
+        "odyssey_light_shared_semantic_plan_v1",
+        "odyssey_p2_source_coverage_v1",
+        "odyssey_speaker_full_A",
+        "odyssey_speaker_full_B"
+      ],
+      "runtime_status": "needs_attention",
+      "physical_changed_notes": 0,
+      "browser_checkpoint": "await_reply",
+      "n8n_browser_requests": 1,
+      "explanation": "Six fresh GPT responses reached active source runtime; needs_attention without Markdown. Browser awaited acknowledgement class, which is not applied to ordinary needs_attention; generic UI probe corrected AFTER this run. No case acceptance."
+    },
+    {
       "case": "F13",
       "outcome": "failed",
       "charged_or_reserved_usd": 0.0031466,
@@ -71,9 +91,9 @@
       "explanation": "Real-model request from isolated Chromium+n8n; incomplete user acceptance"
     },
     {
-      "case": "F09",
-      "outcome": "failed",
-      "charged_or_reserved_usd": 0.0036672,
+      "case": "R28",
+      "outcome": "deferred",
+      "charged_or_reserved_usd": 0.003575,
       "usage_complete": true,
       "actual_provider_calls_recorded": 6,
       "provider_schemas": [
@@ -84,19 +104,53 @@
         "odyssey_speaker_full_A",
         "odyssey_speaker_full_B"
       ],
+      "runtime_status": "completed",
+      "physical_changed_notes": 3,
+      "n8n_browser_requests": 1,
+      "core_prewrite_gates": [
+        "proposal",
+        "coverage_verdict",
+        "prewrite_accepted"
+      ],
+      "public_cloudflare_access": false,
+      "browser_notes_list_count": 0,
+      "browser_opened_note_readback": false,
+      "semantic_oracle_independently_accepted": false,
+      "explanation": "Fresh GPT via visible Chromium→isolated n8n→Core/E3; completed, 3 physical Markdown paths changed, replay stable, assistant Guardado after refresh. Prior UI smoke entered Notes and Calendar but Notes list snapshot had 0 rows and did not inspect any note body: DEFERRED, not semantic acceptance; first test harness subsequently hardened. Temporary vault disposed; note text unavailable."
+    },
+    {
+      "case": "R29",
+      "outcome": "failed",
+      "charged_or_reserved_usd": 0.0049426,
+      "usage_complete": true,
+      "actual_provider_calls_recorded": 4,
+      "provider_schemas": [
+        "odyssey_luna_first_planner_result",
+        "odyssey_light_capability_route_events_v1",
+        "odyssey_light_shared_semantic_plan_v1",
+        "odyssey_p2_source_coverage_v1"
+      ],
       "runtime_status": "needs_attention",
       "physical_changed_notes": 0,
-      "browser_checkpoint": "await_reply",
       "n8n_browser_requests": 1,
-      "explanation": "Six fresh GPT responses reached active source runtime; needs_attention without Markdown. Browser awaited acknowledgement class, which is not applied to ordinary needs_attention; generic UI probe corrected AFTER this run. No case acceptance."
+      "core_prewrite_gates": [
+        "proposal",
+        "coverage_verdict",
+        "coverage_contract"
+      ],
+      "public_cloudflare_access": false,
+      "browser_notes_list_count": 8,
+      "browser_opened_note_readback": true,
+      "semantic_oracle_independently_accepted": false,
+      "explanation": "Fresh GPT visible browser (4 provider calls): plan proposed 3 facts and coverage reviewer approved 3. Existing Core validate_whole_message_coverage rejected with FULL_SOURCE_REVIEW_OR_IDENTITY_UNVERIFIED, telemetry coverage_contract reason_code 0 (unknown specific reason); 0 Markdown changes, assistant requested clarification, no unsafe write. New harness inspected Notes but only an unrelated pre-existing fictional note. FAIL; original source unchanged and relationship fixture seeded."
     }
   ],
-  "accounted_usd": 0.5098978,
+  "accounted_usd": 0.5184154,
   "authorized_total_cap_usd": 2.0,
   "real_provider_case_pass_count": 0,
-  "remaining_required": "27 real visible UI cases fully semantic reviewed (including F14/F27 ambiguity), authenticated published DEV Access, Core/E3 and Markdown+Notes/Calendar/replay, 4 independent role reviewers pinned to final source SHA",
+  "remaining_required": "All 30 case-by-case semantic oracles + real visible UI/GPT/n8n/physical Markdown/Notes+Calendar/reload/replay + real deployed matched SHA and isolated account + four independent pinned reviewers. R28/R29 diagnostics do not close stage.",
   "warning": "No historical model output, synthetic UI, manual PASS flag or stage guard substitutes for actual product acceptance",
-  "remaining_usd": 1.4901022,
+  "remaining_usd": 1.4815846,
   "mandatory_cases_total": 30,
   "added_regressions": [
     "R28",
@@ -104,5 +158,7 @@
     "R30"
   ],
   "offline_after_source_change": "R29 (exact family visit) two recorded-model Core/E3 tests: proven relationships write, unproven relationships abstain without mutations. Does not prove fresh model.",
-  "verified_r0_case_completion_count": 0
+  "verified_r0_case_completion_count": 0,
+  "new_r30_status": "NOT RUN: provider launch blocked by remote execution security before campaign arming; no provider receipt or cost. Do not re-label as attempted.",
+  "new_harness_improvements": "After R28: actual #notes-list row and visible note detail body required; synthetic-vault per-note before/after Markdown excerpts+hashes persisted, and unknown prewrite error class/reason recorded without altering verifier return. This stricter test was used for R29, not retroactively for R28."
 }

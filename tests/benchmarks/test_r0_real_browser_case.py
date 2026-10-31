@@ -148,6 +148,15 @@ def test_r0_prewrite_probe_preserves_previous_callback(tmp_path):
     executor._observe_prewrite("request-one", "prewrite_accepted", facts=2)
     assert existing == [("request-one", "prewrite_accepted", {"facts": 2})]
     assert evidence["core_prewrite_gates"][0]["gate"] == "prewrite_accepted"
+    reason = ValueError("New general validator reason (test fixture only)")
+    assert executor._prewrite_reason_code(reason) == 0
+    assert evidence["core_rejection_details"] == [
+        {
+            "error_class": "ValueError",
+            "reason": str(reason),
+            "unchanged_reason_code": 0,
+        }
+    ]
 
 
 def test_r0_prewrite_probe_records_success_before_real_markdown_write(tmp_path):
@@ -242,3 +251,23 @@ def test_original_frozen_case_does_not_gain_extra_test_preconditions(tmp_path):
             before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
             assert _prepare_additional_test_fixture("F09", repo, runtime) == 0
             assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+
+
+def test_disposable_markdown_delta_keeps_content_and_detects_missing_or_invented_facts():
+    from hashlib import sha256
+
+    from scripts.odyssey_r0_real_browser_case import _synthetic_markdown_delta
+
+    before = {"day.md": "--- day ---\nHoy vi a Manu.\n", "self.md": "--- self ---\n"}
+    after = {
+        "day.md": "--- day ---\nHoy vi a Manu. Fui al parque.\n",
+        "self.md": before["self.md"],
+        "Manu.md": "--- person ---\nNombre Manu\n",
+    }
+    changed = _synthetic_markdown_delta(before, after)
+    assert [item["path"] for item in changed] == ["Manu.md", "day.md"]
+    assert changed[0]["new_file"] is True
+    assert changed[1]["after_sha256"] == sha256(after["day.md"].encode()).hexdigest()
+    assert "Fui al parque" in changed[1]["after_markdown_excerpt"]
+    assert all(item["path"] != "self.md" for item in changed)
+    assert _synthetic_markdown_delta(after, after) == []
