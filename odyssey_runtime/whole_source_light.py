@@ -68,6 +68,7 @@ from odyssey_core.dependent_source_scopes import (
 )
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.independent_source_scopes import (
+    IndependentSourceScope,
     IndependentSourceScopesError,
     verify_independent_source_scopes,
 )
@@ -833,7 +834,7 @@ class WholeSourceLightExecutor:
         actor: AuthenticatedActorContext,
         conversation_id: str,
         *,
-        independent_scope: str | None = None,
+        verified_scope: IndependentSourceScope | None = None,
         delivery_instant: datetime | None = None,
         prechecked_task_scope: dict[str, object] | None = None,
     ) -> ApplicationResult:
@@ -863,19 +864,40 @@ class WholeSourceLightExecutor:
         if self.progress is not None:
             self.progress("routing.started", {})
         router_started = perf_counter()
-        route_schema, route_instructions = capability_route_contract(
-            enable_events=self.event_delegate is not None
-        )
-        with timed_dev_hot_path(delivery, "p4.router"):
-            route = self._ask(
-                ROUTER_MODEL,
-                route_instructions,
-                {"original_source": source, "clock": clock},
-                route_schema,
-                "odyssey_light_capability_route_events_v1"
-                if self.event_delegate is not None
-                else "odyssey_light_capability_route_v1",
+        independent_scope = verified_scope.capability if verified_scope is not None else None
+        if verified_scope is None:
+            route_schema, route_instructions = capability_route_contract(
+                enable_events=self.event_delegate is not None
             )
+            with timed_dev_hot_path(delivery, "p4.router"):
+                route = self._ask(
+                    ROUTER_MODEL,
+                    route_instructions,
+                    {"original_source": source, "clock": clock},
+                    route_schema,
+                    "odyssey_light_capability_route_events_v1"
+                    if self.event_delegate is not None
+                    else "odyssey_light_capability_route_v1",
+                )
+        else:
+            # An independent-partition proposal plus its separate review has
+            # already proved this exact span's sole capability and that it has
+            # no cross-scope referent. Re-running the capability router here
+            # was a second, weaker decision which could only duplicate or
+            # contradict that typed evidence. Core and the App still interpret
+            # the complete scoped source themselves below.
+            if (
+                verified_scope.capability not in {"core", "tasks"}
+                or verified_scope.source.strip() != source
+            ):
+                return self._abstain(delivery, "INDEPENDENT_SCOPE_CAPABILITY_UNVERIFIED")
+            route = {
+                "capabilities": [verified_scope.capability],
+                "interpretation": "joint",
+                "reason": "single",
+                "self_relation_span": None,
+                "app_scopes": [],
+            }
         capabilities = route.get("capabilities")
         allowed = {"core", "tasks", "temporal"}
         if self.event_delegate is not None:
@@ -2883,7 +2905,7 @@ class WholeSourceLightExecutor:
                         locator,
                         actor,
                         conversation_id,
-                        independent_scope=part.capability,
+                        verified_scope=part,
                         delivery_instant=delivery_instant,
                         prechecked_task_scope=task_scopes.get(part.index),
                     )
