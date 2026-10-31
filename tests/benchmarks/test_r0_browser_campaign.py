@@ -70,3 +70,18 @@ def test_rejected_trace_without_provider_usage_cannot_be_recorded_as_live():
     trace["provider_usage"] = []
     with pytest.raises(campaign.CampaignError, match="provider usage"):
         campaign.validate_adapter_trace(trace, case)
+
+
+def test_failed_browser_run_retains_forensics_without_false_pass():
+    case = campaign.frozen_cases()[5]
+    failure = {
+        "case": case.id,
+        "source_sha256": case.source_sha256,
+        "outcome": "failed",
+        "provider_usage": [],
+        "forensics": {"error": "RouterError", "detail": "bootstrap rejected"},
+    }
+    assert campaign.validate_adapter_trace(failure, case)["forensics"]["error"] == "RouterError"
+    failure["outcome"] = "passed"
+    with pytest.raises(campaign.CampaignError, match="Cloudflare"):
+        campaign.validate_adapter_trace(failure, case)

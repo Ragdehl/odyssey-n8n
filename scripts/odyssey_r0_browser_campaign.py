@@ -178,6 +178,11 @@ def validate_adapter_trace(trace: object, case: Case) -> dict[str, Any]:
     }
     if trace.get("case") != case.id or trace.get("source_sha256") != case.source_sha256:
         raise CampaignError("Adapter trace does not belong to the armed original source")
+    # A failed adapter MUST retain its forensic trace. Requiring successful
+    # n8n/Markdown evidence on a failed attempt hides the actual first blocker
+    # and turns a one-off paid failure into an unrepeatable opaque error.
+    if trace.get("outcome") == "failed":
+        return trace
     if trace.get("cloudflare_public_access_used") is not False:
         raise CampaignError("R0 isolated harness must not use external Cloudflare Access")
     if any(trace.get(key) is not True for key in required_true - {"cloudflare_public_access_used"}):

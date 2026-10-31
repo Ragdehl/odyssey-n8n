@@ -1,0 +1,79 @@
+{
+  "schema": "odyssey-r0-preliminary-diagnostics-v1",
+  "date": "2026-10-31",
+  "phase": "R0",
+  "accepted": false,
+  "campaign_state": "incomplete",
+  "runtime_source_branch": "refactor/e5-source-orchestration-consolidation",
+  "runtime_base_sha_at_tests": "a7a24e1",
+  "harness_commit_at_tests": null,
+  "isolation": "temporary local browser cookie; separate real n8n Docker network none; temporary 13-note synthetic vault; NOT published Cloudflare Access",
+  "first_previous_live_F11": {
+    "case": "F11",
+    "outcome": "partial_browser_failure",
+    "provider_calls_actual": 5,
+    "backend_E3_markdown_written": true,
+    "notes_visible_after_open": true,
+    "old_browser_assertion_failed": "expected literal source while displayed enriched writer content",
+    "model_cost_actual_known": false,
+    "conservatively_reserved_usd": 0.25
+  },
+  "cases": [
+    {
+      "case": "F01",
+      "outcome": "failed",
+      "charged_or_reserved_usd": 0.003084,
+      "usage_complete": true,
+      "actual_provider_calls_recorded": 1,
+      "provider_schemas": [
+        null
+      ],
+      "runtime_status": "none",
+      "physical_changed_notes": 0,
+      "writer_failures": [],
+      "browser_ui_result": true,
+      "n8n_browser_requests": 1,
+      "explanation": "Real-model request from isolated Chromium+n8n; incomplete user acceptance"
+    },
+    {
+      "case": "F06",
+      "outcome": "failed",
+      "charged_or_reserved_usd": 0.25,
+      "usage_complete": false,
+      "actual_provider_calls_recorded": 0,
+      "provider_schemas": [],
+      "runtime_status": null,
+      "physical_changed_notes": null,
+      "writer_failures": [],
+      "browser_ui_result": null,
+      "n8n_browser_requests": null,
+      "explanation": "Aborted by preflight fixture path before provider calls; conservative $0.25 reservation remains"
+    },
+    {
+      "case": "F13",
+      "outcome": "failed",
+      "charged_or_reserved_usd": 0.0031466,
+      "usage_complete": true,
+      "actual_provider_calls_recorded": 1,
+      "provider_schemas": [
+        "odyssey_luna_first_planner_result"
+      ],
+      "runtime_status": "none",
+      "physical_changed_notes": 0,
+      "writer_failures": [
+        {
+          "class": "Refused",
+          "detail": "Per-case R0 provider calls or $0.25 budget exhausted"
+        }
+      ],
+      "browser_ui_result": true,
+      "n8n_browser_requests": 1,
+      "explanation": "Real-model request from isolated Chromium+n8n; incomplete user acceptance"
+    }
+  ],
+  "accounted_usd": 0.5062306,
+  "authorized_total_cap_usd": 2.0,
+  "real_provider_case_pass_count": 0,
+  "remaining_required": "27 real visible UI cases fully semantic reviewed (including F14/F27 ambiguity), authenticated published DEV Access, Core/E3 and Markdown+Notes/Calendar/replay, 4 independent role reviewers pinned to final source SHA",
+  "warning": "No historical model output, synthetic UI, manual PASS flag or stage guard substitutes for actual product acceptance"
+}
