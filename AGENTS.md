@@ -45,7 +45,7 @@ Developer Codex model/effort selection is separate from the actual Odyssey runti
 - `odyssey-live-provider`: OpenAI EnvironmentFile, authorized real-model cost.
 - `odyssey-dev-e2e`: DEV deployment, browser regressions and safe recovery.
 - `odyssey-results`: report verified progress consistently, including examples, test/audit state, immediate and later roadmap, and exact Git/DEV status.
-- `odyssey-skill-steward`: notice repeated workflow mistakes or reusable corrections and improve existing skills before proposing a new one. Use the installed official Codex `skill-creator` for skill design and validation; do not add skills for isolated bugs.
+- `odyssey-skill-steward`: when adding/changing an instruction or skill, check for contradictory active rules before publishing; for repeated workflow mistakes, improve the existing owner before creating a new skill. Use the installed official Codex `skill-creator` for skill design and validation; do not add skills for isolated bugs.
 - `odyssey-ux`: modern UI design and review against Anthropic `frontend-design` and Vercel `web-design-guidelines`, then actual Chromium mobile/desktop acceptance.
 - Existing: `odyssey-architecture-challenge`, `odyssey-verify-change`, `odyssey-pr-feedback`, `odyssey-post-merge`.
 
