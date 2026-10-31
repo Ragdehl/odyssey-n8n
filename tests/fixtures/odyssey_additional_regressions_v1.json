@@ -7,7 +7,16 @@
       "expectation": "A factual recollection is saved in the journal Day, not made into a Task or Event; no person is fabricated.",
       "offline_coverage": "tests/runtime/test_p4_general_day_journal_fallback.py",
       "live_acceptance": "pending",
-      "fixture_setup": []
+      "fixture_setup": [],
+      "expected_units": [
+        {
+          "reading": "Remember that the user saw Manu; no invented role/person and no fabricated Event or Task",
+          "source_anchors": [
+            "He visto a Manu"
+          ],
+          "state": "candidate"
+        }
+      ]
     },
     {
       "id": "R29",
@@ -23,6 +32,29 @@
             "Mi mujer es [[Bea]]."
           ]
         }
+      ],
+      "expected_units": [
+        {
+          "reading": "Preserve the first-person family visit to Paris at the source day; participants can only be linked with verified SELF proof",
+          "source_anchors": [
+            "Hoy hemos estado con mis hijos y mi mujer de visita por Paris"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Preserve the visit to Notre Dame within the same recollection without inventing participant authority",
+          "source_anchors": [
+            "Hemos visto la iglesia de Notre Dame"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Preserve the Louvre museum visit and its source order/date without generating an Event automatically",
+          "source_anchors": [
+            "hemos ido al museo del Louvre"
+          ],
+          "state": "candidate"
+        }
       ]
     },
     {
@@ -37,6 +69,22 @@
           "name": "Preparar informe Atlas",
           "id": "synthetic-task-atlas",
           "path": "Preparar informe Atlas.md"
+        }
+      ],
+      "expected_units": [
+        {
+          "reading": "Preserve the first-person preference to run in the afternoon; this is not an Event or Work Session",
+          "source_anchors": [
+            "Me gusta correr por la tarde"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Start exactly one Work Session attached to the already existing Preparar informe Atlas Task, not a new duplicate Task",
+          "source_anchors": [
+            "Empieza una sesión de trabajo en la tarea Preparar informe Atlas"
+          ],
+          "state": "candidate"
         }
       ]
     }

@@ -87,14 +87,72 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
         ident = case["id"]
         trace = evidence / (ident + ".json")
         trace.write_text(json.dumps({"synthetic_validator_fixture": ident}))
+        # Synthetic validator fixture: link the original *meaning* requirements
+        # to physical final readback proofs, not to any fixed Router partitions,
+        # exact note count, wordings or per-step model hypotheses.
+        note_content = f"Synthetic readback coverage for {ident}; not live evidence"
+        note_hash = hashlib.sha256(note_content.encode()).hexdigest()
+        pending_hash = hashlib.sha256(f"test-pending-{ident}".encode()).hexdigest()
+        uncertain = any(
+            unit.get("state") == "ambiguous_identity" for unit in case.get("expected_units", [])
+        )
+        final_artifact = evidence / (ident + ".final.json")
+        final_artifact.write_text(
+            json.dumps(
+                {
+                    "schema": "odyssey-final-input-output-v1",
+                    "source_sha256": hashlib.sha256(case["source"].encode()).hexdigest(),
+                    "before_vault_sha256": hashlib.sha256(f"before-{ident}".encode()).hexdigest(),
+                    "after_vault_sha256": hashlib.sha256(f"after-{ident}".encode()).hexdigest(),
+                    "canonical_notes": [
+                        {
+                            "note_id": f"synthetic-{ident}",
+                            "note_path": f"calendar/days/{ident}.md",
+                            "markdown_sha256": note_hash,
+                            "content_excerpt": note_content,
+                            "markdown_utf8": note_content,
+                        }
+                    ],
+                    "canonical_pending": (
+                        [
+                            {
+                                "reason": "Ambiguous referent left safely unselected",
+                                "pending_sha256": pending_hash,
+                            }
+                        ]
+                        if uncertain
+                        else []
+                    ),
+                    "ui_after_reload": {
+                        "assistant_reply": "Synthetic acceptance fixture; NOT a real browser",
+                        "notes_and_calendar_loaded": True,
+                        "opened_note_ids": [f"synthetic-{ident}"],
+                    },
+                    "semantic_review": {
+                        "judgement": "safe_partial_pending"
+                        if uncertain
+                        else "semantically_sufficient",
+                        "all_source_meanings_accounted_for": True,
+                        "no_invented_facts_or_actions": True,
+                        "alternate_safe_representation": False,
+                        "explanation": f"Synthetic semantic review for {ident}; real independent final review is still required",
+                    },
+                }
+            )
+        )
         rows.append(
             {
                 "id": ident,
+                "final_output_artifact": "docs/architecture/e2e-receipts/" + final_artifact.name,
+                "final_output_artifact_sha256": hashlib.sha256(
+                    final_artifact.read_bytes()
+                ).hexdigest(),
                 "source_sha256": hashlib.sha256(case["source"].encode()).hexdigest(),
                 "outcome": "safely_ambiguous" if ident in {"F14", "F27"} else "passed",
                 "request_id": f"test-request-{ident}",
                 "visible_ui_submitted": True,
                 "live_provider_observed": True,
+                "provider_calls_observed": 1,
                 "source_preserved": True,
                 "canonical_result_checked": True,
                 "ui_readback_checked": True,
@@ -111,9 +169,9 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
                         ),
                         "source_supported": True,
                         "canonical_readback": True,
-                        "proof_sha256": hashlib.sha256(
-                            f"synthetic-only-{ident}-{index}".encode()
-                        ).hexdigest(),
+                        "proof_sha256": (
+                            pending_hash if unit.get("state") == "ambiguous_identity" else note_hash
+                        ),
                     }
                     for index, unit in enumerate(
                         case.get("expected_units") or [{"state": "end_to_end"}]
@@ -212,7 +270,9 @@ def test_frozen_source_rewrite_is_not_accepted_even_with_new_receipts(tmp_path: 
     additional = json.loads(cases.read_text())
     additional["cases"][0]["source"] = "He visto a alguien."
     cases.write_text(json.dumps(additional))
-    with pytest.raises(StageAcceptanceError, match="regression sources changed"):
+    with pytest.raises(
+        StageAcceptanceError, match="Additional regression case catalog|regression sources changed"
+    ):
         inspect_stage_acceptance(root=tmp_path, manifest=manifest)
 
 
@@ -292,5 +352,127 @@ def test_added_case_expectation_and_fixture_are_immutable(tmp_path: Path):
     catalog = json.loads(file.read_text())
     catalog["cases"][1]["fixture_setup"][0]["facts"] = ["La persona conoció a otra persona."]
     file.write_text(json.dumps(catalog))
+    with pytest.raises(StageAcceptanceError, match="regression sources changed"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_final_output_is_required_not_just_intermediate_green(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    receipt["cases"][0].pop("final_output_artifact")
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="Missing final input-output proof"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_same_canonical_note_may_prove_two_distinct_source_meanings(tmp_path: Path):
+    """F09 can store Marta and Luis together; no fixed two-write requirement."""
+    manifest, receipt = _evidence(tmp_path)
+    f09 = receipt["cases"][8]
+    assert len(f09["unit_verifications"]) == 2
+    assert (
+        f09["unit_verifications"][0]["proof_sha256"] == f09["unit_verifications"][1]["proof_sha256"]
+    )
+    artifact = tmp_path / f09["final_output_artifact"]
+    final = json.loads(artifact.read_text())
+    final["semantic_review"]["alternate_safe_representation"] = True
+    final["semantic_review"]["explanation"] = (
+        "Both independent city-of-residence meanings are present and proven "
+        "in one canonical note, with no invented participants or missing fact"
+    )
+    artifact.write_text(json.dumps(final))
+    f09["final_output_artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    assert inspect_stage_acceptance(root=tmp_path, manifest=manifest)["accepted_stages"] == ["R0"]
+
+
+def test_unproven_semantic_summary_cannot_hide_missing_final_fact(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    f01 = receipt["cases"][0]
+    artifact = tmp_path / f01["final_output_artifact"]
+    final = json.loads(artifact.read_text())
+    final["semantic_review"]["all_source_meanings_accounted_for"] = False
+    artifact.write_text(json.dumps(final))
+    f01["final_output_artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="Final output is not independently reviewable"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_final_proof_must_match_a_canonical_note_or_pending(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    receipt["cases"][0]["unit_verifications"][0]["proof_sha256"] = "a" * 64
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="lack final canonical/pending"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_final_note_hash_must_match_actual_full_markdown_bytes(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    f09 = receipt["cases"][8]
+    artifact = tmp_path / f09["final_output_artifact"]
+    final = json.loads(artifact.read_text())
+    final["canonical_notes"][0]["markdown_utf8"] += " forged second fact"
+    artifact.write_text(json.dumps(final))
+    f09["final_output_artifact_sha256"] = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="Canonical note readback is invalid"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_all_four_role_prompts_require_reuse_comparison_and_thin_coordinator():
+    """Do not let mandatory reviewers silently omit the already-built-code search."""
+    roles = ("generality", "quality", "testing", "performance")
+    for role in roles:
+        prompt = (ROOT / "ops/agent-team" / f"{role}.md").read_text()
+        assert "Mandatory reuse and thin-coordinator audit" in prompt, role
+        assert "existing owner/path" in prompt, role
+        assert "new/changed owner/path" in prompt, role
+        assert "blocking repairable" in prompt, role
+        assert "runtime coordinator" in prompt, role
+    readme = (ROOT / "ops/agent-team/README.md").read_text()
+    assert "All four" in readme and "reuse-first" in readme
+    qa = (ROOT / "ops/agent-team/testing.md").read_text()
+    assert "Full input → final output" in qa
+    assert "fresh model calls" in qa
+
+
+def test_every_input_requires_its_own_fresh_model_call_claim(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    receipt["cases"][22]["provider_calls_observed"] = 0
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="non-live case evidence"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_provider_aggregate_must_cover_all_claimed_per_case_calls(tmp_path: Path):
+    manifest, receipt = _evidence(tmp_path)
+    receipt["cases"][2]["provider_calls_observed"] = 6
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="Aggregate provider-call proof"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_all_appended_scenarios_preserve_every_semantic_user_requirement():
+    from scripts.odyssey_r0_browser_campaign import additional_cases
+
+    original = json.loads((ROOT / STAGE["additional_regression_source"]).read_text())
+    assert [case.id for case in additional_cases()] == ["R28", "R29", "R30"]
+    assert [len(row["expected_units"]) for row in original["cases"]] == [1, 3, 2]
+    assert all(
+        all(
+            anchor in row["source"]
+            for unit in row["expected_units"]
+            for anchor in unit["source_anchors"]
+        )
+        for row in original["cases"]
+    )
+
+
+def test_appended_semantic_requirement_cannot_be_weakened_without_detection(tmp_path: Path):
+    manifest, _receipt = _evidence(tmp_path)
+    path = tmp_path / STAGE["additional_regression_source"]
+    rows = json.loads(path.read_text())
+    rows["cases"][1]["expected_units"].pop()
+    path.write_text(json.dumps(rows))
     with pytest.raises(StageAcceptanceError, match="regression sources changed"):
         inspect_stage_acceptance(root=tmp_path, manifest=manifest)

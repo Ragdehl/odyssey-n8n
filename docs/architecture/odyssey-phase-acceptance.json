@@ -4,7 +4,7 @@
   "corpus_manifest": "tests/fixtures/full_message_corpus_v1/manifest.json",
   "original_case_design": "benchmarks/application_router/fact_units_v2.design.json",
   "additional_regression_source": "tests/fixtures/odyssey_additional_regressions_v1.json",
-  "evidence_rule": "No stage completion without a fresh real-model, real browser/n8n, E3 Markdown/UI readback and four independent reviewers for the exact source and deployed SHA. All F01-F27 and every appended regression must be run; known ambiguity must remain safely unresolved.",
+  "evidence_rule": "No stage completion without a fresh real-model, real browser/n8n, E3 Markdown/UI readback and four independent reviewers for the exact source and deployed SHA. All F01-F27 and every appended regression must be run through fresh GPT individually; accept by complete input-to-final-output semantic meaning from physical Markdown and UI, not by exact intermediate routing, model wording or number of notes. Independent semantic review may accept a safe equivalent result; known ambiguity must remain safely unresolved.",
   "stages": [
     {
       "id": "R0",

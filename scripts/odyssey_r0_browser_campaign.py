@@ -37,9 +37,9 @@ ADDITIONAL = ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json"
 ORIGINAL_SOURCE_DIGEST = "350424ac788725911fe2c309ac1d0a90d6cbd3881f625f311280aed833bb8241"
 ORIGINAL_ORACLE_DIGEST = "666a048dd0a4baf25ce8a0bdf9d54b30e2fbc79519d5cea3266d881f53f82008"
 ADDITIONAL_ORACLE_PREFIX = (
-    "3784b1ec14d7585207d7506b8e85c619a354d4d5244393c7e0501f91f31f7926",
-    "e631da9f41d6aafff1423fa74d11cc0204897f47e7401cb67d16c9ce4aaa0d2b",
-    "08c319e536a7fed0a1f65e3787a769b41ee6644790af2ab7f4a9c60545c0d344",
+    "0f45aa8764a0d6c06b38dedf543a16c23d7ad7985f1ef5654796d1d1148ef5bd",
+    "0f15452efeb9388dec5a826177e0fb3953fdfb7e0312d8ddb40355e1c0439fd0",
+    "ad33bfa516108c7884574d882ca2f155a8b43eb74be3bdd56d5219269086177a",
 )
 
 
@@ -78,7 +78,14 @@ def verify_source_anchors(original_rows: list[dict], additional_rows: list[dict]
         _stable_digest(
             {
                 key: row.get(key)
-                for key in ("id", "source", "expectation", "offline_coverage", "fixture_setup")
+                for key in (
+                    "id",
+                    "source",
+                    "expectation",
+                    "offline_coverage",
+                    "fixture_setup",
+                    "expected_units",
+                )
             }
         )
         for row in additional_rows
@@ -200,6 +207,21 @@ def additional_cases() -> tuple[Case, ...]:
         or not row["expectation"].strip()
         or row.get("live_acceptance") != "pending"
         or not valid_fixture_setup(row.get("fixture_setup"))
+        or not isinstance(row.get("expected_units"), list)
+        or not row["expected_units"]
+        or any(
+            not isinstance(unit, dict)
+            or unit.get("state") not in {"candidate", "ambiguous_identity"}
+            or not isinstance(unit.get("reading"), str)
+            or not unit["reading"].strip()
+            or not isinstance(unit.get("source_anchors"), list)
+            or not unit["source_anchors"]
+            or any(
+                not isinstance(anchor, str) or anchor not in row["source"]
+                for anchor in unit["source_anchors"]
+            )
+            for unit in row["expected_units"]
+        )
         or not isinstance(row.get("offline_coverage"), str)
         or not row["offline_coverage"].startswith("tests/")
         or not (ROOT / row["offline_coverage"]).is_file()

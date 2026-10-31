@@ -139,6 +139,19 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
             or not isinstance(row.get("expectation"), str)
             or not row["expectation"].strip()
             or not valid_fixture_setup(row.get("fixture_setup"))
+            or not isinstance(row.get("expected_units"), list)
+            or not row["expected_units"]
+            or any(
+                not isinstance(unit, dict)
+                or unit.get("state") not in {"candidate", "ambiguous_identity"}
+                or not isinstance(unit.get("source_anchors"), list)
+                or not unit["source_anchors"]
+                or any(
+                    not isinstance(anchor, str) or anchor not in row["source"]
+                    for anchor in unit["source_anchors"]
+                )
+                for unit in row["expected_units"]
+            )
             or row.get("live_acceptance") != "pending"
             for row in additional
         )
@@ -190,6 +203,10 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
         if receipt["provider_calls"] < len(all_ids):
             raise StageAcceptanceError("Fresh provider-call count cannot cover every case")
         _verify_case_rows(receipt, full_design, all_ids, root)
+        if receipt["provider_calls"] < sum(
+            row["provider_calls_observed"] for row in receipt["cases"]
+        ):
+            raise StageAcceptanceError("Aggregate provider-call proof does not cover each source")
         _verify_auditors(receipt, source_sha, root)
         if root.resolve() == ROOT.resolve():
             code_diff = subprocess.run(
@@ -256,6 +273,8 @@ def _verify_case_rows(receipt: dict, design: dict, ids: tuple[str, ...], root: P
             or request_id in used_requests
             or row.get("visible_ui_submitted") is not True
             or row.get("live_provider_observed") is not True
+            or type(row.get("provider_calls_observed")) is not int
+            or row["provider_calls_observed"] < 1
             or row.get("source_preserved") is not True
             or row.get("canonical_result_checked") is not True
             or row.get("ui_readback_checked") is not True
@@ -301,6 +320,11 @@ def _verify_case_rows(receipt: dict, design: dict, ids: tuple[str, ...], root: P
                 raise StageAcceptanceError(
                     "Incomplete semantic unit or invented identity: " + expected
                 )
+        # Bind each semantic claim to an independently inspectable final
+        # canonical/pending readback. Multiple semantic units MAY share one
+        # physical note, and one user meaning MAY involve several notes: no
+        # equality is imposed on Router partitions, writer count or prose.
+        _verify_final_input_output(row, digest, outcome, root)
         used_requests.add(request_id)
         trace = row.get("trace_artifact")
         if not isinstance(trace, str) or not trace.startswith("docs/architecture/e2e-receipts/"):
@@ -315,6 +339,102 @@ def _verify_case_rows(receipt: dict, design: dict, ids: tuple[str, ...], root: P
             raise StageAcceptanceError("Unsafe trace artifact: " + expected)
         if hashlib.sha256(artifact.read_bytes()).hexdigest() != row["trace_artifact_sha256"]:
             raise StageAcceptanceError("Altered browser trace: " + expected)
+
+
+def _verify_final_input_output(row: dict, digest: str, outcome: str, root: Path) -> None:
+    """Require actual end-state evidence, rather than intermediate model shapes.
+
+    A reviewer still MUST inspect the authenticated browser and genuine model
+    provenance; a self-authored artifact alone cannot demonstrate semantics.
+    """
+    path = row.get("final_output_artifact")
+    checksum = row.get("final_output_artifact_sha256")
+    if (
+        not isinstance(path, str)
+        or not path.startswith("docs/architecture/e2e-receipts/")
+        or not isinstance(checksum, str)
+        or re.fullmatch(r"[0-9a-f]{64}", checksum) is None
+    ):
+        raise StageAcceptanceError("Missing final input-output proof")
+    artifact = _json(root, path)
+    if hashlib.sha256((root / path).read_bytes()).hexdigest() != checksum:
+        raise StageAcceptanceError("Altered final output readback")
+    review = artifact.get("semantic_review")
+    ui = artifact.get("ui_after_reload")
+    notes = artifact.get("canonical_notes")
+    pendings = artifact.get("canonical_pending")
+    sha256 = r"[0-9a-f]{64}"
+    if (
+        artifact.get("schema") != "odyssey-final-input-output-v1"
+        or artifact.get("source_sha256") != digest
+        or not isinstance(artifact.get("before_vault_sha256"), str)
+        or re.fullmatch(sha256, artifact["before_vault_sha256"]) is None
+        or not isinstance(artifact.get("after_vault_sha256"), str)
+        or re.fullmatch(sha256, artifact["after_vault_sha256"]) is None
+        or not isinstance(notes, list)
+        or not isinstance(pendings, list)
+        or not notes
+        and not pendings
+        or not isinstance(ui, dict)
+        or ui.get("notes_and_calendar_loaded") is not True
+        or not isinstance(ui.get("assistant_reply"), str)
+        or not ui["assistant_reply"].strip()
+        or not isinstance(review, dict)
+        or review.get("judgement")
+        != ("safe_partial_pending" if outcome == "safely_ambiguous" else "semantically_sufficient")
+        or review.get("all_source_meanings_accounted_for") is not True
+        or review.get("no_invented_facts_or_actions") is not True
+        or not isinstance(review.get("explanation"), str)
+        or len(review["explanation"].strip()) < 20
+        or type(review.get("alternate_safe_representation")) is not bool
+        or review["alternate_safe_representation"] is True
+        and len(review["explanation"].strip()) < 35
+    ):
+        raise StageAcceptanceError("Final output is not independently reviewable")
+    readback_proofs = set()
+    note_ids = set()
+    for note in notes:
+        if (
+            not isinstance(note, dict)
+            or not isinstance(note.get("note_id"), str)
+            or not note["note_id"].strip()
+            or note["note_id"] in note_ids
+            or not isinstance(note.get("note_path"), str)
+            or not note["note_path"].strip()
+            or not isinstance(note.get("markdown_sha256"), str)
+            or re.fullmatch(sha256, note["markdown_sha256"]) is None
+            or not isinstance(note.get("content_excerpt"), str)
+            or not note["content_excerpt"].strip()
+            or not isinstance(note.get("markdown_utf8"), str)
+            or not note["markdown_utf8"].strip()
+            or len(note["markdown_utf8"]) > 20000
+            or note["content_excerpt"] not in note["markdown_utf8"]
+            or hashlib.sha256(note["markdown_utf8"].encode("utf-8")).hexdigest()
+            != note["markdown_sha256"]
+        ):
+            raise StageAcceptanceError("Canonical note readback is invalid")
+        note_ids.add(note["note_id"])
+        readback_proofs.add(note["markdown_sha256"])
+    for pending in pendings:
+        if (
+            not isinstance(pending, dict)
+            or not isinstance(pending.get("reason"), str)
+            or not pending["reason"].strip()
+            or not isinstance(pending.get("pending_sha256"), str)
+            or re.fullmatch(sha256, pending["pending_sha256"]) is None
+        ):
+            raise StageAcceptanceError("Safe pending proof missing")
+        readback_proofs.add(pending["pending_sha256"])
+    if (
+        outcome == "safely_ambiguous"
+        and not pendings
+        or not isinstance(ui.get("opened_note_ids"), list)
+        or any(not isinstance(n, str) or n not in note_ids for n in ui["opened_note_ids"])
+        or not all(
+            unit.get("proof_sha256") in readback_proofs for unit in row["unit_verifications"]
+        )
+    ):
+        raise StageAcceptanceError("Semantic units lack final canonical/pending readback")
 
 
 def _verify_auditors(receipt: dict, source_sha: str, root: Path) -> None:
