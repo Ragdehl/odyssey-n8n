@@ -73,6 +73,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e2_person_target_subject_coverage.py",
         "tests/core/test_e2_fact_temporal_ownership.py",
         "tests/core/test_whole_message_coverage_p3.py",
+        "tests/core/test_whole_message_relationship_proof_p3.py",
+        "tests/core/test_shared_relational_helper_shape.py",
         "tests/core/test_whole_message_coverage_provenance_v2.py",
         "tests/core/test_issue157_fact_group_provenance.py",
         "tests/core/test_whole_message_speaker_proof_p4.py",

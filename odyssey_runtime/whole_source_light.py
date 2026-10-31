@@ -96,7 +96,7 @@ from odyssey_core.whole_message_relationship_proof import (
     VerifiedSelfRelationship,
     WholeSourceRelationshipError,
     recheck_self_relationship,
-    verify_self_relationship,
+    verify_proposed_source_relationships,
 )
 from odyssey_core.whole_message_speaker_proof import (
     WholeMessageSpeakerError,
@@ -943,47 +943,20 @@ class WholeSourceLightExecutor:
             )
         ):
             return self._abstain(delivery)
-        # Ground every model-suggested group in fresh authenticated SELF.
-        # Reuse already-verified identities, never deduce an ID from grammar.
-        relationships = []
-        verified_members: dict[str, str] = {}
-        unverified_mentions: list[str] = []
-        # Router mentions are hints, never authorization requirements.
-        # Core validates any actual identity/reference claimed by the plan.
+        # Core already owns verification of source-grounded entity relations.
+        # Runtime carries its immutable evidence; it does not interpret names,
+        # relation categories, members or overlap independently.
         try:
-            for relation_span in proposed_relation_spans:
-                try:
-                    proof = verify_self_relationship(
-                        source,
-                        relation_span,
-                        repository=self.repository,
-                        schema=self.schema,
-                        actor=actor,
-                        bindings=self.bindings,
-                    )
-                except WholeSourceRelationshipError:
-                    # No proof means no identity. Preserve the original wording
-                    # and let Core decide if the fact itself can be recorded.
-                    unverified_mentions.append(relation_span)
-                    continue
-                # Two distinct relation phrases in one canonical atomic fact
-                # may project the SAME combined target set. Its target list
-                # cannot prove which member belongs to which phrase. Refuse
-                # ambiguous grouping rather than attribute unrelated people.
-                if any(
-                    prior.source_id == proof.source_id
-                    and prior.fact_locator == proof.fact_locator
-                    and prior.original_relation_span != proof.original_relation_span
-                    for prior in relationships
-                ):
-                    raise WholeSourceRelationshipError("Groups share an indivisible source fact")
-                relationships.append(proof)
-                for note_id, name in proof.members:
-                    if note_id in verified_members and verified_members[note_id] != name:
-                        raise WholeSourceRelationshipError("Conflicting member proof")
-                    verified_members[note_id] = name
-            if len(set(verified_members.values())) != len(verified_members):
-                raise WholeSourceRelationshipError("Ambiguous member names")
+            relationships, verified_members, unverified_mentions = (
+                verify_proposed_source_relationships(
+                    source,
+                    tuple(proposed_relation_spans),
+                    repository=self.repository,
+                    schema=self.schema,
+                    actor=actor,
+                    bindings=self.bindings,
+                )
+            )
         except (WholeSourceRelationshipError, ValueError):
             return self._abstain(delivery)
         # App lifecycle/target actions may not inherit an unproven identity

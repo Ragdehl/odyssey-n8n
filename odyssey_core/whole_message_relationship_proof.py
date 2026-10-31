@@ -78,6 +78,56 @@ def verify_self_relationship(
     )
 
 
+def verify_proposed_source_relationships(
+    source: str,
+    proposed_spans: tuple[str, ...],
+    *,
+    repository: VaultRepository,
+    schema: dict,
+    actor: AuthenticatedActorContext,
+    bindings: SelfBindingRepository,
+) -> tuple[tuple[VerifiedSelfRelationship, ...], dict[str, str], tuple[str, ...]]:
+    """Core-owned grouping of current, source-grounded relationship evidence.
+
+    Unverified phrases remain literal; no model or Runtime step may invent a
+    canonical target. A single canonical fact cannot prove separate membership
+    for two different relationship phrases inside it. This logic is neutral to
+    relationship labels, names, message examples and App lifecycle.
+    """
+    proofs: list[VerifiedSelfRelationship] = []
+    members: dict[str, str] = {}
+    unverified: list[str] = []
+    for span in proposed_spans:
+        try:
+            proof = verify_self_relationship(
+                source,
+                span,
+                repository=repository,
+                schema=schema,
+                actor=actor,
+                bindings=bindings,
+            )
+        except WholeSourceRelationshipError:
+            # A failed membership proof does not make the user's text false.
+            unverified.append(span)
+            continue
+        if any(
+            previous.source_id == proof.source_id
+            and previous.fact_locator == proof.fact_locator
+            and previous.original_relation_span != proof.original_relation_span
+            for previous in proofs
+        ):
+            raise WholeSourceRelationshipError("Groups share an indivisible source fact")
+        proofs.append(proof)
+        for note_id, name in proof.members:
+            if note_id in members and members[note_id] != name:
+                raise WholeSourceRelationshipError("Conflicting member proof")
+            members[note_id] = name
+    if len(set(members.values())) != len(members):
+        raise WholeSourceRelationshipError("Ambiguous member names")
+    return tuple(proofs), members, tuple(unverified)
+
+
 def recheck_self_relationship(
     evidence: VerifiedSelfRelationship,
     *,

@@ -127,3 +127,84 @@ def test_other_user_does_not_inherit_self_relation(corpus):
             actor=stranger,
             bindings=bindings,
         )
+
+
+def test_proposed_groups_are_bound_by_core_using_non_family_relationships(corpus):
+    root, repo, actor, bindings = corpus
+    _write(
+        root,
+        "Yo",
+        "self-id",
+        render_atomic_facts(
+            (
+                "Mis colegas son [[Cloe]].",
+                "Mi equipo incluye [[Bruno]].",
+            ),
+            "independent-groups",
+            (0, 1),
+            "2026-10-16",
+        ),
+    )
+    from odyssey_core.whole_message_relationship_proof import verify_proposed_source_relationships
+
+    proofs, members, unknown = verify_proposed_source_relationships(
+        "Mis colegas y mi equipo terminaron la revisión.",
+        ("Mis colegas", "mi equipo"),
+        repository=repo,
+        schema=SCHEMA,
+        actor=actor,
+        bindings=bindings,
+    )
+    assert len(proofs) == 2
+    assert members == {"child-1": "Cloe", "child-2": "Bruno"}
+    assert unknown == ()
+    assert {proof.original_relation_span for proof in proofs} == {"Mis colegas", "mi equipo"}
+
+
+def test_unknown_relationship_phrase_preserves_literal_without_inventing_an_identity(corpus):
+    _root, repo, actor, bindings = corpus
+    from odyssey_core.whole_message_relationship_proof import verify_proposed_source_relationships
+
+    proofs, members, unknown = verify_proposed_source_relationships(
+        "Mis hijos y mis colaboradores terminaron la revisión.",
+        ("Mis hijos", "mis colaboradores"),
+        repository=repo,
+        schema=SCHEMA,
+        actor=actor,
+        bindings=bindings,
+    )
+    assert len(proofs) == 1
+    assert len(members) == 2
+    assert unknown == ("mis colaboradores",)
+
+
+def test_two_relationship_spans_in_one_canonical_fact_cannot_prove_separate_members(corpus):
+    root, repo, actor, bindings = corpus
+    from odyssey_core.whole_message_relationship_proof import verify_proposed_source_relationships
+
+    _write(
+        root,
+        "Yo",
+        "self-id",
+        render_atomic_facts(
+            ("Mis colegas y mi equipo son [[Cloe]] y [[Bruno]].",),
+            "shared-group",
+            (0,),
+            "2026-10-16",
+        ),
+    )
+    with pytest.raises(WholeSourceRelationshipError, match="indivisible"):
+        verify_proposed_source_relationships(
+            "Mis colegas y mi equipo trabajaron hoy.",
+            ("Mis colegas", "mi equipo"),
+            repository=repo,
+            schema=SCHEMA,
+            actor=actor,
+            bindings=bindings,
+        )
+
+
+def test_runtime_does_not_duplicate_core_relationship_membership_algorithm():
+    source = (Path(__file__).parents[2] / "odyssey_runtime/whole_source_light.py").read_text()
+    assert "verify_proposed_source_relationships(" in source
+    assert "for relation_span in proposed_relation_spans:" not in source

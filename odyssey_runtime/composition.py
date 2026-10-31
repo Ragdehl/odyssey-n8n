@@ -141,7 +141,11 @@ from odyssey_core.observability import (
 from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
 from odyssey_core.persistence import ActorInput
 from odyssey_core.plural_task_readback import guard_plural_task_readback
-from odyssey_core.reference_preflight import ReferencePreflightError, current_identity_guard
+from odyssey_core.reference_preflight import (
+    ReferencePreflightError,
+    current_identity_guard,
+    single_relational_reference_helper_index,
+)
 from odyssey_core.request_planning import (
     OpenAIRequestPlanner as GPT56RequestPlanner,
 )
@@ -217,48 +221,6 @@ def _combined_write_preflight_guard(
         second(action, preflight, repository, schema)
 
     return combined
-
-
-def _dependent_relational_helper_index(action: Mapping[str, Any]) -> int | None:
-    """Identify one bounded, reference-only relation with one dependent fact write.
-
-    A scalar choice cannot resume unrelated units or other unresolved references.
-    Only already validated Core actions pass this narrower continuation boundary.
-    """
-    if action.get("kind") != "write":
-        return None
-    units = action.get("units")
-    if not isinstance(units, list) or len(units) != 2:
-        return None
-    helpers = [
-        i
-        for i, unit in enumerate(units)
-        if isinstance(unit, dict)
-        and isinstance(unit.get("target"), dict)
-        and isinstance(unit["target"].get("relational_reference"), dict)
-        and unit["target"]["relational_reference"].get("members") == "one"
-        and unit.get("intent") == "record"
-        and not unit.get("facts")
-        and not unit.get("properties")
-        and not unit.get("tag_changes")
-        and not unit.get("references")
-        and unit.get("destination_type") is None
-        and unit.get("cardinality", "one") == "one"
-    ]
-    if len(helpers) != 1:
-        return None
-    helper = helpers[0]
-    consumer = units[1 - helper]
-    references = consumer.get("references") if isinstance(consumer, dict) else None
-    if (
-        not isinstance(references, list)
-        or not references
-        or not consumer.get("facts")
-        or consumer.get("target", {}).get("relational_reference") is not None
-        or any(not isinstance(ref, dict) or ref.get("target_index") != helper for ref in references)
-    ):
-        return None
-    return helper
 
 
 ProgressReporter = Callable[[str, Mapping[str, object]], None]
@@ -1850,7 +1812,7 @@ class RuntimeComposition:
             source_guard: str | None = None
             relational = False
             if action["kind"] == "write":
-                helper_index = _dependent_relational_helper_index(action)
+                helper_index = single_relational_reference_helper_index(action)
                 relational = (
                     len(action["units"]) == 1
                     and action["units"][0]["target"].get("relational_reference") is not None
@@ -1965,7 +1927,7 @@ class RuntimeComposition:
         evidence = record["incomplete_actions"][0]["execution_result"]
         candidate_ids = tuple(option.id for option in pending.options)
         if action.get("kind") == "write":
-            helper_index = _dependent_relational_helper_index(action)
+            helper_index = single_relational_reference_helper_index(action)
             relational = (
                 len(action.get("units", ())) == 1
                 and action["units"][0].get("target", {}).get("relational_reference") is not None
@@ -2040,7 +2002,7 @@ class RuntimeComposition:
         if len(plan.actions) != 1 or not isinstance(plan.actions[0], WriteAction | RetrieveAction):
             raise ValueError("pending continuation is unsupported")
         if action["kind"] == "write":
-            helper_index = _dependent_relational_helper_index(action)
+            helper_index = single_relational_reference_helper_index(action)
             if helper_index is not None:
                 # Internal reference-only helpers are derived by Core lowering. The
                 # pending JSON stores their stable structure, not the private flag.

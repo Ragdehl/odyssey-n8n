@@ -33,6 +33,7 @@ For a small edit or quick status request, condense to a paragraph and small tabl
 ## Guardrails for continuity
 
 - Keep the **single canonical current-state owner** (`docs/architecture/functional-roadmap.md`) truthful; do not append a new historical narrative to it every time. Durable findings live in the relevant contract/PR/audit receipt.
+- **Examples are data, not implementation branches.** When explaining a user sentence, describe generic `source → model interpretation → Core evidence/identity authorization → App/Writer → Markdown/UI`; never imply a specific family, friend, object or relationship resolver was created because the sentence mentioned it. Be explicit when a real legacy type-specific guard remains, instead of claiming everything is generic. Distinguish a route change from a changed test expectation.
 - Always distinguish results of **this turn** from previously verified checkpoints and from intended next steps. Keep the explanation understandable before listing internals: user phrase, what Odyssey did/will do, where it appeared, and which proof backs the claim.
 - Before describing a phase as not implemented, inspect actual code and prior tests; distinguish **existing mechanism** from **missing integration**. Read `odyssey-generality` for reuse and `odyssey-diagnose-first` for supposed lost functionality. This report does not authorize coding.
 - Mention what remains after the immediate phase, including user-facing product capabilities, if known.
