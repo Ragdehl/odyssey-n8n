@@ -294,7 +294,7 @@ def validate_whole_message_coverage(
             or len(set(names)) != len(names)
             or any(not isinstance(n, str) or not n.strip() or len(n) > 128 for n in names)
         ):
-            raise WholeMessageCoverageError("Invalid typed person references")
+            raise WholeMessageCoverageError("Invalid typed canonical references")
         valid_names = {n for n in fact.get("participants", []) if isinstance(n, str)} | {
             e.get("mention") for e in entities if isinstance(e.get("mention"), str)
         }
@@ -323,7 +323,7 @@ def validate_whole_message_coverage(
                 and not proven_prior_reference
             ):
                 raise WholeMessageCoverageError(
-                    "Person name unsupported by this atomic source fact"
+                    "Canonical identity unsupported by this atomic source fact"
                 )
         if names and any(
             primary_spans[index] != other
@@ -383,7 +383,9 @@ def validate_whole_message_coverage(
         ):
             raise WholeMessageCoverageError("Invalid cross-operation dependency")
         if dependency is not None and not (set(names) & set(output[dependency].reference_names)):
-            raise WholeMessageCoverageError("Cross-operation identity handoff has no shared person")
+            raise WholeMessageCoverageError(
+                "Cross-operation identity handoff has no shared canonical entity"
+            )
         output.append(
             ReviewedFullSourceFact(
                 quote, text, kind, date, tuple(names), dependency, tuple(support_spans)

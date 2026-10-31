@@ -56,6 +56,7 @@ def assert_reviewed_markdown(
     review: Mapping[str, Any],
     self_roles: tuple[bool, ...],
     self_id: str,
+    reference_types: Mapping[str, str | None] | None = None,
 ) -> dict[str, Any]:
     """Prove each assertion's exact owner/text/links and new-or-existing receipt.
 
@@ -70,16 +71,23 @@ def assert_reviewed_markdown(
     parsed = {path: parse_note(text) for path, text in after.items()}
     assert len({note.metadata["id"] for note in parsed.values()}) == len(parsed)
     by_id = {note.metadata["id"]: (path, note) for path, note in parsed.items()}
-    people = [note for note in parsed.values() if note.metadata.get("type") == "person"]
+    # A referenced canonical identity may be any type admitted by NoteSchema;
+    # role words and model output never grant an ID or silently coerce to Person.
+    expected_types = reference_types or {}
     references_by_name: dict[str, str] = {}
     for item in reviewed:
         for name in item["reference_names"]:
             matches = [
                 note
-                for note in people
-                if note.metadata.get("name", "").casefold() == name.casefold()
+                for note in parsed.values()
+                if note.metadata.get("deleted") is not True
+                and note.metadata.get("name", "").casefold() == name.casefold()
+                and (
+                    expected_types.get(name) is None
+                    or note.metadata.get("type") == expected_types[name]
+                )
             ]
-            assert len(matches) == 1, "A referenced name is not a unique canonical person"
+            assert len(matches) == 1, "A referenced identity is not canonical and unique"
             references_by_name[name] = str(matches[0].metadata["id"])
 
     used: set[tuple[str, str, int]] = set()

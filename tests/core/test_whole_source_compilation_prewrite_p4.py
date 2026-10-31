@@ -93,3 +93,43 @@ def test_any_unsupported_later_fact_fails_before_compiling_any_write(invalid):
         roles = roles[:1]
     with pytest.raises((WholeSourceCompilationError, ValueError, KeyError)):
         compile_reviewed_operations({"facts": copy.deepcopy(facts)}, tuple(roles))
+
+
+@pytest.mark.parametrize("note_type", ["person", "project", "document", "concept"])
+def test_compiler_preserves_core_schema_type_without_person_assumption(note_type):
+    from odyssey_core.request_planning import WriteAction
+
+    checked = compile_reviewed_operations(
+        {"facts": [_fact(text="Hoy revisé {{ref:0}}.", name="Atlas")]},
+        (True,),
+        reference_types={"Atlas": note_type},
+        declared_types=frozenset(("person", "project", "document", "concept")),
+    )
+    assert len(checked) == 1
+    action = checked[0].plan.actions[0]
+    assert isinstance(action, WriteAction)
+    # The third unit is the already-established SELF speaker link; do not
+    # falsely treat that authorized metadata as an extra user fact.
+    assert len(action.units) == 3
+    assert action.units[1].target.type == note_type
+    assert action.units[1].reference_lookup_only is True
+    assert action.units[0].references[0].role == "related"
+
+
+def test_unknown_model_invented_note_type_rejected_before_any_compilation():
+    with pytest.raises(WholeSourceCompilationError, match="schema reference type"):
+        compile_reviewed_operations(
+            {"facts": [_fact()]},
+            (True,),
+            reference_types={"Clara": "unregistered_dynamic_type"},
+            declared_types=frozenset(("person", "project", "document", "concept")),
+        )
+
+
+def test_no_type_hint_does_not_default_arbitrary_identity_to_person():
+    from odyssey_core.request_planning import WriteAction
+
+    checked = compile_reviewed_operations({"facts": [_fact()]}, (True,))
+    action = checked[0].plan.actions[0]
+    assert isinstance(action, WriteAction)
+    assert action.units[1].target.type is None

@@ -19,13 +19,13 @@ from odyssey_core.whole_message_relationship_proof import (
 SCHEMA = json.loads((Path(__file__).parents[2] / "config/note-schema.json").read_text())
 
 
-def _write(root: Path, name: str, identifier: str, body: str):
+def _write(root: Path, name: str, identifier: str, body: str, note_type: str = "person"):
     text = serialize_note(
         Note(
             {
                 "id": identifier,
                 "name": name,
-                "type": "person",
+                "type": note_type,
                 "created_at": "2026-01-01T00:00:00Z",
                 "updated_at": "2026-01-01T00:00:00Z",
                 "created_by": {"human": None, "app": "test"},
@@ -208,3 +208,36 @@ def test_runtime_does_not_duplicate_core_relationship_membership_algorithm():
     source = (Path(__file__).parents[2] / "odyssey_runtime/whole_source_light.py").read_text()
     assert "verify_proposed_source_relationships(" in source
     assert "for relation_span in proposed_relation_spans:" not in source
+
+
+@pytest.mark.parametrize("member_type", ["concept", "project", "document", "person"])
+def test_canonical_relationship_proof_accepts_any_schema_note_type(corpus, member_type):
+    root, repo, actor, bindings = corpus
+    _write(root, "Atlas", "atlas-1", "", member_type)
+    _write(
+        root,
+        "Yo",
+        "self-id",
+        render_atomic_facts(("Mis recursos son [[Atlas]].",), "cross-type", (0,), "2026-10-16"),
+    )
+    proof = verify_self_relationship(
+        "Mis recursos están actualizados.",
+        "Mis recursos",
+        repository=repo,
+        schema=SCHEMA,
+        actor=actor,
+        bindings=bindings,
+    )
+    assert proof.members == (("atlas-1", "Atlas"),)
+    assert proof.member_types == (("atlas-1", member_type),)
+    recheck_self_relationship(proof, repository=repo, schema=SCHEMA, actor=actor, bindings=bindings)
+    other_type = "document" if member_type != "document" else "concept"
+    _write(root, "Atlas", "atlas-1", "", other_type)
+    with pytest.raises(WholeSourceRelationshipError, match="evidence changed"):
+        recheck_self_relationship(
+            proof,
+            repository=repo,
+            schema=SCHEMA,
+            actor=actor,
+            bindings=bindings,
+        )

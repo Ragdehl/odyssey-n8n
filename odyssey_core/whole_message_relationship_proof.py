@@ -27,6 +27,7 @@ class VerifiedSelfRelationship:
     fact_locator: str
     original_relation_span: str
     members: tuple[tuple[str, str], ...]
+    member_types: tuple[tuple[str, str], ...] = ()
 
 
 def verify_self_relationship(
@@ -64,7 +65,7 @@ def verify_self_relationship(
     if (
         projected.status is not TargetProjectionStatus.COMPLETE
         or len(projected.targets) < 1
-        or any(t.type != "person" for t in projected.targets)
+        or any(not isinstance(t.type, str) or not t.type for t in projected.targets)
         or projected.source is None
         or projected.source.source_hash != fact.source.source_hash
     ):
@@ -75,6 +76,7 @@ def verify_self_relationship(
         fact.locator,
         relation_span,
         tuple((t.id, t.name) for t in projected.targets),
+        tuple((t.id, t.type) for t in projected.targets),
     )
 
 
@@ -149,5 +151,6 @@ def recheck_self_relationship(
         or projected.source is None
         or projected.source.source_hash != evidence.source_hash
         or tuple((t.id, t.name) for t in projected.targets) != evidence.members
+        or tuple((t.id, t.type) for t in projected.targets) != evidence.member_types
     ):
         raise WholeSourceRelationshipError("Relationship evidence changed before write")

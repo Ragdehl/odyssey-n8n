@@ -89,8 +89,9 @@ from odyssey_core.whole_message_coverage import (
     validate_whole_message_coverage,
 )
 from odyssey_core.whole_message_identity_guard import (
-    UnprovenPersonIdentityError,
-    reject_unproven_person_collisions,
+    UnprovenIdentityError,
+    collect_schema_reference_types,
+    reject_unproven_identity_collisions,
 )
 from odyssey_core.whole_message_relationship_proof import (
     VerifiedSelfRelationship,
@@ -1270,7 +1271,12 @@ class WholeSourceLightExecutor:
                     "clock": clock,
                     "routing_hint": route,
                     "known_notes": known_notes,
-                    "verified_family": group_members,
+                    "allowed_note_types": tuple(row["id"] for row in self.schema["types"]),
+                    "verified_canonical_members": [
+                        {"name": name, "note_type": dict(proof.member_types)[note_id]}
+                        for proof in relationships
+                        for note_id, name in proof.members
+                    ],
                     "prior_independent_coverage_rejected": bool(attempt),
                 },
                 (PLAN_CORE_ANCHORED_SCHEMA if self.core_anchored_coverage_enabled else PLAN_SCHEMA),
@@ -1402,6 +1408,16 @@ class WholeSourceLightExecutor:
             self._observe_prewrite(delivery, "coverage_retry_exhausted")
             return self._abstain(delivery)
         try:
+            used_names = frozenset(
+                name
+                for fact in review.get("facts", ())
+                if isinstance(fact, dict) and isinstance(fact.get("reference_names"), list)
+                for name in fact["reference_names"]
+                if isinstance(name, str)
+            )
+            reference_types = collect_schema_reference_types(
+                proposed, relationships, self.schema, used_reference_names=used_names
+            )
             validate_whole_message_coverage(
                 source,
                 proposed,
@@ -1420,10 +1436,14 @@ class WholeSourceLightExecutor:
             )
             self._measure_local(
                 "identity_collision_preflight",
-                reject_unproven_person_collisions,
+                reject_unproven_identity_collisions,
                 self.repository,
                 self.schema,
                 names,
+                reference_types=reference_types,
+                verified_reference_names=frozenset(
+                    name for proof in relationships for _note_id, name in proof.members
+                ),
             )
             speaker_payload = {
                 "original_source": source,
@@ -1443,14 +1463,14 @@ class WholeSourceLightExecutor:
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
         except (
             WholeMessageCoverageError,
-            UnprovenPersonIdentityError,
+            UnprovenIdentityError,
             WholeMessageSpeakerError,
         ) as error:
             category = (
                 "coverage_contract"
                 if isinstance(error, WholeMessageCoverageError)
                 else "identity_collision"
-                if isinstance(error, UnprovenPersonIdentityError)
+                if isinstance(error, UnprovenIdentityError)
                 else "speaker_contract"
             )
             self._observe_prewrite(
@@ -1467,6 +1487,8 @@ class WholeSourceLightExecutor:
                 compile_reviewed_operations,
                 review,
                 tuple(attested.requires_self_link(i) for i in range(len(attested.facts))),
+                reference_types=reference_types,
+                declared_types=frozenset(note_type["id"] for note_type in self.schema["types"]),
             )
         except WholeSourceCompilationError:
             self._observe_prewrite(delivery, "compile_rejected")
@@ -1579,6 +1601,7 @@ class WholeSourceLightExecutor:
                     attested.requires_self_link(i) for i in range(len(attested.facts))
                 ),
                 self_id=self.bindings.resolve(actor.stable_user_id).person_note_id,
+                reference_types=reference_types,
             )
             if proof["physical_fact_count"] != len(review["facts"]):
                 raise AssertionError("A source assertion lacks canonical readback")

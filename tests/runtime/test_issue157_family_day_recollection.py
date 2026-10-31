@@ -127,7 +127,10 @@ def test_event_enabled_contract_supports_variable_groups_without_changing_legacy
     assert "already-completed shared experiences" in prompt
     assert "Events requires an actual scheduled/upcoming occurrence" in prompt
     assert "minimal, exact contiguous reference phrase" in prompt
-    assert "SINGULAR partner/family member or PLURAL collective group" in prompt
+    assert (
+        "one described entity or a finite source-attested group of any canonical Note type"
+        in prompt
+    )
     assert "split them into their individual phrases" in prompt
     assert "MUST be null" in prompt
     assert "historical memory" in prompt

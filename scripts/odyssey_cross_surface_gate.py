@@ -203,6 +203,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_agent_daily_builder_resume.py",
         "tests/runtime/test_agent_offline_sandbox.py",
         "tests/runtime/test_p4_model_contract_strict_schema.py",
+        "tests/runtime/test_p4_generic_reference_types.py",
         "tests/runtime/test_p4_independent_mixed_scopes.py",
         "tests/runtime/test_p4_dependent_task_target.py",
         "tests/runtime/test_p4_production_composition_task_ui.py",
