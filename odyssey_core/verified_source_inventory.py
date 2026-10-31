@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -47,7 +48,7 @@ def verified_context_source_inventory(
     context SQL metadata are loaded. Any drift forces fail-closed fallback.
     """
     try:
-        with sqlite3.connect(f"file:{context_index_path}?mode=ro", uri=True) as db:
+        with closing(sqlite3.connect(f"file:{context_index_path}?mode=ro", uri=True)) as db, db:
             metadata = dict(db.execute("SELECT key,value FROM metadata"))
             if (
                 metadata.get("format") != "context-index"

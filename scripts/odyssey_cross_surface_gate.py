@@ -167,6 +167,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_schema_auto_backfill.py",
         "tests/core/test_context_deterministic_projection.py",
         "tests/core/test_context_incremental_noop.py",
+        "tests/core/test_sqlite_connection_lifecycle.py",
         "tests/core/test_reference_preflight.py",
         "tests/core/test_reference_preflight_parallel.py",
         "tests/core/test_atomic_facts.py",

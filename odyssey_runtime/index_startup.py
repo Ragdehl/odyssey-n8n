@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Mapping
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ from odyssey_core.verified_metadata_catalog import _from_complete_index
 
 
 def _indexed_rows(index: Path, markers: Mapping[str, str], embedder: Any):
-    with sqlite3.connect(f"file:{index}?mode=ro", uri=True) as connection:
+    with closing(sqlite3.connect(f"file:{index}?mode=ro", uri=True)) as connection, connection:
         observed = dict(connection.execute("SELECT key,value FROM metadata"))
         if any(observed.get(key) != value for key, value in markers.items()):
             return None
@@ -62,7 +63,10 @@ def p4_indexes_reusable(
         if primary is None:
             return False
         _meta, current = primary
-        with sqlite3.connect(f"file:{context.path}?mode=ro", uri=True) as connection:
+        with (
+            closing(sqlite3.connect(f"file:{context.path}?mode=ro", uri=True)) as connection,
+            connection,
+        ):
             inventory = {
                 r[0]: (r[1], r[2])
                 for r in connection.execute(

@@ -48,6 +48,21 @@
         "isolated_crosscheck": "Embedding worker plus agent builder resume: 22 pass in isolation, indicating at least some run-order/environment interaction; cause not yet proven.",
         "evidence": "/tmp/odyssey-r0-g01-full-suite-before-ci-20261031.log (host-only; NOT committed because logs may include local environment details)",
         "next": "Classify failures by root cause; repair outdated contracts using existing owners, resource/fixture isolation; never suppress failing tests; validate hosted full suite before G01 close."
+      },
+      "resource_lifecycle_checkpoint": {
+        "root_cause": "with sqlite3.connect returns a transaction context, NOT a closable connection context; SQLite connection reference cycles retained file handles until eventual GC.",
+        "production_changes": "Explicit closing(sqlite3.connect(...)) as conn, conn; 24 connection lifetimes in 7 existing odyssey_core/odyssey_runtime modules. No new independent SQLite helper, and transaction behavior preserved.",
+        "before": "118 failed, 5454 passed, 80 skipped, 4772 warnings, 52 subtests, >950 open fd by 38% of source full pytest.",
+        "after": "56 failed, 5518 passed, 80 skipped, 120 warnings, 52 subtests. Descriptor probe maximum recorded 136 (<950) on 100% of same suite; execution stops only at remaining historic prompt-snapshot mismatches.",
+        "tests": [
+          "tests/core/test_sqlite_connection_lifecycle.py",
+          "tests/core/test_context.py",
+          "tests/core/test_semantic.py",
+          "tests/core/test_context_wal_publication.py"
+        ],
+        "real_model_browser": "NOT RUN; full suite still red on 56 original historical benchmarks; do not close G01.",
+        "official_cross_surface": "PASS: 2690 Python + 7 subtests + 296 JavaScript on current working-tree after fixes, including connection lifecycle regression selected in Core group.",
+        "record_tracking_note": "Append-only ledger test assumed zero followups; generalized to next ID from current ledger and fixed before final official gate."
       }
     },
     {
@@ -483,5 +498,15 @@
       "closure": null
     }
   ],
-  "followups": []
+  "followups": [
+    {
+      "id": "R0-N001",
+      "source": "Suite Python completa con índices de conocimiento reconstruidos y consultas repetidas en un vault ficticio.",
+      "observed_failure": "Las conexiones sqlite3 usadas como context manager no se cerraban: con >950 descriptores abiertos, el supervisor y el worker de embeddings fallaban al invocar procesos con select(). 118 fallos en la suite.",
+      "expected_effect": "Todas las conexiones SQLite de Core/Runtime se cierran al salir de operaciones con éxito o error, preservando commit/rollback; las pruebas del supervisor/worker funcionan en la suite conjunta.",
+      "workstream_id": "G01",
+      "state": "in_progress",
+      "closure": null
+    }
+  ]
 }

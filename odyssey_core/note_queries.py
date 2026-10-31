@@ -8,6 +8,7 @@ import json
 import math
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -729,7 +730,12 @@ class NotesQueryService:
             offset = saved["offset"]
         source_ids: set[str] = set()
         try:
-            with sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(
+                    sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True)
+                ) as connection,
+                connection,
+            ):
                 rows = connection.execute(
                     "SELECT source_id FROM note_links WHERE target_id = ?",
                     (target_id,),
@@ -790,7 +796,12 @@ class NotesQueryService:
     def _grounded_index_notes(self) -> tuple[str, list[_GroundedNote]]:
         """Load index ordering evidence only after every row agrees with current Markdown."""
         try:
-            with sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(
+                    sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True)
+                ) as connection,
+                connection,
+            ):
                 markers = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(markers.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise NotesQueryError("Notes index requires rebuild")
@@ -933,7 +944,12 @@ class NotesQueryService:
         own = {note.summary.id: self._activity_band(note.summary.updated_at, now) for note in notes}
         neighbors: dict[str, set[str]] = {note.summary.id: set() for note in notes}
         try:
-            with sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(
+                    sqlite3.connect(f"file:{self.context_index.path}?mode=ro", uri=True)
+                ) as connection,
+                connection,
+            ):
                 for source, target in connection.execute(
                     "SELECT source_id, target_id FROM note_links"
                 ):

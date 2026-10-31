@@ -147,8 +147,9 @@ def test_r0_guard_requires_closure_proof_and_no_premature_group_done(tmp_path: P
 
 def test_r0_append_only_followup_has_consistent_id_and_expected_effect(tmp_path: Path) -> None:
     guard, path, ledger = _r0_ledger_fixture(tmp_path)
+    next_index = len(ledger["followups"]) + 1
     case = {
-        "id": "R0-N001",
+        "id": f"R0-N{next_index:03}",
         "source": "Caso sintético anónimo",
         "observed_failure": "Se perdió el hecho",
         "expected_effect": "Debería verse en la nota",
@@ -159,7 +160,7 @@ def test_r0_append_only_followup_has_consistent_id_and_expected_effect(tmp_path:
     ledger["followups"].append(case)
     path.write_text(json.dumps(ledger))
     assert guard.check_r0_findings(tmp_path) == []
-    ledger["followups"][0]["expected_effect"] = ""
+    ledger["followups"][-1]["expected_effect"] = ""
     path.write_text(json.dumps(ledger))
     assert any("invalid appended" in x for x in guard.check_r0_findings(tmp_path))
 
