@@ -59,10 +59,22 @@ bounded direct work   iterative/debug/environment work
  deterministic CI + Sonar
              |
              v
-       semantic review
+  four-role audit at integration
              |
              v
-         human merge
+ real-model E2E if model-facing
+             |
+             v
+    honest readiness report
+             |
+             v
+ human-approved merge/deploy
+             |
+             v
+ authenticated published DEV E2E
+             |
+             v
+        phase acceptance
 ```
 
 ### Default routing
@@ -71,7 +83,7 @@ bounded direct work   iterative/debug/environment work
 | --- | --- | --- |
 | Architecture/roadmap/status documentation | GitHub-capable agent | Direct, reviewable, normally no local execution needed |
 | PR review / documentation coherence / architecture challenge | GitHub-capable agent | Cross-file judgment and independent review |
-| Small well-understood code change | GitHub-capable agent when CI gives sufficient validation | Avoid unnecessary delegation overhead |
+| Small deterministic, non-user-visible code change | GitHub-capable agent when focused CI gives sufficient evidence | Not a shortcut for model-facing/user E2E or integration audits |
 | Broad multi-layer implementation/refactor/debugging | Codex | Local iteration materially improves reliability |
 | Benchmark/harness or repeated experiments | Codex | Controlled execution/evidence collection required |
 | Raspberry/Docker/filesystem/local-n8n work | Codex | Requires the actual environment |
@@ -80,6 +92,8 @@ bounded direct work   iterative/debug/environment work
 If a nominally small change becomes difficult to validate safely without local feedback, move it to Codex rather than stretching the GitHub path.
 
 ## Verification
+
+**No silent waiver of acceptance gates:** deterministic CI, independent auditors and real-model browser E2E are separate evidence. A green CI proves offline contracts only. Before a model-facing user-visible integration is called ready, record a pinned-SHA real-model journey with browser UI, n8n, Core/E3, Markdown readback and retry. At coherent integration checkpoints, require fresh four-role audit receipts on the actual SHA, not a previous branch. Small documentation/static-only changes are not model-facing integration checkpoints. If credentials, actor isolation, cost authorization or access prevent a gate, its status is BLOCKED, never PASS; leave the phase unaccepted and label any merge/deploy as unaccepted. Deployed DEV acceptance additionally needs a genuine user session on the published app. The authority lives in AGENTS.md, odyssey-verify-change and odyssey-dev-e2e; do not describe cheaper substitutes as equivalent tests.
 
 During implementation, run focused tests/checks. Before readiness, run `odyssey-verify-change` (or equivalent complete evidence when the local environment is unavailable) and require server-side CI.
 

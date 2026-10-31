@@ -55,23 +55,7 @@ Versioned n8n Workflow SDK source under `workflows/` is validated through its re
 
 GitHub CI independently validates pull requests and `main`. The stable deterministic check name is `Python CI / Python deterministic checks`; SonarQube Cloud adds code-quality/security analysis. Whether branch protection currently requires that check is a GitHub repository setting and should be verified before relying on it.
 
-```text
-implementation
-     |
-focused tests / local iteration
-     |
-complete deterministic gate
-     |
-odyssey-verify-change
-     |
-push / Draft PR
-     |
-GitHub CI + Sonar
-     |
-semantic review
-     |
-human merge
-```
+The release acceptance sequence (including independent audits, bounded real-model browser E2E and separate acceptance on deployed DEV) is owned by [Development Pipeline](development-pipeline.md). A green offline CI does not waive those gates; missing evidence must be shown as BLOCKED, never as product acceptance.
 
 Do not duplicate identical expensive local checks immediately when an unchanged tree already has fresh successful evidence; rerun the affected gate after any relevant change.
 
