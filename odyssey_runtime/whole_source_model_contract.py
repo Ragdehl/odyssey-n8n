@@ -280,8 +280,23 @@ ROUTER_INSTRUCTIONS = (
     "Return null if no unambiguous collective relation reference is present."
 )
 
+# One identity/reference contract shared by the planner and independent reviewer.
+# A descriptive mention is safe knowledge; it is not a Person identity.
+OPTIONAL_REFERENCE_RULE = (
+    "A descriptive mention (such as an unnamed person, group, role or thing) "
+    "does NOT identify an individual Person and MUST NOT be added as a Person "
+    "entity, participant name or symbolic person reference unless a concrete "
+    "individual is explicitly named in the source or independently verified "
+    "in supplied Core evidence. Preserve such mentions faithfully as literal "
+    "text in the record; an optional unresolved link is NOT an unresolved "
+    "fact and must not trigger clarification or reject coverage. Conversely, "
+    "if an action requires a specific unknown target, ask for clarification "
+    "rather than guess an identity or execute the action. "
+)
+
 PLANNER_INSTRUCTIONS = (
-    "You are a semantic-planning feasibility probe for Odyssey. Interpret the ORIGINAL FULL user "
+    OPTIONAL_REFERENCE_RULE
+    + "You are a semantic-planning feasibility probe for Odyssey. Interpret the ORIGINAL FULL user "
     "request once, NOT independent fragments. Return exactly one ordered item for each "
     "independent durable assertion or task, and explicitly resolve subjects, shared predicates, "
     "dates, reference pronouns and participants, including references across Core and Tasks. If "
@@ -352,7 +367,8 @@ PROMPT_SPEAKER_B = (
 )
 
 PROMPT_SOURCE_REVIEW = (
-    "INDEPENDENT conservative Core source-coverage reviewer. Input original unmodified message and untrusted atomic fact suggestions from a separate LLM. Inspect every event, speaker, pronoun, obligation, person, and date; reject if fabricated, omitted, semantically misattributed, ambiguous or not entailed by exact source. All proposed facts must be covered; approval false unless complete. The current time is TRUSTED and explicitly provided in the JSON clock; relative words hoy ayer and manana MUST be resolved against it. A specific person appearing in an assertion MUST be represented by a typed {{ref:N}} marker rather than bare literal; fail if missing. For each original quoted scope, return a concise natural SPANISH fact text equivalent to what the user said. Use {{ref:0}}, {{ref:1}} etc where and ONLY where that fact has actual specific persons as participants. Reference_names ordered by marker index; they must be individuals in the supplied proposed participant list. Resolve explicit antecedents (e.g. 'ella') only where UNIQUE; never invent a name. A person identity is a suggestion for later Core resolution, NOT a canonical note ID. For tasks, write an actionable label (e.g. Llamar a {{ref:0}}.) but do NOT turn future indicative plans into obligations. Exact dates MUST equal proposed date. Preserve date=null when not specified. If the message has multiple facts, review each separately; no raw markdown or note IDs. No execution authority. An optional independently Core-verified SELF relationship may include canonical members even when their names are absent from the message. Only if that typed evidence is supplied may you map a group mention to those specific members. The authenticated first-person grammatical speaker is not an explicitly named source person: do NOT demand {{ref:N}} for first-person I/yo/me or an implied Spanish first-person verb, and do not mark source coverage incomplete merely because speaker is omitted from participant person names. Speaker involvement is checked separately by authenticated Core source proof. Future first-person indicative reports an intention/plan that MAY happen: faithfully record the expressed future plan, not a completed or guaranteed future occurrence. Preserve negation and condition; unsupported assertions must still be rejected. "
+    OPTIONAL_REFERENCE_RULE
+    + "INDEPENDENT conservative Core source-coverage reviewer. Input original unmodified message and untrusted atomic fact suggestions from a separate LLM. Inspect every event, speaker, pronoun, obligation, person, and date; reject if fabricated, omitted, semantically misattributed, ambiguous or not entailed by exact source. All proposed facts must be covered; approval false unless complete. The current time is TRUSTED and explicitly provided in the JSON clock; relative words hoy ayer and manana MUST be resolved against it. A specific person appearing in an assertion MUST be represented by a typed {{ref:N}} marker rather than bare literal; fail if missing. For each original quoted scope, return a concise natural SPANISH fact text equivalent to what the user said. Use {{ref:0}}, {{ref:1}} etc where and ONLY where that fact has actual specific persons as participants. Reference_names ordered by marker index; they must be individuals in the supplied proposed participant list. Resolve explicit antecedents (e.g. 'ella') only where UNIQUE; never invent a name. A person identity is a suggestion for later Core resolution, NOT a canonical note ID. For tasks, write an actionable label (e.g. Llamar a {{ref:0}}.) but do NOT turn future indicative plans into obligations. Exact dates MUST equal proposed date. Preserve date=null when not specified. If the message has multiple facts, review each separately; no raw markdown or note IDs. No execution authority. An optional independently Core-verified SELF relationship may include canonical members even when their names are absent from the message. Only if that typed evidence is supplied may you map a group mention to those specific members. The authenticated first-person grammatical speaker is not an explicitly named source person: do NOT demand {{ref:N}} for first-person I/yo/me or an implied Spanish first-person verb, and do not mark source coverage incomplete merely because speaker is omitted from participant person names. Speaker involvement is checked separately by authenticated Core source proof. Future first-person indicative reports an intention/plan that MAY happen: faithfully record the expressed future plan, not a completed or guaranteed future occurrence. Preserve negation and condition; unsupported assertions must still be rejected. "
     "For first-person input, express the reviewed fact in natural first-person Spanish: "
     "keep 'me', 'he', or implicit first-person morphology as supported by the "
     "source. Do not describe the narrator indirectly as 'the speaker', 'the user' "

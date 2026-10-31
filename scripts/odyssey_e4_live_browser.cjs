@@ -148,32 +148,31 @@ const CHROME=process.env.ODYSSEY_CHROMIUM_BINARY ||
     await page.evaluate(()=>Array.from(document.querySelectorAll(
       '#notes-list .note-row')).find(row=>row.textContent.includes('2026-10-16')).click());
     const genericDay=process.env.ODYSSEY_E4_RECORDED_CASE==="generic_day";
-    await page.waitForFunction((generic)=>{
+    await page.waitForFunction((generic, original)=>{
       const view=document.querySelector('#note-detail');
       const text=view?.textContent||"";
       return !view?.hidden && (generic
-        ? text.includes("He visto a Manu")
+        ? text.includes(original)
         : text.includes("jardín") && text.includes("museo") &&
           ["Nora","Ivo","Vera"].every(name=>text.includes(name)));
-    },{timeout:12000},genericDay);
-    const dayDetail=await page.evaluate(()=>({
+    },{timeout:12000},genericDay,process.env.ODYSSEY_SYNTHETIC_SOURCE);
+    const dayDetail=await page.evaluate((original)=>({
       garden:document.querySelector('#note-detail')?.textContent.includes("jardín"),
       museum:document.querySelector('#note-detail')?.textContent.includes("museo"),
-      manu:document.querySelector('#note-detail')?.textContent.includes("He visto a Manu"),
+      sourcePresent:document.querySelector('#note-detail')?.textContent.includes(original),
       linkedNames:["Nora","Ivo","Vera"].filter(name=>
         document.querySelector('#note-detail')?.textContent.includes(name)),
-    }));
+    }),process.env.ODYSSEY_SYNTHETIC_SOURCE);
     const receipt=Number(process.env.ODYSSEY_E4_EXPECTED_WRITES);
-    const recordedFixture=process.env.ODYSSEY_E4_RECORDED==="1";
     const output={
-      pass:recordedFixture && receipt===1 && progressDonut.present && progressDonut.valid &&
+      pass:receipt===1 && progressDonut.present && progressDonut.valid &&
         progressTrace.monotonic && before.userMessages===1 && before.acknowledgements===1 &&
         before.details===after.details && before.noteButtons===after.noteButtons &&
         before.confirmationVisible && after.confirmationVisible &&
         detail.svgCount>0 && detail.sourceFlow && detail.writeReceipts===receipt &&
         reloadedDetail.svgCount>0 && reloadedDetail.writeReceipts===receipt &&
         !detail.diagnosticRejected && !reloadedDetail.diagnosticRejected &&
-        (genericDay ? dayDetail.manu && dayDetail.linkedNames.length===0 :
+        (genericDay ? dayDetail.sourcePresent && dayDetail.linkedNames.length===0 :
           dayDetail.garden && dayDetail.museum && dayDetail.linkedNames.length===3) &&
         jsErrors.length===0,
       before,after,detail,reloadedDetail,dayDetail,progressDonut,progressTrace,

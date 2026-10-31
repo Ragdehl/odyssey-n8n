@@ -66,7 +66,7 @@ if RECORDED_CASE not in {
 }:
     raise RuntimeError("Unsupported isolated browser fixture")
 if (
-    RECORDED_CASE in {"issue157_day", "generic_day", "recovery_day"}
+    RECORDED_CASE in {"issue157_day", "recovery_day"}
     and os.environ.get("ODYSSEY_E4_RECORDED") != "1"
 ):
     raise RuntimeError("Family fixture requires recorded model responses")
@@ -78,7 +78,7 @@ else:
 E4_SOURCE = (
     "He elegido a Luis."
     if RECORDED_CASE == "e5_selected"
-    else "He visto a Manu."
+    else os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", "He visto a Manu.")
     if RECORDED_CASE == "generic_day"
     else FAMILY_SOURCE or os.environ.get("ODYSSEY_E4_SYNTHETIC_SOURCE", DEFAULT_E4_SOURCE)
 )
@@ -444,7 +444,79 @@ def selected_product(root: Path):
         executor.event_delegate = lambda *_: (_ for _ in ()).throw(
             RuntimeError("Past-day source misrouted as Event")
         )
-        executor.client = RecordedClient(_reviewed_day(E4_SOURCE, "2026-10-16"))
+        if os.environ.get("ODYSSEY_E4_RECORDED") == "1":
+            executor.client = RecordedClient(_reviewed_day(E4_SOURCE, "2026-10-16"))
+        else:
+            from types import SimpleNamespace
+
+            from openai import OpenAI
+
+            create = OpenAI(max_retries=0, timeout=70).responses.create
+            calls = 0
+
+            def bounded_create(**kwargs):
+                nonlocal calls
+                if calls >= 8:
+                    raise RuntimeError("Live E2E provider cap reached (8 calls)")
+                calls += 1
+                print(
+                    "E4_REAL_PROVIDER_CALL="
+                    + str(calls)
+                    + " model="
+                    + str(kwargs.get("model"))
+                    + " schema="
+                    + str(kwargs.get("text", {}).get("format", {}).get("name")),
+                    flush=True,
+                )
+                response = create(**kwargs)
+                try:
+                    parsed = json.loads(response.output_text)
+                    facts = parsed.get("facts", [])
+                    meta = {
+                        "schema": kwargs.get("text", {}).get("format", {}).get("name"),
+                        "capabilities": parsed.get("capabilities"),
+                        "self_relation_count": len(parsed.get("self_relation_spans") or []),
+                        "fact_count": len(facts) if isinstance(facts, list) else -1,
+                        "unresolved_count": len(parsed.get("unresolved") or []),
+                        "entities_count": len(parsed.get("entities") or []),
+                        "needs_clarification": [
+                            f.get("needs_clarification") for f in facts if isinstance(f, dict)
+                        ]
+                        if isinstance(facts, list)
+                        else [],
+                        "participants_count": [
+                            len(f.get("participants") or []) for f in facts if isinstance(f, dict)
+                        ]
+                        if isinstance(facts, list)
+                        else [],
+                        "review_approved": parsed.get("approved"),
+                        "review_complete": parsed.get("complete"),
+                        "review_supported": [
+                            f.get("supported") for f in facts if isinstance(f, dict)
+                        ]
+                        if isinstance(facts, list)
+                        else [],
+                        "review_reference_count": [
+                            len(f.get("reference_names") or [])
+                            for f in facts
+                            if isinstance(f, dict)
+                        ]
+                        if isinstance(facts, list)
+                        else [],
+                        "reason": str(parsed.get("reason") or "")[:180],
+                    }
+                    print(
+                        "E4_REAL_MODEL_DECISION=" + json.dumps(meta, ensure_ascii=False), flush=True
+                    )
+                except (ValueError, AttributeError, TypeError):
+                    print("E4_REAL_MODEL_DECISION=UNPARSEABLE", flush=True)
+                return response
+
+            executor.prewrite_diagnostic = lambda _delivery, gate, values: print(
+                "E4_PREWRITE_GATE=" + gate + " " + json.dumps(values, ensure_ascii=False),
+                flush=True,
+            )
+            executor.client = SimpleNamespace(responses=SimpleNamespace(create=bounded_create))
         runtime.notes_service = NotesQueryService(repo, SCHEMA, executor.context_index)
         runtime.vault_repository = repo
         yield repo, actor, runtime
@@ -873,7 +945,7 @@ def run() -> dict:
                                 ]
                                 assert len(day_notes) == 1
                                 body = day_notes[0].content
-                                assert "He visto a Manu" in body
+                                assert E4_SOURCE in body
                                 assert body.count("odyssey:fact request=") == 1
                                 assert (
                                     len(
@@ -896,7 +968,9 @@ def run() -> dict:
                                     "passed": True,
                                     "source_case": RECORDED_CASE,
                                     "seconds": round(time.monotonic() - started, 2),
-                                    "gpt": "recorded",
+                                    "gpt": "recorded"
+                                    if os.environ.get("ODYSSEY_E4_RECORDED") == "1"
+                                    else "real",
                                     "n8n": "real_offline_docker",
                                     "browser": "Chromium real",
                                     "authentication": "synthetic_local_cookie_gate",
