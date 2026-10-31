@@ -92,6 +92,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e3_complete_reference_set_enrichment.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",
+        # Previously verified, real-provider *recorded* hybrid Core behavior:
+        # no semantic reimplementation by F09 text and no silent deletion of
+        # F14/F27 partial/pending identity guarantees. This is offline replay,
+        # NOT the P4 real-model/browser acceptance gate.
+        "tests/runtime/test_hybrid_known_fact_real_review_20261013.py",
+        "tests/runtime/test_hybrid_ambiguous_real_pending_20261013.py",
         "tests/benchmarks/test_odyssey_stage_acceptance.py",
         "tests/benchmarks/test_r0_browser_campaign.py",
         "tests/benchmarks/test_r0_real_browser_case.py",

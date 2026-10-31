@@ -98,6 +98,27 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
                 "source_preserved": True,
                 "canonical_result_checked": True,
                 "ui_readback_checked": True,
+                "no_unsupported_writes": True,
+                "semantic_oracle_reviewed": True,
+                "unit_verifications": [
+                    {
+                        "ordinal": index,
+                        "expected_state": unit.get("state", "end_to_end"),
+                        "disposition": (
+                            "pending_unresolved"
+                            if unit.get("state") == "ambiguous_identity"
+                            else "persisted"
+                        ),
+                        "source_supported": True,
+                        "canonical_readback": True,
+                        "proof_sha256": hashlib.sha256(
+                            f"synthetic-only-{ident}-{index}".encode()
+                        ).hexdigest(),
+                    }
+                    for index, unit in enumerate(
+                        case.get("expected_units") or [{"state": "end_to_end"}]
+                    )
+                ],
                 "trace_artifact": "docs/architecture/e2e-receipts/" + ident + ".json",
                 "trace_artifact_sha256": hashlib.sha256(trace.read_bytes()).hexdigest(),
             }
@@ -215,4 +236,61 @@ def test_real_model_call_count_must_cover_all_appended_cases(tmp_path: Path):
     path = tmp_path / manifest["stages"][0]["acceptance_receipt"]
     path.write_text(json.dumps(receipt))
     with pytest.raises(StageAcceptanceError, match="provider-call count"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_compound_source_cannot_pass_with_only_first_fact_verified(tmp_path: Path):
+    """F01 has three occurrences; a saved park fact cannot hide missing cinema/concert."""
+    manifest, receipt = _evidence(tmp_path)
+    f01 = receipt["cases"][0]
+    assert len(f01["unit_verifications"]) == 3
+    f01["unit_verifications"] = f01["unit_verifications"][:1]
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="per-unit semantic verification"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_ambiguous_reference_must_stay_unresolved_with_proof(tmp_path: Path):
+    """F14 may persist the proven conversation, never guess the cinema companion."""
+    manifest, receipt = _evidence(tmp_path)
+    f14 = receipt["cases"][13]
+    assert [unit["disposition"] for unit in f14["unit_verifications"]] == [
+        "persisted",
+        "pending_unresolved",
+    ]
+    f14["unit_verifications"][1]["disposition"] = "persisted"
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="invented identity"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_existing_fact_noop_requires_canonical_proof(tmp_path: Path):
+    """F09 equivalence is allowed but must be grounded, not a missing write."""
+    manifest, receipt = _evidence(tmp_path)
+    f09 = receipt["cases"][8]
+    f09["unit_verifications"][0]["disposition"] = "existing_proven"
+    f09["unit_verifications"][0]["canonical_readback"] = False
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(StageAcceptanceError, match="Incomplete semantic unit"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_original_unit_oracle_cannot_delete_cinema_or_concert(tmp_path: Path):
+    manifest, _receipt = _evidence(tmp_path)
+    file = tmp_path / STAGE["original_case_design"]
+    design = json.loads(file.read_text())
+    assert len(design["cases"][0]["expected_units"]) == 3
+    design["cases"][0]["expected_units"].pop()
+    file.write_text(json.dumps(design))
+    with pytest.raises(StageAcceptanceError, match="regression sources changed"):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_added_case_expectation_and_fixture_are_immutable(tmp_path: Path):
+    manifest, _receipt = _evidence(tmp_path)
+    file = tmp_path / STAGE["additional_regression_source"]
+    catalog = json.loads(file.read_text())
+    catalog["cases"][1]["fixture_setup"][0]["facts"] = ["La persona conoció a otra persona."]
+    file.write_text(json.dumps(catalog))
+    with pytest.raises(StageAcceptanceError, match="regression sources changed"):
         inspect_stage_acceptance(root=tmp_path, manifest=manifest)

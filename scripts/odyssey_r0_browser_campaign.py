@@ -35,6 +35,24 @@ ADDITIONAL = ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json"
 # removing or rewriting any prior source is not. These are test-data hashes,
 # NEVER branches in the Odyssey runtime/semantic interpreter.
 ORIGINAL_SOURCE_DIGEST = "350424ac788725911fe2c309ac1d0a90d6cbd3881f625f311280aed833bb8241"
+ORIGINAL_ORACLE_DIGEST = "666a048dd0a4baf25ce8a0bdf9d54b30e2fbc79519d5cea3266d881f53f82008"
+ADDITIONAL_ORACLE_PREFIX = (
+    "3784b1ec14d7585207d7506b8e85c619a354d4d5244393c7e0501f91f31f7926",
+    "e631da9f41d6aafff1423fa74d11cc0204897f47e7401cb67d16c9ce4aaa0d2b",
+    "08c319e536a7fed0a1f65e3787a769b41ee6644790af2ab7f4a9c60545c0d344",
+)
+
+
+def _stable_digest(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 ADDITIONAL_SOURCE_PREFIX = (
     "e107fe15284565462a40867437b32f3f8c0ed9eefdd7b7dc67d68ab4d5cecce3",
     "adcaf7b78d6c92e1169e335a486ef2e502f4ded4e74c884ae820aa3958763c48",
@@ -53,9 +71,23 @@ def verify_source_anchors(original_rows: list[dict], additional_rows: list[dict]
     extra_hashes = tuple(
         hashlib.sha256(row["source"].encode("utf-8")).hexdigest() for row in additional_rows
     )
+    # Freeze the *meaning* of the oracle too. Otherwise an old test could be
+    # made green by deleting expected facts while preserving its source text.
+    unit_oracle = _stable_digest([(row["id"], row["expected_units"]) for row in original_rows])
+    extra_oracles = tuple(
+        _stable_digest(
+            {
+                key: row.get(key)
+                for key in ("id", "source", "expectation", "offline_coverage", "fixture_setup")
+            }
+        )
+        for row in additional_rows
+    )
     if (
         digest != ORIGINAL_SOURCE_DIGEST
+        or unit_oracle != ORIGINAL_ORACLE_DIGEST
         or extra_hashes[: len(ADDITIONAL_SOURCE_PREFIX)] != ADDITIONAL_SOURCE_PREFIX
+        or extra_oracles[: len(ADDITIONAL_ORACLE_PREFIX)] != ADDITIONAL_ORACLE_PREFIX
     ):
         raise CampaignError("Frozen 27-message sources or accepted additional prefix changed")
     if len(extra_hashes) < len(ADDITIONAL_SOURCE_PREFIX):

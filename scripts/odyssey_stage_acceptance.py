@@ -264,6 +264,43 @@ def _verify_case_rows(receipt: dict, design: dict, ids: tuple[str, ...], root: P
             or re.fullmatch(r"[0-9a-f]{64}", row["trace_artifact_sha256"]) is None
         ):
             raise StageAcceptanceError("Incomplete or non-live case evidence: " + expected)
+        # One successful Chat acknowledgement cannot certify a compound
+        # source: every original source unit (or appended scenario) needs its
+        # own readback-supported semantic disposition. An ambiguous reference
+        # is a positive safe-pending check, NOT a failed identity guess.
+        expected_units = case.get("expected_units") or [{"state": "end_to_end"}]
+        observed_units = row.get("unit_verifications")
+        if (
+            row.get("no_unsupported_writes") is not True
+            or row.get("semantic_oracle_reviewed") is not True
+            or not isinstance(observed_units, list)
+            or len(observed_units) != len(expected_units)
+        ):
+            raise StageAcceptanceError(
+                "Missing full-source per-unit semantic verification: " + expected
+            )
+        for index, (planned, observed) in enumerate(
+            zip(expected_units, observed_units, strict=True)
+        ):
+            state = planned.get("state")
+            required_dispositions = (
+                {"pending_unresolved"}
+                if state == "ambiguous_identity"
+                else {"persisted", "existing_proven"}
+            )
+            if (
+                not isinstance(observed, dict)
+                or observed.get("ordinal") != index
+                or observed.get("expected_state") != state
+                or observed.get("disposition") not in required_dispositions
+                or observed.get("source_supported") is not True
+                or observed.get("canonical_readback") is not True
+                or not isinstance(observed.get("proof_sha256"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", observed["proof_sha256"]) is None
+            ):
+                raise StageAcceptanceError(
+                    "Incomplete semantic unit or invented identity: " + expected
+                )
         used_requests.add(request_id)
         trace = row.get("trace_artifact")
         if not isinstance(trace, str) or not trace.startswith("docs/architecture/e2e-receipts/"):

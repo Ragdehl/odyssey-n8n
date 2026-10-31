@@ -101,4 +101,14 @@ def test_append_only_fixtures_are_validated_before_paid_campaign_arming(tmp_path
         {"kind": "create_task", "name": "Safe task", "path": "Safe task.md", "id": "synthetic-task"}
     ]
     bad.write_text(json.dumps(additional))
+    # A safe *different* fixture is still a contract rewrite; it must be
+    # rejected rather than silently making a formerly difficult test easy.
+    with pytest.raises(campaign.CampaignError, match="accepted additional prefix changed"):
+        campaign.additional_cases()
+    # The canonical fixture remains valid and is the only permitted baseline.
+    monkeypatch.setattr(
+        campaign,
+        "ADDITIONAL",
+        campaign.ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json",
+    )
     assert [case.id for case in campaign.additional_cases()] == ["R28", "R29", "R30"]
