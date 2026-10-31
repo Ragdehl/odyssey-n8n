@@ -28,7 +28,7 @@ def test_r0_is_unaccepted_but_original_27_sources_remain_anchored():
         "stage": "R0",
         "review_stage": "R0",
         "accepted_stages": [],
-        "cases": 31,
+        "cases": 32,
         "accepted": False,
     }
 
@@ -201,7 +201,7 @@ def _evidence(tmp_path: Path) -> tuple[dict, dict]:
         "source_sha": sha,
         "deployed_sha": sha,
         "provider_mode": "fresh_real_model",
-        "provider_calls": 31,
+        "provider_calls": 32,
         "provider_model": "test-model",
         "browser_mode": "visible_authenticated_user_actions",
         "n8n_mode": "real",
@@ -258,7 +258,7 @@ def test_additional_regressions_cannot_disappear_from_an_accepted_stage(tmp_path
     extra = json.loads(additional_path.read_text())
     extra["cases"].pop()
     additional_path.write_text(json.dumps(extra))
-    # The prior 31-case receipt has more cases than the altered 30-case catalog;
+    # The prior 32-case receipt has more cases than the altered 31-case catalog;
     # a supposed complete stage must now fail rather than silently ignore one.
     with pytest.raises(StageAcceptanceError, match="regression sources changed"):
         inspect_stage_acceptance(root=tmp_path, manifest=manifest)
@@ -280,15 +280,16 @@ def test_additional_regression_ids_cannot_be_reordered_or_reused():
     from scripts.odyssey_r0_browser_campaign import additional_cases, campaign_cases
 
     addition = additional_cases()
-    assert [case.id for case in addition] == ["R28", "R29", "R30", "R31"]
+    assert [case.id for case in addition] == ["R28", "R29", "R30", "R31", "R32"]
     assert [case.id for case in campaign_cases()] == [
         *(f"F{i:02d}" for i in range(1, 28)),
         "R28",
         "R29",
         "R30",
         "R31",
+        "R32",
     ]
-    assert len({case.source_sha256 for case in campaign_cases()}) == 31
+    assert len({case.source_sha256 for case in campaign_cases()}) == 32
 
 
 def test_real_model_call_count_must_cover_all_appended_cases(tmp_path: Path):
@@ -457,8 +458,8 @@ def test_all_appended_scenarios_preserve_every_semantic_user_requirement():
     from scripts.odyssey_r0_browser_campaign import additional_cases
 
     original = json.loads((ROOT / STAGE["additional_regression_source"]).read_text())
-    assert [case.id for case in additional_cases()] == ["R28", "R29", "R30", "R31"]
-    assert [len(row["expected_units"]) for row in original["cases"]] == [1, 3, 2, 1]
+    assert [case.id for case in additional_cases()] == ["R28", "R29", "R30", "R31", "R32"]
+    assert [len(row["expected_units"]) for row in original["cases"]] == [1, 3, 2, 1, 1]
     assert all(
         all(
             anchor in row["source"]

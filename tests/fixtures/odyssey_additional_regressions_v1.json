@@ -104,6 +104,30 @@
           "state": "candidate"
         }
       ]
+    },
+    {
+      "id": "R32",
+      "source": "¿Quién es mi padre?",
+      "expectation": "A read-only query about a relationship already proved by the authenticated SELF canonical Note resolves the existing linked member and answers with its real name. No Markdown mutation, no fabricated absence, and no silent fallback that hides the original read-planner failure; graph reports a verified failing stage or honestly says evidence is missing.",
+      "offline_coverage": "tests/core/test_relational_application.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [
+        {
+          "kind": "replace_self_facts",
+          "facts": [
+            "Mi padre es [[Eric]]."
+          ]
+        }
+      ],
+      "expected_units": [
+        {
+          "reading": "Return existing canonical relation member Eric from the authenticated SELF record; do not invent a second identity or claim no data exists when it is stored",
+          "source_anchors": [
+            "mi padre"
+          ],
+          "state": "candidate"
+        }
+      ]
     }
   ]
 }

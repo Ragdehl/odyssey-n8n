@@ -271,3 +271,32 @@ def test_disposable_markdown_delta_keeps_content_and_detects_missing_or_invented
     assert "Fui al parque" in changed[1]["after_markdown_excerpt"]
     assert all(item["path"] != "self.md" for item in changed)
     assert _synthetic_markdown_delta(after, after) == []
+
+
+def test_appended_generic_read_case_has_preexisting_canonical_self_relationship(tmp_path):
+    """R32 read-only fixture is real Markdown, not model-suggested membership."""
+    from unittest.mock import patch
+
+    from odyssey_core.notes import parse_note
+    from odyssey_core.whole_message_relationship_proof import verify_self_relationship
+    from scripts.odyssey_r0_real_browser_case import (
+        _prepare_additional_test_fixture,
+        _r0_product,
+    )
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "FAKE_NO_PROVIDER"}):
+        with _r0_product(tmp_path) as (repo, actor, product):
+            assert len(repo.list_markdown_paths()) == 13
+            assert _prepare_additional_test_fixture("R32", repo, product) == 1
+            note = parse_note(repo.read_text("Alex.md"))
+            assert "Mi padre es [[Eric]]." in note.content
+            proof = verify_self_relationship(
+                "¿Quién es mi padre?",
+                "mi padre",
+                repository=repo,
+                schema=product.canonical_schema,
+                actor=actor,
+                bindings=product.hybrid_candidate_execute.bindings,
+            )
+            assert proof.members == (("fixture-person-eric", "Eric"),)
+            assert len(repo.list_markdown_paths()) == 13

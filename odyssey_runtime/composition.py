@@ -377,6 +377,14 @@ class NotesTelemetryError(RuntimeError):
         self.bad_request = bad_request
 
 
+class CoreReadPreflightUnavailable(RuntimeError):
+    """A generic read planner failed before disposition; preserve its cause.
+
+    It is not a source classifier and never changes mutation or fallback
+    authority. Only the exception CLASS may appear in product telemetry.
+    """
+
+
 class DerivedIndexRefreshCoordinator:
     """Maintain derived indexes asynchronously with a strict reader barrier.
 
@@ -3053,6 +3061,7 @@ class RuntimeComposition:
                 )
             )
         core_started = self.monotonic()
+        read_preflight_failure: OperationalStage | None = None
         if resume_plan is not None:
             if original_request is None or clarification_choice is None:
                 raise ValueError("clarification continuation is incomplete")
@@ -3076,13 +3085,29 @@ class RuntimeComposition:
                     clarification_code="HYBRID_AUTHENTICATED_CONVERSATION_REQUIRED",
                 )
             else:
-                read_result = (
-                    self.hybrid_read_execute(
-                        user_request, request_id, authenticated_actor, conversation_id
+                read_started = self.monotonic()
+                try:
+                    read_result = (
+                        self.hybrid_read_execute(
+                            user_request, request_id, authenticated_actor, conversation_id
+                        )
+                        if self.hybrid_read_execute is not None
+                        else None
                     )
-                    if self.hybrid_read_execute is not None
-                    else None
-                )
+                except CoreReadPreflightUnavailable as error:
+                    # An unreadable/non-validated model call is not proof of
+                    # READ_ONLY, so the existing guarded router still owns
+                    # fallback. Preserve the failed boundary for diagnosis.
+                    read_preflight_failure = OperationalStage(
+                        "core.read_preflight",
+                        OperationalOutcome.FAILED,
+                        max(0.0, (self.monotonic() - read_started) * 1000),
+                        error_category=type(error.__cause__).__name__
+                        if error.__cause__ is not None
+                        else type(error).__name__,
+                        start_offset_ms=max(0.0, (read_started - started) * 1000),
+                    )
+                    read_result = None
                 result = read_result or self.hybrid_candidate_execute(
                     user_request, request_id, authenticated_actor, conversation_id
                 )
@@ -3118,6 +3143,12 @@ class RuntimeComposition:
         core_offset_ms = max(0.0, (core_started - started) * 1000)
         stages = [
             *pre_stages,
+            *(
+                [read_preflight_failure]
+                if read_preflight_failure is not None
+                and result.status is not ApplicationStatus.COMPLETED
+                else []
+            ),
             *[
                 replace(
                     stage,
@@ -4615,8 +4646,11 @@ def _build_runtime_from_environment_unlocked(
                     conversation_root_resolver.resolve(authenticated_actor.stable_user_id)
                 ).recent_context(exclude_request_id=request_id),
             )
-        except Exception:
-            return None
+        except Exception as error:
+            # The guarded candidate path may still complete, but failure in
+            # the earlier shared read planner cannot silently disappear from
+            # a later unsuccessful delivery's E2/graph evidence.
+            raise CoreReadPreflightUnavailable("Core read planning unavailable") from error
         if isinstance(plan, PlannerClarification) or not isinstance(plan, RequestPlan):
             return None
         disposition = request_disposition(plan)
