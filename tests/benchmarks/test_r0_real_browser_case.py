@@ -102,3 +102,143 @@ def test_live_budget_blocks_one_extremely_large_call_before_provider(tmp_path):
                     max_output_tokens=1400,
                     text={"format": {"name": "no-network"}},
                 )
+
+
+def test_r0_prewrite_probe_observes_active_real_p4_route_without_changing_outcome(tmp_path):
+    """Frozen GPT responses, real P4 source coverage and real E3 no-write refusal."""
+    from scripts.odyssey_r0_real_browser_case import _attach_prewrite_diagnostics
+    from tests.runtime.test_whole_source_light_product_p4 import (
+        RecordedClient,
+        _actual_snapshot,
+        _fixture,
+    )
+
+    source, route, plan, review = _actual_snapshot("maya_simple")
+    repo, actor, executor, runtime = _fixture(tmp_path)
+    rejected = {**review, "approved": False, "complete": False, "reason": "missing source fact"}
+    executor.client = RecordedClient([route, plan, rejected, plan, rejected])
+    evidence = {}
+    _attach_prewrite_diagnostics(runtime, evidence)
+    before = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "r0-test-prewrite-negative", "main", actor)
+    assert result["status"] == "needs_attention"
+    assert {p: repo.read_text(p) for p in repo.list_markdown_paths()} == before
+    rows = evidence["core_prewrite_gates"]
+    verdicts = [row for row in rows if row["gate"] == "coverage_verdict"]
+    assert len(verdicts) == 2
+    assert rows[-1]["gate"] == "coverage_rejected"
+    assert any(row["gate"] == "proposal" for row in rows)
+    assert verdicts[0]["values"]["approved"] is False
+    assert verdicts[1]["values"]["attempt"] == 1
+    assert all(len(row["delivery_sha256"]) == 64 for row in rows)
+    assert all("source" not in row and "name" not in row for row in rows)
+
+
+def test_r0_prewrite_probe_preserves_previous_callback(tmp_path):
+    from scripts.odyssey_r0_real_browser_case import _attach_prewrite_diagnostics
+    from tests.runtime.test_whole_source_light_product_p4 import _fixture
+
+    _repo, _actor, executor, runtime = _fixture(tmp_path)
+    existing = []
+    executor.prewrite_diagnostic = lambda delivery, gate, values: existing.append(
+        (delivery, gate, values)
+    )
+    evidence = {}
+    _attach_prewrite_diagnostics(runtime, evidence)
+    executor._observe_prewrite("request-one", "prewrite_accepted", facts=2)
+    assert existing == [("request-one", "prewrite_accepted", {"facts": 2})]
+    assert evidence["core_prewrite_gates"][0]["gate"] == "prewrite_accepted"
+
+
+def test_r0_prewrite_probe_records_success_before_real_markdown_write(tmp_path):
+    """The same product P4 path emits accepted verdict before actual Core/E3."""
+    from scripts.odyssey_r0_real_browser_case import _attach_prewrite_diagnostics
+    from tests.runtime.test_whole_source_light_product_p4 import (
+        RecordedClient,
+        _actual_snapshot,
+        _fixture,
+        _speaker,
+    )
+
+    source, route, plan, review = _actual_snapshot("maya_simple")
+    repository, actor, executor, runtime = _fixture(tmp_path)
+    executor.client = RecordedClient(
+        [route, plan, review, _speaker(source, plan, base=1), _speaker(source, plan)]
+    )
+    recorded = {}
+    _attach_prewrite_diagnostics(runtime, recorded)
+    response = runtime.execute_product(source, "r0-probe-genuine-e3-write", "main", actor)
+    assert response["status"] == "completed"
+    rows = recorded["core_prewrite_gates"]
+    assert any(r["gate"] == "coverage_verdict" and r["values"]["complete"] is True for r in rows)
+    assert any(r["gate"] == "prewrite_accepted" for r in rows)
+    assert any(
+        "odyssey:fact request=r0-probe-genuine-e3-write" in repository.read_text(path)
+        for path in repository.list_markdown_paths()
+    )
+
+
+def test_appended_family_case_has_separate_proven_wife_and_child_sets(tmp_path):
+    """R29 has TWO disjoint canonical groups; no wife→children leakage."""
+    from unittest.mock import patch
+
+    from odyssey_core.whole_message_relationship_proof import verify_self_relationship
+    from scripts.odyssey_r0_real_browser_case import (
+        _prepare_additional_test_fixture,
+        _r0_product,
+    )
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "FAKE_NO_PROVIDER"}):
+        with _r0_product(tmp_path) as (repo, actor, runtime):
+            assert len(repo.list_markdown_paths()) == 13
+            assert _prepare_additional_test_fixture("R29", repo, runtime) == 1
+            assert len(repo.list_markdown_paths()) == 13
+            bindings = runtime.hybrid_candidate_execute.bindings
+            groups = {}
+            for phrase in ("mis hijos", "mi mujer"):
+                proof = verify_self_relationship(
+                    "Hoy hemos estado con mis hijos y mi mujer.",
+                    phrase,
+                    repository=repo,
+                    schema=runtime.canonical_schema,
+                    actor=actor,
+                    bindings=bindings,
+                )
+                groups[phrase] = {name for _id, name in proof.members}
+            assert groups == {"mis hijos": {"Nina", "Pablo"}, "mi mujer": {"Bea"}}
+            assert groups["mis hijos"].isdisjoint(groups["mi mujer"])
+
+
+def test_appended_work_session_case_starts_with_actual_synthetic_task(tmp_path):
+    from unittest.mock import patch
+
+    from odyssey_core.notes import parse_note
+    from scripts.odyssey_r0_real_browser_case import (
+        _prepare_additional_test_fixture,
+        _r0_product,
+    )
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "FAKE_NO_PROVIDER"}):
+        with _r0_product(tmp_path) as (repo, _actor, runtime):
+            assert len(repo.list_markdown_paths()) == 13
+            assert _prepare_additional_test_fixture("R30", repo, runtime) == 1
+            assert len(repo.list_markdown_paths()) == 14
+            task = parse_note(repo.read_text("Preparar informe Atlas.md"))
+            assert task.metadata["id"] == "synthetic-task-atlas"
+            assert task.metadata["type"] == "task"
+            assert task.metadata["status"] == "pending"
+
+
+def test_original_frozen_case_does_not_gain_extra_test_preconditions(tmp_path):
+    from unittest.mock import patch
+
+    from scripts.odyssey_r0_real_browser_case import (
+        _prepare_additional_test_fixture,
+        _r0_product,
+    )
+
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "FAKE_NO_PROVIDER"}):
+        with _r0_product(tmp_path) as (repo, _actor, runtime):
+            before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+            assert _prepare_additional_test_fixture("F09", repo, runtime) == 0
+            assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}

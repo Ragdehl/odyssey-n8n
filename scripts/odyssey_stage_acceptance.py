@@ -16,9 +16,17 @@ from pathlib import Path
 from typing import Any
 
 if __package__:
-    from .odyssey_r0_browser_campaign import CampaignError, verify_source_anchors
+    from .odyssey_r0_browser_campaign import (
+        CampaignError,
+        valid_fixture_setup,
+        verify_source_anchors,
+    )
 else:
-    from odyssey_r0_browser_campaign import CampaignError, verify_source_anchors
+    from odyssey_r0_browser_campaign import (
+        CampaignError,
+        valid_fixture_setup,
+        verify_source_anchors,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "docs/architecture/odyssey-phase-acceptance.json"
@@ -130,6 +138,7 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
             or not row["source"].strip()
             or not isinstance(row.get("expectation"), str)
             or not row["expectation"].strip()
+            or not valid_fixture_setup(row.get("fixture_setup"))
             or row.get("live_acceptance") != "pending"
             for row in additional
         )

@@ -109,6 +109,45 @@ def frozen_cases() -> tuple[Case, ...]:
     return cases
 
 
+def valid_fixture_setup(steps: object) -> bool:
+    """Check test prerequisites before arming billable provider calls."""
+    if not isinstance(steps, list) or len(steps) > 6:
+        return False
+    for step in steps:
+        if not isinstance(step, dict):
+            return False
+        if step.get("kind") == "replace_self_facts":
+            facts = step.get("facts")
+            if (
+                set(step) != {"kind", "facts"}
+                or not isinstance(facts, list)
+                or not 1 <= len(facts) <= 8
+                or any(
+                    not isinstance(f, str) or not f.endswith(".") or not 1 <= len(f) <= 180
+                    for f in facts
+                )
+            ):
+                return False
+        elif step.get("kind") == "create_task":
+            name, id_, path = step.get("name"), step.get("id"), step.get("path")
+            if (
+                set(step) != {"kind", "name", "id", "path"}
+                or not isinstance(name, str)
+                or not 1 <= len(name) <= 120
+                or not isinstance(id_, str)
+                or not id_.startswith("synthetic-")
+                or not isinstance(path, str)
+                or path != name + ".md"
+                or "/" in path
+                or "\\" in path
+                or ".." in path
+            ):
+                return False
+        else:
+            return False
+    return True
+
+
 def additional_cases() -> tuple[Case, ...]:
     """Independent append-only real-journey regressions after the original 27."""
     value = json.loads(ADDITIONAL.read_text(encoding="utf-8"))
@@ -128,6 +167,7 @@ def additional_cases() -> tuple[Case, ...]:
         or not isinstance(row.get("expectation"), str)
         or not row["expectation"].strip()
         or row.get("live_acceptance") != "pending"
+        or not valid_fixture_setup(row.get("fixture_setup"))
         or not isinstance(row.get("offline_coverage"), str)
         or not row["offline_coverage"].startswith("tests/")
         or not (ROOT / row["offline_coverage"]).is_file()

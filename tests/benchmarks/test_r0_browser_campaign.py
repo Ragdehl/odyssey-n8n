@@ -85,3 +85,20 @@ def test_failed_browser_run_retains_forensics_without_false_pass():
     failure["outcome"] = "passed"
     with pytest.raises(campaign.CampaignError, match="Cloudflare"):
         campaign.validate_adapter_trace(failure, case)
+
+
+def test_append_only_fixtures_are_validated_before_paid_campaign_arming(tmp_path, monkeypatch):
+    additional = json.loads(campaign.ADDITIONAL.read_text())
+    bad = tmp_path / "bad-regressions.json"
+    monkeypatch.setattr(campaign, "ADDITIONAL", bad)
+    additional["cases"][2]["fixture_setup"] = [
+        {"kind": "create_task", "name": "Unsafe", "path": "../vault.md", "id": "synthetic-evil"}
+    ]
+    bad.write_text(json.dumps(additional))
+    with pytest.raises(campaign.CampaignError, match="grounded test"):
+        campaign.additional_cases()
+    additional["cases"][2]["fixture_setup"] = [
+        {"kind": "create_task", "name": "Safe task", "path": "Safe task.md", "id": "synthetic-task"}
+    ]
+    bad.write_text(json.dumps(additional))
+    assert [case.id for case in campaign.additional_cases()] == ["R28", "R29", "R30"]

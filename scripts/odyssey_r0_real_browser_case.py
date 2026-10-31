@@ -136,6 +136,105 @@ def _r0_product(root: Path):
         yield repo, actor, product
 
 
+def _prepare_additional_test_fixture(case_id: str, repo: Any, product: Any) -> int:
+    """Seed typed preconditions in a disposable vault, never the product or corpus.
+
+    The historic 27 always retain their exact 13-note starting fixture. The
+    appended acceptance cases may require *test-only* task/SELF knowledge.
+    No `if case_id == ...` or name-based branch enters Odyssey's runtime.
+    """
+    from dataclasses import replace
+
+    from odyssey_core import create_entity
+    from odyssey_core.atomic_facts import render_atomic_facts
+    from odyssey_core.notes import parse_note, serialize_note
+    from scripts.odyssey_r0_browser_campaign import ADDITIONAL
+
+    catalog = json.loads(ADDITIONAL.read_text(encoding="utf-8"))["cases"]
+    row = next((entry for entry in catalog if entry["id"] == case_id), None)
+    steps = [] if row is None else row.get("fixture_setup", [])
+    if not isinstance(steps, list):
+        raise Refused("Additional case setup is invalid")
+    for step in steps:
+        if step.get("kind") == "replace_self_facts":
+            facts = step.get("facts")
+            if (
+                not isinstance(facts, list)
+                or not 1 <= len(facts) <= 8
+                or any(
+                    not isinstance(fact, str) or not fact.endswith(".") or len(fact) > 180
+                    for fact in facts
+                )
+            ):
+                raise Refused("Unsafe typed synthetic SELF facts")
+            path = "Alex.md"
+            note = parse_note(repo.read_text(path))
+            if note.metadata.get("id") != SELF:
+                raise Refused("Synthetic SELF fixture identity changed")
+            # One canonical fact ID per relation, not a joined legacy line:
+            # otherwise target projection can incorrectly treat wife+children
+            # as one unseparable proven group. These are TEST data only.
+            body = render_atomic_facts(
+                tuple(facts), "r0-synthetic-relations", tuple(range(len(facts))), "2026-10-04"
+            )
+            repo.replace_text(path, serialize_note(replace(note, content=body)))
+        elif step.get("kind") == "create_task":
+            task_name, task_id, task_path = (step.get("name"), step.get("id"), step.get("path"))
+            if not all(isinstance(v, str) and v for v in (task_name, task_id, task_path)):
+                raise Refused("Invalid synthetic Task fixture")
+            create_entity(
+                repo,
+                product.canonical_schema,
+                path=task_path,
+                entity_id=task_id,
+                metadata={"name": task_name, "type": "task", "status": "pending"},
+                content=f"- {task_name}.\n",
+                actor="r0-synthetic-fixture",
+                now=CLOCK,
+            )
+        else:
+            raise Refused("Unknown synthetic fixture setup operation")
+    if steps:
+        executor = product.hybrid_candidate_execute
+        executor.context_index.rebuild(repo, product.canonical_schema, executor.embedder)
+        executor.semantic_index.rebuild(repo, product.canonical_schema, executor.embedder)
+    return len(steps)
+
+
+def _attach_prewrite_diagnostics(product: Any, evidence: dict[str, Any]) -> None:
+    """Observe the existing P4 trust boundary without authorizing any action.
+
+    The bridge stores only named gates, bounded numeric/bool counters and a
+    request ID digest. No prompts, identities, private notes or model output.
+    Production already has this callback; this test composes with it rather
+    than replacing or bypassing the underlying decision.
+    """
+    executor = product.hybrid_candidate_execute
+    if executor is None or not callable(getattr(executor, "_observe_prewrite", None)):
+        raise Refused("Active P4 prewrite diagnostic boundary unavailable")
+    previous = executor.prewrite_diagnostic
+    items: list[dict[str, Any]] = []
+    evidence["core_prewrite_gates"] = items
+
+    def observed(delivery: str, gate: str, values: dict[str, int | bool]) -> None:
+        if len(items) < 64:
+            items.append(
+                {
+                    "delivery_sha256": hashlib.sha256(delivery.encode("utf-8")).hexdigest(),
+                    "gate": gate,
+                    "values": {
+                        key: value
+                        for key, value in values.items()
+                        if isinstance(key, str) and (type(value) is bool or type(value) is int)
+                    },
+                }
+            )
+        if previous is not None:
+            previous(delivery, gate, values)
+
+    executor.prewrite_diagnostic = observed
+
+
 def _record_usage(receipt: Path, usage: list[dict[str, Any]]) -> None:
     """Persist redacted per-call telemetry without weakening the reservation."""
     value = json.loads(receipt.read_text(encoding="utf-8"))
@@ -264,10 +363,16 @@ def run(case: str, digest: str, receipt: Path) -> dict[str, Any]:
         (share / "broker.cjs").write_text(e4.BROKER_JS, encoding="utf-8")
         (share / "broker.cjs").chmod(0o444)
         with _r0_product(root / "data") as (repo, actor, product):
+            _attach_prewrite_diagnostics(product, evidence)
+            original_before_setup = _snapshot(repo)
+            evidence["fixture_count"] = len(original_before_setup)
+            if len(original_before_setup) != 13:
+                raise Refused("R0 original fixture is not exactly 13 Markdown notes")
+            evidence["fixture_setup_actions"] = _prepare_additional_test_fixture(
+                case, repo, product
+            )
             before = _snapshot(repo)
-            evidence["fixture_count"] = len(before)
-            if len(before) != 13:
-                raise Refused("R0 fixture is not exactly 13 Markdown notes")
+            evidence["fixture_count_after_setup"] = len(before)
             sock = share / "writer.sock"
             token = secrets.token_urlsafe(32)
             results: list[dict[str, Any]] = []

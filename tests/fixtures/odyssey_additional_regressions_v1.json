@@ -6,21 +6,39 @@
       "source": "He visto a Manu.",
       "expectation": "A factual recollection is saved in the journal Day, not made into a Task or Event; no person is fabricated.",
       "offline_coverage": "tests/runtime/test_p4_general_day_journal_fallback.py",
-      "live_acceptance": "pending"
+      "live_acceptance": "pending",
+      "fixture_setup": []
     },
     {
       "id": "R29",
       "source": "Hoy hemos estado con mis hijos y mi mujer de visita por Paris. Hemos visto la iglesia de Notre Dame y hemos ido al museo del Louvre.",
       "expectation": "Preserve all visited places, participants and the date as one complete user recollection; resolve family only from verified SELF data; no invented Event.",
       "offline_coverage": "tests/runtime/test_issue157_family_day_recollection.py",
-      "live_acceptance": "pending"
+      "live_acceptance": "pending",
+      "fixture_setup": [
+        {
+          "kind": "replace_self_facts",
+          "facts": [
+            "Mis hijos son [[Nina]] y [[Pablo]].",
+            "Mi mujer es [[Bea]]."
+          ]
+        }
+      ]
     },
     {
       "id": "R30",
       "source": "Me gusta correr por la tarde. Empieza una sesión de trabajo en la tarea Preparar informe Atlas.",
       "expectation": "Preserve the self preference and start exactly one Work Session for the existing Task; full-source cross-app coverage and idempotent replay.",
       "offline_coverage": "tests/runtime/test_p4_independent_mixed_scopes.py",
-      "live_acceptance": "pending"
+      "live_acceptance": "pending",
+      "fixture_setup": [
+        {
+          "kind": "create_task",
+          "name": "Preparar informe Atlas",
+          "id": "synthetic-task-atlas",
+          "path": "Preparar informe Atlas.md"
+        }
+      ]
     }
   ]
 }
