@@ -63,7 +63,7 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
   }));
   checkpoint='notes_ui';
   let notesChecked=false, calendarChecked=false, notesCount=null;
-  let notesListTexts=[], openedNoteText='';
+  let notesListTexts=[], openedNoteText='', openedNoteId=null;
   const noteSet=await page.$('.note-set-button');
   if(noteSet){
     await noteSet.click();
@@ -81,6 +81,11 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
   notesListTexts=await page.$$eval('#notes-list .note-row:not(.note-unavailable)',
     els=>els.slice(0,12).map(e=>e.textContent.slice(0,170)));
   notesCount=notesListTexts.length;
+  // The real Notes row already exposes its canonical id; record the exact
+  // user-opened identity. Python compares it with the physically changed
+  // Markdown, so an unrelated preexisting note cannot green-light the run.
+  openedNoteId=await page.$eval('#notes-list .note-row:not(.note-unavailable)',
+    e=>e.dataset.noteId || null);
   await page.click('#notes-list .note-row:not(.note-unavailable)');
   await page.waitForFunction(()=>{
     const detail=document.querySelector('#note-detail');
@@ -99,7 +104,7 @@ const executablePath = process.env.ODYSSEY_CHROMIUM_BINARY ||
     after.userMessages.some(x=>x.includes(source));
   const pass=sourceShown && notesChecked && calendarChecked && jsErrors.length===0;
   console.log(JSON.stringify({pass,sourceShown,before,after,notesChecked,
-    notesCount,notesListTexts,openedNoteText,calendarChecked,jsErrors}));
+    notesCount,notesListTexts,openedNoteId,openedNoteText,calendarChecked,jsErrors}));
   if(!pass)process.exitCode=2;
  }catch(e){console.log(JSON.stringify({pass:false,checkpoint,error:String(e.message).slice(0,230)}));process.exitCode=1;}
  finally{if(browser)await browser.close();}

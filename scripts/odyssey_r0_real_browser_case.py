@@ -101,6 +101,27 @@ def _synthetic_markdown_delta(
     return changes
 
 
+def _browser_opened_affected_note(
+    before: dict[str, str], after: dict[str, str], opened_note_id: object
+) -> bool:
+    """A visible Notes detail must identify a physically changed canonical note.
+
+    Read-only requests may have no delta and are assessed by their separate
+    semantic readback oracle. For mutating requests, an unrelated Note already
+    in the vault cannot count as UI evidence of this source's effect.
+    """
+    from odyssey_core.notes import parse_note
+
+    affected = {
+        parsed.metadata["id"]
+        for path, markdown in after.items()
+        if before.get(path) != markdown
+        for parsed in (parse_note(markdown),)
+        if isinstance(parsed.metadata.get("id"), str)
+    }
+    return not affected or isinstance(opened_note_id, str) and opened_note_id in affected
+
+
 @contextmanager
 def _r0_product(root: Path):
     """Compose the real runtime around exactly the committed 13-note fixture."""
@@ -664,8 +685,13 @@ def run(case: str, digest: str, receipt: Path) -> dict[str, Any]:
                                 }
                             browser_ok = browser.returncode == 0 and observed.get("pass") is True
                             visible = browser_ok and observed.get("sourceShown") is True
+                            affected_opened = _browser_opened_affected_note(
+                                before, after, observed.get("openedNoteId")
+                            )
+                            evidence["browser_opened_affected_note"] = affected_opened
                             ui = (
                                 browser_ok
+                                and affected_opened
                                 and observed.get("notesChecked") is True
                                 and observed.get("calendarChecked") is True
                                 and isinstance(observed.get("notesCount"), int)

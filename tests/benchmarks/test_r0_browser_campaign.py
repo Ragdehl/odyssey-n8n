@@ -112,3 +112,89 @@ def test_append_only_fixtures_are_validated_before_paid_campaign_arming(tmp_path
         campaign.ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json",
     )
     assert [case.id for case in campaign.additional_cases()] == ["R28", "R29", "R30", "R31", "R32"]
+
+
+@pytest.mark.parametrize("outcome", ["deferred", "failed"])
+def test_live_campaign_returns_nonzero_for_nonpassing_cases(tmp_path, monkeypatch, capsys, outcome):
+    """A controller may preserve a paid forensic receipt without claiming success."""
+    import sys
+
+    case = campaign.frozen_cases()[0]
+    monkeypatch.setenv(campaign.APPROVAL_FLAG, "1")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "campaign",
+            "--receipts",
+            str(tmp_path),
+            "--case",
+            case.id,
+            "--live",
+            "--case-command",
+            "offline-synthetic-adapter",
+        ],
+    )
+    trace = _trace(case)
+    trace["outcome"] = outcome
+    monkeypatch.setattr(campaign, "run_case_adapter", lambda *args: trace)
+    assert campaign.main() != 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["results"] == [{"case": case.id, "outcome": outcome}]
+    assert json.loads((tmp_path / f"{case.id}.json").read_text())["outcome"] == outcome
+
+
+def test_live_campaign_returns_nonzero_for_unattempted_budget_cases(tmp_path, monkeypatch, capsys):
+    import sys
+
+    case = campaign.frozen_cases()[0]
+    monkeypatch.setenv(campaign.APPROVAL_FLAG, "1")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "campaign",
+            "--receipts",
+            str(tmp_path),
+            "--case",
+            case.id,
+            "--live",
+            "--case-command",
+            "offline-synthetic-adapter",
+            "--cap-usd",
+            str(campaign.PRIOR_UNCERTAIN_RESERVE_USD),
+        ],
+    )
+    assert campaign.main() != 0
+    assert json.loads(capsys.readouterr().out)["results"] == [
+        {"case": case.id, "outcome": "pending", "reason": "budget_cap"}
+    ]
+    assert not (tmp_path / f"{case.id}.json").exists()
+
+
+def test_live_campaign_zero_only_when_all_selected_pass(tmp_path, monkeypatch, capsys):
+    import sys
+
+    case = campaign.frozen_cases()[0]
+    monkeypatch.setenv(campaign.APPROVAL_FLAG, "1")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "campaign",
+            "--receipts",
+            str(tmp_path),
+            "--case",
+            case.id,
+            "--live",
+            "--case-command",
+            "offline-synthetic-adapter",
+        ],
+    )
+    trace = _trace(case)
+    trace["outcome"] = "passed"
+    monkeypatch.setattr(campaign, "run_case_adapter", lambda *args: trace)
+    assert campaign.main() == 0
+    assert json.loads(capsys.readouterr().out)["results"] == [
+        {"case": case.id, "outcome": "passed"}
+    ]

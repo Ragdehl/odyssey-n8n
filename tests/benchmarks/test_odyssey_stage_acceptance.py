@@ -478,3 +478,94 @@ def test_appended_semantic_requirement_cannot_be_weakened_without_detection(tmp_
     path.write_text(json.dumps(rows))
     with pytest.raises(StageAcceptanceError, match="regression sources changed"):
         inspect_stage_acceptance(root=tmp_path, manifest=manifest)
+
+
+def test_final_receipt_is_invalidated_when_acceptance_runner_changes_after_live_run(tmp_path):
+    """A clean product commit is not enough if the test oracle is newer."""
+    import subprocess
+
+    from scripts.odyssey_stage_acceptance import _assert_acceptance_sources_unchanged
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for name in (
+        "odyssey_core/application.py",
+        "scripts/odyssey_r0_browser_campaign.py",
+        "scripts/odyssey_stage_acceptance.py",
+        "tests/fixtures/odyssey_additional_regressions_v1.json",
+        "benchmarks/application_router/fact_units_v2.design.json",
+    ):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("unchanged source input\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Offline Test",
+            "-c",
+            "user.email=offline-test@invalid.example",
+            "commit",
+            "-qm",
+            "baseline",
+        ],
+        check=True,
+    )
+    sha = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"], text=True
+    ).strip()
+    _assert_acceptance_sources_unchanged(tmp_path, sha)
+    for name in (
+        "scripts/odyssey_r0_browser_campaign.py",
+        "tests/fixtures/odyssey_additional_regressions_v1.json",
+        "benchmarks/application_router/fact_units_v2.design.json",
+    ):
+        path = tmp_path / name
+        path.write_text("weakened acceptance rule\n")
+        with pytest.raises(StageAcceptanceError, match="pinned real browser/model"):
+            _assert_acceptance_sources_unchanged(tmp_path, sha)
+        path.write_text("unchanged source input\n")
+    _assert_acceptance_sources_unchanged(tmp_path, sha)
+    (tmp_path / "scripts/odyssey_stage_acceptance.py").write_text("changed stage validator\n")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(tmp_path),
+            "-c",
+            "user.name=Offline Test",
+            "-c",
+            "user.email=offline-test@invalid.example",
+            "commit",
+            "-qm",
+            "modified checks",
+        ],
+        check=True,
+    )
+    with pytest.raises(StageAcceptanceError, match="pinned real browser/model"):
+        _assert_acceptance_sources_unchanged(tmp_path, sha)
+    # A new acceptance after the test runner changed must pin the new commit.
+    current = subprocess.check_output(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"], text=True
+    ).strip()
+    _assert_acceptance_sources_unchanged(tmp_path, current)
+
+
+def test_stage_acceptance_rejects_unopened_canonical_result_even_if_notes_loaded(tmp_path):
+    """An unrelated Notes screen must not certify this case's canonical result."""
+    manifest, receipt = _evidence(tmp_path)
+    row = receipt["cases"][0]
+    path = tmp_path / row["final_output_artifact"]
+    result = json.loads(path.read_text())
+    assert result["canonical_notes"]
+    result["ui_after_reload"]["opened_note_ids"] = []
+    path.write_text(json.dumps(result))
+    row["final_output_artifact_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    (tmp_path / manifest["stages"][0]["acceptance_receipt"]).write_text(json.dumps(receipt))
+    with pytest.raises(
+        StageAcceptanceError, match="Semantic units lack final canonical/pending readback"
+    ):
+        inspect_stage_acceptance(root=tmp_path, manifest=manifest)

@@ -419,3 +419,18 @@ def test_generic_core_read_abstention_keeps_its_observed_stage_through_safe_fall
             )
             assert read_stage.outcome.value == "unavailable"
             assert read_stage.error_category == "CoreReadPreflightUnavailable"
+
+
+def test_r0_browser_must_open_a_note_really_changed_by_the_same_message():
+    """Opening any existing note on Notes cannot prove a source write."""
+    from scripts.odyssey_r0_real_browser_case import _browser_opened_affected_note
+
+    before = {
+        "old.md": '---\nid: "old-id"\nname: "Old"\ntype: person\n---\n\nOld fact',
+        "updated.md": '---\nid: "new-id"\nname: "New"\ntype: project\n---\n\nBefore',
+    }
+    after = {**before, "updated.md": before["updated.md"] + "\nNew fact"}
+    assert not _browser_opened_affected_note(before, after, "old-id")
+    assert not _browser_opened_affected_note(before, after, None)
+    assert _browser_opened_affected_note(before, after, "new-id")
+    assert _browser_opened_affected_note(before, before, None)

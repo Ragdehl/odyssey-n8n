@@ -24,8 +24,19 @@
       "depends_on": [],
       "change_contract": "Fail closed on changed run/oracle/test definitions; real case-specific Notes/Calendar readback and nonzero unsuccessful campaign status.",
       "verification": "Automated tamper/negative tests, selected+full offline gate, external E2E remains separate.",
-      "status": "not_started",
-      "review_decision": "pending_review"
+      "status": "in_progress",
+      "review_decision": "approved_for_implementation",
+      "implementation_checkpoint": {
+        "working_tree": "refactor/e5-source-orchestration-consolidation",
+        "results": "Campaign nonzero on failure/deferred/pending, broad SHA-bound acceptance code+oracle checks, actual changed note id verified in browser and all final canonical note IDs required in UI. Code tested offline only; real browser still pending.",
+        "negative_tests": [
+          "tests/benchmarks/test_r0_browser_campaign.py",
+          "tests/benchmarks/test_odyssey_stage_acceptance.py",
+          "tests/benchmarks/test_r0_real_browser_case.py"
+        ],
+        "note": "R0-F024 DEV CI scope audit remains open; all G01 findings require independent review before closure.",
+        "offline_cross_surface": "2687 Python, 7 subtests, 296 JS PASS at source working tree; not live model/browser acceptance"
+      }
     },
     {
       "id": "G02",
@@ -412,7 +423,7 @@
       "severity": "blocking",
       "reference": "scripts/odyssey_stage_acceptance.py:211",
       "workstream_id": "G01",
-      "state": "open",
+      "state": "in_progress",
       "closure": null
     },
     {
@@ -434,7 +445,7 @@
       "severity": "warning",
       "reference": "scripts/odyssey_r0_browser_campaign.py:438",
       "workstream_id": "G01",
-      "state": "open",
+      "state": "in_progress",
       "closure": null
     },
     {
@@ -445,7 +456,7 @@
       "severity": "warning",
       "reference": "scripts/odyssey_r0_real_browser_case.cjs:64",
       "workstream_id": "G01",
-      "state": "open",
+      "state": "in_progress",
       "closure": null
     },
     {

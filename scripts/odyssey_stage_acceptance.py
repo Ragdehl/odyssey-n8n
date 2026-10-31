@@ -38,6 +38,71 @@ class StageAcceptanceError(ValueError):
     """The declared phase is incomplete, forged or lacks required live evidence."""
 
 
+# All code and acceptance tool surfaces that can materially change what a
+# previous browser/provider test means. The acceptance receipt manifest and
+# e2e-receipts themselves are excluded because signing off a run necessarily
+# creates them *after* the actual product execution.
+PINNED_ACCEPTANCE_INPUTS = (
+    "odyssey_core",
+    "odyssey_apps",
+    "odyssey_runtime",
+    "odyssey_web",
+    "workflows",
+    "config",
+    "scripts",
+    "tests",
+    "benchmarks",
+    "ops/agent-team",
+    ".github/workflows",
+    ".codex/skills",
+    "AGENTS.md",
+)
+
+
+def _assert_acceptance_sources_unchanged(root: Path, source_sha: str) -> None:
+    """A verified live run is only valid for its exact code AND test contract.
+
+    Checking product code alone permits rewriting the runner/oracle/fixture
+    after the model+browser session without invalidating the old receipt.
+    Fail closed on changed tracked code, staged edits and local edits. Do not
+    require the stage acceptance manifest itself to predate the actual run.
+    """
+    if not _sha(source_sha):
+        raise StageAcceptanceError("Invalid pinned source SHA")
+    repo = str(root)
+    ancestry = subprocess.run(
+        ["git", "-C", repo, "merge-base", "--is-ancestor", source_sha, "HEAD"],
+        capture_output=True,
+        check=False,
+    )
+    if ancestry.returncode:
+        raise StageAcceptanceError("Tested commit is not an ancestor of the current source")
+    diff = subprocess.run(
+        ["git", "-C", repo, "diff", "--quiet", source_sha, "HEAD", "--", *PINNED_ACCEPTANCE_INPUTS],
+        capture_output=True,
+        check=False,
+    )
+    if diff.returncode:
+        raise StageAcceptanceError("Acceptance inputs changed since pinned real browser/model test")
+    dirty = subprocess.run(
+        [
+            "git",
+            "-C",
+            repo,
+            "status",
+            "--porcelain",
+            "--untracked-files=no",
+            "--",
+            *PINNED_ACCEPTANCE_INPUTS,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if dirty.returncode or dirty.stdout.strip():
+        raise StageAcceptanceError("Acceptance inputs changed since pinned real browser/model test")
+
+
 def _json(root: Path, relative: str) -> dict[str, Any]:
     raw = root / relative
     path = raw.resolve()
@@ -208,29 +273,8 @@ def inspect_stage_acceptance(*, root: Path = ROOT, manifest: dict | None = None)
         ):
             raise StageAcceptanceError("Aggregate provider-call proof does not cover each source")
         _verify_auditors(receipt, source_sha, root)
-        if root.resolve() == ROOT.resolve():
-            code_diff = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(root),
-                    "diff",
-                    "--quiet",
-                    source_sha,
-                    "HEAD",
-                    "--",
-                    "odyssey_core",
-                    "odyssey_apps",
-                    "odyssey_runtime",
-                    "odyssey_web",
-                    "workflows",
-                    "config",
-                ],
-                check=False,
-                capture_output=True,
-            )
-            if code_diff.returncode != 0:
-                raise StageAcceptanceError("Code changed since the pinned real browser/model test")
+        if root.resolve() == ROOT.resolve() or (root / ".git").exists():
+            _assert_acceptance_sources_unchanged(root, source_sha)
         accepted_stages.append(item["id"])
     current = next((item["id"] for item in stages if item["status"] == "in_progress"), None)
     return {
@@ -430,6 +474,9 @@ def _verify_final_input_output(row: dict, digest: str, outcome: str, root: Path)
         and not pendings
         or not isinstance(ui.get("opened_note_ids"), list)
         or any(not isinstance(n, str) or n not in note_ids for n in ui["opened_note_ids"])
+        # The user's visible Notes journey must have opened the very notes
+        # claimed as evidence. A true but unrelated Notes screen is not proof.
+        or not note_ids.issubset(set(ui["opened_note_ids"]))
         or not all(
             unit.get("proof_sha256") in readback_proofs for unit in row["unit_verifications"]
         )

@@ -464,7 +464,15 @@ def main() -> int:
             ensure_ascii=False,
         )
     )
-    return 0
+    # Persist the outcome/forensics of every attempted case, but never signal
+    # success to CI or a calling operator if ANY selected case was deferred,
+    # failed or could not be attempted under the cost cap. An offline listing
+    # above is still explicitly non-live and has its own successful exit.
+    return (
+        0
+        if len(results) == len(selected) and all(row["outcome"] == "passed" for row in results)
+        else 1
+    )
 
 
 if __name__ == "__main__":
