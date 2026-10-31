@@ -8,6 +8,7 @@ from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.identity_boundary import AuthenticatedActorContext
 from odyssey_core.local_conversations import ConversationRootResolver
 from odyssey_runtime.composition import (
+    CoreReadPreflightUnavailable,
     RuntimeComposition,
     _hybrid_dev_enabled,
     _hybrid_source_review_enabled,
@@ -193,3 +194,50 @@ def test_source_review_rejects_prod_or_missing_hybrid_gate(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="HYBRID_DEV_ENABLED"):
         _hybrid_source_review_enabled(False)
+
+
+def test_read_preflight_failure_remains_visible_when_guarded_fallback_cannot_complete(tmp_path):
+    """No specific relationship or noun decides fallback and failed telemetry."""
+    candidates = []
+    failure = ApplicationResult(
+        "read-error",
+        ApplicationStatus.NEEDS_ATTENTION,
+        (),
+        (),
+        clarification_code="UNREPRESENTABLE_REQUEST",
+    )
+
+    def unavailable(*_args):
+        try:
+            raise ValueError("PRIVATE SOURCE OR PROVIDER MESSAGE MUST NOT BE LOGGED")
+        except ValueError as error:
+            raise CoreReadPreflightUnavailable("read planner unavailable") from error
+
+    runtime = RuntimeComposition(
+        core_execute=lambda source, request_id, *args: _completed(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        hybrid_read_execute=unavailable,
+        hybrid_candidate_execute=lambda *args: candidates.append(args) or failure,
+    )
+    result = runtime.execute("¿Quién es mi padre?", "read-error", "main", ACTOR)
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert len(candidates) == 1
+    stage = next(s for s in result.operational.stages if s.name == "core.read_preflight")
+    assert stage.outcome.value == "failed"
+    assert stage.error_category == "ValueError"
+    assert "PRIVATE" not in repr(stage)
+    assert not result.affected_stable_note_ids
+
+
+def test_successful_guarded_fallback_does_not_display_a_false_terminal_failure(tmp_path):
+    runtime = RuntimeComposition(
+        core_execute=lambda source, request_id, *args: _completed(request_id),
+        refresh_indexes=lambda: None,
+        conversation_root_resolver=ConversationRootResolver(tmp_path / "state"),
+        hybrid_read_execute=lambda *args: (_ for _ in ()).throw(CoreReadPreflightUnavailable()),
+        hybrid_candidate_execute=lambda *args: _completed(args[1]),
+    )
+    result = runtime.execute("Una nota de prueba.", "good-fallback", "main", ACTOR)
+    assert result.status is ApplicationStatus.COMPLETED
+    assert not any(s.name == "core.read_preflight" for s in result.operational.stages)

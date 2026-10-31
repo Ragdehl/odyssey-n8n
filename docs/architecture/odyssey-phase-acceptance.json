@@ -1,0 +1,36 @@
+{
+  "schema": "odyssey-phase-acceptance-v1",
+  "phase": "thin-orchestrator-R0-R4",
+  "corpus_manifest": "tests/fixtures/full_message_corpus_v1/manifest.json",
+  "original_case_design": "benchmarks/application_router/fact_units_v2.design.json",
+  "additional_regression_source": "tests/fixtures/odyssey_additional_regressions_v1.json",
+  "evidence_rule": "No stage completion without a fresh real-model, real browser/n8n, E3 Markdown/UI readback and four independent reviewers for the exact source and deployed SHA. All F01-F27 and every appended regression must be run through fresh GPT individually; accept by complete input-to-final-output semantic meaning from physical Markdown and UI, not by exact intermediate routing, model wording or number of notes. Independent semantic review may accept a safe equivalent result; known ambiguity must remain safely unresolved.",
+  "stages": [
+    {
+      "id": "R0",
+      "status": "in_progress",
+      "acceptance_receipt": null
+    },
+    {
+      "id": "R1",
+      "status": "not_started",
+      "acceptance_receipt": null
+    },
+    {
+      "id": "R2",
+      "status": "not_started",
+      "acceptance_receipt": null
+    },
+    {
+      "id": "R3",
+      "status": "not_started",
+      "acceptance_receipt": null
+    },
+    {
+      "id": "R4",
+      "status": "not_started",
+      "acceptance_receipt": null
+    }
+  ],
+  "review_stage": "R0"
+}

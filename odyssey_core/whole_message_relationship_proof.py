@@ -27,6 +27,7 @@ class VerifiedSelfRelationship:
     fact_locator: str
     original_relation_span: str
     members: tuple[tuple[str, str], ...]
+    member_types: tuple[tuple[str, str], ...] = ()
 
 
 def verify_self_relationship(
@@ -64,7 +65,7 @@ def verify_self_relationship(
     if (
         projected.status is not TargetProjectionStatus.COMPLETE
         or len(projected.targets) < 1
-        or any(t.type != "person" for t in projected.targets)
+        or any(not isinstance(t.type, str) or not t.type for t in projected.targets)
         or projected.source is None
         or projected.source.source_hash != fact.source.source_hash
     ):
@@ -75,7 +76,58 @@ def verify_self_relationship(
         fact.locator,
         relation_span,
         tuple((t.id, t.name) for t in projected.targets),
+        tuple((t.id, t.type) for t in projected.targets),
     )
+
+
+def verify_proposed_source_relationships(
+    source: str,
+    proposed_spans: tuple[str, ...],
+    *,
+    repository: VaultRepository,
+    schema: dict,
+    actor: AuthenticatedActorContext,
+    bindings: SelfBindingRepository,
+) -> tuple[tuple[VerifiedSelfRelationship, ...], dict[str, str], tuple[str, ...]]:
+    """Core-owned grouping of current, source-grounded relationship evidence.
+
+    Unverified phrases remain literal; no model or Runtime step may invent a
+    canonical target. A single canonical fact cannot prove separate membership
+    for two different relationship phrases inside it. This logic is neutral to
+    relationship labels, names, message examples and App lifecycle.
+    """
+    proofs: list[VerifiedSelfRelationship] = []
+    members: dict[str, str] = {}
+    unverified: list[str] = []
+    for span in proposed_spans:
+        try:
+            proof = verify_self_relationship(
+                source,
+                span,
+                repository=repository,
+                schema=schema,
+                actor=actor,
+                bindings=bindings,
+            )
+        except WholeSourceRelationshipError:
+            # A failed membership proof does not make the user's text false.
+            unverified.append(span)
+            continue
+        if any(
+            previous.source_id == proof.source_id
+            and previous.fact_locator == proof.fact_locator
+            and previous.original_relation_span != proof.original_relation_span
+            for previous in proofs
+        ):
+            raise WholeSourceRelationshipError("Groups share an indivisible source fact")
+        proofs.append(proof)
+        for note_id, name in proof.members:
+            if note_id in members and members[note_id] != name:
+                raise WholeSourceRelationshipError("Conflicting member proof")
+            members[note_id] = name
+    if len(set(members.values())) != len(members):
+        raise WholeSourceRelationshipError("Ambiguous member names")
+    return tuple(proofs), members, tuple(unverified)
 
 
 def recheck_self_relationship(
@@ -99,5 +151,6 @@ def recheck_self_relationship(
         or projected.source is None
         or projected.source.source_hash != evidence.source_hash
         or tuple((t.id, t.name) for t in projected.targets) != evidence.members
+        or tuple((t.id, t.type) for t in projected.targets) != evidence.member_types
     ):
         raise WholeSourceRelationshipError("Relationship evidence changed before write")

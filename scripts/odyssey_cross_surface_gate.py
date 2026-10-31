@@ -73,6 +73,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e2_person_target_subject_coverage.py",
         "tests/core/test_e2_fact_temporal_ownership.py",
         "tests/core/test_whole_message_coverage_p3.py",
+        "tests/core/test_whole_message_relationship_proof_p3.py",
+        "tests/core/test_shared_relational_helper_shape.py",
         "tests/core/test_whole_message_coverage_provenance_v2.py",
         "tests/core/test_issue157_fact_group_provenance.py",
         "tests/core/test_whole_message_speaker_proof_p4.py",
@@ -92,6 +94,16 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e3_complete_reference_set_enrichment.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",
+        # Previously verified, real-provider *recorded* hybrid Core behavior:
+        # no semantic reimplementation by F09 text and no silent deletion of
+        # F14/F27 partial/pending identity guarantees. This is offline replay,
+        # NOT the P4 real-model/browser acceptance gate.
+        "tests/runtime/test_hybrid_known_fact_real_review_20261013.py",
+        "tests/runtime/test_hybrid_ambiguous_real_pending_20261013.py",
+        "tests/benchmarks/test_odyssey_stage_acceptance.py",
+        "tests/benchmarks/test_r0_browser_campaign.py",
+        "tests/benchmarks/test_r0_real_browser_case.py",
+        "tests/benchmarks/test_odyssey_acceptance_contracts.py",
     ),
     "task_chat_core": (
         "tests/apps/tasks/test_core_interop.py",
@@ -191,6 +203,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_agent_daily_builder_resume.py",
         "tests/runtime/test_agent_offline_sandbox.py",
         "tests/runtime/test_p4_model_contract_strict_schema.py",
+        "tests/runtime/test_p4_generic_reference_types.py",
+        "tests/runtime/test_p4_generic_owner_gap.py",
         "tests/runtime/test_p4_independent_mixed_scopes.py",
         "tests/runtime/test_p4_dependent_task_target.py",
         "tests/runtime/test_p4_production_composition_task_ui.py",

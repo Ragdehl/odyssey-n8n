@@ -127,7 +127,10 @@ def test_event_enabled_contract_supports_variable_groups_without_changing_legacy
     assert "already-completed shared experiences" in prompt
     assert "Events requires an actual scheduled/upcoming occurrence" in prompt
     assert "minimal, exact contiguous reference phrase" in prompt
-    assert "SINGULAR partner/family member or PLURAL collective group" in prompt
+    assert (
+        "one described entity or a finite source-attested group of any canonical Note type"
+        in prompt
+    )
     assert "split them into their individual phrases" in prompt
     assert "MUST be null" in prompt
     assert "historical memory" in prompt
@@ -421,3 +424,77 @@ def test_router_scalar_claim_cannot_disagree_with_multiple_verified_groups(tmp_p
     outcome = runtime.execute_product(SOURCE, "issue157-scalar-mismatch", "main", actor)
     assert outcome["status"] == "needs_attention"
     assert before == {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+
+
+@pytest.mark.parametrize(
+    "relation_explicit", [False, True], ids=["unverified_refused", "verified_trip_saved"]
+)
+def test_additional_family_trip_source_preserves_both_places_and_three_people(
+    tmp_path, relation_explicit
+):
+    """R29: the user's exact multi-place visit, with recorded AI and real Core/E3."""
+    from copy import deepcopy
+
+    from scripts.odyssey_r0_browser_campaign import additional_cases
+
+    source = next(x.source for x in additional_cases() if x.id == "R29")
+    parts = source.split(" Hemos visto ")
+    assert len(parts) == 2
+    factual = (parts[0], "Hemos visto " + parts[1])
+    rows = deepcopy(_model_responses())
+    rows[0]["self_relation_spans"] = ["mis hijos", "mi mujer"]
+    rows[1]["facts"] = [
+        {
+            **rows[1]["facts"][i],
+            "meaning": part,
+            "source_evidence": part,
+            "participants": list(PEOPLE) if i == 0 else [],
+        }
+        for i, part in enumerate(factual)
+    ]
+    rows[2]["facts"] = [
+        {
+            **rows[2]["facts"][i],
+            "source_quote": part,
+            "reviewed_text": (
+                part.replace("mis hijos y mi mujer", "{{ref:0}}, {{ref:1}} y {{ref:2}}")
+                if i == 0
+                else part
+            ),
+            "reference_names": list(PEOPLE) if i == 0 else [],
+        }
+        for i, part in enumerate(factual)
+    ]
+    for speaker in rows[3:]:
+        speaker["facts"] = [
+            {**speaker["facts"][i], "source_quote": part} for i, part in enumerate(factual)
+        ]
+    repo, actor, executor, runtime = _family(tmp_path)
+    # Only explicitly verified relationships may supply canonical identities.
+    # This is test data, not a product-level string-to-person routing rule.
+    if relation_explicit:
+        my_note = parse_note(repo.read_text("self.md"))
+        assert "Mi pareja es" in my_note.content
+        repo.replace_text(
+            "self.md",
+            serialize_note(
+                replace(my_note, content=my_note.content.replace("Mi pareja es", "Mi mujer es"))
+            ),
+        )
+        executor.context_index.rebuild(repo, SCHEMA, executor.embedder)
+        executor.semantic_index.rebuild(repo, SCHEMA, executor.embedder)
+    executor.client = RecordedClient(rows)
+    before = {path: repo.read_text(path) for path in repo.list_markdown_paths()}
+    result = runtime.execute_product(source, "r29-multiplace-1", "main", actor)
+    if not relation_explicit:
+        assert result["status"] == "needs_attention", result
+        assert {path: repo.read_text(path) for path in repo.list_markdown_paths()} == before
+        return
+    assert result["status"] == "completed", result
+    note = parse_note(repo.read_text(f"calendar/days/{DAY}.md"))
+    assert all(name in note.content for name in ("Notre Dame", "Louvre", "Paris"))
+    assert all("[[" + name in note.content for name in PEOPLE)
+    assert note.content.count("odyssey:fact request=r29-multiplace-1") == 2
+    snap = {p: repo.read_text(p) for p in repo.list_markdown_paths()}
+    assert runtime.execute_product(source, "r29-multiplace-1", "main", actor)["delivery_replayed"]
+    assert snap == {p: repo.read_text(p) for p in repo.list_markdown_paths()}

@@ -68,6 +68,7 @@ from odyssey_core.dependent_source_scopes import (
 )
 from odyssey_core.identity_boundary import AuthenticatedActorContext, SelfBindingRepository
 from odyssey_core.independent_source_scopes import (
+    IndependentSourceScope,
     IndependentSourceScopesError,
     verify_independent_source_scopes,
 )
@@ -88,14 +89,15 @@ from odyssey_core.whole_message_coverage import (
     validate_whole_message_coverage,
 )
 from odyssey_core.whole_message_identity_guard import (
-    UnprovenPersonIdentityError,
-    reject_unproven_person_collisions,
+    UnprovenIdentityError,
+    collect_schema_reference_types,
+    reject_unproven_identity_collisions,
 )
 from odyssey_core.whole_message_relationship_proof import (
     VerifiedSelfRelationship,
     WholeSourceRelationshipError,
     recheck_self_relationship,
-    verify_self_relationship,
+    verify_proposed_source_relationships,
 )
 from odyssey_core.whole_message_speaker_proof import (
     WholeMessageSpeakerError,
@@ -334,8 +336,15 @@ class WholeSourceLightExecutor:
         message = str(error)
         if message.startswith("UNPROVEN_PARTIAL_CANONICAL_IDENTITY: "):
             return 31
-        if message.startswith("AMBIGUOUS_CANONICAL_PERSON: "):
+        if message.startswith(
+            (
+                "AMBIGUOUS_CANONICAL_ENTITY: ",
+                "AMBIGUOUS_CANONICAL_PERSON: ",  # Older persisted diagnostic records.
+            )
+        ):
             return 32
+        if message.startswith("UNSUPPORTED_CANONICAL_TYPE_CHOICE: "):
+            return 33
         return fixed.get(message, 0)
 
     def _observe_prewrite(self, delivery: str, gate: str, **values: int | bool) -> None:
@@ -833,7 +842,7 @@ class WholeSourceLightExecutor:
         actor: AuthenticatedActorContext,
         conversation_id: str,
         *,
-        independent_scope: str | None = None,
+        verified_scope: IndependentSourceScope | None = None,
         delivery_instant: datetime | None = None,
         prechecked_task_scope: dict[str, object] | None = None,
     ) -> ApplicationResult:
@@ -863,19 +872,40 @@ class WholeSourceLightExecutor:
         if self.progress is not None:
             self.progress("routing.started", {})
         router_started = perf_counter()
-        route_schema, route_instructions = capability_route_contract(
-            enable_events=self.event_delegate is not None
-        )
-        with timed_dev_hot_path(delivery, "p4.router"):
-            route = self._ask(
-                ROUTER_MODEL,
-                route_instructions,
-                {"original_source": source, "clock": clock},
-                route_schema,
-                "odyssey_light_capability_route_events_v1"
-                if self.event_delegate is not None
-                else "odyssey_light_capability_route_v1",
+        independent_scope = verified_scope.capability if verified_scope is not None else None
+        if verified_scope is None:
+            route_schema, route_instructions = capability_route_contract(
+                enable_events=self.event_delegate is not None
             )
+            with timed_dev_hot_path(delivery, "p4.router"):
+                route = self._ask(
+                    ROUTER_MODEL,
+                    route_instructions,
+                    {"original_source": source, "clock": clock},
+                    route_schema,
+                    "odyssey_light_capability_route_events_v1"
+                    if self.event_delegate is not None
+                    else "odyssey_light_capability_route_v1",
+                )
+        else:
+            # An independent-partition proposal plus its separate review has
+            # already proved this exact span's sole capability and that it has
+            # no cross-scope referent. Re-running the capability router here
+            # was a second, weaker decision which could only duplicate or
+            # contradict that typed evidence. Core and the App still interpret
+            # the complete scoped source themselves below.
+            if (
+                verified_scope.capability not in {"core", "tasks"}
+                or verified_scope.source.strip() != source
+            ):
+                return self._abstain(delivery, "INDEPENDENT_SCOPE_CAPABILITY_UNVERIFIED")
+            route = {
+                "capabilities": [verified_scope.capability],
+                "interpretation": "joint",
+                "reason": "single",
+                "self_relation_span": None,
+                "app_scopes": [],
+            }
         capabilities = route.get("capabilities")
         allowed = {"core", "tasks", "temporal"}
         if self.event_delegate is not None:
@@ -921,47 +951,20 @@ class WholeSourceLightExecutor:
             )
         ):
             return self._abstain(delivery)
-        # Ground every model-suggested group in fresh authenticated SELF.
-        # Reuse already-verified identities, never deduce an ID from grammar.
-        relationships = []
-        verified_members: dict[str, str] = {}
-        unverified_mentions: list[str] = []
-        # Router mentions are hints, never authorization requirements.
-        # Core validates any actual identity/reference claimed by the plan.
+        # Core already owns verification of source-grounded entity relations.
+        # Runtime carries its immutable evidence; it does not interpret names,
+        # relation categories, members or overlap independently.
         try:
-            for relation_span in proposed_relation_spans:
-                try:
-                    proof = verify_self_relationship(
-                        source,
-                        relation_span,
-                        repository=self.repository,
-                        schema=self.schema,
-                        actor=actor,
-                        bindings=self.bindings,
-                    )
-                except WholeSourceRelationshipError:
-                    # No proof means no identity. Preserve the original wording
-                    # and let Core decide if the fact itself can be recorded.
-                    unverified_mentions.append(relation_span)
-                    continue
-                # Two distinct relation phrases in one canonical atomic fact
-                # may project the SAME combined target set. Its target list
-                # cannot prove which member belongs to which phrase. Refuse
-                # ambiguous grouping rather than attribute unrelated people.
-                if any(
-                    prior.source_id == proof.source_id
-                    and prior.fact_locator == proof.fact_locator
-                    and prior.original_relation_span != proof.original_relation_span
-                    for prior in relationships
-                ):
-                    raise WholeSourceRelationshipError("Groups share an indivisible source fact")
-                relationships.append(proof)
-                for note_id, name in proof.members:
-                    if note_id in verified_members and verified_members[note_id] != name:
-                        raise WholeSourceRelationshipError("Conflicting member proof")
-                    verified_members[note_id] = name
-            if len(set(verified_members.values())) != len(verified_members):
-                raise WholeSourceRelationshipError("Ambiguous member names")
+            relationships, verified_members, unverified_mentions = (
+                verify_proposed_source_relationships(
+                    source,
+                    tuple(proposed_relation_spans),
+                    repository=self.repository,
+                    schema=self.schema,
+                    actor=actor,
+                    bindings=self.bindings,
+                )
+            )
         except (WholeSourceRelationshipError, ValueError):
             return self._abstain(delivery)
         # App lifecycle/target actions may not inherit an unproven identity
@@ -1275,7 +1278,12 @@ class WholeSourceLightExecutor:
                     "clock": clock,
                     "routing_hint": route,
                     "known_notes": known_notes,
-                    "verified_family": group_members,
+                    "allowed_note_types": tuple(row["id"] for row in self.schema["types"]),
+                    "verified_canonical_members": [
+                        {"name": name, "note_type": dict(proof.member_types)[note_id]}
+                        for proof in relationships
+                        for note_id, name in proof.members
+                    ],
                     "prior_independent_coverage_rejected": bool(attempt),
                 },
                 (PLAN_CORE_ANCHORED_SCHEMA if self.core_anchored_coverage_enabled else PLAN_SCHEMA),
@@ -1407,6 +1415,16 @@ class WholeSourceLightExecutor:
             self._observe_prewrite(delivery, "coverage_retry_exhausted")
             return self._abstain(delivery)
         try:
+            used_names = frozenset(
+                name
+                for fact in review.get("facts", ())
+                if isinstance(fact, dict) and isinstance(fact.get("reference_names"), list)
+                for name in fact["reference_names"]
+                if isinstance(name, str)
+            )
+            reference_types = collect_schema_reference_types(
+                proposed, relationships, self.schema, used_reference_names=used_names
+            )
             validate_whole_message_coverage(
                 source,
                 proposed,
@@ -1425,10 +1443,14 @@ class WholeSourceLightExecutor:
             )
             self._measure_local(
                 "identity_collision_preflight",
-                reject_unproven_person_collisions,
+                reject_unproven_identity_collisions,
                 self.repository,
                 self.schema,
                 names,
+                reference_types=reference_types,
+                verified_reference_names=frozenset(
+                    name for proof in relationships for _note_id, name in proof.members
+                ),
             )
             speaker_payload = {
                 "original_source": source,
@@ -1448,14 +1470,14 @@ class WholeSourceLightExecutor:
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
         except (
             WholeMessageCoverageError,
-            UnprovenPersonIdentityError,
+            UnprovenIdentityError,
             WholeMessageSpeakerError,
         ) as error:
             category = (
                 "coverage_contract"
                 if isinstance(error, WholeMessageCoverageError)
                 else "identity_collision"
-                if isinstance(error, UnprovenPersonIdentityError)
+                if isinstance(error, UnprovenIdentityError)
                 else "speaker_contract"
             )
             self._observe_prewrite(
@@ -1472,6 +1494,8 @@ class WholeSourceLightExecutor:
                 compile_reviewed_operations,
                 review,
                 tuple(attested.requires_self_link(i) for i in range(len(attested.facts))),
+                reference_types=reference_types,
+                declared_types=frozenset(note_type["id"] for note_type in self.schema["types"]),
             )
         except WholeSourceCompilationError:
             self._observe_prewrite(delivery, "compile_rejected")
@@ -1584,6 +1608,7 @@ class WholeSourceLightExecutor:
                     attested.requires_self_link(i) for i in range(len(attested.facts))
                 ),
                 self_id=self.bindings.resolve(actor.stable_user_id).person_note_id,
+                reference_types=reference_types,
             )
             if proof["physical_fact_count"] != len(review["facts"]):
                 raise AssertionError("A source assertion lacks canonical readback")
@@ -2883,7 +2908,7 @@ class WholeSourceLightExecutor:
                         locator,
                         actor,
                         conversation_id,
-                        independent_scope=part.capability,
+                        verified_scope=part,
                         delivery_instant=delivery_instant,
                         prechecked_task_scope=task_scopes.get(part.index),
                     )

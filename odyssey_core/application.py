@@ -60,13 +60,13 @@ from .reference_preflight import (
     _preflight_write_action,
     allocate_stable_id,
     current_identity_guard,
-    is_reference_only_unit,
     preflight_complete_set_reference_action,
     preflight_relational_target_write_action,
     preflight_relationship_write_action,
     preflight_write_action,
     prepare_complete_set_reference_action,
     prepare_relationship_shared_fact_action,
+    single_relational_reference_helper_index,
 )
 from .relational_resolution import RelationalResolutionError, resolve_relational_reference
 from .relationship_evidence import RelationshipEvidenceProjector
@@ -1527,35 +1527,6 @@ def _execute_retrieve(
     return ActionResult(action_index, action.kind, ActionStatus.COMPLETED, retrieval=context)
 
 
-def _single_relational_reference_helper_index(action: WriteAction) -> int | None:
-    """Allow one fact-bearing consumer and its sole, factless relational identity helper.
-
-    This is a general dependency shape, not a special case for a family relationship
-    or a Calendar Day. Independent writes cannot be replayed by a scalar choice.
-    """
-    if len(action.units) != 2:
-        return None
-    helpers = [
-        index
-        for index, unit in enumerate(action.units)
-        if is_reference_only_unit(unit)
-        and unit.target.relational_reference is not None
-        and unit.target.relational_reference.members == "one"
-    ]
-    if len(helpers) != 1:
-        return None
-    helper = helpers[0]
-    consumer = action.units[1 - helper]
-    if (
-        not consumer.facts
-        or consumer.target.relational_reference is not None
-        or not consumer.references
-        or any(reference.target_index != helper for reference in consumer.references)
-    ):
-        return None
-    return helper
-
-
 def _execute_write(
     action_index: int,
     action: WriteAction,
@@ -1624,7 +1595,7 @@ def _execute_write(
             spans,
             clarification_choice,
         )
-    relational_helper = _single_relational_reference_helper_index(action)
+    relational_helper = single_relational_reference_helper_index(action)
     chosen_helper_id: str | None = None
     if clarification_choice is not None and relational_helper is not None:
         # Re-ground only the selected, previously offered dependency. No provider

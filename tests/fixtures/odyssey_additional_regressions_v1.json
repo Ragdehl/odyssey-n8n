@@ -1,0 +1,133 @@
+{
+  "schema": "odyssey-additional-regressions-v1",
+  "cases": [
+    {
+      "id": "R28",
+      "source": "He visto a Manu.",
+      "expectation": "A factual recollection is saved in the journal Day, not made into a Task or Event; no person is fabricated.",
+      "offline_coverage": "tests/runtime/test_p4_general_day_journal_fallback.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [],
+      "expected_units": [
+        {
+          "reading": "Remember that the user saw Manu; no invented role/person and no fabricated Event or Task",
+          "source_anchors": [
+            "He visto a Manu"
+          ],
+          "state": "candidate"
+        }
+      ]
+    },
+    {
+      "id": "R29",
+      "source": "Hoy hemos estado con mis hijos y mi mujer de visita por Paris. Hemos visto la iglesia de Notre Dame y hemos ido al museo del Louvre.",
+      "expectation": "Preserve all visited places, participants and the date as one complete user recollection; resolve family only from verified SELF data; no invented Event.",
+      "offline_coverage": "tests/runtime/test_issue157_family_day_recollection.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [
+        {
+          "kind": "replace_self_facts",
+          "facts": [
+            "Mis hijos son [[Nina]] y [[Pablo]].",
+            "Mi mujer es [[Bea]]."
+          ]
+        }
+      ],
+      "expected_units": [
+        {
+          "reading": "Preserve the first-person family visit to Paris at the source day; participants can only be linked with verified SELF proof",
+          "source_anchors": [
+            "Hoy hemos estado con mis hijos y mi mujer de visita por Paris"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Preserve the visit to Notre Dame within the same recollection without inventing participant authority",
+          "source_anchors": [
+            "Hemos visto la iglesia de Notre Dame"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Preserve the Louvre museum visit and its source order/date without generating an Event automatically",
+          "source_anchors": [
+            "hemos ido al museo del Louvre"
+          ],
+          "state": "candidate"
+        }
+      ]
+    },
+    {
+      "id": "R30",
+      "source": "Me gusta correr por la tarde. Empieza una sesión de trabajo en la tarea Preparar informe Atlas.",
+      "expectation": "Preserve the self preference and start exactly one Work Session for the existing Task; full-source cross-app coverage and idempotent replay.",
+      "offline_coverage": "tests/runtime/test_p4_independent_mixed_scopes.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [
+        {
+          "kind": "create_task",
+          "name": "Preparar informe Atlas",
+          "id": "synthetic-task-atlas",
+          "path": "Preparar informe Atlas.md"
+        }
+      ],
+      "expected_units": [
+        {
+          "reading": "Preserve the first-person preference to run in the afternoon; this is not an Event or Work Session",
+          "source_anchors": [
+            "Me gusta correr por la tarde"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Start exactly one Work Session attached to the already existing Preparar informe Atlas Task, not a new duplicate Task",
+          "source_anchors": [
+            "Empieza una sesión de trabajo en la tarea Preparar informe Atlas"
+          ],
+          "state": "candidate"
+        }
+      ]
+    },
+    {
+      "id": "R31",
+      "source": "El proyecto Atlas tiene prioridad alta.",
+      "expectation": "Save the knowledge on the canonically selected Project note (or safely create that Project if absent); do not silently put it in the current Day/SELF or turn it into a Task/Event. Replay must not duplicate the assertion.",
+      "offline_coverage": "tests/runtime/test_p4_generic_owner_gap.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [],
+      "expected_units": [
+        {
+          "reading": "The priority assertion belongs to the selected Atlas Project note, not a journal Day or SELF; no unsupported identity or duplicate operation",
+          "source_anchors": [
+            "El proyecto Atlas tiene prioridad alta"
+          ],
+          "state": "candidate"
+        }
+      ]
+    },
+    {
+      "id": "R32",
+      "source": "¿Quién es mi padre?",
+      "expectation": "A read-only query about a relationship already proved by the authenticated SELF canonical Note resolves the existing linked member and answers with its real name. No Markdown mutation, no fabricated absence, and no silent fallback that hides the original read-planner failure; graph reports a verified failing stage or honestly says evidence is missing.",
+      "offline_coverage": "tests/core/test_relational_application.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [
+        {
+          "kind": "replace_self_facts",
+          "facts": [
+            "Mi padre es [[Eric]]."
+          ]
+        }
+      ],
+      "expected_units": [
+        {
+          "reading": "Return existing canonical relation member Eric from the authenticated SELF record; do not invent a second identity or claim no data exists when it is stored",
+          "source_anchors": [
+            "mi padre"
+          ],
+          "state": "candidate"
+        }
+      ]
+    }
+  ]
+}

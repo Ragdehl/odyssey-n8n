@@ -141,7 +141,11 @@ from odyssey_core.observability import (
 from odyssey_core.pending_work import PendingWorkError, PendingWorkRepository
 from odyssey_core.persistence import ActorInput
 from odyssey_core.plural_task_readback import guard_plural_task_readback
-from odyssey_core.reference_preflight import ReferencePreflightError, current_identity_guard
+from odyssey_core.reference_preflight import (
+    ReferencePreflightError,
+    current_identity_guard,
+    single_relational_reference_helper_index,
+)
 from odyssey_core.request_planning import (
     OpenAIRequestPlanner as GPT56RequestPlanner,
 )
@@ -217,48 +221,6 @@ def _combined_write_preflight_guard(
         second(action, preflight, repository, schema)
 
     return combined
-
-
-def _dependent_relational_helper_index(action: Mapping[str, Any]) -> int | None:
-    """Identify one bounded, reference-only relation with one dependent fact write.
-
-    A scalar choice cannot resume unrelated units or other unresolved references.
-    Only already validated Core actions pass this narrower continuation boundary.
-    """
-    if action.get("kind") != "write":
-        return None
-    units = action.get("units")
-    if not isinstance(units, list) or len(units) != 2:
-        return None
-    helpers = [
-        i
-        for i, unit in enumerate(units)
-        if isinstance(unit, dict)
-        and isinstance(unit.get("target"), dict)
-        and isinstance(unit["target"].get("relational_reference"), dict)
-        and unit["target"]["relational_reference"].get("members") == "one"
-        and unit.get("intent") == "record"
-        and not unit.get("facts")
-        and not unit.get("properties")
-        and not unit.get("tag_changes")
-        and not unit.get("references")
-        and unit.get("destination_type") is None
-        and unit.get("cardinality", "one") == "one"
-    ]
-    if len(helpers) != 1:
-        return None
-    helper = helpers[0]
-    consumer = units[1 - helper]
-    references = consumer.get("references") if isinstance(consumer, dict) else None
-    if (
-        not isinstance(references, list)
-        or not references
-        or not consumer.get("facts")
-        or consumer.get("target", {}).get("relational_reference") is not None
-        or any(not isinstance(ref, dict) or ref.get("target_index") != helper for ref in references)
-    ):
-        return None
-    return helper
 
 
 ProgressReporter = Callable[[str, Mapping[str, object]], None]
@@ -413,6 +375,14 @@ class NotesTelemetryError(RuntimeError):
         super().__init__("intelligent Notes execution failed")
         self.operational = operational
         self.bad_request = bad_request
+
+
+class CoreReadPreflightUnavailable(RuntimeError):
+    """A generic read planner failed before disposition; preserve its cause.
+
+    It is not a source classifier and never changes mutation or fallback
+    authority. Only the exception CLASS may appear in product telemetry.
+    """
 
 
 class DerivedIndexRefreshCoordinator:
@@ -1850,7 +1820,7 @@ class RuntimeComposition:
             source_guard: str | None = None
             relational = False
             if action["kind"] == "write":
-                helper_index = _dependent_relational_helper_index(action)
+                helper_index = single_relational_reference_helper_index(action)
                 relational = (
                     len(action["units"]) == 1
                     and action["units"][0]["target"].get("relational_reference") is not None
@@ -1965,7 +1935,7 @@ class RuntimeComposition:
         evidence = record["incomplete_actions"][0]["execution_result"]
         candidate_ids = tuple(option.id for option in pending.options)
         if action.get("kind") == "write":
-            helper_index = _dependent_relational_helper_index(action)
+            helper_index = single_relational_reference_helper_index(action)
             relational = (
                 len(action.get("units", ())) == 1
                 and action["units"][0].get("target", {}).get("relational_reference") is not None
@@ -2040,7 +2010,7 @@ class RuntimeComposition:
         if len(plan.actions) != 1 or not isinstance(plan.actions[0], WriteAction | RetrieveAction):
             raise ValueError("pending continuation is unsupported")
         if action["kind"] == "write":
-            helper_index = _dependent_relational_helper_index(action)
+            helper_index = single_relational_reference_helper_index(action)
             if helper_index is not None:
                 # Internal reference-only helpers are derived by Core lowering. The
                 # pending JSON stores their stable structure, not the private flag.
@@ -3091,6 +3061,7 @@ class RuntimeComposition:
                 )
             )
         core_started = self.monotonic()
+        read_preflight_failure: OperationalStage | None = None
         if resume_plan is not None:
             if original_request is None or clarification_choice is None:
                 raise ValueError("clarification continuation is incomplete")
@@ -3114,13 +3085,29 @@ class RuntimeComposition:
                     clarification_code="HYBRID_AUTHENTICATED_CONVERSATION_REQUIRED",
                 )
             else:
-                read_result = (
-                    self.hybrid_read_execute(
-                        user_request, request_id, authenticated_actor, conversation_id
+                read_started = self.monotonic()
+                try:
+                    read_result = (
+                        self.hybrid_read_execute(
+                            user_request, request_id, authenticated_actor, conversation_id
+                        )
+                        if self.hybrid_read_execute is not None
+                        else None
                     )
-                    if self.hybrid_read_execute is not None
-                    else None
-                )
+                except CoreReadPreflightUnavailable as error:
+                    # An unreadable/non-validated model call is not proof of
+                    # READ_ONLY, so the existing guarded router still owns
+                    # fallback. Preserve the failed boundary for diagnosis.
+                    read_preflight_failure = OperationalStage(
+                        "core.read_preflight",
+                        OperationalOutcome.FAILED,
+                        max(0.0, (self.monotonic() - read_started) * 1000),
+                        error_category=type(error.__cause__).__name__
+                        if error.__cause__ is not None
+                        else type(error).__name__,
+                        start_offset_ms=max(0.0, (read_started - started) * 1000),
+                    )
+                    read_result = None
                 result = read_result or self.hybrid_candidate_execute(
                     user_request, request_id, authenticated_actor, conversation_id
                 )
@@ -3156,6 +3143,12 @@ class RuntimeComposition:
         core_offset_ms = max(0.0, (core_started - started) * 1000)
         stages = [
             *pre_stages,
+            *(
+                [read_preflight_failure]
+                if read_preflight_failure is not None
+                and result.status is not ApplicationStatus.COMPLETED
+                else []
+            ),
             *[
                 replace(
                     stage,
@@ -4653,8 +4646,11 @@ def _build_runtime_from_environment_unlocked(
                     conversation_root_resolver.resolve(authenticated_actor.stable_user_id)
                 ).recent_context(exclude_request_id=request_id),
             )
-        except Exception:
-            return None
+        except Exception as error:
+            # The guarded candidate path may still complete, but failure in
+            # the earlier shared read planner cannot silently disappear from
+            # a later unsuccessful delivery's E2/graph evidence.
+            raise CoreReadPreflightUnavailable("Core read planning unavailable") from error
         if isinstance(plan, PlannerClarification) or not isinstance(plan, RequestPlan):
             return None
         disposition = request_disposition(plan)

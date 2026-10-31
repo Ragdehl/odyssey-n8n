@@ -11,7 +11,7 @@ Supervisor: `scripts/odyssey_agent_cycle.py` is a deterministic state machine th
 4. Testing — adversarial, full-source and genuine end-to-end evidence.
 5. Performance — timed real Pi runs, RAM/CPU/swap and scaling evidence.
 
-Reviewers are independent sessions with read-only sandbox and strict machine-readable results. The Builder receives all their findings and, if no essential environmental gate blocks work, may repair and repeat. Never more than three iterations or one Codex process concurrently.
+Reviewers are independent sessions with read-only sandbox and strict machine-readable results. **All four** reviewer role prompts require explicit reuse-first inspection of changed functions against existing/historical implementations plus thin-coordinator ownership; the JSON `evidence` must cite actual paths and concrete comparisons, and a newly duplicated semantic mechanism or coordinator-owned domain decision is a blocking repairable finding. An absent equivalent must be supported by a bounded search, not asserted. The supervisor must not treat a green suite as a substitute for this audit. The Builder receives all their findings and, if no essential environmental gate blocks work, may repair and repeat. Never more than three iterations or one Codex process concurrently.
 
 ## Status and commands (on the Raspberry Pi)
 

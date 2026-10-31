@@ -41,6 +41,23 @@ jobs:
       - name: Enforce human-approved invariants and block false live acceptance
         run: python scripts/odyssey_acceptance_contracts.py
 
+      # A Draft PR may iterate offline. A semantic PR marked ready for review
+      # cannot be promoted with mocks or an unaccepted active architecture stage.
+      - name: Block ready semantic PR without app GPT E2E and four audits
+        if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && !github.event.pull_request.draft) }}
+        env:
+          BASE_SHA: ${{ github.event_name == 'push' && github.event.before || github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- \
+              odyssey_core odyssey_apps odyssey_runtime odyssey_web workflows config)"
+          if [[ -n "$changed" ]]; then
+            python scripts/odyssey_acceptance_contracts.py --require-review-stage-accepted
+          else
+            echo 'No semantic runtime/app/web/config source changes in this commit range'
+          fi
+
       - name: Cross-surface regression suite without credentials
         run: python scripts/odyssey_cross_surface_gate.py --output /tmp/odyssey-dev-cross-surface-gate.json
 

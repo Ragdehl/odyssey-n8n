@@ -178,3 +178,11 @@ def test_events_tasks_router_demands_exact_two_independent_scopes():
     assert "Temporal is a shared" in prompt
     assert "byte-for-byte complete partition" in prompt
     assert "semantic reviewer BEFORE either write" in prompt
+
+
+def test_p4_entity_note_types_come_from_schema_input_not_hardcoded_two_type_enum():
+    declared = contract.PLAN_SCHEMA["properties"]["entities"]["items"]["properties"]["note_type"]
+    assert declared == {"type": "string"}
+    assert "allowed_note_types" in contract.PLANNER_INSTRUCTIONS
+    assert "verified current canonical" in contract.PLANNER_INSTRUCTIONS
+    assert "do not invent an ontology" in contract.PLANNER_INSTRUCTIONS
