@@ -106,6 +106,8 @@ from odyssey_core.whole_message_speaker_proof import (
 from odyssey_core.whole_source_compiler import (
     WholeSourceCompilationError,
     compile_reviewed_operations,
+    guard_for_reviewed_owner_operation,
+    resolve_attested_owner_targets,
 )
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
 from odyssey_runtime.dev_hot_path_diagnostics import timed_dev_hot_path
@@ -133,11 +135,14 @@ from odyssey_runtime.whole_source_model_contract import (
     PLAN_SCHEMA,
     PLANNER_CORE_ANCHORED_INSTRUCTIONS,
     PLANNER_INSTRUCTIONS,
+    PROMPT_SOURCE_OWNER_REVIEW,
     PROMPT_SOURCE_REVIEW,
     PROMPT_SOURCE_REVIEW_CORE_ANCHORED,
     PROMPT_SPEAKER_A,
     PROMPT_SPEAKER_B,
     REVIEW_CORE_ANCHORED_SCHEMA,
+    REVIEW_OWNER_CORE_ANCHORED_SCHEMA,
+    REVIEW_OWNER_SCHEMA,
     REVIEW_SCHEMA,
     SPEAKER_SCHEMA,
     TASK_ONLY_SCOPE_PROMPT,
@@ -220,6 +225,8 @@ class WholeSourceLightExecutor:
     # Experimental across ALL Core/Tasks source-reviewed routes, not a Task
     # cardinality special case; frozen provider contracts retain v1 by default.
     core_anchored_coverage_enabled: bool = False
+    # Offline opt-in only; not enabled by production configuration.
+    owner_review_enabled: bool = False
     prewrite_diagnostic: Callable[[str, str, dict[str, int | bool]], None] | None = None
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
@@ -534,6 +541,31 @@ class WholeSourceLightExecutor:
             )
         return first, second
 
+    def _source_review_contract(self) -> tuple[str, dict, str]:
+        """Extend the existing independent Core source reviewer, not add another stage."""
+        prompt = (
+            PROMPT_SOURCE_REVIEW_CORE_ANCHORED
+            if self.core_anchored_coverage_enabled
+            else PROMPT_SOURCE_REVIEW
+        )
+        schema = (
+            REVIEW_CORE_ANCHORED_SCHEMA if self.core_anchored_coverage_enabled else REVIEW_SCHEMA
+        )
+        label = (
+            "odyssey_p4_source_coverage_v2"
+            if self.core_anchored_coverage_enabled
+            else "odyssey_p2_source_coverage_v1"
+        )
+        if self.owner_review_enabled:
+            prompt += PROMPT_SOURCE_OWNER_REVIEW
+            schema = (
+                REVIEW_OWNER_CORE_ANCHORED_SCHEMA
+                if self.core_anchored_coverage_enabled
+                else REVIEW_OWNER_SCHEMA
+            )
+            label = "odyssey_p4_source_owner_review_v1"
+        return prompt, schema, label
+
     def _review_and_attest_concurrently(
         self,
         source: str,
@@ -568,11 +600,7 @@ class WholeSourceLightExecutor:
             speaker_future = pool.submit(run_speakers)
             coverage = self._ask(
                 PLANNER_MODEL,
-                (
-                    PROMPT_SOURCE_REVIEW_CORE_ANCHORED
-                    if self.core_anchored_coverage_enabled
-                    else PROMPT_SOURCE_REVIEW
-                ),
+                self._source_review_contract()[0],
                 {
                     "source": source,
                     "clock": clock,
@@ -580,16 +608,8 @@ class WholeSourceLightExecutor:
                     "proposed_entities": proposed.get("entities"),
                     "core_verified_self_relationship": group_members or None,
                 },
-                (
-                    REVIEW_CORE_ANCHORED_SCHEMA
-                    if self.core_anchored_coverage_enabled
-                    else REVIEW_SCHEMA
-                ),
-                (
-                    "odyssey_p4_source_coverage_v2"
-                    if self.core_anchored_coverage_enabled
-                    else "odyssey_p2_source_coverage_v1"
-                ),
+                self._source_review_contract()[1],
+                self._source_review_contract()[2],
             )
             speakers, speaker_spans = speaker_future.result()
         if parent_recorder is not None:
@@ -1357,11 +1377,7 @@ class WholeSourceLightExecutor:
             else:
                 review = self._ask(
                     PLANNER_MODEL,
-                    (
-                        PROMPT_SOURCE_REVIEW_CORE_ANCHORED
-                        if self.core_anchored_coverage_enabled
-                        else PROMPT_SOURCE_REVIEW
-                    ),
+                    self._source_review_contract()[0],
                     {
                         "source": source,
                         "clock": clock,
@@ -1369,16 +1385,8 @@ class WholeSourceLightExecutor:
                         "proposed_entities": proposed.get("entities"),
                         "core_verified_self_relationship": group_members or None,
                     },
-                    (
-                        REVIEW_CORE_ANCHORED_SCHEMA
-                        if self.core_anchored_coverage_enabled
-                        else REVIEW_SCHEMA
-                    ),
-                    (
-                        "odyssey_p4_source_coverage_v2"
-                        if self.core_anchored_coverage_enabled
-                        else "odyssey_p2_source_coverage_v1"
-                    ),
+                    self._source_review_contract()[1],
+                    self._source_review_contract()[2],
                 )
             self._observe_prewrite(
                 delivery,
@@ -1420,7 +1428,7 @@ class WholeSourceLightExecutor:
             reference_types = collect_schema_reference_types(
                 proposed, relationships, self.schema, used_reference_names=used_names
             )
-            validate_whole_message_coverage(
+            coverage = validate_whole_message_coverage(
                 source,
                 proposed,
                 review,
@@ -1432,6 +1440,7 @@ class WholeSourceLightExecutor:
                     for proof in relationships
                 ),
                 core_anchored_evidence=self.core_anchored_coverage_enabled,
+                require_owner_review=self.owner_review_enabled,
             )
             names = tuple(
                 sorted({name for fact in review["facts"] for name in fact["reference_names"]})
@@ -1463,10 +1472,23 @@ class WholeSourceLightExecutor:
             attested = validate_dual_speaker_review(source, proposed["facts"], speaker_a, speaker_b)
             if any(f.assertion not in {"asserted", "planned"} for f in attested.facts):
                 raise WholeMessageCoverageError("Non-affirmative input is not a completed event")
+            owner_targets, owner_note_ids = (
+                self._measure_local(
+                    "canonical_source_owners",
+                    resolve_attested_owner_targets,
+                    coverage,
+                    attested,
+                    self.repository,
+                    self.schema,
+                )
+                if self.owner_review_enabled
+                else ({}, {})
+            )
         except (
             WholeMessageCoverageError,
             UnprovenIdentityError,
             WholeMessageSpeakerError,
+            WholeSourceCompilationError,
         ) as error:
             category = (
                 "coverage_contract"
@@ -1474,6 +1496,8 @@ class WholeSourceLightExecutor:
                 else "identity_collision"
                 if isinstance(error, UnprovenIdentityError)
                 else "speaker_contract"
+                if isinstance(error, WholeMessageSpeakerError)
+                else "canonical_owner_contract"
             )
             self._observe_prewrite(
                 delivery, category, reason_code=self._prewrite_reason_code(error)
@@ -1491,6 +1515,7 @@ class WholeSourceLightExecutor:
                 tuple(attested.requires_self_link(i) for i in range(len(attested.facts))),
                 reference_types=reference_types,
                 declared_types=frozenset(note_type["id"] for note_type in self.schema["types"]),
+                verified_owner_targets=owner_targets,
             )
         except WholeSourceCompilationError:
             self._observe_prewrite(delivery, "compile_rejected")
@@ -1507,7 +1532,9 @@ class WholeSourceLightExecutor:
         )
         results: list[ApplicationResult] = []
 
-        def execute_one(plan: Any, locator: str, task: bool = False) -> ApplicationResult:
+        def execute_one(
+            plan: Any, locator: str, task: bool = False, owner_guard: Any = None
+        ) -> ApplicationResult:
             planner = SimpleNamespace(plan=lambda *_args, _plan=plan: _plan)
             # The P4 compiler is Core-owned. The Task App contributes only
             # its lifecycle preflight, never restructures a Core RequestPlan.
@@ -1526,7 +1553,9 @@ class WholeSourceLightExecutor:
                 actor=actor.stable_user_id,
                 now=now,
                 context_limit=10,
-                write_preflight_guard=TaskLifecycleGuard(TaskOperation.CREATE) if task else None,
+                write_preflight_guard=TaskLifecycleGuard(TaskOperation.CREATE)
+                if task
+                else owner_guard,
                 pending_recorder=self.pending_recorder,
                 request_id_factory=lambda: locator,
                 parallel_write_target_decisions=self.parallel_target_decisions,
@@ -1568,6 +1597,7 @@ class WholeSourceLightExecutor:
                 operation.plan,
                 f"{delivery}-{operation.locator_suffix}",
                 task=operation.task_create,
+                owner_guard=guard_for_reviewed_owner_operation(operation, owner_note_ids),
             )
             results.append(result)
             if result.status is not ApplicationStatus.COMPLETED:
@@ -1589,6 +1619,11 @@ class WholeSourceLightExecutor:
                     for path in self.repository.list_markdown_paths()
                 },
             )
+            owner_readbacks = {
+                index: (owner_note_ids[index], f"{delivery}-{operation.locator_suffix}")
+                for operation in operations
+                for index in operation.source_positions
+            }
             proof = self._measure_local(
                 "canonical_markdown_readback",
                 assert_reviewed_markdown,
@@ -1604,6 +1639,7 @@ class WholeSourceLightExecutor:
                 ),
                 self_id=self.bindings.resolve(actor.stable_user_id).person_note_id,
                 reference_types=reference_types,
+                canonical_owners=owner_readbacks,
             )
             if proof["physical_fact_count"] != len(review["facts"]):
                 raise AssertionError("A source assertion lacks canonical readback")

@@ -403,3 +403,74 @@ def test_shared_reference_remapping_writes_correct_two_fact_links_to_markdown(
         assert len(fact_lines) == 1, physical
         assert all(name in fact_lines[0] for name in scope), physical
         assert all(other not in fact_lines[0] for other in names if other not in scope), physical
+
+
+@pytest.mark.parametrize("note_type", ["person", "project", "document", "concept"])
+def test_canonical_owner_e3_guard_refuses_repointing_or_homonym_after_proof(tmp_path, note_type):
+    """Even a verified source owner cannot authorize a different current Note."""
+    from types import SimpleNamespace
+
+    from odyssey_core import create_entity
+    from odyssey_core.application import WritePreflightGuardError
+    from odyssey_core.request_planning import SelectionCriteria
+    from odyssey_core.whole_source_compiler import guard_for_reviewed_owner_operation
+    from tests.runtime.test_whole_source_light_product_p4 import _fixture
+
+    repository, _actor, service, _runtime = _fixture(tmp_path)
+    name = f"Nota-{note_type}"
+    create_entity(
+        repository,
+        service.schema,
+        path=f"{name}.md",
+        entity_id="original-owner-id",
+        metadata={"name": name, "type": note_type},
+        content="",
+        actor="fixture",
+        now="2026-10-16T11:00:00+02:00",
+    )
+    source_owner = SelectionCriteria(name, name, note_type, (), None)
+    operations = compile_reviewed_operations(
+        {
+            "facts": [
+                {
+                    "kind": "record",
+                    "date": None,
+                    "reviewed_text": "Estado de la nota.",
+                    "reference_names": [],
+                }
+            ]
+        },
+        (False,),
+        declared_types=frozenset({note_type}),
+        verified_owner_targets={0: source_owner},
+    )
+    assert len(operations) == 1 and operations[0].source_positions == (0,)
+    guard = guard_for_reviewed_owner_operation(operations[0], {0: "original-owner-id"})
+    resolved = (SimpleNamespace(unit_index=0, stable_id="original-owner-id", canonical_name=name),)
+    guard(operations[0].plan.actions[0], resolved, repository, service.schema)
+    with pytest.raises(WritePreflightGuardError):
+        guard(
+            operations[0].plan.actions[0],
+            (SimpleNamespace(unit_index=0, stable_id="substituted-id", canonical_name=name),),
+            repository,
+            service.schema,
+        )
+    # The same spelling in another Note type is still ambiguous. A model type
+    # must NEVER be allowed to select one of the homonyms for the user.
+    other_type = "concept" if note_type != "concept" else "project"
+    create_entity(
+        repository,
+        service.schema,
+        path=f"conflicting-{name}.md",
+        entity_id="same-name-other-type",
+        metadata={"name": name, "type": other_type},
+        content="",
+        actor="fixture",
+        now="2026-10-16T11:01:00+02:00",
+    )
+    snapshot = {path: repository.read_text(path) for path in repository.list_markdown_paths()}
+    with pytest.raises(WritePreflightGuardError):
+        guard(operations[0].plan.actions[0], resolved, repository, service.schema)
+    assert {
+        path: repository.read_text(path) for path in repository.list_markdown_paths()
+    } == snapshot

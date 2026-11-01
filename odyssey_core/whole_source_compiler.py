@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
+from odyssey_core.identity import resolve_exact_entities_batch, resolve_exact_entity
 from odyssey_core.request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -21,7 +22,11 @@ from odyssey_core.request_planning import (
     WriteAction,
 )
 from odyssey_core.temporal import TemporalAnchor
-from odyssey_core.whole_message_speaker_proof import attach_speaker_to_day_action
+from odyssey_core.whole_message_coverage import ReviewedFullSource
+from odyssey_core.whole_message_speaker_proof import (
+    AttestedSpeakerReview,
+    attach_speaker_to_day_action,
+)
 
 
 def _record_action(
@@ -142,6 +147,115 @@ class WholeSourceCompilationError(ValueError):
     """An entire source must be compilable before ANY canonical mutation."""
 
 
+def resolve_attested_owner_targets(
+    source_proof: ReviewedFullSource,
+    speakers: AttestedSpeakerReview,
+    repository: Any,
+    schema: dict[str, Any],
+) -> tuple[dict[int, SelectionCriteria], dict[int, str]]:
+    """Core-only exact owner selection from two source and two speaker reviews.
+
+    A model's note-type guess cannot disambiguate a homonym. An owner must
+    resolve to ONE CURRENT existing canonical Note, or the entire source is
+    refused before any mutation. E3 still independently preflights the target.
+    """
+    if (
+        not isinstance(source_proof, ReviewedFullSource)
+        or not isinstance(speakers, AttestedSpeakerReview)
+        or len(source_proof.reviewed_facts) != len(speakers.facts)
+    ):
+        raise WholeSourceCompilationError("Mismatched source/actor owner proof")
+    claims = [
+        (index, fact.owner_name)
+        for index, fact in enumerate(source_proof.reviewed_facts)
+        if fact.owner_name is not None
+    ]
+    if any(
+        source_proof.reviewed_facts[index].kind != "record" or speakers.requires_self_link(index)
+        for index, _name in claims
+    ):
+        raise WholeSourceCompilationError("Claimed canonical owner conflicts with reviewed role")
+    # Core's EXISTING batch resolver reads current Markdown once, regardless
+    # of how many independently reviewed owners one source contains.
+    try:
+        matches = (
+            resolve_exact_entities_batch(
+                repository, schema, tuple((name, None) for _index, name in claims)
+            )
+            if claims
+            else ()
+        )
+    except ValueError as error:
+        raise WholeSourceCompilationError("Current canonical owner lookup failed") from error
+    targets: dict[int, SelectionCriteria] = {}
+    canonical_ids: dict[int, str] = {}
+    for (index, _name), match in zip(claims, matches, strict=True):
+        if match.candidate is None:
+            raise WholeSourceCompilationError("Named owner not uniquely existing")
+        canonical = match.candidate
+        targets[index] = SelectionCriteria(
+            canonical.primary_name, canonical.primary_name, canonical.type, (), None
+        )
+        canonical_ids[index] = canonical.id
+    return targets, canonical_ids
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalSourceOwnerGuard:
+    """Recheck one trusted canonical owner at the existing E3 prewrite seam.
+
+    Prevent a stale name from selecting another Note after a prior Core
+    identity proof, including a same-name replacement between two operations.
+    The guard grants no independent permission to mutate.
+    """
+
+    name: str
+    note_type: str
+    stable_id: str
+
+    def __call__(
+        self, action: WriteAction, preflight: tuple[Any, ...], repository: Any, schema: dict
+    ) -> None:
+        from odyssey_core.application import WritePreflightGuardError
+
+        primary = action.units[0] if action.units else None
+        resolved = next((unit for unit in preflight if unit.unit_index == 0), None)
+        if (
+            primary is None
+            or primary.target.entity != self.name
+            or primary.target.type != self.note_type
+            or resolved is None
+            or resolved.stable_id != self.stable_id
+            or resolved.canonical_name != self.name
+        ):
+            raise WritePreflightGuardError("SOURCE_OWNER_CANONICAL_TARGET_CHANGED")
+        try:
+            current = resolve_exact_entity(repository, schema, self.name)
+        except ValueError as error:
+            raise WritePreflightGuardError("SOURCE_OWNER_CANONICAL_LOOKUP_UNAVAILABLE") from error
+        if (
+            current.candidate is None
+            or current.candidate.id != self.stable_id
+            or current.candidate.type != self.note_type
+        ):
+            raise WritePreflightGuardError("SOURCE_OWNER_CANONICAL_TARGET_STALE")
+
+
+def guard_for_reviewed_owner_operation(
+    operation: ReviewedSourceOperation, canonical_ids: Mapping[int, str]
+) -> CanonicalSourceOwnerGuard | None:
+    """Build the E3 guard from Core's source-position and identity evidence."""
+    if not operation.source_positions:
+        return None
+    ids = {canonical_ids.get(index) for index in operation.source_positions}
+    if len(ids) != 1 or None in ids or not operation.plan.actions:
+        raise WholeSourceCompilationError("Grouped owner identities are inconsistent")
+    target = operation.plan.actions[0].units[0].target
+    if not target.entity or not target.type:
+        raise WholeSourceCompilationError("Grouped owner target is invalid")
+    return CanonicalSourceOwnerGuard(target.entity, target.type, next(iter(ids)))
+
+
 @dataclass(frozen=True, slots=True)
 class ReviewedSourceOperation:
     """Core-owned, source-order-associated write, not a mutation permission."""
@@ -149,6 +263,7 @@ class ReviewedSourceOperation:
     locator_suffix: str
     plan: RequestPlan
     task_create: bool = False
+    source_positions: tuple[int, ...] = ()
 
 
 def compile_reviewed_operations(
@@ -157,6 +272,7 @@ def compile_reviewed_operations(
     *,
     reference_types: Mapping[str, str | None] | None = None,
     declared_types: frozenset[str] | None = None,
+    verified_owner_targets: Mapping[int, SelectionCriteria] | None = None,
 ) -> tuple[ReviewedSourceOperation, ...]:
     """Pure preflight of EVERY reviewed fact to avoid avoidable partial writes.
 
@@ -188,9 +304,31 @@ def compile_reviewed_operations(
         or any(type(flag) is not bool for flag in self_roles)
     ):
         raise WholeSourceCompilationError("Whole-source fact/speaker alignment invalid")
+    owners = verified_owner_targets or {}
+    if not isinstance(owners, Mapping) or any(
+        type(i) is not int
+        or i < 0
+        or i >= len(facts)
+        or not isinstance(target, SelectionCriteria)
+        or not isinstance(target.entity, str)
+        or not target.entity.strip()
+        or target.query != target.entity
+        or not isinstance(target.type, str)
+        or declared_types is None
+        or target.type not in declared_types
+        or target.self_target is not None
+        or target.link_scope is not None
+        or target.filters
+        or target.relational_reference is not None
+        or target.semantic_set is not None
+        or target.collection_subject is not None
+        for i, target in owners.items()
+    ):
+        raise WholeSourceCompilationError("Unverified canonical owner target")
     days: dict[str, list[int]] = {}
     undated: list[tuple[int, dict[str, Any]]] = []
     tasks: list[tuple[int, dict[str, Any]]] = []
+    owner_facts: dict[tuple[SelectionCriteria, str | None], list[tuple[int, dict[str, Any]]]] = {}
     for position, fact in enumerate(facts):
         if not isinstance(fact, dict):
             raise WholeSourceCompilationError("Reviewed fact must be an object")
@@ -214,7 +352,15 @@ def compile_reviewed_operations(
                 "Reference marker coverage does not match canonical entities"
             )
         kind, date = fact.get("kind"), fact.get("date")
-        if kind == "record" and isinstance(date, str) and date:
+        if position in owners:
+            if (
+                kind != "record"
+                or self_roles[position]
+                or (date is not None and not isinstance(date, str))
+            ):
+                raise WholeSourceCompilationError("Reviewed owner contradicts fact or speaker")
+            owner_facts.setdefault((owners[position], date), []).append((position, fact))
+        elif kind == "record" and isinstance(date, str) and date:
             days.setdefault(date, []).append(position)
         elif kind == "record" and date is None and self_roles[position]:
             undated.append((position, fact))
@@ -239,6 +385,20 @@ def compile_reviewed_operations(
                     undated_self_record(
                         [fact for _, fact in undated], reference_types=reference_types
                     ),
+                )
+            )
+        for (owner, date), items in owner_facts.items():
+            action = _record_action(
+                [fact for _, fact in items],
+                target=owner,
+                date=date,
+                reference_types=reference_types,
+            )
+            operations.append(
+                ReviewedSourceOperation(
+                    "owner-" + str(items[0][0]),
+                    RequestPlan((action,), ()),
+                    source_positions=tuple(position for position, _fact in items),
                 )
             )
         for position, fact in tasks:

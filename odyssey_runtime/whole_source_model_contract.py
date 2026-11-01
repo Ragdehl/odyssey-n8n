@@ -206,6 +206,30 @@ REVIEW_SCHEMA = {
     "additionalProperties": False,
 }
 
+
+# R0/G05 optional contract: SAME independent source coverage reviewer, no
+# additional model call or second semantic writer. Disabled until a fresh
+# bounded production-model evaluation demonstrates safe owner attribution.
+REVIEW_OWNER_SCHEMA = copy.deepcopy(REVIEW_SCHEMA)
+for _owner_schema in (REVIEW_OWNER_SCHEMA,):
+    _owner_fact = _owner_schema["properties"]["facts"]["items"]
+    _owner_fact["properties"]["owner_name"] = {"type": ["string", "null"]}
+    _owner_fact["required"].append("owner_name")
+
+PROMPT_SOURCE_OWNER_REVIEW = (
+    "For EACH independently reviewed source fact ALSO return owner_name: the exact "
+    "canonical-name MENTION present in that fact's own ORIGINAL source evidence "
+    "only when the fact describes a named existing entity as its subject and "
+    "belongs on that entity's note. Use null for a first-person/self statement, "
+    "a calendar remembrance or task, or if the owner is not unambiguous from "
+    "the same source evidence. Do not use the first mentioned participant, "
+    "grammatical proximity, a proposed note type, adjacent fact, or suggested "
+    "subject as proof. Never guess an ID or create an identity. Independently "
+    "compare original source against the proposed subject, and refuse a "
+    "mismatch or ambiguity. Core separately checks literal source attribution, "
+    "current canonical identity uniqueness, and speaker role before writing."
+)
+
 SPEAKER_SCHEMA = {
     "type": "object",
     "properties": {
@@ -402,6 +426,11 @@ REVIEW_CORE_ANCHORED_SCHEMA = copy.deepcopy(REVIEW_SCHEMA)
 _ANCHORED_REVIEW = REVIEW_CORE_ANCHORED_SCHEMA["properties"]["facts"]["items"]
 del _ANCHORED_REVIEW["properties"]["source_quote"]
 _ANCHORED_REVIEW["required"].remove("source_quote")
+REVIEW_OWNER_CORE_ANCHORED_SCHEMA = copy.deepcopy(REVIEW_CORE_ANCHORED_SCHEMA)
+_owner_fact = REVIEW_OWNER_CORE_ANCHORED_SCHEMA["properties"]["facts"]["items"]
+_owner_fact["properties"]["owner_name"] = {"type": ["string", "null"]}
+_owner_fact["required"].append("owner_name")
+
 
 PLANNER_CORE_ANCHORED_INSTRUCTIONS = (
     PLANNER_INSTRUCTIONS + " EVIDENCE V2: For EVERY atomic fact, source_evidence must be ONE exact "
