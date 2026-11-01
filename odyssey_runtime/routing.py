@@ -575,10 +575,10 @@ def _routed_result(
                 "text": route.source_text[:4096],
                 "stage_count": len(result.operational.stages),
                 "status": result.status.value,
-                "temporal": list((result.execution_flow or {}).get("temporal", []))[:8],
-                "plan": list((result.execution_flow or {}).get("plan", []))[:8],
-                "entities": list((result.execution_flow or {}).get("entities", []))[:8],
-                "writes": list((result.execution_flow or {}).get("writes", []))[:8],
+                "temporal": list((result.execution_flow or {}).get("temporal", [])),
+                "plan": list((result.execution_flow or {}).get("plan", [])),
+                "entities": list((result.execution_flow or {}).get("entities", [])),
+                "writes": list((result.execution_flow or {}).get("writes", [])),
                 "steps": _route_stage_io(route.source_text, result),
                 **(
                     {

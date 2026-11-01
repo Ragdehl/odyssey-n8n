@@ -287,3 +287,26 @@ test("graph admits that it cannot identify failure stage instead of saying every
   assert.match(graph.textContent, /Necesita revisión/);
   assert.doesNotMatch(graph.textContent, /Rutas completadas/);
 });
+
+test("graph renders all 10 verified source routes and 12 writes in a single route", () => {
+  const routes = Array.from({length: 10}, (_, index) => ({
+    capability: "core", text: `Afirmación ${index}.`, status: "completed",
+    stage_count: 1, temporal: [],
+    writes: Array.from({length: index === 0 ? 12 : 1}, (_, item) => ({
+      status: "succeeded", operation: "UPDATED", target: `note-${index}-${item}`,
+    })),
+  }));
+  const graph = renderExecutionFlow(fakeDocument, {
+    operational: {total_duration_ms: 10, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 1, provider_calls: []},
+      ...routes.map((_, index) => ({name: "core.writer", outcome: "completed", duration_ms: 1,
+        provider_calls: [], route_index: index})),
+    ]},
+    flow: {version: 1, input: routes.map(item => item.text).join(" "),
+      parallel_preparation: false, routes},
+  });
+  assert.match(graph.textContent, /note-0-0/);
+  assert.match(graph.textContent, /note-0-11/);
+  assert.match(graph.textContent, /note-9-0/);
+  assert.equal((graph.textContent.match(/Resultado de escritura Core registrado:/g) || []).length, 21);
+});

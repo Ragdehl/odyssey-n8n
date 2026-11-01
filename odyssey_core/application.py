@@ -1146,7 +1146,7 @@ def _project_execution_flow(
     entities_by_key: dict[tuple[str, str], dict[str, str]] = {}
     link_ids: set[str] = set()
     candidates: list[tuple[str, str, str | None]] = []
-    for action, outcome in zip(plan.actions[:8], results[:8], strict=False):
+    for action, outcome in zip(plan.actions, results, strict=False):
         if isinstance(action, WriteAction):
             unit_results = {unit.unit_index: unit for unit in outcome.unit_results}
             set_members: dict[str, list[str]] = {}
@@ -1158,7 +1158,7 @@ def _project_execution_flow(
                 for stable_id in member_ids:
                     link_ids.add(stable_id)
                     candidates.append((mention[:120], "person", stable_id))
-            for unit_index, unit in enumerate(action.units[:8]):
+            for unit_index, unit in enumerate(action.units):
                 selection = unit.target
                 target = selection.entity or selection.query
                 if unit.reference_lookup_only:
@@ -1191,7 +1191,7 @@ def _project_execution_flow(
                     candidates.append(
                         (target.strip()[:120], (selection.type or "")[:40], observed.stable_note_id)
                     )
-                for reference in unit.references[:8]:
+                for reference in unit.references:
                     mention = reference.mention.strip()[:120]
                     if not mention:
                         continue
@@ -1226,7 +1226,7 @@ def _project_execution_flow(
             )
     names: dict[str, str] = {}
     if link_ids:
-        # Scan once for at most eight Core-confirmed stable IDs; do not use stale
+        # Scan once for all Core-confirmed stable IDs; do not use stale
         # search indexes or derive a name from an ID, filename or model output.
         from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
         from .storage import NoteUnavailableError, VaultAccessError
@@ -1250,7 +1250,7 @@ def _project_execution_flow(
                         names[stable_id] = name
         except (VaultAccessError, OSError):
             pass
-    for mention, kind, stable_id in candidates[:8]:
+    for mention, kind, stable_id in candidates:
         key = (mention, stable_id or "")
         if key in entities_by_key:
             continue
@@ -1262,9 +1262,9 @@ def _project_execution_flow(
             "type": kind,
         }
     return {
-        "plan": planned[:8],
-        "entities": list(entities_by_key.values())[:8],
-        "writes": writes[:8],
+        "plan": planned,
+        "entities": list(entities_by_key.values()),
+        "writes": writes,
     }
 
 

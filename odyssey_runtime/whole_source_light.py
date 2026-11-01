@@ -2725,9 +2725,15 @@ class WholeSourceLightExecutor:
                 max(0.0, (perf_counter() - router_started) * 1000),
             )
         ]
-        complete_flow = len(outcomes) <= 8
+        # Preserve the complete source graph if its observed stages fit the
+        # existing durable 64-stage provenance envelope; no semantic count cap.
+        complete_flow = (
+            bool(outcomes)
+            and len(outcomes) <= 64
+            and 1 + sum(len(item.operational.stages) for item in outcomes) <= 64
+        )
         for part, outcome in zip(graph.groups, outcomes, strict=False):
-            if len(outcome.operational.stages) > 64:
+            if len(outcome.operational.stages) > 16:
                 complete_flow = False
             stages.extend(
                 replace(stage, route_index=part.ordinal) for stage in outcome.operational.stages
@@ -3044,10 +3050,16 @@ class WholeSourceLightExecutor:
         )
         flattened_stages = [outer_stage]
         route_rows = []
-        complete_flow = len(outcomes) <= 8
+        # Preserve the complete source graph if its observed stages fit the
+        # existing durable 64-stage provenance envelope; no semantic count cap.
+        complete_flow = (
+            bool(outcomes)
+            and len(outcomes) <= 64
+            and 1 + sum(len(item.operational.stages) for item in outcomes) <= 64
+        )
         for part, outcome in zip(verified, outcomes, strict=False):
             stages = outcome.operational.stages
-            if len(stages) > 64:
+            if len(stages) > 16:
                 complete_flow = False
             flattened_stages.extend(replace(stage, route_index=part.index) for stage in stages)
             route_rows.append(
