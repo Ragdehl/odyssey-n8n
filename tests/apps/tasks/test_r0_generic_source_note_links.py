@@ -29,6 +29,7 @@ def _task_with_source_hints(
     wrong_type=None,
     wrong_name=None,
     omit_helper=False,
+    unlinked_fact=False,
 ):
     named = [(f"Elemento {index:02d}", kind) for index, kind in enumerate(types)]
     if reversed_order:
@@ -59,7 +60,13 @@ def _task_with_source_hints(
         "record",
         (PropertyChange("status", "set", "pending"),),
         (),
-        ("Revisar elementos.",),
+        (
+            "Revisar elementos."
+            if unlinked_fact or not refs
+            else "Revisar elementos: "
+            + ", ".join(f"{{{{ref:{index}}}}}" for index in range(len(refs)))
+            + ".",
+        ),
         tuple(refs),
         fact_temporal_anchors=((),),
     )
@@ -284,4 +291,12 @@ def test_core_source_note_completeness_rejects_wrong_helper_kind_identity_or_abs
     )
     wrapper, source, _names = _task_with_source_hints((kind,), **kwargs)
     with pytest.raises(RequestPlanningError, match="source.*identity|dropped|primary task target"):
+        wrapper.plan(source)
+
+
+@pytest.mark.parametrize("kind", ["person", "project", "document", "concept", "equipment"])
+def test_reference_helper_without_fact_marker_cannot_claim_source_note_saved(kind):
+    """A referenced-but-unused helper must not masquerade as a persisted link."""
+    wrapper, source, _named = _task_with_source_hints((kind,), unlinked_fact=True)
+    with pytest.raises(RequestPlanningError, match="source.*identity|dropped"):
         wrapper.plan(source)

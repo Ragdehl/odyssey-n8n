@@ -164,6 +164,7 @@ def require_complete_named_source_references(
     semantically refers to a given Note or permission to select its identity.
     Core still resolves every proposed link at E3; callers only require
     complete coverage of the already source-bound, unambiguous name hints.
+    Each linked helper MUST be used in a fact marker, not merely proposed.
     """
     if not hints:
         return
@@ -180,11 +181,12 @@ def require_complete_named_source_references(
     for hint in hints:
         if not any(
             reference.mention.casefold() == hint.mention.casefold()
+            and any(f"{{{{ref:{position}}}}}" in fact for fact in primary.facts)
             and 0 <= reference.target_index < len(action.units)
             and (helper := action.units[reference.target_index]).reference_lookup_only
             and helper.target.type == hint.note_type
             and (helper.target.entity or helper.target.query).casefold() == hint.name.casefold()
-            for reference in primary.references
+            for position, reference in enumerate(primary.references)
         ):
             raise RequestPlanningError("Core write dropped a named source Note identity")
 
