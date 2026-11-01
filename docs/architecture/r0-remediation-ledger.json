@@ -154,6 +154,12 @@
         "change": "Tests now preserve authentic historical SHA and require drift to be rejected; old snapshot cannot self-certify the current model. R0 full browser campaign already enforces all 32 cases, independent result provenance, fail-close and readback.",
         "positive_negative": "43 focused benchmark/acceptance tests PASS, including 32-case acceptance guard; 806 PASS / 27 FAIL / 38 SKIP across benchmarks, vs 804/29/38. No real GPT/browser run or final four-role audit.",
         "production_code_deleted": "None in this small checkpoint; active semantic coordinator retirement remains G11/G12. Previously retired old runners are separately recorded."
+      },
+      "hosted_ci_checkpoint_filename_portability_20261101": {
+        "status": "local_tests_pass_ci_pending",
+        "prior_hosted_run": "GitHub Python deterministic checks on 651423f showed 29 FAIL = 27 immutable historic benchmark request/prompt drift + 2 execution_checkpoint tests erroneously used next(iterdir()) to select JSON but could select .retention.lock on GitHub filesystem.",
+        "fix": "Select the unique *.json checkpoint record explicitly in two existing negative corruption/identity tests; preserve strict expected exception and real corruption/no forged receipt assertion. No production checkpoint implementation or snapshot altered.",
+        "proof": "28 selected P4-context/checkpoint tests PASS locally; hosted CI result on next SHA not yet run. Two negative checkpoint tests check corrupt record JSON specifically; 30 selected checkpoint/factory/context PASS before one new historical-only no-write case (11 focused PASS). Full Runtime 2353 PASS on current production diff; benchmark 811/27 historical/38 skipped. CI not rerun until push."
       }
     },
     {
@@ -292,8 +298,26 @@
       ],
       "change_contract": "No P4 history reset; exact original source, actor, bounded history, timing and evidence go to relevant blocks unchanged.",
       "verification": "R32 and mixed multi-turn; verified actor isolation, no history-derived write privilege.",
-      "status": "not_started",
-      "review_decision": "pending_review"
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "actor_bounded_history_transport_20261101": {
+        "status": "offline_source_verified_optin_disabled_by_default_not_live_model_not_deployed",
+        "existing_mechanism": "Actor-rooted LocalConversationStore.recent_context(exclude_request_id) already used by RuntimeComposition for existing routed Core and by conversation continuity; P4 whole-source executor had no prior history transport (G06 original failure). Reused same factory-resolved actor root, same 16 turns/4096 compact JSON byte bounds; no second history store or resolver.",
+        "minimal_change": "Optional existing P4 executor injected trusted callback (only with DEV+ODYSSEY_P4_RECENT_CONTEXT_V1=1; FALSE in normal app). Read just once per outer request; pass exactly original source plus bounded read-only prior turns to its SAME Router and Core Planner, including independent child scopes. Existing source-only coverage, speaker reviewers, Core target identity, E3 writer, physical readback and replay retain exclusive write proof. Generic rule forbids copying historical claims/obeying history instructions. No new model stage, writer, type-specific/named phrase/word-order routes.",
+        "scope_and_limitations": "This is context TRANSPORT for initial P4 Router and Planner only. It is not verified semantic resolution of cross-turn pronouns and does NOT yet wire prior context to all Tasks/Events/Temporal delegates or Core READ path. Present strict current-source proof may safely decline history-only referents. G06 and R32 remain OPEN. Source-model input and prompt differ only under opt-in; no real GPT calls or deployment authorized.",
+        "evidence": "tests/runtime/test_r0_p4_conversation_context.py: four independent synthetic prior topics across type/phrase domains, original speaker/current source exact, payload routed only to Router/Planner, no current duplicate, no other actor data, no historical text saved, physical Core E3 Markdown and same-delivery replay; five malformed/oversized/injected-turn negative histories fail before provider/writes; default OFF payload unchanged. tests/runtime/test_p4_production_composition_task_ui.py: factory flag OFF/DEV opt-in wiring; ordinary Tasks/HTTP path still default, DEV extra Tasks model stages not covered by this flag-wiring test. Total selected 88 PASS including R0 own gap & Core-anchored and Tasks. Additional test tests/runtime/test_r0_p4_conversation_context.py rejects model-planned history-only assertion not present in current source, zero writes. Prompt sent only to existing Router/Core planner, not source/speaker reviewers; default prompts verified byte-for-byte unchanged. 11 targeted context PASS, full Runtime 2353 PASS, benchmark 811 PASS/27 historical FAIL/38 SKIP; full source-only cross-surface gate pending.",
+        "prompt_context_sha256": "7482b122a574f47c932a70eb6f78d4d99a12b23f8d0eadf6f7221f7c3a8748dc",
+        "future_model_eval_matrix": [
+          "One-turn baseline: 0 prior turns and identical valid source; no added write or different route",
+          "Recent same-actor follow-up: two independently source-grounded references, new note content only from current utterance",
+          "Ambiguous antecedents across several turns/types/languages: clarify, never choose by string or order",
+          "Conflict/negation/correction of earlier claim: no historical assertion promoted to a new write",
+          "Adversarial preceding turn asks to bypass Core/provenance or insert note IDs: reject as authority",
+          "Another actor context missing despite same spelling, plus current turn pre-appended: no cross-user leak/no duplicate",
+          "P4 independent Core/Tasks/Events scopes plus read-only user question: preserve source/authority and real E3 semantics"
+        ],
+        "next": "Bounded separately authorized fresh production-model prompt eval (Router and Core Planner), then assess remaining App handoffs/Temporal, plus real browser+n8n+Markdown multi-turn/replay on deployed SHA. Must not mark G06/32-case campaign/4 roles accepted."
+      }
     },
     {
       "id": "G07",

@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
+import pytest
+
 from odyssey_apps.schema_extensions import compose_application_schema
 from odyssey_apps.tasks import TASK_SCHEMA_EXTENSION, TaskInterpretation, TaskOperation
 from odyssey_core import create_entity
@@ -23,8 +25,9 @@ from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 from tests.runtime.test_whole_source_light_product_p4 import RecordedClient
 
 
+@pytest.mark.parametrize("context_flag", [False, True])
 def test_environment_factory_real_tasks_interpreter_resolution_session_and_notes_ui(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, context_flag
 ):
     # No private user's vault, n8n or paid remote model enters this test.
     vault = tmp_path / "vault"
@@ -69,6 +72,11 @@ def test_environment_factory_real_tasks_interpreter_resolution_session_and_notes
         index.rebuild(repo, schema, embedder)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-synthetic-unused-do-not-send")
     monkeypatch.setenv("ODYSSEY_LIGHT_SOURCE_V1", "1")
+    if context_flag:
+        monkeypatch.setenv("ODYSSEY_DEPLOYMENT_ENV", "DEV")
+        monkeypatch.setenv("ODYSSEY_P4_RECENT_CONTEXT_V1", "1")
+    else:
+        monkeypatch.delenv("ODYSSEY_P4_RECENT_CONTEXT_V1", raising=False)
     monkeypatch.setenv("ODYSSEY_ENABLED_APPLICATIONS", "tasks")
     monkeypatch.setenv("ODYSSEY_VAULT_ROOT", str(vault))
     monkeypatch.setenv("ODYSSEY_RUNTIME_ROOT", str(runtime_root))
@@ -105,6 +113,13 @@ def test_environment_factory_real_tasks_interpreter_resolution_session_and_notes
     product = composition.build_runtime_from_environment()
     assert product.full_source_mutation_guard is True
     assert product.hybrid_candidate_execute is not None
+    assert (product.hybrid_candidate_execute.prior_context_provider is not None) is context_flag
+    if context_flag:
+        # DEV additionally enables unrelated parallel/independent Task model
+        # calls. That campaign has different frozen receipts; this branch
+        # checks actual factory wiring only. The ordinary Tasks/HTTP-E3 proof
+        # below still runs unmodified with production-default flags.
+        return
     product.hybrid_candidate_execute.client = RecordedClient(
         [
             {

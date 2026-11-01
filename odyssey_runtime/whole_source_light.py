@@ -135,6 +135,7 @@ from odyssey_runtime.whole_source_model_contract import (
     PLAN_SCHEMA,
     PLANNER_CORE_ANCHORED_INSTRUCTIONS,
     PLANNER_INSTRUCTIONS,
+    PRIOR_CONVERSATION_READ_ONLY_RULE,
     PROMPT_SOURCE_OWNER_REVIEW,
     PROMPT_SOURCE_REVIEW,
     PROMPT_SOURCE_REVIEW_CORE_ANCHORED,
@@ -227,6 +228,11 @@ class WholeSourceLightExecutor:
     core_anchored_coverage_enabled: bool = False
     # Offline opt-in only; not enabled by production configuration.
     owner_review_enabled: bool = False
+    # Trusted actor-scoped transcript transport, no identity/write permission;
+    # only wired by a separately gated production composition.
+    prior_context_provider: (
+        Callable[[AuthenticatedActorContext, str, str], tuple[dict[str, str], ...]] | None
+    ) = None
     prewrite_diagnostic: Callable[[str, str, dict[str, int | bool]], None] | None = None
     # Reuse Core's existing persisted pending-work recorder. Losing an
     # uncertain Day write must not erase the pending review evidence.
@@ -659,7 +665,10 @@ class WholeSourceLightExecutor:
                 timed_dev_hot_path(delivery, "p4.source"),
             ):
                 try:
-                    result = self._execute_source(source, delivery, actor, conversation_id)
+                    prior = self._bounded_prior_context(actor, conversation_id, delivery)
+                    result = self._execute_source(
+                        source, delivery, actor, conversation_id, prior_context=prior
+                    )
                 except WholeSourceLightError:
                     # The P4-specific error class is raised only by model and
                     # source-hint PREWRITE steps. Core/Tasks mutations use their
@@ -851,6 +860,41 @@ class WholeSourceLightExecutor:
             execution_flow=flow,
         )
 
+    def _bounded_prior_context(
+        self, actor: AuthenticatedActorContext, conversation_id: str, delivery: str
+    ) -> tuple[dict[str, str], ...]:
+        """Carry original actor-rooted turns only, with existing planner bounds.
+
+        Historical text is never an identity, source fact, or write permit.
+        Untrusted or damaged context fails closed BEFORE any Core mutation.
+        """
+        if self.prior_context_provider is None:
+            return ()
+        if not isinstance(actor, AuthenticatedActorContext) or conversation_id != "main":
+            raise WholeSourceLightError("Authenticated conversation context required")
+        try:
+            history = self.prior_context_provider(actor, conversation_id, delivery)
+            if (
+                not isinstance(history, (tuple, list))
+                or len(history) > 16
+                or any(
+                    not isinstance(turn, dict)
+                    or set(turn) != {"role", "text"}
+                    or turn["role"] not in {"user", "assistant"}
+                    or not isinstance(turn["text"], str)
+                    or not turn["text"].strip()
+                    for turn in history
+                )
+                or len(
+                    json.dumps(history, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                )
+                > 4096
+            ):
+                raise ValueError("Invalid scoped conversation evidence")
+        except (OSError, TypeError, ValueError) as error:
+            raise WholeSourceLightError("Scoped conversation context unavailable") from error
+        return tuple({"role": row["role"], "text": row["text"]} for row in history)
+
     def _execute_source(
         self,
         source: str,
@@ -859,6 +903,7 @@ class WholeSourceLightExecutor:
         conversation_id: str,
         *,
         verified_scope: IndependentSourceScope | None = None,
+        prior_context: tuple[dict[str, str], ...] = (),
         delivery_instant: datetime | None = None,
         prechecked_task_scope: dict[str, object] | None = None,
     ) -> ApplicationResult:
@@ -896,8 +941,17 @@ class WholeSourceLightExecutor:
             with timed_dev_hot_path(delivery, "p4.router"):
                 route = self._ask(
                     ROUTER_MODEL,
-                    route_instructions,
-                    {"original_source": source, "clock": clock},
+                    route_instructions
+                    + (PRIOR_CONVERSATION_READ_ONLY_RULE if self.prior_context_provider else ""),
+                    {
+                        "original_source": source,
+                        "clock": clock,
+                        **(
+                            {"prior_conversation": prior_context}
+                            if self.prior_context_provider
+                            else {}
+                        ),
+                    },
                     route_schema,
                     "odyssey_light_capability_route_events_v1"
                     if self.event_delegate is not None
@@ -1015,6 +1069,7 @@ class WholeSourceLightExecutor:
                     delivery,
                     actor,
                     conversation_id,
+                    prior_context=prior_context,
                     delivery_instant=instant,
                     router_started=router_started,
                     route_scopes=scopes,
@@ -1192,6 +1247,7 @@ class WholeSourceLightExecutor:
                 delivery,
                 actor,
                 conversation_id,
+                prior_context=prior_context,
                 delivery_instant=instant,
                 router_started=router_started,
                 route_scopes=scopes,
@@ -1287,10 +1343,14 @@ class WholeSourceLightExecutor:
                     PLANNER_CORE_ANCHORED_INSTRUCTIONS
                     if self.core_anchored_coverage_enabled
                     else PLANNER_INSTRUCTIONS
-                ),
+                )
+                + (PRIOR_CONVERSATION_READ_ONLY_RULE if self.prior_context_provider else ""),
                 {
                     "original_source": source,
                     "clock": clock,
+                    **(
+                        {"prior_conversation": prior_context} if self.prior_context_provider else {}
+                    ),
                     "routing_hint": route,
                     "known_notes": known_notes,
                     "allowed_note_types": tuple(row["id"] for row in self.schema["types"]),
@@ -2732,6 +2792,7 @@ class WholeSourceLightExecutor:
         router_started: float,
         route_scopes: list[dict[str, object]],
         verified_relationships: tuple[VerifiedSelfRelationship, ...] = (),
+        prior_context: tuple[dict[str, str], ...] = (),
     ) -> ApplicationResult:
         # Proposed scopes are non-authoritative byte ranges. No trimming,
         # deletion, or LLM-authored canonical identities in this boundary.
@@ -2940,6 +3001,7 @@ class WholeSourceLightExecutor:
                         actor,
                         conversation_id,
                         verified_scope=part,
+                        prior_context=prior_context,
                         delivery_instant=delivery_instant,
                         prechecked_task_scope=task_scopes.get(part.index),
                     )

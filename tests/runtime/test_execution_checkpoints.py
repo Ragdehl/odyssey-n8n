@@ -194,7 +194,11 @@ def test_checkpoint_store_fails_closed_for_corruption(tmp_path: Path) -> None:
     """A malformed persisted record cannot be treated as execution evidence."""
     store = LocalExecutionCheckpointStore(tmp_path)
     store.record("request-1", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
-    next((tmp_path).iterdir()).write_text("{", encoding="utf-8")
+    # The actor store also owns a lock file. Directory iteration order is
+    # nondeterministic across CI filesystems; corrupt the JSON record itself.
+    records = list(tmp_path.glob("*.json"))
+    assert len(records) == 1
+    records[0].write_text("{", encoding="utf-8")
 
     with pytest.raises(ExecutionCheckpointError):
         store.load("request-1")
@@ -331,7 +335,9 @@ def test_checkpoint_rejects_mismatched_record_identity_and_false_delivery_claim(
 
     store = LocalExecutionCheckpointStore(tmp_path / "checkpoint")
     store.record("trace-1", "starting", CheckpointOutcome.MILESTONE_OBSERVED, NOW)
-    path = next((tmp_path / "checkpoint").iterdir())
+    records = list((tmp_path / "checkpoint").glob("*.json"))
+    assert len(records) == 1
+    path = records[0]
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["request_id"] = "another-valid-id"
     path.write_text(json.dumps(payload), encoding="utf-8")

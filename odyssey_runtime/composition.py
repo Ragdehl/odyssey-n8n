@@ -6185,6 +6185,20 @@ def _build_runtime_from_environment_unlocked(
             raise TaskInterpretationError("Incomplete Work Session returned a START receipt")
         return result, None
 
+    # G06: reuse the existing actor-local transcript source, not another
+    # context cache. Opt-in until bounded real-model review; no default
+    # change to the proven P4 production request shape.
+    def _p4_recent_context(
+        identity: AuthenticatedActorContext, conversation_id: str, request_id: str
+    ) -> tuple[dict[str, str], ...]:
+        if not isinstance(identity, AuthenticatedActorContext) or conversation_id != "main":
+            raise ValueError("P4 conversation actor scope invalid")
+        transcript = LocalConversationStore(
+            conversation_root_resolver.resolve(identity.stable_user_id)
+        )
+        transcript.load_or_create_main(now=_current_time()["timestamp"])
+        return tuple(transcript.recent_context(exclude_request_id=request_id))
+
     light_source_execute = None
     if light_source_enabled:
         if self_binding_repository is None:
@@ -6203,6 +6217,12 @@ def _build_runtime_from_environment_unlocked(
             reasoner=contextual_reasoner,
             bindings=self_binding_repository,
             pending_recorder=pending_recorder,
+            prior_context_provider=(
+                _p4_recent_context
+                if os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV"
+                and os.environ.get("ODYSSEY_P4_RECENT_CONTEXT_V1") == "1"
+                else None
+            ),
             parallel_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_coverage_speaker_reviews=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
             parallel_target_decisions=os.environ.get("ODYSSEY_DEPLOYMENT_ENV") == "DEV",
