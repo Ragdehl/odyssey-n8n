@@ -42,12 +42,19 @@ def _record_action(
     references: list[KnowledgeReference] = []
     values: list[str] = []
     for item in items:
-        text = item["reviewed_text"]
+        local_slots: dict[int, int] = {}
         for index, name in enumerate(item["reference_names"]):
             helper = helpers.setdefault(name, len(helpers))
-            slot = len(references)
+            local_slots[index] = len(references)
             references.append(KnowledgeReference(helper + 1, "related", name))
-            text = text.replace("{{ref:" + str(index) + "}}", "{{ref:" + str(slot) + "}}")
+        # Translate ORIGINAL local tokens in one pass. Sequential str.replace
+        # can renumber an earlier replacement a second time when a later local
+        # marker has the same numeric index as a new global marker.
+        text = re.sub(
+            r"\{\{ref:(\d+)\}\}",
+            lambda found, slots=local_slots: "{{ref:" + str(slots[int(found.group(1))]) + "}}",
+            item["reviewed_text"],
+        )
         values.append(text)
     primary = KnowledgeUnit(
         target,
