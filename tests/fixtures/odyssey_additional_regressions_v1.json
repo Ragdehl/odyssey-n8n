@@ -128,6 +128,38 @@
           "state": "candidate"
         }
       ]
+    },
+    {
+      "id": "R33",
+      "source": "He conocido varias personas. Mañana tengo que escribirles.",
+      "expectation": "Preserve the completed recollection literally on the authenticated capture Day without inventing Person identities; create a distinct pending Task for tomorrow retaining the literal unresolved expression `escribirles` (the user does NOT request resolving or expanding the group), and link that Task to the canonical Day Note specifically containing the source recollection. The link is to a documented source fact/Note, never an invented Person, and must have independently reviewed source dependence and E3-verified Markdown. If the source Note link cannot be verified, do not invent a target or misreport a completed linked Task. Source meaning must survive Tasks/Diary/Calendar physical readback and delivery replay.",
+      "offline_coverage": "tests/benchmarks/test_r0_literal_diary_task_contract.py",
+      "live_acceptance": "pending",
+      "fixture_setup": [],
+      "expected_units": [
+        {
+          "reading": "Completed first-person recollection is persisted literally in the capture Day; the group is not expanded into named Persons and no Event is invented",
+          "source_anchors": [
+            "He conocido varias personas"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "One Task is saved with intended target date tomorrow and the unresolved recipient phrase preserved literally; no Person identities or assignee inferred",
+          "source_anchors": [
+            "Mañana tengo que escribirles"
+          ],
+          "state": "candidate"
+        },
+        {
+          "reading": "Task has a canonical E3-verifiable link to the Day Note carrying the actual recollection, without changing that note or making a fabricated person link",
+          "source_anchors": [
+            "varias personas",
+            "escribirles"
+          ],
+          "state": "candidate"
+        }
+      ]
     }
   ]
 }

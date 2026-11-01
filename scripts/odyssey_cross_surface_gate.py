@@ -104,6 +104,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/benchmarks/test_r0_browser_campaign.py",
         "tests/benchmarks/test_r0_semantic_branch_regressions.py",
         "tests/benchmarks/test_r0_real_browser_case.py",
+        "tests/benchmarks/test_r0_literal_diary_task_contract.py",
         "tests/benchmarks/test_odyssey_acceptance_contracts.py",
     ),
     "task_chat_core": (
