@@ -8,8 +8,10 @@ sole authority for identity selection, mutation and canonical Markdown.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
+from .canonical_source_context import CanonicalSourceNameHint
 from .request_planning import (
     KnowledgeReference,
     KnowledgeUnit,
@@ -151,6 +153,40 @@ def add_core_reference_facts(plan: RequestPlan, links: tuple[CoreLinkFactSpec, .
         fact_temporal_anchors=tuple(anchors),
     )
     return replace(plan, actions=(replace(action, units=tuple((*units, *helpers))),))
+
+
+def require_complete_named_source_references(
+    plan: RequestPlan, hints: Sequence[CanonicalSourceNameHint]
+) -> None:
+    """Refuse silently dropped canonical source names for any registered Note type.
+
+    This is a read-only plan completeness check, NOT evidence that a mention
+    semantically refers to a given Note or permission to select its identity.
+    Core still resolves every proposed link at E3; callers only require
+    complete coverage of the already source-bound, unambiguous name hints.
+    """
+    if not hints:
+        return
+    if len(hints) > 16 or any(
+        not isinstance(hint, CanonicalSourceNameHint)
+        or not hint.mention.strip()
+        or not hint.name.strip()
+        or not hint.note_type.strip()
+        for hint in hints
+    ):
+        raise RequestPlanningError("Core source-name evidence is malformed")
+    action, units, index = _sole_primary(plan)
+    primary = units[index]
+    for hint in hints:
+        if not any(
+            reference.mention.casefold() == hint.mention.casefold()
+            and 0 <= reference.target_index < len(action.units)
+            and (helper := action.units[reference.target_index]).reference_lookup_only
+            and helper.target.type == hint.note_type
+            and (helper.target.entity or helper.target.query).casefold() == hint.name.casefold()
+            for reference in primary.references
+        ):
+            raise RequestPlanningError("Core write dropped a named source Note identity")
 
 
 def ensure_complete_core_reference_set(
