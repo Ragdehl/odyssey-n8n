@@ -95,6 +95,26 @@
         "existing_active_protections": "tests/apps/test_router.py checks current role/text context, exact source validation, schema, temporal routing authority; scripts/odyssey_stage_acceptance.py pins current acceptance to changed product scripts/oracles and rejects stale receipts.",
         "safe_migration": "Preserve historical prompt hash and prior evidence without reanchoring. Confirm original artifact provenance and current equivalents of each source/provenance/authorization invariant before removing or replacing the mislabelled current-hash assertion. Re-run prompt/model acceptance on the final source SHA; do not claim a green full suite yet.",
         "state": "diagnosed_only"
+      },
+      "historical_routing_gate_hardening_20261101": {
+        "status": "code_only_not_closed",
+        "previous_result": "Before: 782 PASS / 55 FAIL / 38 SKIP (dated benchmark suite); active Router prompt SHA d2ffd7f8 differed from historical 3be2fb5e; v2 cost projection USD 0.0447304 exceeded unchanged USD 0.04 limit.",
+        "existing_owner": "Original one-shot Router dependency v1 and Router/Temporal v2 benchmark gates plus active Router validation in tests/apps/test_router.py. No product Router, Temporal, planner or model prompt modified.",
+        "general_gap": "Old benchmark runners could be attempted after production source drift and their tests conflated historical evidence with current contract approval.",
+        "reused_mechanism": "The existing SHA-256 of Router prompt+schema, v2 source digest, unchanged historical evidence, and prior cost ceiling; no new infrastructure or permission.",
+        "changes": "Runner v1 now fails closed before the provider when the originally recorded prompt/schema pair changed; runner v2 preflight fails closed on historical source digest mismatch even without credentials. Historic 0.04 USD v2 cost bound retained, no re-anchoring or prompt edit. Three previously red tests now honestly preserve historical receipt, require stale-source refusal, and keep current active schema/source invariants distinct.",
+        "path_removed_or_scheduled": "Removed implicit runner assumption that the moving current Router contract is the reviewed historical contract. Actual redundant production coordination removal remains G11/G12, after parity proof.",
+        "negative_tests": [
+          "tests/benchmarks/test_router_dependency_live_v1.py",
+          "tests/benchmarks/test_router_temporal_live_v2.py",
+          "tests/benchmarks/test_router_temporal_current_v1.py"
+        ],
+        "active_independent_checks": [
+          "tests/apps/test_router.py",
+          "scripts/odyssey_stage_acceptance.py"
+        ],
+        "offline_tests": "tests/benchmarks overall 788 PASS / 51 FAIL / 38 SKIP after change; 47 targeted Router historical/current tests PASS; no fresh model/browser tests.",
+        "known_limits": "51 remaining failed historic benchmarks; changed live Router prompt is NOT re-approved, no current GPT semantic evaluation, no DEV deployment or four SHA reviewers. G01/full CI and R0 still FAIL."
       }
     },
     {
