@@ -1,13 +1,14 @@
 """Actual saved GPT-6 Router + GPT-5.6 Core dependent-fact write diagnostics.
 
-The existing Core compiler is replayed against immutable REAL model outputs.
-Normal mechanics run only in disposable Markdown vaults. This test explicitly
-distinguishes ordinary Core mechanical execution from the still-blocked full
-original-source candidate coverage required for runtime activation.
+The current Core compiler replays archived real-model responses in disposable
+Markdown vaults. This is a mechanical compatibility check, NOT proof that the
+now-changed model prompt would produce those outputs or that original-source
+coverage authorized any write. Archived response bytes remain SHA-pinned.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,16 +33,34 @@ from tests.runtime.test_fact_candidate_planning_vertical import _sdk_fake
 from tests.runtime.test_fact_candidate_semantic_luna_vertical import CLOCK, SCHEMA
 from tests.runtime.test_temporal_user_path_e2e import ConstantEmbedder
 
+# These are the unchanged historical 2026-10-11 receipt bytes, not fresh
+# provider approvals for any current Planner prompt or source revision.
+_ARCHIVED_RECEIPT_SHA256 = {
+    ("F23", "candidate-1"): "938b7f0a007f5a0a5d3b6918cbec9be242a3b10a8d76870a3d61b8b398d97b6b",
+    ("F23", "candidate-2"): "c6094d8d875b07a9961ae8f7b4a6f52b9e52b65e5d532beb58f55532660f63f1",
+    ("F26", "candidate-1"): "b50ddeab4e8572c8984a45b0745ee851a064d5c5bc531e8beb0a632c757481fc",
+    ("F26", "candidate-2"): "e5cb16949477605be072d04d319cc8314e07bb6ada1cf96ab6a272df55173d21",
+}
+
 
 def _plans(case_id: str):
-    """Compile exact saved real GPT-5.6 outputs through existing normal Core."""
+    """Replay immutable old outputs as fixtures, never approve changed inputs."""
     source, context = _observed(case_id)
     planned = []
     for uid in ("candidate-1", "candidate-2"):
-        unit, request, temporal, wire = gate.reviewed(case_id, uid)
+        unit, request, temporal, wire = gate._request(case_id, uid)
+        # The archived *authorization* no longer matches the current Planner
+        # envelope. Replaying frozen model output may test Core mechanics, but
+        # must never be mistaken for a newly reviewed or billable request.
+        with pytest.raises(ValueError, match="Unreviewed dependent Core request"):
+            gate.reviewed(case_id, uid)
         files = list(gate.RECEIPTS.glob(f"*--{case_id}--{uid}.json"))
         assert len(files) == 1
-        receipt = json.loads(files[0].read_text(encoding="utf-8"))
+        original_bytes = files[0].read_bytes()
+        assert (
+            hashlib.sha256(original_bytes).hexdigest() == _ARCHIVED_RECEIPT_SHA256[(case_id, uid)]
+        )
+        receipt = json.loads(original_bytes)
         assert receipt["mode"] == "LIVE_CORE_DEPENDENT_PLAN_ONLY"
         assert receipt["provider_status"] == "completed"
         assert receipt["validation"] == "local_compiler_accepted"
@@ -60,6 +79,20 @@ def _plans(case_id: str):
         assert unit.candidate_id == uid
         planned.append((request, compiled))
     return source, context, planned
+
+
+def test_archived_model_replay_rejects_mutated_receipt_bytes(tmp_path, monkeypatch):
+    """Replaying historical responses must not silently accept altered evidence."""
+    receipts = tmp_path / "historical-receipts"
+    receipts.mkdir()
+    for original in gate.RECEIPTS.glob("*--F23--candidate-*.json"):
+        (receipts / original.name).write_bytes(original.read_bytes())
+    monkeypatch.setattr(gate, "RECEIPTS", receipts)
+    target = next(receipts.glob("*--F23--candidate-2.json"))
+    # A harmless whitespace edit still breaks the authentic witness SHA.
+    target.write_bytes(target.read_bytes() + b" ")
+    with pytest.raises(AssertionError):
+        _plans("F23")
 
 
 def _vault(tmp_path: Path, *, existing_report: bool):

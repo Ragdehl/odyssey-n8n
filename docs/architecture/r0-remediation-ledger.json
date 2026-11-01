@@ -115,6 +115,17 @@
         ],
         "offline_tests": "tests/benchmarks overall 788 PASS / 51 FAIL / 38 SKIP after change; 47 targeted Router historical/current tests PASS; no fresh model/browser tests.",
         "known_limits": "51 remaining failed historic benchmarks; changed live Router prompt is NOT re-approved, no current GPT semantic evaluation, no DEV deployment or four SHA reviewers. G01/full CI and R0 still FAIL."
+      },
+      "archived_core_mechanical_replay_20261101": {
+        "status": "code_checked_not_closed",
+        "observed_failure": "5 archived F23/F26 Core Markdown tests and 6 dependent live-gate tests failed before Core execution: reviewed_dependent_requests.json does not match the changed current Planner envelope (each of 4 requests drifted by 274 serialized bytes). Correct fail-closed hash refusal, not proven Core write regression.",
+        "preexisting_owners": "Retired 2026-10-11 two-candidate legacy preview and run_dependent_live.reviewed immutable model approval; active generic full-source handoff tests/runtime/test_complete_source_handoff.py and tests/runtime/test_general_source_fact_graph_e2e.py; actual Core execute_request, VaultRepository and canonical readback.",
+        "reused_instead_of_reimplementation": "Unmodified request reviewer for any real/provider gate; four authentic 2026-10-11 historical receipt byte SHA256 values pinned from original Git artifact. _request only as offline fixture preparation; downstream model responses are recorded outputs recompiled through current Core on a disposable vault with no source/write authority inherited from history.",
+        "obsolete_path_removed": "Removed the old test assumption that a dated, separately scoped Planner request must still match the changed current prompt. No production rewrite or extra Coordinator/Planner; the old per-candidate production path had already been retired by 4c4b283; deletion of still-unused historical pilot code must await callers and full gate review.",
+        "positive_proof": "5 historical-output tests execute through current Core with disposable Markdown physical assertions, including multiple facts on one source, existing typed note reuse and document creation; active generic handoff/temporal/identity/current source tests 86 PASS.",
+        "negative_proof": "All 4 changed current requests are rejected by the unchanged reviewed gate; a one-byte append to archived receipt blocks replay; old flag, budget, no-retry controls separately exercised using only in-process fake provider and isolated mock of stale reviewer; original source-coverage manifest still rejects unauthorized direct activation.",
+        "bench_scope": "After editing and adding a tamper sentinel, tests/benchmarks: 800 PASS, 40 FAIL, 38 SKIP (offline); earlier 788 PASS / 51 FAIL / 38 SKIP. Original failed tests are not all solved and CI is not green.",
+        "limitations": "No fresh GPT model semantic proof, no authenticated Chromium/n8n/current version E3, no current prompt acceptance, no four independent SHA audits. G01 and R0 NOT ACCEPTED."
       }
     },
     {
