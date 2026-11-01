@@ -22,3 +22,7 @@ Router failures were bounded to the dependent no-split sentinels:
 No retry was performed. The immutable consumed evidence is `results/1ede7c7f9b92.json`.
 
 After this evidence, the Router prompt was corrected generically around truth-condition completeness of exact spans and capability choice by requested lifecycle semantics rather than surface resemblance. Provider-free regressions and disposable user-path E2E are green; that later prompt revision has **not** received another live model call under this authorization.
+
+## Archive status (2026-11-01)
+
+The eight authorized provider calls are already consumed; the executable `run_live.py` was retired as unreachable from product code. The immutable matrix and 6/8 receipt remain available for historical review, including both failures. Neither the receipt nor its source digest authorizes the current prompt. `tests/benchmarks/test_router_core_followup_archive.py` protects the archived bytes and cost/attempt invariants. Current semantics and no-write authority are verified through the active Router/Core tests and the R0 final live acceptance gate, still incomplete.

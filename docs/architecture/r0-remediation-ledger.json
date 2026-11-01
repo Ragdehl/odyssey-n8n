@@ -126,6 +126,17 @@
         "negative_proof": "All 4 changed current requests are rejected by the unchanged reviewed gate; a one-byte append to archived receipt blocks replay; old flag, budget, no-retry controls separately exercised using only in-process fake provider and isolated mock of stale reviewer; original source-coverage manifest still rejects unauthorized direct activation.",
         "bench_scope": "After editing and adding a tamper sentinel, tests/benchmarks: 800 PASS, 40 FAIL, 38 SKIP (offline); earlier 788 PASS / 51 FAIL / 38 SKIP. Original failed tests are not all solved and CI is not green.",
         "limitations": "No fresh GPT model semantic proof, no authenticated Chromium/n8n/current version E3, no current prompt acceptance, no four independent SHA audits. G01 and R0 NOT ACCEPTED."
+      },
+      "retired_router_core_provider_runner_20261101": {
+        "status": "code_verified_offline_not_closed",
+        "existing_owner": "Router and Core production paths already tested at tests/apps/test_router.py, tests/runtime/test_complete_source_handoff.py and tests/runtime/test_general_source_fact_graph_e2e.py; old one-shot experiments lived solely under benchmarks/router_core_followup_live_v3 and v3_8.",
+        "general_defect": "An unapproved ninth-call Sol experiment and an already-consumed eight-call historical campaign retained two executable provider callers totaling 689 lines; old tests required a historic $0.31 budget whose active recalculation is $0.31034608, but no new approval existed. Historical evidence was conflated with current approval.",
+        "reuse": "Existing generic Router/Core source and ownership tests remain the real behavior owner. Preserve two unchanged, hash-pinned original matrices and actual consumed 8-call receipt as historical data; test archived bytes rather than maintaining old provider executors.",
+        "code_removed": "benchmarks/router_core_followup_live_v3/run_live.py (361 lines), benchmarks/router_core_followup_live_v3_8/run_live.py (328 lines), tests/benchmarks/test_router_core_followup_live_v3.py (54 lines). New compact data-only receipt integrity test; both READMEs explain why source code was retired.",
+        "observable_before_after": "Before: the v3 preflight was RED on changed budget and its one-Sol call was never approved; the v3_8 already used 8/8 and was not current model approval. After: no executable old runner in either archived folder; original receipt hash d957cd2... unchanged, 8 attempts/0 retries/no writes and 6/8 with two Router FAILs asserted; the full active route/Core tests exercise current semantics without invoking archival code.",
+        "positive_negative_tests": "tests/benchmarks/test_router_core_followup_archive.py verifies matrices, exact receipt, bound, zero writes/retries and two failed Router records; a modified archive receipt fails closed. Active generic Router and full-source Core regression set: 87 PASS with archive tests. Only offline, not fresh GPT/browser.",
+        "postchange_suite": "tests/benchmarks 801 PASS / 38 FAIL / 38 SKIP vs prior 800 PASS / 40 FAIL / 38 SKIP; removed two obsolete failing assertions, no xfail/skip or budget lift.",
+        "limits": "Retirement is solely of unreferenced benchmark executable code, NOT one of the two active production semantic coordinators. 38 benchmark failures and full CI remain red; independent four-role final audit and 32-case E2E not run; G01/R0 not closed."
       }
     },
     {
