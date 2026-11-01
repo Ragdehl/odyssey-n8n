@@ -61,7 +61,10 @@ from odyssey_core.dependent_group_graph import (
     classify_dependent_group_review_rejection,
     verify_dependent_group_graph,
 )
-from odyssey_core.dependent_reference_form import referenced_finite_cardinality
+from odyssey_core.dependent_reference_form import (
+    MIN_COMPLETE_COHORT_MEMBERS,
+    referenced_finite_cardinality,
+)
 from odyssey_core.dependent_source_scopes import (
     DependentSourceScopesError,
     verify_dependent_source_scopes,
@@ -110,6 +113,7 @@ from odyssey_core.whole_source_compiler import (
     resolve_attested_owner_targets,
 )
 from odyssey_core.whole_source_readback import assert_reviewed_markdown
+from odyssey_core.write_plan_enrichment import MAX_CORE_REFERENCE_FACTS
 from odyssey_runtime.dev_hot_path_diagnostics import timed_dev_hot_path
 from odyssey_runtime.routing import _aggregate as aggregate_verified_application_results
 from odyssey_runtime.whole_source_model_contract import (
@@ -2064,7 +2068,7 @@ class WholeSourceLightExecutor:
         cardinality = referenced_finite_cardinality(scope.mention)
         if (
             cardinality is None
-            or not 2 <= cardinality <= 8
+            or not MIN_COMPLETE_COHORT_MEMBERS <= cardinality <= MAX_CORE_REFERENCE_FACTS
             or len(route_scopes) != 2
             or [group.get("capability") for group in route_scopes] != ["core", "tasks"]
         ):
@@ -2268,10 +2272,6 @@ class WholeSourceLightExecutor:
                         )
                         or len(_split_task_edges(part)[1]) > 1
                         or (not _split_task_edges(part)[0] and bool(part.dependencies))
-                        or (
-                            bool(_split_task_edges(part)[0])
-                            and len(part.dependencies) not in range(1, 9)
-                        )
                     )
                 )
                 for part in graph.groups

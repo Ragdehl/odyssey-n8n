@@ -21,6 +21,10 @@ from .request_planning import (
     WriteAction,
 )
 
+# Existing Core/E3 plan resource envelope, shared by App adapters; this is
+# not a linguistic participant count or permission to infer group membership.
+MAX_CORE_REFERENCE_FACTS = 16
+
 
 @dataclass(frozen=True, slots=True)
 class CoreLinkFactSpec:
@@ -87,7 +91,7 @@ def add_core_reference_facts(plan: RequestPlan, links: tuple[CoreLinkFactSpec, .
     """
     if not links:
         return plan
-    if len(links) > 16 or any(
+    if len(links) > MAX_CORE_REFERENCE_FACTS or any(
         not isinstance(spec, CoreLinkFactSpec)
         or not all(
             (
@@ -208,7 +212,7 @@ def ensure_complete_core_reference_set(
     """
     if not links:
         return plan
-    if len(links) > 16 or any(
+    if len(links) > MAX_CORE_REFERENCE_FACTS or any(
         not isinstance(spec, CoreLinkFactSpec)
         or not isinstance(spec.canonical_target_name, str)
         or not spec.canonical_target_name.strip()

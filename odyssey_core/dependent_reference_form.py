@@ -35,6 +35,11 @@ _GENERIC_HEADS = frozenset(
 )
 
 
+# A multi-member source review requires two or more independently grounded
+# identities. This is a structural proof minimum, never a guessed source set.
+MIN_COMPLETE_COHORT_MEMBERS = 2
+
+
 _COUNTED_PRONOUN_DETERMINERS = frozenset({"los", "las", "les", "the"})
 _COUNTED_PRONOUN_NUMBERS = {
     "dos": 2,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from odyssey_core.dependent_reference_form import MIN_COMPLETE_COHORT_MEMBERS
 from odyssey_core.request_planning import (
     PlannerClarification,
     RequestPlan,
@@ -12,6 +13,7 @@ from odyssey_core.request_planning import (
     WriteAction,
 )
 from odyssey_core.write_plan_enrichment import (
+    MAX_CORE_REFERENCE_FACTS,
     CoreLinkFactSpec,
     add_core_reference_facts,
     ensure_complete_core_reference_set,
@@ -39,7 +41,7 @@ class TaskCorePlanner:
     ) -> None:
         self._planner = planner
         if verified_person_set and (
-            not 2 <= len(verified_person_set) <= 8
+            not MIN_COMPLETE_COHORT_MEMBERS <= len(verified_person_set) <= MAX_CORE_REFERENCE_FACTS
             or any(
                 not isinstance(p, tuple)
                 or len(p) != 2
