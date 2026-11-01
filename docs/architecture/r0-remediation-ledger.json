@@ -185,6 +185,15 @@
         "important_limits": "The reviewed facts and decisions are TEST-SUPPLIED semantic hypotheses; no current GPT model was asked to interpret these variants and no P4/browser/n8n real journey was run. Four owner cases are known P4 NEEDS_ATTENTION not success; group cases are source-proof only, and ambiguity negative cases do not establish useful partial-save behavior. User-generated NoteSchema type requires further physical schema proof, though existing generated Core tests include custom type hints. This cannot certify natural-language robustness. The 16 live_challenges are NOT simulated model successes: their stored expectation is for future human/AI interpretation on actual product path only.",
         "future_real_ai_gate": "Keep the 32 acceptance cases untouched. Before R0 acceptance, after production semantic consolidation, evaluate the 55 reviewed-source variants PLUS 16 semantic-only challenges (71 supplemental inputs) as a separate real-model browser/n8n/Markdown stress campaign with result-level semantic/owner/ambiguity oracles; detect source/order-dependent failures. Reuse existing R0 browser infrastructure, a fresh bounded approval/budget and four role reviewers; never fake receipts or treat offline proposals as fresh model outputs. The official stage 32 real cases and final whole-code four-role audit remain mandatory.",
         "no_product_logic_added": "No Core/Runtime/Apps production files, prompts, model settings, routing branches, NoteSchema or user vault changed in this checkpoint; all new case phrasing lives only in fixtures/tests. The tests do not conceal already known P4 owner gaps."
+      },
+      "r0_semantic_static_branch_tripwire_20261101": {
+        "status": "offline_invariant_verified_not_full_audit",
+        "source_baseline_sha": "2dfd87ca251847012eb4932f6bb6b80ec38ddbe5",
+        "existing_suspect_count": 86,
+        "files_with_suspect_count": 48,
+        "owner": "scripts/audit_semantic_branch_regressions.py reused by tests/benchmarks/test_r0_semantic_branch_regressions.py and the existing scripts/odyssey_cross_surface_gate.py e2_identity_and_source group; baseline docs/architecture/r0-semantic-branch-baseline.json SHA pinned in tests. No extra agent or new pipeline.",
+        "positive_negative": "Python AST scans all odyssey_core/odyssey_runtime/odyssey_apps modules on every cross-surface gate. Synthetic tests inject phrase branch, note-type branch, fixed participant cap, old route proposed_relation_spans > 8, match/case, and a new branch in each package: all are rejected as new review findings. Generic schema-driven type validation, source-bound proof and schema-based resource limits accepted. Existing findings may be removed but may not be silently expanded or rewritten.",
+        "limits": "86 are heuristic review flags, NOT proven 86 software defects, and passing means no NEW unreviewed flags only. Runtime/Apps JavaScript, prompt prose, dynamic aliases, other sentence-semantic logic and existing flagged paths require human and four-role whole-source audit before acceptance. Audit remains open and cannot be made clean by re-pinning baseline without review."
       }
     },
     {
@@ -206,6 +215,14 @@
         "general_fix_and_deletion": "Removed four legacy hard-coded eight-item semantic ceilings in the two existing Core validators without creating any new dispatcher, type rule, planner, writer or service. Kept source max 4096, fact text max 320, max 16 reviewed atomic facts, per-claim unique identifiers, exact source checks, slot identity, verified relationship groups, applicant schema, original entity attribution and E3 write authority.",
         "positive_and_negative": "157 Python focal PASS including 9 and 12 references in source and Core plan, 12 unverified mentions, 12 separate verified groups, 4 Core/E3 physical self.md readbacks with nine existing identities of person/project/document/concept types, invented/duplicate/absent names, bad slot counts, forged group phrases and wrong source rejected.",
         "limitations": "No product P4 end-to-end path with 9 references; another source proposal/reviewer may still constrain 8 elsewhere. Generic note owner P4 R31 still rejects before Core despite existing Core semantic writer. Final 32-case live GPT/browser/n8n/Markdown and four audits missing. G03/G04 and R0 NOT CLOSED."
+      },
+      "p4_verified_9_source_relationships_20261101": {
+        "status": "code_verified_offline_not_closed",
+        "before": "Four actual P4 synthetic-vault tests with 9 distinct current SELF relationship groups and identity type person/project/document/concept all refused after the FIRST Router response solely because len(proposed_relation_spans)>8; corresponding 1 and 8 cases completed.",
+        "existing_owner_reused": "odyssey_runtime/whole_source_light.py validated route-to-Core SELF relationship boundary; existing odyssey_core/whole_message_relationship_proof.py verifies original source occurrences and canonical actor SELF relation members, and Core/E3 alone writes Markdown.",
+        "one_line_product_fix": "Removed the redundant maximum-eight proposal-count check, retaining <=4096 source bounds, <=128 per-span length, exact distinct source occurrence verification, authenticated SELF membership, ambiguity rejection, schema and Core/E3 write authorization. No type/frase/order special branch, new handler, prompt or second writer.",
+        "proof": "tests/runtime/test_r0_n_relationship_groups_p4.py with 1/8/9 independent actual authenticated SELF group proof (all Note types person/project/document/concept) → P4 recorded-model path → canonical E3 physical Markdown readback → replay idempotency. 9th invented or duplicated source group refuses and makes zero writes, across all four Note types. 20 tests PASS; original Issue157 family group negatives also PASS.",
+        "remaining": "This closes one active P4 cap only, not all historic 2-to-8 Person/task scope paths, P4 arbitrary NoteSchema natural owner R31, full 32 actual GPT/browser cases or four fresh independent auditors. G03/R0 OPEN."
       }
     },
     {

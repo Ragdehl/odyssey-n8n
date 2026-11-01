@@ -928,7 +928,6 @@ class WholeSourceLightExecutor:
             )
         if (
             not isinstance(proposed_relation_spans, list)
-            or len(proposed_relation_spans) > 8
             or any(
                 not isinstance(span, str) or not span or len(span) > 128
                 for span in proposed_relation_spans
