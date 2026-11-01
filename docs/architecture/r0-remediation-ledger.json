@@ -146,6 +146,14 @@
         "positive_negative_proof": "Archive 3 receipt hashes and 2 request-snapshot hashes verified unchanged; each genuine 4-call result is source_valid but all_fixture_matches=false and live_model_quality_verified=false. Tampered archived receipt rejected. Current tests/apps/test_fact_candidates.py and retained observed 23-case tests + archive = 64 PASS, no fresh provider.",
         "bench_scope": "804 PASS / 29 FAIL / 38 SKIP after this edit (before: 801 PASS / 38 FAIL / 38 SKIP); 29 remain openly failing, not suppressed or reanchored.",
         "next_and_limits": "Continue classifying historic temporal/scoped/Core QA gates before removing any helpers consumed by current vertical tests. Real product coordinator G11/G12 not yet retired; no fresh GPT, authenticated browser/n8n, four final reviewer approvals or DEV deployment; R0/G01 not accepted."
+      },
+      "archived_prompt_exports_20261101": {
+        "status": "offline_verified_not_closed",
+        "before": "Two archived validation tests assumed a dated Playground export and Planner v5 manifest matched moving current production prompts; current contracts drift, so assertions failed before any model.",
+        "reused_owners": "Original saved Playground and Planner v5 manifest bytes SHA-256 plus existing strict verify_manifest() refusal, historical cost bound and current Router/Core tests. No new provider gate, prompt, model schema, cost cap or production code.",
+        "change": "Tests now preserve authentic historical SHA and require drift to be rejected; old snapshot cannot self-certify the current model. R0 full browser campaign already enforces all 32 cases, independent result provenance, fail-close and readback.",
+        "positive_negative": "43 focused benchmark/acceptance tests PASS, including 32-case acceptance guard; 806 PASS / 27 FAIL / 38 SKIP across benchmarks, vs 804/29/38. No real GPT/browser run or final four-role audit.",
+        "production_code_deleted": "None in this small checkpoint; active semantic coordinator retirement remains G11/G12. Previously retired old runners are separately recorded."
       }
     },
     {
@@ -159,7 +167,16 @@
       "change_contract": "Distinguish diff review from whole-repo scans; record honest coverage and require pinned immutable source.",
       "verification": "Negative documentation-only diff with known pre-existing source defect; four roles independently assert scope.",
       "status": "not_started",
-      "review_decision": "pending_review"
+      "review_decision": "pending_review",
+      "post_consolidation_residual_audit": {
+        "status": "scheduled_within_r0_not_run",
+        "order": "AFTER actual G03-G12 semantic consolidation and BEFORE 32-case real model/browser campaign and final four SHA approvals; repeat after significant changes as needed.",
+        "source_baseline": "Immutable existing whole-repository audit at e336d1d; repeat file inventory and full production-subtree high-risk read on final consolidated SHA.",
+        "coverage": "All tracked files indexed; entire production Python Core/Runtime/Apps and all active JS/web/n8n/workflow/writer paths explicitly covered by four role-separated read-only reviewers; deep-read vs AST/index-only disclosed; semantic special paths, duplicate owners, orphan/dead modules, E3 bypass, E2 context, actor/provenance, budgets, runtimes and tests.",
+        "roles": "Reuse Generality/Quality/Testing/Performance, not a fifth auditor. A small PR-diff review is insufficient and no clean report without before-after residual inventory and source SHA.",
+        "acceptance": "Correct all material findings in existing G01-G12 ledger, perform all 32 independent real-model browser/n8n/E3 Markdown UI reload/replay cases on SHA-matched DEV, then final four independent SHA auditors and --require-stage-accepted R0 PASS.",
+        "note": "This is a mandatory audit milestone, NOT an added feature stage, and was not performed by merely updating documentation."
+      }
     },
     {
       "id": "G03",
