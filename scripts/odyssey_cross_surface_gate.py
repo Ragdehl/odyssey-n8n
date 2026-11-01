@@ -83,7 +83,6 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_p4_dependent_source_scopes.py",
         "tests/core/test_p4_dependent_group_graph.py",
         "tests/core/test_p4_canonical_group_handoff.py",
-        "tests/core/test_r0_canonical_source_fact_note.py",
         "tests/core/test_p4_multi_reference_set_guard.py",
         "tests/core/test_p4_plural_core_prompt_contract.py",
         "tests/core/test_p4_plural_complete_cohort.py",
