@@ -222,7 +222,6 @@ def compile_reviewed_operations(
             or not raw_text.strip()
             or len(raw_text) > 320
             or not isinstance(names, list)
-            or len(names) > 8
             or any(not isinstance(n, str) or not n.strip() for n in names)
             or len(set(names)) != len(names)
             or "[[" in raw_text

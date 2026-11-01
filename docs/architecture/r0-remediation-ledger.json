@@ -188,8 +188,16 @@
       ],
       "change_contract": "Remove candidate-shape and semantic max-8 constraints, retaining authenticated evidence, bounded memory/resources, provenance and no invented relation.",
       "verification": "0/1/N and N:M facts, >8 references, ambiguous/hallucinated names refused, physical readback.",
-      "status": "not_started",
-      "review_decision": "pending_review"
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "source_reference_cardinality_fix_20261101": {
+        "status": "offline_verified_partial",
+        "before": "Original Core source coverage rejected 9 or 12 explicit reference_names on a single fact solely because len(names)>8; Core reviewed compiler also rejected >8; other paths rejected >8 unverified source mentions and authenticated groups independently.",
+        "existing_owner": "odyssey_core.whole_message_coverage.validate_whole_message_coverage and odyssey_core.whole_source_compiler.compile_reviewed_operations; existing Core/E3 execute_request for authenticated identity, canonical Markdown and readback.",
+        "general_fix_and_deletion": "Removed four legacy hard-coded eight-item semantic ceilings in the two existing Core validators without creating any new dispatcher, type rule, planner, writer or service. Kept source max 4096, fact text max 320, max 16 reviewed atomic facts, per-claim unique identifiers, exact source checks, slot identity, verified relationship groups, applicant schema, original entity attribution and E3 write authority.",
+        "positive_and_negative": "157 Python focal PASS including 9 and 12 references in source and Core plan, 12 unverified mentions, 12 separate verified groups, 4 Core/E3 physical self.md readbacks with nine existing identities of person/project/document/concept types, invented/duplicate/absent names, bad slot counts, forged group phrases and wrong source rejected.",
+        "limitations": "No product P4 end-to-end path with 9 references; another source proposal/reviewer may still constrain 8 elsewhere. Generic note owner P4 R31 still rejects before Core despite existing Core semantic writer. Final 32-case live GPT/browser/n8n/Markdown and four audits missing. G03/G04 and R0 NOT CLOSED."
+      }
     },
     {
       "id": "G04",

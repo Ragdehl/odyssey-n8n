@@ -152,18 +152,14 @@ def validate_whole_message_coverage(
     # Unverified mentions carry no identity authority. They may be saved as
     # literal source, but independent semantic review must preserve each one.
     mentions = tuple(unverified_source_mentions)
-    if (
-        len(mentions) > 8
-        or any(not isinstance(m, str) or not m or m not in source for m in mentions)
-        or any(
-            not any(
-                isinstance(row, Mapping)
-                and isinstance(row.get("reviewed_text"), str)
-                and mention in row["reviewed_text"]
-                for row in judgments
-            )
-            for mention in mentions
+    if any(not isinstance(m, str) or not m or m not in source for m in mentions) or any(
+        not any(
+            isinstance(row, Mapping)
+            and isinstance(row.get("reviewed_text"), str)
+            and mention in row["reviewed_text"]
+            for row in judgments
         )
+        for mention in mentions
     ):
         raise WholeMessageCoverageError("Unverified source mention was not retained")
     verified = set(verified_relationship_members)
@@ -172,7 +168,7 @@ def validate_whole_message_coverage(
     # Core supplies each source-quoted relation AND its verified members.
     # Names known somewhere in SELF do not prove membership in every fact.
     groups = tuple(verified_relationship_groups)
-    if len(groups) > 8 or any(
+    if any(
         not isinstance(phrase, str)
         or phrase not in source
         or not isinstance(members, (tuple, list))
@@ -290,7 +286,6 @@ def validate_whole_message_coverage(
         names = claim.get("reference_names")
         if (
             not isinstance(names, list)
-            or len(names) > 8
             or len(set(names)) != len(names)
             or any(not isinstance(n, str) or not n.strip() or len(n) > 128 for n in names)
         ):
