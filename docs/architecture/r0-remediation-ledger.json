@@ -256,8 +256,16 @@
       ],
       "change_contract": "Interpret arbitrary source group through AI, verify existing Core canonical memberships, no hard-coded Person/2–8/grammar handling.",
       "verification": "0/1/2/3/5/9+ typed groups, cross-actor and unknown members safe pending, E3/Tasks replay.",
-      "status": "not_started",
-      "review_decision": "pending_review"
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "core_general_nm_group_proof_20261101": {
+        "status": "source_core_e3_offline_proof_not_live_model_not_deployed_not_closed",
+        "existing": "odyssey_core.dependent_group_graph.verify_dependent_group_graph already establishes original complete source, independent review, source-specific N:M spans and no forward edges. odyssey_core.dependent_group_evidence.prove_canonical_group_handoff maps model edges to actual E3-written Markdown receipts; odyssey_core.application.DependentReferenceSetGuard enforces individual fresh canonical stable IDs and fact-bearing markers at the existing E3 prewrite seam. No new resolver, planner, router, writer, stage or backend.",
+        "defect": "Generic reviewed source DAG rejected 9 or 12 independently proven edges solely with len(dependencies)>8, despite bounded original source (4096) and <=16 reviewed groups. Existing E3 multi-reference guard rejected >8 edges and a mixed NoteSchema type set, and also required all references to use one identical mention despite each edge independently checking its own marker and stable target. Both checks were unnecessary semantic shape restrictions.",
+        "source_change": "Remove graph fan-in 8-only veto and E3 grouped guard arbitrary upper limit/same-type/same-mention restrictions, retain at least two edges, uniqueness by canonical stable Note ID, strict original source and independent reviewer match, Core physically materialized proof, per-edge E3 fresh CAS ID, type and canonical name, and after-write physical Markdown. Resource bounds unchanged at 4096 source bytes and <=16 source groups; max 4096 is source length in characters, not payload bytes.",
+        "proof": "tests/core/test_p4_dependent_group_graph.py: 2/3/5/9/12 typed source edges in both original and reversed order; independent reviewer missing-one mismatch fails. tests/core/test_r0_mixed_cardinality_e3.py: physically write 9 canonical references to concept/project/document/person and additional dynamically registered equipment NoteSchema type, original reviewed two-source-group graph with 9 links -> exact Core handoff -> E3 nine physical links in target Note -> replay unchanged. Reverse source order, omitted marker and substituted canonical ID negative, independent review dropped edge fails; a real canonical edit between predecessor and consumer makes E3 abort without modifying target. Additional actual Core/E3 nine-link mixed-type write with N distinct canonical source mentions, without shared pronoun or note type; duplicate ID fails at grouped preflight construction. 91 focused tests PASS across reviewed source graph, physical E3, existing dependent guard, and active P4 dependent N-group regressions.",
+        "not_yet_done": "Existing person/task-specialized cardinal/grammar handling, provider strict model contract and previous 2-8 limits in Tasks and other active modules require broader owner-based correction. Nine edges can be carried by the Core graph but not asserted as end-to-end supported by every router/model/Tasks path or current DEV. No fresh GPT, n8n, authenticated browser, real user vault, final 32 E2E, four SHA auditors or stage acceptance yet."
+      }
     },
     {
       "id": "G05",

@@ -326,11 +326,9 @@ class DependentReferenceSetGuard:
     def __post_init__(self) -> None:
         if (
             not isinstance(self.guards, tuple)
-            or not 2 <= len(self.guards) <= 8
+            or len(self.guards) < 2
             or any(not isinstance(guard, DependentReferenceGuard) for guard in self.guards)
             or len({guard.evidence.stable_note_id for guard in self.guards}) != len(self.guards)
-            or len({guard.evidence.note_type for guard in self.guards}) != 1
-            or len({guard.mention for guard in self.guards}) != 1
         ):
             raise WritePreflightGuardError("MULTI_DEPENDENT_REFERENCE_SET_INVALID")
 

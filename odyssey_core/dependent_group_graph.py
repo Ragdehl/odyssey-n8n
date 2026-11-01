@@ -201,8 +201,6 @@ def verify_dependent_group_graph(
                 raise DependentGroupGraphError("Ambiguous, forward, or ungrounded dependency")
             seen.add(key)
             dependencies.append(GroupDependency(parent, mention, antecedent_mention))
-        if len(dependencies) > 8:
-            raise DependentGroupGraphError("Dependency fan-in exceeds budget")
         has_dependency |= bool(dependencies)
         groups.append(
             SourceGroup(i, group["capability"], group["source_quote"], tuple(dependencies))
