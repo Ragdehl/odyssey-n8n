@@ -172,7 +172,7 @@ class WholeSourceLightError(ValueError):
 
 
 def _verified_route_writes(result: ApplicationResult) -> list[dict[str, str]]:
-    """Project ONLY actual materialized Core/Tasks receipts, bounded for UI."""
+    """Project ALL materialized Core/Tasks receipts, excluding unverified writes."""
     writes = [
         {
             "status": unit.status.value,
@@ -189,7 +189,7 @@ def _verified_route_writes(result: ApplicationResult) -> list[dict[str, str]]:
         and isinstance(unit.stable_note_id, str)
         and unit.stable_note_id
     ]
-    return writes if 0 < len(writes) <= 8 else []
+    return writes
 
 
 @dataclass
@@ -757,11 +757,7 @@ class WholeSourceLightExecutor:
                                 "status": result.status.value,
                                 "stage_count": len(route_stages),
                                 "temporal": [],
-                                **(
-                                    {"writes": verified_writes}
-                                    if 0 < len(verified_writes) <= 8
-                                    else {}
-                                ),
+                                **({"writes": verified_writes} if verified_writes else {}),
                                 "steps": [
                                     {"name": stage.name[:80], "input": source[:512], "output": ""}
                                     for stage in route_stages
@@ -788,7 +784,7 @@ class WholeSourceLightExecutor:
             )
             # Project actual SUCCEEDED Core unit receipts, never Planner
             # intentions. Each item is physically postwrite; no identity
-            # inferred from text. The browser supports up to eight entries.
+            # inferred from text. No silent truncation of materialized writes.
             verified_writes = _verified_route_writes(result)
             # Prior per-operation route_index values are action ordinals,
             # not Router-proven source subroutes. One complete Core source
@@ -810,7 +806,7 @@ class WholeSourceLightExecutor:
                         "stage_count": len(stages),
                         "status": result.status.value,
                         "temporal": [],
-                        **({"writes": verified_writes} if 0 < len(verified_writes) <= 8 else {}),
+                        **({"writes": verified_writes} if verified_writes else {}),
                     }
                 ],
             }

@@ -194,6 +194,14 @@
         "owner": "scripts/audit_semantic_branch_regressions.py reused by tests/benchmarks/test_r0_semantic_branch_regressions.py and the existing scripts/odyssey_cross_surface_gate.py e2_identity_and_source group; baseline docs/architecture/r0-semantic-branch-baseline.json SHA pinned in tests. No extra agent or new pipeline.",
         "positive_negative": "Python AST scans all odyssey_core/odyssey_runtime/odyssey_apps modules on every cross-surface gate. Synthetic tests inject phrase branch, note-type branch, fixed participant cap, old route proposed_relation_spans > 8, match/case, and a new branch in each package: all are rejected as new review findings. Generic schema-driven type validation, source-bound proof and schema-based resource limits accepted. Existing findings may be removed but may not be silently expanded or rewritten.",
         "limits": "86 are heuristic review flags, NOT proven 86 software defects, and passing means no NEW unreviewed flags only. Runtime/Apps JavaScript, prompt prose, dynamic aliases, other sentence-semantic logic and existing flagged paths require human and four-role whole-source audit before acceptance. Audit remains open and cannot be made clean by re-pinning baseline without review."
+      },
+      "materialized_write_projection_completeness_20261101": {
+        "status": "offline_p4_physical_verified_not_closed",
+        "before": "For one P4 request with 10 source-attributed independently dated facts, Core/E3 persisted all 10 real Markdown calendar-day notes, but _verified_route_writes returned [] due a hardcoded limit of eight. Two other execution-flow constructors erased the entire writes field when >8, so graph reported no write despite durable user data.",
+        "reused_owner": "Existing Core UnitResult/ActionResult materialized receipts; P4 _verified_route_writes for bounded projection; existing odyssey_web/progress.js routeEvidence already iterates all route.writes, so no renderer rewrite or independent graph owner needed.",
+        "fix": "Remove three redundant 8-result presentation ceilings (a 4-line net production deletion), without changing Core E3 authority or adding semantic dispatch, note-type cases, prompts, agent, service, writer or numeric truncation. Only show succeeded, materially affected, authenticated affected_stable_note_ids backed unit receipts.",
+        "positive_negative": "tests/runtime/test_r0_write_receipt_completeness.py: 12 verified receipts kept in source order, no false/failed/unaffected writes, 10 actual Core/E3 dated Markdown physical writes, 10 actual P4 output graph writes from recorded model responses and exact replay. 73 focused PASS with existing P4, owner-gap and Core-anchored routes.",
+        "limitations": "Offline recorded-model P4, not fresh model or browser; browser JS renders every supplied write but interactive Chromium not rerun. Core G05 arbitrary target requires independent owner proof not present in current P4 proposal/review/speaker contract; do not pass raw proposed subject as owner or create a competing writer. Full 32 real-model/browser E2E and four roles still unverified."
       }
     },
     {
@@ -249,7 +257,14 @@
       "change_contract": "P4 carries Core-selected natural canonical owner, without Day/SELF-only semantics.",
       "verification": "R31 positive P4→correct Markdown owner→Notes; arbitrary NoteSchema type, ambiguous/unknown owner negatives.",
       "status": "not_started",
-      "review_decision": "pending_review"
+      "review_decision": "pending_review",
+      "owner_proof_boundary_inspection_20261101": {
+        "status": "diagnosed_not_implemented",
+        "existing": "Core semantic_write.compile_semantic_write already selects described canonical target for any NoteSchema type; P4 has independent source coverage and two speaker reviewers.",
+        "missing": "P4 reviewed fact schema does not attest per-fact canonical owner; speaker reviewers prove participation/negation, not which named third-party note is owned. The Planner subject is one untrusted model suggestion and cannot be elevated to owner/write authority merely because the spelling appears in source or the reviewer also mentions the identity.",
+        "decision": "No raw subject-to-SelectionCriteria shortcut, no alternate owner compiler/writer, no new note-type/phrase branch. Remain fail-closed for R31 pending independently reviewed owner semantics and schema-contract live-model approval as required by odyssey-llm-stage. Both whole-source and canonical Core identity evidence must agree before any E3 write.",
+        "required_next": "Design and test a minimal independent per-fact owner semantic attestation using existing Core reviewer/model contract; prove positive across user-defined NoteSchema and source reorderings and negative ambiguous/stale/cross-actor, then bounded provider eval, P4 physical/browser acceptance."
+      }
     },
     {
       "id": "G06",
