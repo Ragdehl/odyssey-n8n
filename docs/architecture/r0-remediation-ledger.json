@@ -137,6 +137,15 @@
         "positive_negative_tests": "tests/benchmarks/test_router_core_followup_archive.py verifies matrices, exact receipt, bound, zero writes/retries and two failed Router records; a modified archive receipt fails closed. Active generic Router and full-source Core regression set: 87 PASS with archive tests. Only offline, not fresh GPT/browser.",
         "postchange_suite": "tests/benchmarks 801 PASS / 38 FAIL / 38 SKIP vs prior 800 PASS / 40 FAIL / 38 SKIP; removed two obsolete failing assertions, no xfail/skip or budget lift.",
         "limits": "Retirement is solely of unreferenced benchmark executable code, NOT one of the two active production semantic coordinators. 38 benchmark failures and full CI remain red; independent four-role final audit and 32-case E2E not run; G01/R0 not closed."
+      },
+      "retired_consumed_router_fourcall_runner_20261101": {
+        "status": "offline_code_verified_not_closed",
+        "owner_and_defect": "The four-call Router v1/v2/v3 pilot (benchmarks/fact_candidate_v2_live/run_live.py) belongs to historical QA, NOT product Router. All three four-call campaigns were consumed on 2026-10-10; historic prompt request snapshots are no longer equal to the current Router. Existing runner logic duplicated current source validation and retained provider-call authority despite all three runs failing their semantic oracle.",
+        "existing_mechanism_reused": "odyssey_apps.fact_candidates canonical strict source validator, tests/apps/test_fact_candidates.py source/negative tests, real future R0 source-wide E2E. The still-needed remaining 23-case offline evidence runner now computes its own filesystem HERE/ROOT, eliminating its sole dependency on the consumed pilot. No schema, prompt, cost cap, active production path or historic record edited.",
+        "removed": "216-line obsolete executable benchmarks/fact_candidate_v2_live/run_live.py and 145-line obsolete test_fact_candidate_v2_live_runner.py (9 historical red checks). Replaced with short SHA-pinned receipt/snapshot-only tests; retained all 3 original synthetic receipts, 2 old request snapshots, and remaining 23-case runner.",
+        "positive_negative_proof": "Archive 3 receipt hashes and 2 request-snapshot hashes verified unchanged; each genuine 4-call result is source_valid but all_fixture_matches=false and live_model_quality_verified=false. Tampered archived receipt rejected. Current tests/apps/test_fact_candidates.py and retained observed 23-case tests + archive = 64 PASS, no fresh provider.",
+        "bench_scope": "804 PASS / 29 FAIL / 38 SKIP after this edit (before: 801 PASS / 38 FAIL / 38 SKIP); 29 remain openly failing, not suppressed or reanchored.",
+        "next_and_limits": "Continue classifying historic temporal/scoped/Core QA gates before removing any helpers consumed by current vertical tests. Real product coordinator G11/G12 not yet retired; no fresh GPT, authenticated browser/n8n, four final reviewer approvals or DEV deployment; R0/G01 not accepted."
       }
     },
     {
