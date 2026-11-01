@@ -63,6 +63,30 @@
         "real_model_browser": "NOT RUN; full suite still red on 56 original historical benchmarks; do not close G01.",
         "official_cross_surface": "PASS: 2690 Python + 7 subtests + 296 JavaScript on current working-tree after fixes, including connection lifecycle regression selected in Core group.",
         "record_tracking_note": "Append-only ledger test assumed zero followups; generalized to next ID from current ledger and fixed before final official gate."
+      },
+      "historical_benchmark_checkpoint": {
+        "observed_after_stale_e4_test_corrected": "782 PASS / 55 FAIL / 38 SKIP (tests/benchmarks scope, source branch; no provider calls). Before: 781 PASS / 56 FAIL / 38 SKIP.",
+        "source_bound_proof": "E4 receipt retains authentic trace SHA and original browser/physical content, but explicitly refuses certification of later code after pinned source SHA drift. No receipts or prompt snapshots changed.",
+        "remaining_red_files": {
+          "tests/benchmarks/test_application_router_calendar_live_v4.py": 2,
+          "tests/benchmarks/test_application_router_calendar_live_v5.py": 1,
+          "tests/benchmarks/test_core_dependent_live_gate.py": 6,
+          "tests/benchmarks/test_fact_candidate_core_live_runner.py": 4,
+          "tests/benchmarks/test_fact_candidate_core_temporal_live_runner.py": 9,
+          "tests/benchmarks/test_fact_candidate_playground_export.py": 1,
+          "tests/benchmarks/test_fact_candidate_remaining_live_runner.py": 7,
+          "tests/benchmarks/test_fact_candidate_scoped_core_live.py": 4,
+          "tests/benchmarks/test_fact_candidate_v2_live_runner.py": 9,
+          "tests/benchmarks/test_historical_dependent_core_outputs.py": 5,
+          "tests/benchmarks/test_planner_prompt_regression_v5.py": 1,
+          "tests/benchmarks/test_router_core_followup_live_v3.py": 2,
+          "tests/benchmarks/test_router_dependency_live_v1.py": 1,
+          "tests/benchmarks/test_router_temporal_current_v1.py": 1,
+          "tests/benchmarks/test_router_temporal_live_v2.py": 2
+        },
+        "classification": "Fifteen historical frozen request/cost/prompt evaluation suites. Their exact former wire formats cannot certify current active Core/Apps/Runtime; no production imports observed for surveyed archived benchmark gates. No versioned fixture or authorization ceiling was re-anchored.",
+        "next": "Review the active equivalent for each historical guarantee (provider approval, cost cap, no retry, strict typed source, no E3 write, original 32 R0 real E2E) before retiring historical gate, otherwise keep CI red and mark R0 unaccepted. No skip/xfail/continue-on-error.",
+        "reviewed_test": "tests/benchmarks/test_e4_functional_acceptance.py"
       }
     },
     {
