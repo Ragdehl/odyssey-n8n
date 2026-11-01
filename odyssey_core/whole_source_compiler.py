@@ -24,126 +24,49 @@ from odyssey_core.temporal import TemporalAnchor
 from odyssey_core.whole_message_speaker_proof import attach_speaker_to_day_action
 
 
-def make_action(
+def _record_action(
     items: list[dict[str, Any]],
     *,
-    date: str | None,
-    kind: str,
+    target: SelectionCriteria,
+    date: str | None = None,
     reference_types: Mapping[str, str | None] | None = None,
-):
-    """Lower reviewed facts with schema-derived, non-authoritative type hints."""
-    types = reference_types or {}
-    if kind == "task":
-        if len(items) != 1 or not date:
-            raise ValueError("Task creation requires one reviewed exact-date assertion")
-        item = items[0]
-        title = item["reviewed_text"]
-        for i, name in enumerate(item["reference_names"]):
-            title = title.replace("{{ref:" + str(i) + "}}", name)
-        title = title.strip().rstrip(".")
-        if not title or len(title) > 160:
-            raise ValueError("Invalid bounded Task title")
-        primary = KnowledgeUnit(
-            SelectionCriteria(title, title, "task", (), None),
-            "record",
-            (
-                PropertyChange("status", "set", "pending"),
-                PropertyChange("target_date", "set", date),
-            ),
-            (),
-            (item["reviewed_text"],),
-            tuple(
-                KnowledgeReference(i + 1, "related", name)
-                for i, name in enumerate(item["reference_names"])
-            ),
-            fact_temporal_anchors=((),),
-            force_create=True,
-        )
-    elif kind == "record":
-        if date is None:
-            raise ValueError("Undated Core fact requires explicit owner, not Day")
-        references = []
-        fact_texts = []
-        anchors = []
-        helpers = {}
-        for item in items:
-            value = item["reviewed_text"]
-            for index, name in enumerate(item["reference_names"]):
-                helper = helpers.setdefault(name, len(helpers))
-                local = len(references)
-                references.append(KnowledgeReference(helper + 1, "related", name))
-                value = value.replace("{{ref:" + str(index) + "}}", "{{ref:" + str(local) + "}}")
-            fact_texts.append(value)
-            anchors.append((TemporalAnchor.from_value(date),))
-        primary = KnowledgeUnit(
-            SelectionCriteria(None, date, "calendar_day", (), None),
-            "record",
-            (),
-            (),
-            tuple(fact_texts),
-            tuple(references),
-            fact_temporal_anchors=tuple(anchors),
-        )
-    else:
-        raise ValueError("Unknown operation kind")
-    seen = []
-    if kind == "record":
-        seen = list(helpers)
-    else:
-        seen = item["reference_names"]
-    helpers_units = [
-        KnowledgeUnit(
-            SelectionCriteria(name, name, types.get(name), (), None),
-            "record",
-            (),
-            (),
-            (),
-            (),
-            reference_lookup_only=True,
-        )
-        for name in seen
-    ]
-    return WriteAction((primary, *helpers_units))
+    properties: tuple[PropertyChange, ...] = (),
+    force_create: bool = False,
+) -> WriteAction:
+    """Use one Core reference/materialization shape for every reviewed record.
 
-
-def plan_for_record(
-    review: dict[str, Any], date: str, *, reference_types: Mapping[str, str | None] | None = None
-):
-    items = [r for r in review["facts"] if r["kind"] == "record" and r["date"] == date]
-    return RequestPlan(
-        (make_action(items, date=date, kind="record", reference_types=reference_types),), ()
-    )
-
-
-def plan_for_task(item: dict[str, Any], *, reference_types: Mapping[str, str | None] | None = None):
-    return RequestPlan(
-        (make_action([item], date=item["date"], kind="task", reference_types=reference_types),), ()
-    )
-
-
-def undated_self_record(facts, *, reference_types: Mapping[str, str | None] | None = None):
-    types = reference_types or {}
-    """A validated speaker assertion belongs to SELF, not an invented Day."""
-    helpers = {}
-    refs = []
-    values = []
-    for item in facts:
+    Targets and Task lifecycle properties are supplied by existing owners;
+    the model's text never authorizes target selection or canonical links.
+    """
+    helpers: dict[str, int] = {}
+    references: list[KnowledgeReference] = []
+    values: list[str] = []
+    for item in items:
         text = item["reviewed_text"]
         for index, name in enumerate(item["reference_names"]):
             helper = helpers.setdefault(name, len(helpers))
-            slot = len(refs)
-            refs.append(KnowledgeReference(helper + 1, "related", name))
+            slot = len(references)
+            references.append(KnowledgeReference(helper + 1, "related", name))
             text = text.replace("{{ref:" + str(index) + "}}", "{{ref:" + str(slot) + "}}")
         values.append(text)
-    owner = KnowledgeUnit(
-        SelectionCriteria(None, "yo", "person", (), None, self_target="self"),
+    primary = KnowledgeUnit(
+        target,
         "record",
-        (),
+        properties,
         (),
         tuple(values),
-        tuple(refs),
+        tuple(references),
+        fact_temporal_anchors=(
+            tuple((TemporalAnchor.from_value(date),) for _ in items)
+            if date is not None
+            else tuple(() for _ in items)
+            if force_create
+            else ()
+        ),
+        force_create=force_create,
     )
-    helper_units = tuple(
+    types = reference_types or {}
+    helpers_units = tuple(
         KnowledgeUnit(
             SelectionCriteria(name, name, types.get(name), (), None),
             "record",
@@ -155,7 +78,57 @@ def undated_self_record(facts, *, reference_types: Mapping[str, str | None] | No
         )
         for name in helpers
     )
-    return RequestPlan((WriteAction((owner, *helper_units)),), ())
+    return WriteAction((primary, *helpers_units))
+
+
+def plan_for_record(
+    review: dict[str, Any], date: str, *, reference_types: Mapping[str, str | None] | None = None
+):
+    items = [r for r in review["facts"] if r["kind"] == "record" and r["date"] == date]
+    return RequestPlan(
+        (
+            _record_action(
+                items,
+                target=SelectionCriteria(None, date, "calendar_day", (), None),
+                date=date,
+                reference_types=reference_types,
+            ),
+        ),
+        (),
+    )
+
+
+def plan_for_task(item: dict[str, Any], *, reference_types: Mapping[str, str | None] | None = None):
+    date = item["date"]
+    if not date:
+        raise ValueError("Task creation requires one reviewed exact-date assertion")
+    title = item["reviewed_text"]
+    for index, name in enumerate(item["reference_names"]):
+        title = title.replace("{{ref:" + str(index) + "}}", name)
+    title = title.strip().rstrip(".")
+    if not title or len(title) > 160:
+        raise ValueError("Invalid bounded Task title")
+    action = _record_action(
+        [item],
+        target=SelectionCriteria(title, title, "task", (), None),
+        reference_types=reference_types,
+        properties=(
+            PropertyChange("status", "set", "pending"),
+            PropertyChange("target_date", "set", date),
+        ),
+        force_create=True,
+    )
+    return RequestPlan((action,), ())
+
+
+def undated_self_record(facts, *, reference_types: Mapping[str, str | None] | None = None):
+    """Use the same reference lowering for an independently attested SELF owner."""
+    action = _record_action(
+        facts,
+        target=SelectionCriteria(None, "yo", "person", (), None, self_target="self"),
+        reference_types=reference_types,
+    )
+    return RequestPlan((action,), ())
 
 
 class WholeSourceCompilationError(ValueError):

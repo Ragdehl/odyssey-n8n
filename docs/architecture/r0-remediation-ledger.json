@@ -323,8 +323,17 @@
       ],
       "change_contract": "Prove inactive callers, optional launches and tests; archive/delete only if not a distinct security boundary or user-supported path.",
       "verification": "Import/feature flag/test caller inventory, no direct Markdown writer outside Core/E3, regression before deletion.",
-      "status": "not_started",
-      "review_decision": "pending_review"
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "active_core_reference_renderer_consolidation_20261101": {
+        "status": "code_verified_offline_not_closed",
+        "before": "odyssey_core/whole_source_compiler.py had two independent duplicated symbolic-reference/link loops for the same Core record, one for dated Day facts and one for SELF facts; Task repeated helper lookup units. This invites inconsistent reference renumbering, duplicate owners and future note-type patchwork.",
+        "existing_owner_reused": "Existing Core KnowledgeUnit, SelectionCriteria, KnowledgeReference, RequestPlan and E3 execute_request. Independently attested target remains Day or authenticated SELF; Task lifecycle/status/target_date and source speaker backlinks remain their existing separate trust checks.",
+        "actual_code_removed": "Replaced both production record/link loops and the redundant make_action kind dispatch with one _record_action canonical reference renderer. Removed 27 net production lines (102 removed, 75 added) and one separate production conversion path, not simply an extra function. No new app dispatch, model calls, NoteSchema type-specific or phrase-specific branch.",
+        "positive_negative_tests": "85 focused Python PASS: same two independent facts in original/reversed order, Day vs authenticated SELF, person/project/document/concept typed lookup hints, reference dedup and source speaker backlinks, Tasks pending+date+force_create properties unchanged, undated Task rejection; P4 existing real recorded-model synthetic vault and generic-owner-negative regressions remain correct.",
+        "remaining_duplicate": "The 2026-10-16 archive benchmarks/application_router/light_router_poc_20261016/p2_integrated_bridge.py still contains a historic make_action and is imported by two archived P3/P4 pilots and tests/benchmarks/test_light_router_p2_contract_20261016.py. Not a production caller. Must classify downstream historical evidence before deleting; do not reintroduce as active path.",
+        "limits": "This is an active Core duplication removal, NOT full retirement of both large P4 and legacy Runtime coordinators, NOT R31 arbitrary-note-owner acceptance, and NOT real GPT/browser E2E. G12/R0 remain open."
+      }
     },
     {
       "id": "G13",

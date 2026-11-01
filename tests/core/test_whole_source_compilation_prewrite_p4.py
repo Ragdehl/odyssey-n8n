@@ -133,3 +133,90 @@ def test_no_type_hint_does_not_default_arbitrary_identity_to_person():
     action = checked[0].plan.actions[0]
     assert isinstance(action, WriteAction)
     assert action.units[1].target.type is None
+
+
+@pytest.mark.parametrize("target", ["dated", "self"])
+@pytest.mark.parametrize("type_hint", ["person", "project", "document", "concept"])
+@pytest.mark.parametrize("reversed_order", [False, True])
+def test_shared_record_renderer_deduplicates_links_across_facts_without_type_branches(
+    target, type_hint, reversed_order
+):
+    """One lowerer must preserve the two facts and three independent references."""
+    date = "2026-10-16" if target == "dated" else None
+    reviewed = {
+        "facts": [
+            {
+                "kind": "record",
+                "date": date,
+                "reviewed_text": "Hablé con {{ref:0}} sobre {{ref:1}}.",
+                "reference_names": ["Eva", "Atlas"],
+            },
+            {
+                "kind": "record",
+                "date": date,
+                "reviewed_text": "Después comenté {{ref:0}} con {{ref:1}}.",
+                "reference_names": ["Atlas", "Nora"],
+            },
+        ]
+    }
+    if reversed_order:
+        reviewed["facts"].reverse()
+    operations = compile_reviewed_operations(
+        reviewed,
+        (True, True),
+        reference_types={"Eva": type_hint, "Atlas": type_hint, "Nora": type_hint},
+        declared_types=frozenset({"person", "project", "document", "concept"}),
+    )
+    assert len(operations) == 1
+    owner, *helpers = operations[0].plan.actions[0].units
+    assert len(owner.facts) == 2
+    assert [r.target_index for r in owner.references[:4]] == (
+        [1, 2, 3, 1] if reversed_order else [1, 2, 2, 3]
+    )
+    # Dated operations preserve independently attested SELF speaker backlinks.
+    if target == "dated":
+        assert [r.target_index for r in owner.references[4:]] == [4, 4]
+    else:
+        assert len(owner.references) == 4
+    assert [unit.target.entity for unit in helpers[:3]] == (
+        ["Atlas", "Nora", "Eva"] if reversed_order else ["Eva", "Atlas", "Nora"]
+    )
+    assert all(unit.target.type == type_hint for unit in helpers[:3])
+    expected_second = (
+        "Hablé con {{ref:2}} sobre {{ref:3}}."
+        if reversed_order
+        else "Después comenté {{ref:2}} con {{ref:3}}."
+    )
+    if target == "dated":
+        assert owner.facts[1] == expected_second[:-1] + " (yo: {{ref:5}})."
+        assert operations[0].locator_suffix == "day-2026-10-16"
+        assert owner.fact_temporal_anchors and len(owner.fact_temporal_anchors) == 2
+    else:
+        assert owner.facts[1] == expected_second
+        assert operations[0].locator_suffix == "self"
+        assert owner.target.self_target == "self"
+        assert not owner.fact_temporal_anchors
+
+
+def test_shared_lowerer_still_keeps_task_lifecycle_and_refusal_boundaries():
+    task = _fact(kind="task", date="2026-10-16", text="Llamar a {{ref:0}}.")
+    operations = compile_reviewed_operations(
+        {"facts": [task]},
+        (False,),
+        reference_types={"Clara": "person"},
+        declared_types=frozenset({"person", "task"}),
+    )
+    task_unit, helper = operations[0].plan.actions[0].units
+    assert operations[0].task_create
+    assert task_unit.force_create
+    assert task_unit.target.type == "task"
+    assert [(p.field, p.value) for p in task_unit.properties] == [
+        ("status", "pending"),
+        ("target_date", "2026-10-16"),
+    ]
+    assert task_unit.fact_temporal_anchors == ((),)
+    assert helper.reference_lookup_only and helper.target.type == "person"
+    bad = copy.deepcopy(task)
+    bad["date"] = None
+    with pytest.raises(WholeSourceCompilationError):
+        compile_reviewed_operations({"facts": [bad]}, (False,))
