@@ -166,7 +166,7 @@
       ],
       "change_contract": "Distinguish diff review from whole-repo scans; record honest coverage and require pinned immutable source.",
       "verification": "Negative documentation-only diff with known pre-existing source defect; four roles independently assert scope.",
-      "status": "not_started",
+      "status": "in_progress",
       "review_decision": "pending_review",
       "post_consolidation_residual_audit": {
         "status": "scheduled_within_r0_not_run",
@@ -176,6 +176,15 @@
         "roles": "Reuse Generality/Quality/Testing/Performance, not a fifth auditor. A small PR-diff review is insufficient and no clean report without before-after residual inventory and source SHA.",
         "acceptance": "Correct all material findings in existing G01-G12 ledger, perform all 32 independent real-model browser/n8n/E3 Markdown UI reload/replay cases on SHA-matched DEV, then final four independent SHA auditors and --require-stage-accepted R0 PASS.",
         "note": "This is a mandatory audit milestone, NOT an added feature stage, and was not performed by merely updating documentation."
+      },
+      "metamorphic_source_coverage_matrix_20261101": {
+        "status": "offline_case_matrix_implemented_stage_not_accepted",
+        "user_goal": "Prevent semantic shortcuts based on names, one phrase, one sentence order, one temporal position or one NoteSchema type. Recover past F09/F10/F14/F16/F21/F23/F25/F26/F27 and R28-R32 families, including previous double-renumbered multi-fact links and the unresolved R31 owner gap.",
+        "new_variation_data": "tests/fixtures/r0_semantic_variations_v1.json; 55 separate human-authored input variants across 11 families. 39 affirmative/compilable oracles, 8 uncertain/negated/ambiguous refuse/pending controls, 4 verified relationship/source-only proofs, 4 R31 third-party owner negative sentinels. Meaningfully equivalent two-fact assertions in Spanish/French/English with order swapped, temporal phrases before/after, shared references and nine names, single-turn antecedent/pronoun dependence, cross-App Core+Task, NoteSchema person/project/document/concept and safe ambiguity. An additional 16 source-and-expected-meaning live-only challenges span eight neglected original themes: corrections F19, conditionals F20, positive vs negated F17/F18, time/person ordering F07/F08, shared predicate F09/F16, authenticated relation query R32, mixed Work Session R30 and past-recollection vs future Event F01/F02/R29.",
+        "actual_test_owners": "tests/core/test_r0_semantic_variations_matrix.py: typed whole-source immutable provenance/dual-speaker/core compilation + semantic-meaning-set oracle; deliberate five independent forgeries per affirmative case, source-scoped relationship member swapping, missing/backwards dependencies, nonaffirmative abstention; tests/runtime/test_r0_semantic_variations_physical.py: 26 actual Core/E3 writes to disposable Markdown, source order reversal, multilingual variants, nine references, per-fact owner/link isolation and readback. 280 tests PASS in matrix+physical.",
+        "important_limits": "The reviewed facts and decisions are TEST-SUPPLIED semantic hypotheses; no current GPT model was asked to interpret these variants and no P4/browser/n8n real journey was run. Four owner cases are known P4 NEEDS_ATTENTION not success; group cases are source-proof only, and ambiguity negative cases do not establish useful partial-save behavior. User-generated NoteSchema type requires further physical schema proof, though existing generated Core tests include custom type hints. This cannot certify natural-language robustness. The 16 live_challenges are NOT simulated model successes: their stored expectation is for future human/AI interpretation on actual product path only.",
+        "future_real_ai_gate": "Keep the 32 acceptance cases untouched. Before R0 acceptance, after production semantic consolidation, evaluate the 55 reviewed-source variants PLUS 16 semantic-only challenges (71 supplemental inputs) as a separate real-model browser/n8n/Markdown stress campaign with result-level semantic/owner/ambiguity oracles; detect source/order-dependent failures. Reuse existing R0 browser infrastructure, a fresh bounded approval/budget and four role reviewers; never fake receipts or treat offline proposals as fresh model outputs. The official stage 32 real cases and final whole-code four-role audit remain mandatory.",
+        "no_product_logic_added": "No Core/Runtime/Apps production files, prompts, model settings, routing branches, NoteSchema or user vault changed in this checkpoint; all new case phrasing lives only in fixtures/tests. The tests do not conceal already known P4 owner gaps."
       }
     },
     {
