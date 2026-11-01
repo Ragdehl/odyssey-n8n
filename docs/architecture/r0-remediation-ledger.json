@@ -87,6 +87,14 @@
         "classification": "Fifteen historical frozen request/cost/prompt evaluation suites. Their exact former wire formats cannot certify current active Core/Apps/Runtime; no production imports observed for surveyed archived benchmark gates. No versioned fixture or authorization ceiling was re-anchored.",
         "next": "Review the active equivalent for each historical guarantee (provider approval, cost cap, no retry, strict typed source, no E3 write, original 32 R0 real E2E) before retiring historical gate, otherwise keep CI red and mark R0 unaccepted. No skip/xfail/continue-on-error.",
         "reviewed_test": "tests/benchmarks/test_e4_functional_acceptance.py"
+      },
+      "router_prompt_drift_diagnosis": {
+        "test": "tests/benchmarks/test_router_temporal_current_v1.py::test_current_router_and_temporal_model_contracts_are_hash_pinned",
+        "observed": "The 2026-10-04 v6 router prompt pin is 3be2fb5e..., while current source renders d2ffd7f8...; Router schema and Temporal prompt/schema still match their frozen pins.",
+        "source_cause": "A later production Router prompt edit in 403295e changed how ellipsis and shared context are described; this dated source pin is not approval of the current model contract.",
+        "existing_active_protections": "tests/apps/test_router.py checks current role/text context, exact source validation, schema, temporal routing authority; scripts/odyssey_stage_acceptance.py pins current acceptance to changed product scripts/oracles and rejects stale receipts.",
+        "safe_migration": "Preserve historical prompt hash and prior evidence without reanchoring. Confirm original artifact provenance and current equivalents of each source/provenance/authorization invariant before removing or replacing the mislabelled current-hash assertion. Re-run prompt/model acceptance on the final source SHA; do not claim a green full suite yet.",
+        "state": "diagnosed_only"
       }
     },
     {

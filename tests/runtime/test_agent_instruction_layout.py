@@ -36,6 +36,21 @@ def test_short_agent_contract_routes_to_llm_and_generality() -> None:
     assert "human" in agents.lower()
 
 
+def test_universal_semantic_generality_rule_is_discoverable_and_auditable() -> None:
+    """Prevent narrowing the no-special-case policy to names or family examples."""
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    skill = (ROOT / ".codex/skills/odyssey-generality/SKILL.md").read_text(encoding="utf-8")
+    plan = (ROOT / "docs/architecture/r0-remediation-plan.md").read_text(encoding="utf-8")
+    reviewer = (ROOT / "ops/agent-team/generality.md").read_text(encoding="utf-8")
+    assert "No case-specific semantic code" in agents
+    assert "temporal mention position/order" in agents
+    assert "redundant path removed" in agents
+    assert "semantically equivalent reorderings" in skill
+    assert "user-defined note types" in skill
+    assert "posición o secuencia de fechas" in plan
+    assert "temporal position/order" in reviewer
+
+
 def test_doctor_never_displays_protected_key_and_fails_closed_on_unknown(
     tmp_path: Path,
 ) -> None:
