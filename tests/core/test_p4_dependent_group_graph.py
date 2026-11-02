@@ -461,3 +461,45 @@ def test_finite_graph_vetoes_two_reviewers_truncating_a_lowercase_multiword_pers
                 "groups": deepcopy(group),
             },
         )
+
+
+@pytest.mark.parametrize("count", [2, 3, 5, 9, 12])
+@pytest.mark.parametrize("reversed_order", [False, True])
+def test_general_nm_review_keeps_entire_source_attested_cohort_independent_of_order(
+    count, reversed_order
+):
+    """The same typed proof carries 0..N links, never an eight-person rule."""
+    names = [f"Recurso {i:02d}" for i in range(count)]
+    if reversed_order:
+        names.reverse()
+    groups = [
+        {"capability": "core", "source_quote": f"Inspeccioné {name}. ", "dependencies": []}
+        for name in names
+    ]
+    groups.append(
+        {
+            "capability": "tasks",
+            "source_quote": "Prepara una nota sobre ellos.",
+            "dependencies": [
+                {"predecessor_index": i, "mention": "ellos", "antecedent_mention": name}
+                for i, name in enumerate(names)
+            ],
+        }
+    )
+    source = "".join(group["source_quote"] for group in groups)
+    proposal = {"full_source_quote": source, "groups": groups}
+    review = {
+        "full_source_quote": source,
+        "complete": True,
+        "dependency_edges_verified": True,
+        "review_reason": "APPROVED",
+        "failing_group_index": None,
+        "groups": deepcopy(groups),
+    }
+    graph = verify_dependent_group_graph(source, proposal, review)
+    assert len(graph.edges) == count
+    assert [edge[2] for edge in graph.edges] == names
+    corrupted = deepcopy(review)
+    corrupted["groups"][-1]["dependencies"].pop()
+    with pytest.raises(DependentGroupGraphError):
+        verify_dependent_group_graph(source, proposal, corrupted)

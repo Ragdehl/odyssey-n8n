@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -82,7 +83,7 @@ class CoreIndexedQueries:
 
     def by_id(self, note_id: str) -> IndexedNoteHit | None:
         snapshot = self._complete()
-        with sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True)) as conn, conn:
             rows = conn.execute(
                 "SELECT path,note_id,source_hash FROM vault_inventory WHERE note_id=?",
                 (note_id,),
@@ -107,7 +108,7 @@ class CoreIndexedQueries:
         normalized = _normalize_reference(name)
         if not normalized or maximum < 1:
             raise ValueError("An exact name and a positive budget are required")
-        with sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True)) as conn, conn:
             rows = conn.execute(
                 "SELECT i.path,i.note_id,i.source_hash,i.metadata_json "
                 "FROM vault_inventory i WHERE i.normalized_name=? OR EXISTS( "
@@ -146,7 +147,7 @@ class CoreIndexedQueries:
         if not field or maximum < 1:
             raise ValueError("Invalid field or budget")
         encoded = json.dumps(value, sort_keys=True, ensure_ascii=False)
-        with sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True)) as conn, conn:
             rows = conn.execute(
                 "SELECT i.path,i.note_id,i.source_hash FROM note_attributes a "
                 "JOIN vault_inventory i ON i.note_id=a.note_id "
@@ -169,7 +170,7 @@ class CoreIndexedQueries:
             actual = {fact.locator: fact.text for fact in parse_atomic_facts(hit.note.content)}
         except AtomicFactError as error:
             raise IndexedQueryUnavailable("Canonical facts cannot be parsed") from error
-        with sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True)) as conn, conn:
             state = conn.execute(
                 "SELECT status FROM note_fact_integrity WHERE note_id=?", (note_id,)
             ).fetchone()
@@ -184,7 +185,7 @@ class CoreIndexedQueries:
     def links(self, note_id: str, *, incoming: bool = False) -> tuple[tuple[str, str, str], ...]:
         snapshot = self._complete()
         col = "target_id" if incoming else "source_id"
-        with sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True) as conn:
+        with closing(sqlite3.connect(f"file:{self.index_path}?mode=ro", uri=True)) as conn, conn:
             data = conn.execute(
                 f"SELECT source_id,target_id,target_text FROM note_links WHERE {col}=? ORDER BY source_id,target_id,target_text",
                 (note_id,),

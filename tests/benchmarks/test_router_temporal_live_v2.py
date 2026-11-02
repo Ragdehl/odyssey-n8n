@@ -7,6 +7,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / "benchmarks/router_temporal_live_v2"
 MATRIX = HERE / "matrix.json"
@@ -48,8 +50,10 @@ def test_live_v2_is_bounded_provider_free_and_contains_split_no_split_sentinels(
     assert len(matrix["router_cases"]) == 17
     assert len(matrix["temporal_cases"]) == 6
     assert runner.MAX_CALLS == 23
-    assert runner._budget_upper(matrix) <= runner.PROPOSED_CEILING_USD
+    # A former 0.04 USD campaign cannot inherit authority after a 3x model
+    # output limit change. Do not lift its frozen cost ceiling to green CI.
     assert runner.PROPOSED_CEILING_USD == 0.04
+    assert runner._budget_upper(matrix) > runner.PROPOSED_CEILING_USD
 
     assert len(router_by_id["independent-temporal-temporal-split"]["expect"]["routes"]) == 2
     assert len(router_by_id["independent-core-core-split"]["expect"]["routes"]) == 2
@@ -62,10 +66,21 @@ def test_live_v2_is_bounded_provider_free_and_contains_split_no_split_sentinels(
         assert len(router_by_id[case_id]["expect"]["routes"]) == 1
 
 
-def test_live_v2_preflight_requires_no_provider_credentials(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_archived_live_v2_refuses_changed_source_without_provider(monkeypatch) -> None:
+    """Source drift invalidates old receipt even for a credentials-free preflight."""
     runner = _runner_module()
+    historical = json.loads((HERE / "results/e1beaa4e406b.json").read_text())
+    assert historical["source_digest"] == runner.FROZEN_SOURCE_DIGEST
+    assert historical["passed"] is False
     monkeypatch.delenv(runner.AUTH_ENV, raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(SystemExit, match="Archived Router/Temporal source changed"):
+        runner._preflight(require_live_auth=False)
 
-    matrix = runner._preflight(require_live_auth=False)
-    assert len(matrix["router_cases"]) + len(matrix["temporal_cases"]) == 23
+
+def test_archived_live_v2_retains_original_budget_refusal(monkeypatch) -> None:
+    """Even with matched code provenance, the increased token cap is blocked."""
+    runner = _runner_module()
+    monkeypatch.setattr(runner, "_source_digest", lambda: runner.FROZEN_SOURCE_DIGEST)
+    with pytest.raises(SystemExit, match="proposed cost envelope changed"):
+        runner._preflight(require_live_auth=False)

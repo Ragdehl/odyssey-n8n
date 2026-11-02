@@ -1,0 +1,2330 @@
+{
+  "schema": "odyssey-r0-semantic-variations-v1",
+  "purpose": "Additional append-only human-authored semantic variation cases; NOT provider result, NOT replacing F01-F27/R28-R32 acceptance",
+  "version": 1,
+  "clock": {
+    "date": "2026-10-16",
+    "timezone": "Europe/Paris"
+  },
+  "cases": [
+    {
+      "id": "V001",
+      "family": "independent_recollections",
+      "based_on": "F09,R28",
+      "source": "Conocí a Nora en el parque. Después hablé con Vera.",
+      "facts": [
+        {
+          "source_quote": "Conocí a Nora en el parque.",
+          "reviewed_text": "Conocí a {{ref:0}} en el parque.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después hablé con Vera.",
+          "reviewed_text": "Después hablé con {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V002",
+      "family": "independent_recollections",
+      "based_on": "F09,R28",
+      "source": "Hablé con Vera por la mañana. Por la tarde conocí a Nora en el parque.",
+      "facts": [
+        {
+          "source_quote": "Hablé con Vera por la mañana.",
+          "reviewed_text": "Hablé con {{ref:0}} por la mañana.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Por la tarde conocí a Nora en el parque.",
+          "reviewed_text": "Conocí a {{ref:0}} en el parque por la tarde.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V003",
+      "family": "independent_recollections",
+      "based_on": "F09,R28",
+      "source": "En el parque me encontré con Nora. Más tarde charlé con Vera.",
+      "facts": [
+        {
+          "source_quote": "En el parque me encontré con Nora.",
+          "reviewed_text": "Me encontré con {{ref:0}} en el parque.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Más tarde charlé con Vera.",
+          "reviewed_text": "Más tarde charlé con {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V004",
+      "family": "independent_recollections",
+      "based_on": "F09,R28",
+      "source": "A Vera le conté lo ocurrido. También vi a Nora.",
+      "facts": [
+        {
+          "source_quote": "A Vera le conté lo ocurrido.",
+          "reviewed_text": "Le conté lo ocurrido a {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "También vi a Nora.",
+          "reviewed_text": "También vi a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V005",
+      "family": "independent_recollections",
+      "based_on": "F09,R28",
+      "source": "J’ai rencontré Nora au parc. Puis j’ai parlé avec Vera.",
+      "facts": [
+        {
+          "source_quote": "J’ai rencontré Nora au parc.",
+          "reviewed_text": "J’ai rencontré {{ref:0}} au parc.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Puis j’ai parlé avec Vera.",
+          "reviewed_text": "Puis j’ai parlé avec {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V006",
+      "family": "independent_recollections",
+      "based_on": "F09,R28",
+      "source": "I met Nora at the park. Later I spoke to Vera.",
+      "facts": [
+        {
+          "source_quote": "I met Nora at the park.",
+          "reviewed_text": "I met {{ref:0}} at the park.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Later I spoke to Vera.",
+          "reviewed_text": "Later I spoke to {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V007",
+      "family": "reference_aliases_and_arbitrary_types",
+      "based_on": "F23,F25,F26,R31",
+      "source": "Revisé el proyecto Atlas. Después consulté el informe.",
+      "facts": [
+        {
+          "source_quote": "Revisé el proyecto Atlas.",
+          "reviewed_text": "Revisé {{ref:0}}.",
+          "reference_names": [
+            "Atlas"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después consulté el informe.",
+          "reviewed_text": "Después consulté {{ref:0}}.",
+          "reference_names": [
+            "El informe"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V008",
+      "family": "reference_aliases_and_arbitrary_types",
+      "based_on": "F23,F25,F26,R31",
+      "source": "He consultado el informe. También he revisado el proyecto Atlas.",
+      "facts": [
+        {
+          "source_quote": "He consultado el informe.",
+          "reviewed_text": "He consultado {{ref:0}}.",
+          "reference_names": [
+            "El informe"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "También he revisado el proyecto Atlas.",
+          "reviewed_text": "He revisado {{ref:0}} también.",
+          "reference_names": [
+            "Atlas"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V009",
+      "family": "reference_aliases_and_arbitrary_types",
+      "based_on": "F23,F25,F26,R31",
+      "source": "J’ai relu le rapport El informe. Puis j’ai examiné Atlas.",
+      "facts": [
+        {
+          "source_quote": "J’ai relu le rapport El informe.",
+          "reviewed_text": "J’ai relu {{ref:0}}.",
+          "reference_names": [
+            "El informe"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Puis j’ai examiné Atlas.",
+          "reviewed_text": "Puis j’ai examiné {{ref:0}}.",
+          "reference_names": [
+            "Atlas"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V010",
+      "family": "reference_aliases_and_arbitrary_types",
+      "based_on": "F23,F25,F26,R31",
+      "source": "I checked Atlas today. I then opened El informe.",
+      "facts": [
+        {
+          "source_quote": "I checked Atlas today.",
+          "reviewed_text": "I checked {{ref:0}} today.",
+          "reference_names": [
+            "Atlas"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "I then opened El informe.",
+          "reviewed_text": "I then opened {{ref:0}}.",
+          "reference_names": [
+            "El informe"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V011",
+      "family": "reference_aliases_and_arbitrary_types",
+      "based_on": "F23,F25,F26,R31",
+      "source": "He comprado El coche. Después miré el proyecto Atlas.",
+      "facts": [
+        {
+          "source_quote": "He comprado El coche.",
+          "reviewed_text": "He comprado {{ref:0}}.",
+          "reference_names": [
+            "El coche"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después miré el proyecto Atlas.",
+          "reviewed_text": "Después miré {{ref:0}}.",
+          "reference_names": [
+            "Atlas"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V012",
+      "family": "reference_aliases_and_arbitrary_types",
+      "based_on": "F23,F25,F26,R31",
+      "source": "He hablado sobre el concepto El coche. Leí el documento El informe.",
+      "facts": [
+        {
+          "source_quote": "He hablado sobre el concepto El coche.",
+          "reviewed_text": "He hablado sobre {{ref:0}}.",
+          "reference_names": [
+            "El coche"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Leí el documento El informe.",
+          "reviewed_text": "Leí {{ref:0}}.",
+          "reference_names": [
+            "El informe"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V013",
+      "family": "reordered_explicit_dates",
+      "based_on": "F21,R29",
+      "source": "El 16 de octubre de 2026 vi a Nora. El 16 de octubre de 2026 hablé con Vera.",
+      "facts": [
+        {
+          "source_quote": "El 16 de octubre de 2026 vi a Nora.",
+          "reviewed_text": "Vi a {{ref:0}} ese día.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "El 16 de octubre de 2026 hablé con Vera.",
+          "reviewed_text": "Hablé con {{ref:0}} ese día.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V014",
+      "family": "reordered_explicit_dates",
+      "based_on": "F21,R29",
+      "source": "Hablé con Vera el 16 de octubre de 2026. Vi a Nora el 16 de octubre de 2026.",
+      "facts": [
+        {
+          "source_quote": "Hablé con Vera el 16 de octubre de 2026.",
+          "reviewed_text": "Hablé con {{ref:0}} ese día.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Vi a Nora el 16 de octubre de 2026.",
+          "reviewed_text": "Vi a {{ref:0}} ese día.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V015",
+      "family": "reordered_explicit_dates",
+      "based_on": "F21,R29",
+      "source": "Nora y yo nos encontramos el 16 de octubre de 2026. A Vera la vi el 16 de octubre de 2026.",
+      "facts": [
+        {
+          "source_quote": "Nora y yo nos encontramos el 16 de octubre de 2026.",
+          "reviewed_text": "Me encontré con {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "A Vera la vi el 16 de octubre de 2026.",
+          "reviewed_text": "Vi a {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V016",
+      "family": "reordered_explicit_dates",
+      "based_on": "F21,R29",
+      "source": "Le 16 octobre 2026, j’ai vu Nora. J’ai téléphoné à Vera le 16 octobre 2026.",
+      "facts": [
+        {
+          "source_quote": "Le 16 octobre 2026, j’ai vu Nora.",
+          "reviewed_text": "J’ai vu {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "J’ai téléphoné à Vera le 16 octobre 2026.",
+          "reviewed_text": "J’ai téléphoné à {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V017",
+      "family": "reordered_explicit_dates",
+      "based_on": "F21,R29",
+      "source": "On 16 October 2026 I met Vera. On that day I saw Nora.",
+      "facts": [
+        {
+          "source_quote": "On 16 October 2026 I met Vera.",
+          "reviewed_text": "I met {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "On that day I saw Nora.",
+          "reviewed_text": "I saw {{ref:0}} on that day.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": "2026-10-16",
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V018",
+      "family": "shared_references_and_more_than_eight",
+      "based_on": "F10,F14,R29",
+      "source": "Vi a Nora y Vera visitar el museo. Después vi a Nora llamar a Vera.",
+      "facts": [
+        {
+          "source_quote": "Vi a Nora y Vera visitar el museo.",
+          "reviewed_text": "Vi a {{ref:0}} y {{ref:1}} visitar el museo.",
+          "reference_names": [
+            "Nora",
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después vi a Nora llamar a Vera.",
+          "reviewed_text": "Después vi a {{ref:0}} llamar a {{ref:1}}.",
+          "reference_names": [
+            "Nora",
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person",
+        "Leo": "person",
+        "Eva": "person",
+        "Mila": "person",
+        "Ivo": "person",
+        "Pablo": "person",
+        "Bea": "person",
+        "Luis": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V019",
+      "family": "shared_references_and_more_than_eight",
+      "based_on": "F10,F14,R29",
+      "source": "Vi a Vera llamar a Nora. Después vi a Nora saludar a Vera.",
+      "facts": [
+        {
+          "source_quote": "Vi a Vera llamar a Nora.",
+          "reviewed_text": "Vi a {{ref:0}} llamar a {{ref:1}}.",
+          "reference_names": [
+            "Vera",
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después vi a Nora saludar a Vera.",
+          "reviewed_text": "Después vi a {{ref:0}} saludar a {{ref:1}}.",
+          "reference_names": [
+            "Nora",
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person",
+        "Leo": "person",
+        "Eva": "person",
+        "Mila": "person",
+        "Ivo": "person",
+        "Pablo": "person",
+        "Bea": "person",
+        "Luis": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V020",
+      "family": "shared_references_and_more_than_eight",
+      "based_on": "F10,F14,R29",
+      "source": "Hablé con Nora, Vera y Leo.",
+      "facts": [
+        {
+          "source_quote": "Hablé con Nora, Vera y Leo.",
+          "reviewed_text": "Hablé con {{ref:0}}, {{ref:1}} y {{ref:2}}.",
+          "reference_names": [
+            "Nora",
+            "Vera",
+            "Leo"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person",
+        "Leo": "person",
+        "Eva": "person",
+        "Mila": "person",
+        "Ivo": "person",
+        "Pablo": "person",
+        "Bea": "person",
+        "Luis": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V021",
+      "family": "shared_references_and_more_than_eight",
+      "based_on": "F10,F14,R29",
+      "source": "Me reuní con Nora, Vera, Leo, Eva, Mila, Ivo, Pablo, Bea y Luis.",
+      "facts": [
+        {
+          "source_quote": "Me reuní con Nora, Vera, Leo, Eva, Mila, Ivo, Pablo, Bea y Luis.",
+          "reviewed_text": "Me reuní con {{ref:0}}, {{ref:1}}, {{ref:2}}, {{ref:3}}, {{ref:4}}, {{ref:5}}, {{ref:6}}, {{ref:7}} y {{ref:8}}.",
+          "reference_names": [
+            "Nora",
+            "Vera",
+            "Leo",
+            "Eva",
+            "Mila",
+            "Ivo",
+            "Pablo",
+            "Bea",
+            "Luis"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person",
+        "Leo": "person",
+        "Eva": "person",
+        "Mila": "person",
+        "Ivo": "person",
+        "Pablo": "person",
+        "Bea": "person",
+        "Luis": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V022",
+      "family": "shared_references_and_more_than_eight",
+      "based_on": "F10,F14,R29",
+      "source": "Me reuní con Luis, Bea, Pablo, Ivo, Mila, Eva, Leo, Vera y Nora.",
+      "facts": [
+        {
+          "source_quote": "Me reuní con Luis, Bea, Pablo, Ivo, Mila, Eva, Leo, Vera y Nora.",
+          "reviewed_text": "Me reuní con {{ref:0}}, {{ref:1}}, {{ref:2}}, {{ref:3}}, {{ref:4}}, {{ref:5}}, {{ref:6}}, {{ref:7}} y {{ref:8}}.",
+          "reference_names": [
+            "Luis",
+            "Bea",
+            "Pablo",
+            "Ivo",
+            "Mila",
+            "Eva",
+            "Leo",
+            "Vera",
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person",
+        "Leo": "person",
+        "Eva": "person",
+        "Mila": "person",
+        "Ivo": "person",
+        "Pablo": "person",
+        "Bea": "person",
+        "Luis": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V023",
+      "family": "core_and_task_order",
+      "based_on": "R30,F06,F22",
+      "source": "Me gusta caminar. Debo llamar a Nora el 16 de octubre de 2026.",
+      "facts": [
+        {
+          "source_quote": "Me gusta caminar.",
+          "reviewed_text": "Me gusta caminar.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Debo llamar a Nora el 16 de octubre de 2026.",
+          "reviewed_text": "Llamar a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "task",
+          "date": "2026-10-16",
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V024",
+      "family": "core_and_task_order",
+      "based_on": "R30,F06,F22",
+      "source": "El 16 de octubre de 2026 debo llamar a Nora. Prefiero caminar.",
+      "facts": [
+        {
+          "source_quote": "El 16 de octubre de 2026 debo llamar a Nora.",
+          "reviewed_text": "Llamar a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "task",
+          "date": "2026-10-16",
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Prefiero caminar.",
+          "reviewed_text": "Prefiero caminar.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V025",
+      "family": "core_and_task_order",
+      "based_on": "R30,F06,F22",
+      "source": "Me encanta leer por las tardes. Tengo que enviar un documento a Vera el 16 de octubre de 2026.",
+      "facts": [
+        {
+          "source_quote": "Me encanta leer por las tardes.",
+          "reviewed_text": "Me encanta leer por las tardes.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Tengo que enviar un documento a Vera el 16 de octubre de 2026.",
+          "reviewed_text": "Enviar documento a {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "task",
+          "date": "2026-10-16",
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V026",
+      "family": "core_and_task_order",
+      "based_on": "R30,F06,F22",
+      "source": "Tengo que enviar un documento a Vera el 16 de octubre de 2026. Por las tardes me gusta leer.",
+      "facts": [
+        {
+          "source_quote": "Tengo que enviar un documento a Vera el 16 de octubre de 2026.",
+          "reviewed_text": "Enviar documento a {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "task",
+          "date": "2026-10-16",
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Por las tardes me gusta leer.",
+          "reviewed_text": "Por las tardes me gusta leer.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": ""
+    },
+    {
+      "id": "V027",
+      "family": "safe_refusal_on_ambiguity_or_negation",
+      "based_on": "F14,F27,R32",
+      "source": "Quizás he visto a Nora.",
+      "facts": [
+        {
+          "source_quote": "Quizás he visto a Nora.",
+          "reviewed_text": "Quizás he visto a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "Model speaker/semantic independent review must not authorize a positive completed event; offline fixture exercises fail-close and no-write only."
+    },
+    {
+      "id": "V028",
+      "family": "safe_refusal_on_ambiguity_or_negation",
+      "based_on": "F14,F27,R32",
+      "source": "No he visto a Nora.",
+      "facts": [
+        {
+          "source_quote": "No he visto a Nora.",
+          "reviewed_text": "No he visto a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "Model speaker/semantic independent review must not authorize a positive completed event; offline fixture exercises fail-close and no-write only."
+    },
+    {
+      "id": "V029",
+      "family": "safe_refusal_on_ambiguity_or_negation",
+      "based_on": "F14,F27,R32",
+      "source": "Si me encuentro con Nora, hablaré con ella.",
+      "facts": [
+        {
+          "source_quote": "Si me encuentro con Nora, hablaré con ella.",
+          "reviewed_text": "Hablaré con {{ref:0}} si la encuentro.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "Model speaker/semantic independent review must not authorize a positive completed event; offline fixture exercises fail-close and no-write only."
+    },
+    {
+      "id": "V030",
+      "family": "safe_refusal_on_ambiguity_or_negation",
+      "based_on": "F14,F27,R32",
+      "source": "Creo que era Nora, pero no estoy seguro.",
+      "facts": [
+        {
+          "source_quote": "Creo que era Nora, pero no estoy seguro.",
+          "reviewed_text": "Quizás era {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "Model speaker/semantic independent review must not authorize a positive completed event; offline fixture exercises fail-close and no-write only."
+    },
+    {
+      "id": "V031",
+      "family": "safe_refusal_on_ambiguity_or_negation",
+      "based_on": "F14,F27,R32",
+      "source": "No sé si hablé con Vera.",
+      "facts": [
+        {
+          "source_quote": "No sé si hablé con Vera.",
+          "reviewed_text": "No sé si hablé con {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "Model speaker/semantic independent review must not authorize a positive completed event; offline fixture exercises fail-close and no-write only."
+    },
+    {
+      "id": "V032",
+      "family": "unknown_owner_must_not_write_to_self",
+      "based_on": "R31",
+      "source": "El proyecto Atlas tiene prioridad alta.",
+      "facts": [
+        {
+          "source_quote": "El proyecto Atlas tiene prioridad alta.",
+          "reviewed_text": "Tiene prioridad alta.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "known_p4_owner_gap",
+      "note": "P4 not yet able to deliver arbitrary note owners. Must fail closed, never silently store in SELF; Core semantic writer separately has this capability."
+    },
+    {
+      "id": "V033",
+      "family": "unknown_owner_must_not_write_to_self",
+      "based_on": "R31",
+      "source": "Atlas es un proyecto prioritario.",
+      "facts": [
+        {
+          "source_quote": "Atlas es un proyecto prioritario.",
+          "reviewed_text": "Tiene prioridad alta.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "known_p4_owner_gap",
+      "note": "P4 not yet able to deliver arbitrary note owners. Must fail closed, never silently store in SELF; Core semantic writer separately has this capability."
+    },
+    {
+      "id": "V034",
+      "family": "unknown_owner_must_not_write_to_self",
+      "based_on": "R31",
+      "source": "El documento El informe necesita correcciones.",
+      "facts": [
+        {
+          "source_quote": "El documento El informe necesita correcciones.",
+          "reviewed_text": "Necesita correcciones.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "known_p4_owner_gap",
+      "note": "P4 not yet able to deliver arbitrary note owners. Must fail closed, never silently store in SELF; Core semantic writer separately has this capability."
+    },
+    {
+      "id": "V035",
+      "family": "unknown_owner_must_not_write_to_self",
+      "based_on": "R31",
+      "source": "El concepto El coche necesita revisión.",
+      "facts": [
+        {
+          "source_quote": "El concepto El coche necesita revisión.",
+          "reviewed_text": "Necesita revisión.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Atlas": "project",
+        "El informe": "document",
+        "El coche": "concept"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "known_p4_owner_gap",
+      "note": "P4 not yet able to deliver arbitrary note owners. Must fail closed, never silently store in SELF; Core semantic writer separately has this capability."
+    },
+    {
+      "id": "V036",
+      "family": "authenticated_groups_source_scoped",
+      "based_on": "R29",
+      "source": "Mis hijos estuvieron en el jardín. Mi pareja estuvo en el museo.",
+      "facts": [
+        {
+          "source_quote": "Mis hijos estuvieron en el jardín.",
+          "reviewed_text": "{{ref:0}} y {{ref:1}} estuvieron en el jardín.",
+          "reference_names": [
+            "Nora",
+            "Ivo"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Mi pareja estuvo en el museo.",
+          "reviewed_text": "{{ref:0}} estuvo en el museo.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Ivo": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [
+        {
+          "phrase": "mis hijos",
+          "members": [
+            "Nora",
+            "Ivo"
+          ]
+        },
+        {
+          "phrase": "mi pareja",
+          "members": [
+            "Vera"
+          ]
+        }
+      ],
+      "expected_disposition": "source_coverage_only",
+      "note": "Core must prove the matching source-scoped group; distinct third-party undated owner not yet safely materialized by P4."
+    },
+    {
+      "id": "V037",
+      "family": "authenticated_groups_source_scoped",
+      "based_on": "R29",
+      "source": "Mi pareja visitó el museo. Después mis hijos fueron al jardín.",
+      "facts": [
+        {
+          "source_quote": "Mi pareja visitó el museo.",
+          "reviewed_text": "{{ref:0}} visitó el museo.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después mis hijos fueron al jardín.",
+          "reviewed_text": "Después {{ref:0}} y {{ref:1}} fueron al jardín.",
+          "reference_names": [
+            "Nora",
+            "Ivo"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Ivo": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [
+        {
+          "phrase": "mis hijos",
+          "members": [
+            "Nora",
+            "Ivo"
+          ]
+        },
+        {
+          "phrase": "mi pareja",
+          "members": [
+            "Vera"
+          ]
+        }
+      ],
+      "expected_disposition": "source_coverage_only",
+      "note": "Core must prove the matching source-scoped group; distinct third-party undated owner not yet safely materialized by P4."
+    },
+    {
+      "id": "V038",
+      "family": "authenticated_groups_source_scoped",
+      "based_on": "R29",
+      "source": "Al museo fue mi pareja. Al jardín fueron mis hijos.",
+      "facts": [
+        {
+          "source_quote": "Al museo fue mi pareja.",
+          "reviewed_text": "{{ref:0}} fue al museo.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Al jardín fueron mis hijos.",
+          "reviewed_text": "{{ref:0}} y {{ref:1}} fueron al jardín.",
+          "reference_names": [
+            "Nora",
+            "Ivo"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Ivo": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [
+        {
+          "phrase": "mis hijos",
+          "members": [
+            "Nora",
+            "Ivo"
+          ]
+        },
+        {
+          "phrase": "mi pareja",
+          "members": [
+            "Vera"
+          ]
+        }
+      ],
+      "expected_disposition": "source_coverage_only",
+      "note": "Core must prove the matching source-scoped group; distinct third-party undated owner not yet safely materialized by P4."
+    },
+    {
+      "id": "V039",
+      "family": "authenticated_groups_source_scoped",
+      "based_on": "R29",
+      "source": "Mis hijos visitaron el jardín. Después mi pareja vio el museo.",
+      "facts": [
+        {
+          "source_quote": "Mis hijos visitaron el jardín.",
+          "reviewed_text": "{{ref:0}} y {{ref:1}} visitaron el jardín.",
+          "reference_names": [
+            "Nora",
+            "Ivo"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después mi pareja vio el museo.",
+          "reviewed_text": "Después {{ref:0}} vio el museo.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": false,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Ivo": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [
+        {
+          "phrase": "mis hijos",
+          "members": [
+            "Nora",
+            "Ivo"
+          ]
+        },
+        {
+          "phrase": "mi pareja",
+          "members": [
+            "Vera"
+          ]
+        }
+      ],
+      "expected_disposition": "source_coverage_only",
+      "note": "Core must prove the matching source-scoped group; distinct third-party undated owner not yet safely materialized by P4."
+    },
+    {
+      "id": "V040",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "Hablé con Nora en Lyon. Trabajé con Vera en Nantes.",
+      "facts": [
+        {
+          "source_quote": "Hablé con Nora en Lyon.",
+          "reviewed_text": "Hablé con {{ref:0}} en Lyon.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        },
+        {
+          "source_quote": "Trabajé con Vera en Nantes.",
+          "reviewed_text": "Trabajé con {{ref:0}} en Nantes.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V041",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "Trabajé con Vera en Nantes. Hablé con Nora en Lyon.",
+      "facts": [
+        {
+          "source_quote": "Trabajé con Vera en Nantes.",
+          "reviewed_text": "Trabajé con {{ref:0}} en Nantes.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        },
+        {
+          "source_quote": "Hablé con Nora en Lyon.",
+          "reviewed_text": "Hablé con {{ref:0}} en Lyon.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V042",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "En Lyon hablé con Nora. En Nantes trabajé con Vera.",
+      "facts": [
+        {
+          "source_quote": "En Lyon hablé con Nora.",
+          "reviewed_text": "En Lyon hablé con {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        },
+        {
+          "source_quote": "En Nantes trabajé con Vera.",
+          "reviewed_text": "En Nantes trabajé con {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V043",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "En Nantes trabajé con Vera. En Lyon hablé con Nora.",
+      "facts": [
+        {
+          "source_quote": "En Nantes trabajé con Vera.",
+          "reviewed_text": "En Nantes trabajé con {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        },
+        {
+          "source_quote": "En Lyon hablé con Nora.",
+          "reviewed_text": "En Lyon hablé con {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V044",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "Con Nora conversé en Lyon. Con Vera trabajé en Nantes.",
+      "facts": [
+        {
+          "source_quote": "Con Nora conversé en Lyon.",
+          "reviewed_text": "Con {{ref:0}} conversé en Lyon.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        },
+        {
+          "source_quote": "Con Vera trabajé en Nantes.",
+          "reviewed_text": "Con {{ref:0}} trabajé en Nantes.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V045",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "J’ai parlé avec Nora à Lyon. J’ai travaillé avec Vera à Nantes.",
+      "facts": [
+        {
+          "source_quote": "J’ai parlé avec Nora à Lyon.",
+          "reviewed_text": "J’ai parlé avec {{ref:0}} à Lyon.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        },
+        {
+          "source_quote": "J’ai travaillé avec Vera à Nantes.",
+          "reviewed_text": "J’ai travaillé avec {{ref:0}} à Nantes.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V046",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "I talked to Nora in Lyon. I worked with Vera in Nantes.",
+      "facts": [
+        {
+          "source_quote": "I talked to Nora in Lyon.",
+          "reviewed_text": "I talked to {{ref:0}} in Lyon.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        },
+        {
+          "source_quote": "I worked with Vera in Nantes.",
+          "reviewed_text": "I worked with {{ref:0}} in Nantes.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V047",
+      "family": "strictly_equivalent_two_facts",
+      "based_on": "F09,F23",
+      "source": "I worked with Vera in Nantes. I talked to Nora in Lyon.",
+      "facts": [
+        {
+          "source_quote": "I worked with Vera in Nantes.",
+          "reviewed_text": "I worked with {{ref:0}} in Nantes.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "worked_with_vera_nantes"
+        },
+        {
+          "source_quote": "I talked to Nora in Lyon.",
+          "reviewed_text": "I talked to {{ref:0}} in Lyon.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null,
+          "semantic_meaning_id": "talked_with_nora_lyon"
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Two stable meanings in every case regardless of syntactic language and clause order."
+    },
+    {
+      "id": "V048",
+      "family": "pronoun_and_ellipsis_antecedent",
+      "based_on": "F14,F16,F27,R29",
+      "source": "Conocí a Nora. Ella me explicó el plan.",
+      "facts": [
+        {
+          "source_quote": "Conocí a Nora.",
+          "reviewed_text": "Conocí a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Ella me explicó el plan.",
+          "reviewed_text": "{{ref:0}} me explicó el plan.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": 0
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Core dependency proof must hand off the previously grounded referent only, never guess a future or absent antecedent."
+    },
+    {
+      "id": "V049",
+      "family": "pronoun_and_ellipsis_antecedent",
+      "based_on": "F14,F16,F27,R29",
+      "source": "Nora me llamó. Después ella me envió el archivo.",
+      "facts": [
+        {
+          "source_quote": "Nora me llamó.",
+          "reviewed_text": "{{ref:0}} me llamó.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después ella me envió el archivo.",
+          "reviewed_text": "Después {{ref:0}} me envió el archivo.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": 0
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Core dependency proof must hand off the previously grounded referent only, never guess a future or absent antecedent."
+    },
+    {
+      "id": "V050",
+      "family": "pronoun_and_ellipsis_antecedent",
+      "based_on": "F14,F16,F27,R29",
+      "source": "Vi a Vera. Luego me enseñó un documento.",
+      "facts": [
+        {
+          "source_quote": "Vi a Vera.",
+          "reviewed_text": "Vi a {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Luego me enseñó un documento.",
+          "reviewed_text": "Luego {{ref:0}} me enseñó un documento.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": 0
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Core dependency proof must hand off the previously grounded referent only, never guess a future or absent antecedent."
+    },
+    {
+      "id": "V051",
+      "family": "pronoun_and_ellipsis_antecedent",
+      "based_on": "F14,F16,F27,R29",
+      "source": "Vi a Vera. Después me escribió.",
+      "facts": [
+        {
+          "source_quote": "Vi a Vera.",
+          "reviewed_text": "Vi a {{ref:0}}.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después me escribió.",
+          "reviewed_text": "Después {{ref:0}} me escribió.",
+          "reference_names": [
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": 0
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Core dependency proof must hand off the previously grounded referent only, never guess a future or absent antecedent."
+    },
+    {
+      "id": "V052",
+      "family": "pronoun_and_ellipsis_antecedent",
+      "based_on": "F14,F16,F27,R29",
+      "source": "Hablé con Nora. Más tarde ella me llamó.",
+      "facts": [
+        {
+          "source_quote": "Hablé con Nora.",
+          "reviewed_text": "Hablé con {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Más tarde ella me llamó.",
+          "reviewed_text": "Más tarde {{ref:0}} me llamó.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": 0
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "accepted_plan",
+      "note": "Core dependency proof must hand off the previously grounded referent only, never guess a future or absent antecedent."
+    },
+    {
+      "id": "V053",
+      "family": "ambiguous_or_backward_pronoun",
+      "based_on": "F14,F27",
+      "source": "Vi a Nora y Vera. Después ella me escribió.",
+      "facts": [
+        {
+          "source_quote": "Vi a Nora y Vera.",
+          "reviewed_text": "Vi a {{ref:0}} y {{ref:1}}.",
+          "reference_names": [
+            "Nora",
+            "Vera"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después ella me escribió.",
+          "reviewed_text": "Después ella me escribió.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "The synthetic independent model reviewer must refuse unresolved ambiguous or backwards pronouns; Core cannot invent referents."
+    },
+    {
+      "id": "V054",
+      "family": "ambiguous_or_backward_pronoun",
+      "based_on": "F14,F27",
+      "source": "Ella me escribió. Después vi a Nora.",
+      "facts": [
+        {
+          "source_quote": "Ella me escribió.",
+          "reviewed_text": "Ella me escribió.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Después vi a Nora.",
+          "reviewed_text": "Después vi a {{ref:0}}.",
+          "reference_names": [
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "The synthetic independent model reviewer must refuse unresolved ambiguous or backwards pronouns; Core cannot invent referents."
+    },
+    {
+      "id": "V055",
+      "family": "ambiguous_or_backward_pronoun",
+      "based_on": "F14,F27",
+      "source": "Después me llamó ella. Antes había hablado con Vera y Nora.",
+      "facts": [
+        {
+          "source_quote": "Después me llamó ella.",
+          "reviewed_text": "Después me llamó ella.",
+          "reference_names": [],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        },
+        {
+          "source_quote": "Antes había hablado con Vera y Nora.",
+          "reviewed_text": "Antes había hablado con {{ref:0}} y {{ref:1}}.",
+          "reference_names": [
+            "Vera",
+            "Nora"
+          ],
+          "kind": "record",
+          "date": null,
+          "self_participant": true,
+          "dependent_on_fact_index": null
+        }
+      ],
+      "reference_types": {
+        "Nora": "person",
+        "Vera": "person"
+      },
+      "verified_relationship_groups": [],
+      "expected_disposition": "refuse_unproven",
+      "note": "The synthetic independent model reviewer must refuse unresolved ambiguous or backwards pronouns; Core cannot invent referents."
+    }
+  ],
+  "live_challenges": [
+    {
+      "id": "L001",
+      "family": "corrections",
+      "based_on": "F19",
+      "source": "El domingo iré al parque a las 11... no, mejor al cine a las 12.",
+      "source_anchors": [
+        "parque a las 11",
+        "cine a las 12"
+      ],
+      "must_preserve": [
+        "Corrección final: cine a las 12, no parque a las 11"
+      ],
+      "must_not": [
+        "Crear simultáneamente las dos citas como confirmadas"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L002",
+      "family": "corrections",
+      "based_on": "F19",
+      "source": "Pensaba ir mañana al parque, pero he cambiado el plan: mañana iré al cine.",
+      "source_anchors": [
+        "mañana al parque",
+        "mañana iré al cine"
+      ],
+      "must_preserve": [
+        "Intención vigente: cine mañana; parque es plan descartado"
+      ],
+      "must_not": [
+        "Escribir el parque como plan actual o suceso completado"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L003",
+      "family": "conditionals",
+      "based_on": "F20",
+      "source": "Si el sábado llueve, nos quedaremos en casa; si no llueve, iremos al cine.",
+      "source_anchors": [
+        "Si el sábado llueve",
+        "si no llueve"
+      ],
+      "must_preserve": [
+        "Dos alternativas condicionales incompatibles; ninguna afirmada como realizada"
+      ],
+      "must_not": [
+        "Registrar como hechos seguros dos salidas simultáneas"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L004",
+      "family": "conditionals",
+      "based_on": "F20",
+      "source": "El sábado iremos al cine siempre que no llueva. Si llueve, nos quedaremos en casa.",
+      "source_anchors": [
+        "siempre que no llueva",
+        "Si llueve"
+      ],
+      "must_preserve": [
+        "Plan de cine sujeto a condición; alternativa en casa si llueve"
+      ],
+      "must_not": [
+        "Borrar la condición e inventar una visita confirmada"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L005",
+      "family": "negation_scope",
+      "based_on": "F17,F18",
+      "source": "Ayer no vi a Ana; en cambio sí hablé con Luis.",
+      "source_anchors": [
+        "no vi a Ana",
+        "sí hablé con Luis"
+      ],
+      "must_preserve": [
+        "Negación limitada al encuentro con Ana; conversación con Luis sí afirmada"
+      ],
+      "must_not": [
+        "Afirmar un encuentro con Ana o negar también el habla con Luis"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L006",
+      "family": "negation_scope",
+      "based_on": "F17,F18",
+      "source": "Con Luis sí hablé ayer, pero con Ana no me reuní.",
+      "source_anchors": [
+        "Con Luis sí hablé ayer",
+        "con Ana no me reuní"
+      ],
+      "must_preserve": [
+        "Habla con Luis positiva, reunión con Ana negada"
+      ],
+      "must_not": [
+        "Omitir el hecho positivo o convertir la negación en encuentro real"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L007",
+      "family": "temporal_ownership",
+      "based_on": "F07,F08",
+      "source": "Mañana Bea tiene cita a las 15h y Luis a las 17h.",
+      "source_anchors": [
+        "Bea tiene cita a las 15h",
+        "Luis a las 17h"
+      ],
+      "must_preserve": [
+        "Bea 15:00, Luis 17:00; ambas futuras"
+      ],
+      "must_not": [
+        "Intercambiar participantes u horas"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L008",
+      "family": "temporal_ownership",
+      "based_on": "F07,F08",
+      "source": "A las 17h de mañana Luis tiene cita; Bea la tiene a las 15h.",
+      "source_anchors": [
+        "Luis tiene cita",
+        "Bea la tiene a las 15h"
+      ],
+      "must_preserve": [
+        "Bea 15:00, Luis 17:00; sin depender de orden de aparición"
+      ],
+      "must_not": [
+        "Asignar 17:00 a Bea por proximidad o primer índice"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L009",
+      "family": "shared_predicate",
+      "based_on": "F09,F16",
+      "source": "Marta y Luis viven en Lyon.",
+      "source_anchors": [
+        "Marta y Luis",
+        "viven en Lyon"
+      ],
+      "must_preserve": [
+        "Marta reside en Lyon y Luis reside en Lyon; ambas entidades conservadas"
+      ],
+      "must_not": [
+        "Guardar solo al primer nombre o crear un hecho fusionado que pierda una relación"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L010",
+      "family": "shared_predicate",
+      "based_on": "F09,F16",
+      "source": "En Lyon viven Luis y Marta.",
+      "source_anchors": [
+        "En Lyon",
+        "Luis y Marta"
+      ],
+      "must_preserve": [
+        "Marta reside en Lyon y Luis reside en Lyon; orden invertido irrelevante"
+      ],
+      "must_not": [
+        "Ignorar el segundo sujeto o tratar Lyon como identidad inventada"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L011",
+      "family": "relational_read_only",
+      "based_on": "R32",
+      "source": "¿Cómo se llama mi padre?",
+      "source_anchors": [
+        "mi padre"
+      ],
+      "must_preserve": [
+        "Consultar la relación autenticada SELF→padre existente y responder su nombre real"
+      ],
+      "must_not": [
+        "Crear una nota Padre, afirmar ausencia sin consultar o modificar Markdown"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L012",
+      "family": "relational_read_only",
+      "based_on": "R32",
+      "source": "Según mis notas, ¿quién es mi padre?",
+      "source_anchors": [
+        "mis notas",
+        "mi padre"
+      ],
+      "must_preserve": [
+        "Resolver solo el miembro canónico de la relación del actor autenticado"
+      ],
+      "must_not": [
+        "Consultar otro actor, inventar identidad o escribir una relación"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L013",
+      "family": "mixed_core_and_work_session",
+      "based_on": "R30",
+      "source": "Me gusta correr. Empieza una sesión de trabajo en la tarea Preparar informe Atlas.",
+      "source_anchors": [
+        "Me gusta correr",
+        "Empieza una sesión de trabajo"
+      ],
+      "must_preserve": [
+        "Preferencia SELF registrada + exactamente una Work Session de la tarea existente"
+      ],
+      "must_not": [
+        "Convertir preferencia en sesión de trabajo o crear segunda tarea"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L014",
+      "family": "mixed_core_and_work_session",
+      "based_on": "R30",
+      "source": "Empieza una sesión de trabajo de Preparar informe Atlas. Además, me gusta correr.",
+      "source_anchors": [
+        "Empieza una sesión de trabajo",
+        "me gusta correr"
+      ],
+      "must_preserve": [
+        "Una Work Session en la tarea existente + preferencia independiente, aunque cambie el orden"
+      ],
+      "must_not": [
+        "Descartar preferencia o vincular sesión a una tarea distinta"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L015",
+      "family": "historical_vs_upcoming",
+      "based_on": "F01,F02,R29",
+      "source": "Ayer visitamos un museo. Mañana tenemos una cita médica.",
+      "source_anchors": [
+        "Ayer visitamos un museo",
+        "Mañana tenemos una cita médica"
+      ],
+      "must_preserve": [
+        "Visita pasada como conocimiento, cita futura como ocurrencia diferenciada"
+      ],
+      "must_not": [
+        "Convertir recuerdo pasado en Event futuro o perder una de las dos acciones"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    },
+    {
+      "id": "L016",
+      "family": "historical_vs_upcoming",
+      "based_on": "F01,F02,R29",
+      "source": "Mañana tenemos una cita médica. Ayer visitamos un museo.",
+      "source_anchors": [
+        "Mañana tenemos una cita médica",
+        "Ayer visitamos un museo"
+      ],
+      "must_preserve": [
+        "Mismas dos intenciones con orden invertido y fechas propias"
+      ],
+      "must_not": [
+        "Asignar mañana a la visita pasada o ayer a la cita futura"
+      ],
+      "verification": "fresh_real_model_browser_n8n_markdown_required",
+      "status": "pending"
+    }
+  ]
+}

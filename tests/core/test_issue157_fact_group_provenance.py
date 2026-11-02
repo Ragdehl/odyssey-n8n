@@ -424,7 +424,7 @@ def test_person_outside_self_proof_cannot_be_borrowed_across_facts(core_anchored
     else:
         reviewed["facts"][0]["source_quote"] = source
     with pytest.raises(
-        WholeMessageCoverageError, match="Person name unsupported by this atomic source fact"
+        WholeMessageCoverageError, match="Canonical identity unsupported by this atomic source fact"
     ):
         validate_whole_message_coverage(
             source,
@@ -487,7 +487,7 @@ def test_no_self_groups_still_prevent_explicit_cross_fact_name_theft(core_anchor
         ],
     }
     with pytest.raises(
-        WholeMessageCoverageError, match="Person name unsupported by this atomic source fact"
+        WholeMessageCoverageError, match="Canonical identity unsupported by this atomic source fact"
     ):
         validate_whole_message_coverage(
             source,

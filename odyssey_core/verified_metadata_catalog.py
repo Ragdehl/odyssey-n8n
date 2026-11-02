@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from threading import RLock
@@ -132,7 +132,10 @@ def _from_complete_index(
     from odyssey_core.source_inventory import schema_digest
 
     try:
-        with sqlite3.connect(f"file:{index_path}?mode=ro", uri=True) as connection:
+        with (
+            closing(sqlite3.connect(f"file:{index_path}?mode=ro", uri=True)) as connection,
+            connection,
+        ):
             markers = dict(connection.execute("SELECT key,value FROM metadata"))
             if (
                 markers.get("format") != "context-index"

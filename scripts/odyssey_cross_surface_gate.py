@@ -73,6 +73,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e2_person_target_subject_coverage.py",
         "tests/core/test_e2_fact_temporal_ownership.py",
         "tests/core/test_whole_message_coverage_p3.py",
+        "tests/core/test_whole_message_relationship_proof_p3.py",
+        "tests/core/test_shared_relational_helper_shape.py",
         "tests/core/test_whole_message_coverage_provenance_v2.py",
         "tests/core/test_issue157_fact_group_provenance.py",
         "tests/core/test_whole_message_speaker_proof_p4.py",
@@ -92,6 +94,18 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_e3_complete_reference_set_enrichment.py",
         "tests/runtime/test_hybrid_speaker_fact_e2e.py",
         "tests/runtime/test_full_message_corpus_regression.py",
+        # Previously verified, real-provider *recorded* hybrid Core behavior:
+        # no semantic reimplementation by F09 text and no silent deletion of
+        # F14/F27 partial/pending identity guarantees. This is offline replay,
+        # NOT the P4 real-model/browser acceptance gate.
+        "tests/runtime/test_hybrid_known_fact_real_review_20261013.py",
+        "tests/runtime/test_hybrid_ambiguous_real_pending_20261013.py",
+        "tests/benchmarks/test_odyssey_stage_acceptance.py",
+        "tests/benchmarks/test_r0_browser_campaign.py",
+        "tests/benchmarks/test_r0_semantic_branch_regressions.py",
+        "tests/benchmarks/test_r0_real_browser_case.py",
+        "tests/benchmarks/test_r0_literal_diary_task_contract.py",
+        "tests/benchmarks/test_odyssey_acceptance_contracts.py",
     ),
     "task_chat_core": (
         "tests/apps/tasks/test_core_interop.py",
@@ -155,6 +169,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/core/test_schema_auto_backfill.py",
         "tests/core/test_context_deterministic_projection.py",
         "tests/core/test_context_incremental_noop.py",
+        "tests/core/test_sqlite_connection_lifecycle.py",
         "tests/core/test_reference_preflight.py",
         "tests/core/test_reference_preflight_parallel.py",
         "tests/core/test_atomic_facts.py",
@@ -191,6 +206,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "tests/runtime/test_agent_daily_builder_resume.py",
         "tests/runtime/test_agent_offline_sandbox.py",
         "tests/runtime/test_p4_model_contract_strict_schema.py",
+        "tests/runtime/test_p4_generic_reference_types.py",
+        "tests/runtime/test_p4_generic_owner_gap.py",
         "tests/runtime/test_p4_independent_mixed_scopes.py",
         "tests/runtime/test_p4_dependent_task_target.py",
         "tests/runtime/test_p4_production_composition_task_ui.py",
@@ -272,6 +289,29 @@ def run(*, names: list[str], output: Path | None, python: str) -> int:
     offline_env = {**os.environ, "PYTHONPATH": str(ROOT)}
     for secret in ("OPENAI_API_KEY", "OPENAI_ORGANIZATION", "OPENAI_PROJECT"):
         offline_env.pop(secret, None)
+    # This existing gate also rejects new production-only helpers which have
+    # no reachable production consumer, even when their isolated unit tests pass.
+    # A Git diff against the real integration base is required; without it,
+    # fail closed instead of silently skipping the architecture preflight.
+    use_check = [
+        python,
+        str(ROOT / "scripts/audit_semantic_branch_regressions.py"),
+        "--require-production-use",
+    ]
+    if os.environ.get("ODYSSEY_REVIEW_BASE_SHA"):
+        use_check.extend(("--base", os.environ["ODYSSEY_REVIEW_BASE_SHA"]))
+    checker = subprocess.run(
+        use_check,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=offline_env,
+    )
+    if checker.returncode != 0:
+        print("CROSS_SURFACE_GATE BLOCKED: unverified new production definitions")
+        print((checker.stdout + checker.stderr)[-4000:])
+        return 1
     proc = subprocess.run(
         command,
         cwd=ROOT,

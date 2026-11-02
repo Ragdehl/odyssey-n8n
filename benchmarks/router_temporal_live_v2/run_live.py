@@ -26,6 +26,8 @@ ROUTER_SOURCE_MATRIX = ROOT / "benchmarks/application_router/regression_v6.json"
 TEMPORAL_SOURCE_MATRIX = ROOT / "benchmarks/temporal_interpreter/regression_v1.json"
 
 MATRIX_SHA256 = "e6ea6722307f11af1d034b6156545771d7ff54abea9f272e7e6f87cb8110ac69"
+# Recorded result e1beaa4e406b.json is historical, not a permit for new code.
+FROZEN_SOURCE_DIGEST = "e1beaa4e406bb7601d7b4e41e1d5ae95c606171a6e53b82fd31a03d6525937b2"
 ROUTER_SOURCE_SHA256 = "cdc2b55c54f5e690c82e33bf526ed7191fe5aa866ad86a1b7ee501fdd319ff8f"
 TEMPORAL_SOURCE_SHA256 = "245960c46257e348f25e99c38166b93c06d5ee82512567e84ab44338c728b027"
 AUTH_ENV = "ODYSSEY_RUN_ROUTER_TEMPORAL_V2"
@@ -168,6 +170,8 @@ def _preflight(*, require_live_auth: bool) -> dict[str, Any]:
     router_source = _load(ROUTER_SOURCE_MATRIX)
     temporal_source = _load(TEMPORAL_SOURCE_MATRIX)
 
+    if _source_digest() != FROZEN_SOURCE_DIGEST:
+        raise SystemExit("Archived Router/Temporal source changed; fresh evaluation required")
     if _sha(MATRIX) != MATRIX_SHA256:
         raise SystemExit("frozen v2 matrix hash changed")
     if _sha(ROUTER_SOURCE_MATRIX) != ROUTER_SOURCE_SHA256:

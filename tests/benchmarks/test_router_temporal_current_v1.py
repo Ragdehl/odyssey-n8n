@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from benchmarks.router_dependency_live_v1.run_live import FROZEN_CONTRACT_HASHES
 from odyssey_apps import ApplicationDescriptor, ApplicationRegistry, Route, RouteOutcome, RoutePlan
 from odyssey_apps.router import render_router_prompt, route_plan_json_schema, validate_route_plan
 from odyssey_core.temporal_interpretation import (
@@ -125,14 +126,19 @@ def test_temporal_v1_matrix_is_closed_and_locally_valid() -> None:
             raise AssertionError(f"unknown frozen outcome: {outcome}")
 
 
-def test_current_router_and_temporal_model_contracts_are_hash_pinned() -> None:
+def test_historical_router_prompt_pin_is_not_current_model_acceptance() -> None:
+    """Keep genuine old prompt proof; check the current schema independently."""
     catalog = _catalog()
     temporal_matrix = json.loads(TEMPORAL_MATRIX.read_text())
     context = temporal_matrix["current_context"]
 
+    assert (ROUTER_PROMPT_SHA256, ROUTER_SCHEMA_SHA256) == FROZEN_CONTRACT_HASHES
+    # A changed production prompt cannot inherit its predecessor's live receipt.
+    # Current prompt instruction/route semantics have separate active tests, and
+    # current model behavior still needs fresh GPT + browser acceptance.
     assert (
         hashlib.sha256(render_router_prompt(catalog, ()).encode()).hexdigest()
-        == ROUTER_PROMPT_SHA256
+        != ROUTER_PROMPT_SHA256
     )
     assert _sha_json(route_plan_json_schema(catalog)) == ROUTER_SCHEMA_SHA256
     assert (

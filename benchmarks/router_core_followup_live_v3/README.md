@@ -17,3 +17,7 @@ A second disposable request, `Mañana a las 15:35 viene el fontanero.`, failed c
 - frozen matrix SHA-256: `17ce0ed065d8eaae861668977b644b43ba0a101fa9b771ca88d3bd1bc0595194`.
 
 The deliberately conservative regional envelope is `$0.30753008`, dominated by the one Sol call's 40,000-input-token and 4,096-output-token production envelopes. The runner hard-stops above **$0.31** and refuses any second v3 result. Actual cost is expected to be lower but is not used to weaken authorization. `--preflight` makes zero provider calls. A live run still requires explicit human authorization plus `ODYSSEY_RUN_ROUTER_CORE_FOLLOWUP_V3=1` and the protected provider environment.
+
+## Archive status (2026-11-01)
+
+**This nine-call proposal was never approved or executed.** Its `run_live.py` was removed on the isolated R0 branch; neither its proposed cost envelope nor its Sol sentinel may be activated from this historical folder. The original matrix remains SHA-pinned for review. The authorized eight-call record is archived separately in `../router_core_followup_live_v3_8/`. Tests guard that the extra ninth call remains unexecuted.

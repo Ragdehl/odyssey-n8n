@@ -60,13 +60,13 @@ from .reference_preflight import (
     _preflight_write_action,
     allocate_stable_id,
     current_identity_guard,
-    is_reference_only_unit,
     preflight_complete_set_reference_action,
     preflight_relational_target_write_action,
     preflight_relationship_write_action,
     preflight_write_action,
     prepare_complete_set_reference_action,
     prepare_relationship_shared_fact_action,
+    single_relational_reference_helper_index,
 )
 from .relational_resolution import RelationalResolutionError, resolve_relational_reference
 from .relationship_evidence import RelationshipEvidenceProjector
@@ -326,11 +326,9 @@ class DependentReferenceSetGuard:
     def __post_init__(self) -> None:
         if (
             not isinstance(self.guards, tuple)
-            or not 2 <= len(self.guards) <= 8
+            or len(self.guards) < 2
             or any(not isinstance(guard, DependentReferenceGuard) for guard in self.guards)
             or len({guard.evidence.stable_note_id for guard in self.guards}) != len(self.guards)
-            or len({guard.evidence.note_type for guard in self.guards}) != 1
-            or len({guard.mention for guard in self.guards}) != 1
         ):
             raise WritePreflightGuardError("MULTI_DEPENDENT_REFERENCE_SET_INVALID")
 
@@ -1146,7 +1144,7 @@ def _project_execution_flow(
     entities_by_key: dict[tuple[str, str], dict[str, str]] = {}
     link_ids: set[str] = set()
     candidates: list[tuple[str, str, str | None]] = []
-    for action, outcome in zip(plan.actions[:8], results[:8], strict=False):
+    for action, outcome in zip(plan.actions, results, strict=False):
         if isinstance(action, WriteAction):
             unit_results = {unit.unit_index: unit for unit in outcome.unit_results}
             set_members: dict[str, list[str]] = {}
@@ -1158,7 +1156,7 @@ def _project_execution_flow(
                 for stable_id in member_ids:
                     link_ids.add(stable_id)
                     candidates.append((mention[:120], "person", stable_id))
-            for unit_index, unit in enumerate(action.units[:8]):
+            for unit_index, unit in enumerate(action.units):
                 selection = unit.target
                 target = selection.entity or selection.query
                 if unit.reference_lookup_only:
@@ -1191,7 +1189,7 @@ def _project_execution_flow(
                     candidates.append(
                         (target.strip()[:120], (selection.type or "")[:40], observed.stable_note_id)
                     )
-                for reference in unit.references[:8]:
+                for reference in unit.references:
                     mention = reference.mention.strip()[:120]
                     if not mention:
                         continue
@@ -1226,7 +1224,7 @@ def _project_execution_flow(
             )
     names: dict[str, str] = {}
     if link_ids:
-        # Scan once for at most eight Core-confirmed stable IDs; do not use stale
+        # Scan once for all Core-confirmed stable IDs; do not use stale
         # search indexes or derive a name from an ID, filename or model output.
         from .notes import NoteFormatError, NoteValidationError, parse_note, validate_note
         from .storage import NoteUnavailableError, VaultAccessError
@@ -1250,7 +1248,7 @@ def _project_execution_flow(
                         names[stable_id] = name
         except (VaultAccessError, OSError):
             pass
-    for mention, kind, stable_id in candidates[:8]:
+    for mention, kind, stable_id in candidates:
         key = (mention, stable_id or "")
         if key in entities_by_key:
             continue
@@ -1262,9 +1260,9 @@ def _project_execution_flow(
             "type": kind,
         }
     return {
-        "plan": planned[:8],
-        "entities": list(entities_by_key.values())[:8],
-        "writes": writes[:8],
+        "plan": planned,
+        "entities": list(entities_by_key.values()),
+        "writes": writes,
     }
 
 
@@ -1527,35 +1525,6 @@ def _execute_retrieve(
     return ActionResult(action_index, action.kind, ActionStatus.COMPLETED, retrieval=context)
 
 
-def _single_relational_reference_helper_index(action: WriteAction) -> int | None:
-    """Allow one fact-bearing consumer and its sole, factless relational identity helper.
-
-    This is a general dependency shape, not a special case for a family relationship
-    or a Calendar Day. Independent writes cannot be replayed by a scalar choice.
-    """
-    if len(action.units) != 2:
-        return None
-    helpers = [
-        index
-        for index, unit in enumerate(action.units)
-        if is_reference_only_unit(unit)
-        and unit.target.relational_reference is not None
-        and unit.target.relational_reference.members == "one"
-    ]
-    if len(helpers) != 1:
-        return None
-    helper = helpers[0]
-    consumer = action.units[1 - helper]
-    if (
-        not consumer.facts
-        or consumer.target.relational_reference is not None
-        or not consumer.references
-        or any(reference.target_index != helper for reference in consumer.references)
-    ):
-        return None
-    return helper
-
-
 def _execute_write(
     action_index: int,
     action: WriteAction,
@@ -1624,7 +1593,7 @@ def _execute_write(
             spans,
             clarification_choice,
         )
-    relational_helper = _single_relational_reference_helper_index(action)
+    relational_helper = single_relational_reference_helper_index(action)
     chosen_helper_id: str | None = None
     if clarification_choice is not None and relational_helper is not None:
         # Re-ground only the selected, previously offered dependency. No provider
@@ -2512,9 +2481,21 @@ def _persisted_source_note(
         persisted = parse_atomic_facts(note.content)
     except (AtomicFactError, NoteFormatError, OSError, ValueError, RuntimeError, AttributeError):
         return None
-    expected = set(zip(rendered_facts, ordinals, strict=True))
-    actual = {(fact.text, fact.ordinal) for fact in persisted if fact.request_id == request_id}
-    if not expected.issubset(actual):
+    # A source-fact ordinal is a unique physical address within a request.
+    # Set membership alone accepted the right fact even if another marker in
+    # the SAME Note reused its ordinal, making the claimed provenance ambiguous.
+    expected = dict(zip(ordinals, rendered_facts, strict=True))
+    if len(expected) != len(ordinals):
+        return None
+    actual = (
+        fact for fact in persisted if fact.request_id == request_id and fact.ordinal in expected
+    )
+    seen: set[int] = set()
+    for fact in actual:
+        if fact.ordinal in seen or fact.text != expected[fact.ordinal]:
+            return None
+        seen.add(fact.ordinal)
+    if len(seen) != len(expected):
         return None
     return stable_note_id, evidence_digest(markdown)
 

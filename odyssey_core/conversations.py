@@ -332,7 +332,7 @@ class ConversationRepository:
                 not isinstance(count, int)
                 or not isinstance(name, str)
                 or count < 1
-                or not re.fullmatch(r"[0-9]{6}\\.json", name)
+                or not re.fullmatch(r"[0-9]{6}\.json", name)
             ):
                 raise ConversationError("conversation manifest is invalid")
             next_offset = offset + count
@@ -576,7 +576,7 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
         or len(value["input"]) > 4096
         or type(value["parallel_preparation"]) is not bool
         or not isinstance(value["routes"], list)
-        or not 1 <= len(value["routes"]) <= 8
+        or not 1 <= len(value["routes"]) <= 64
     ):
         raise ConversationError("execution flow is invalid")
     for index, route in enumerate(value["routes"]):
@@ -606,7 +606,8 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
             or type(route["stage_count"]) is not int
             or not 0 <= route["stage_count"] <= 16
             or not isinstance(route["temporal"], list)
-            or len(route["temporal"]) > 8
+            # The 64 KiB entire request-detail budget constrains this list;
+            # no independently invented semantic participant count is valid.
         ):
             raise ConversationError("execution flow is invalid")
         has_dependency = "depends_on" in route or "reason" in route
@@ -629,7 +630,7 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
             if (
                 not has_dependency
                 or not isinstance(ancestors, list)
-                or not 2 <= len(ancestors) <= 8
+                or len(ancestors) < 2
                 or any(type(parent) is not int or not 0 <= parent < index for parent in ancestors)
                 or len(set(ancestors)) != len(ancestors)
                 or route["depends_on"] not in ancestors
@@ -669,7 +670,7 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
             ),
         ):
             values = route.get(kind, [])
-            if not isinstance(values, list) or len(values) > 8:
+            if not isinstance(values, list):
                 raise ConversationError("execution flow is invalid")
             for item in values:
                 if (
@@ -680,6 +681,8 @@ def _validate_execution_flow(value: Any, stages: list[dict[str, Any]] | None = N
                         for k, bound in limits.items()
                     )
                 ):
+                    raise ConversationError("execution flow is invalid")
+                if kind == "writes" and item["status"] not in ("succeeded", "deferred", "failed"):
                     raise ConversationError("execution flow is invalid")
                 if kind == "entities" and (
                     item["status"] not in ("resolved", "unresolved")
@@ -806,7 +809,7 @@ def _validate_detail_stage(value: Any, *, allow_calls: bool) -> None:
     if "route_index" in value and (
         not allow_calls
         or type(value["route_index"]) is not int
-        or not 0 <= value["route_index"] <= 7
+        or not 0 <= value["route_index"] < 64
     ):
         raise ConversationError("request detail is invalid")
     if "stage_view" in value:

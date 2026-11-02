@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
+import pytest
+
 from benchmarks.planner_prompt_regression_v5 import run_live as gate
 from odyssey_core.request_planning import (
     KnowledgeReference,
@@ -58,12 +63,20 @@ def test_v5_registry_is_current_and_has_no_accepted_failure_holes() -> None:
     } <= ids
 
 
-def test_v5_manifest_pins_current_production_composed_contract() -> None:
+def test_v5_historical_manifest_refuses_current_changed_planner_contract() -> None:
+    """Keep the old review unchanged; don't reanchor model or budget to pass."""
     cases, context = gate.load_gate_cases()
     schema = gate.production_schema()
-
-    gate.verify_manifest(schema, context)
-
+    assert hashlib.sha256(gate.MANIFEST_PATH.read_bytes()).hexdigest() == (
+        "f854642ac7c07c7bc1a85a250f24e34cb4d85ac06666754236c0bdf2da2909cf"
+    )
+    frozen = json.loads(gate.MANIFEST_PATH.read_text(encoding="utf-8"))
+    assert (
+        frozen["sha256"]["prompt_sha256"]
+        != gate._model_contract_hashes(schema, context)["prompt_sha256"]
+    )
+    with pytest.raises(SystemExit, match="Refusing live calls: v5 contract drifted"):
+        gate.verify_manifest(schema, context)
     assert gate.conservative_cost_ceiling(cases, context, schema) <= gate.MAX_CONSERVATIVE_COST_USD
 
 

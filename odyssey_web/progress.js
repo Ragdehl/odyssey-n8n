@@ -205,6 +205,7 @@ function stageTitle(name) {
   if (name === "candidate.source_boundary_review") return "Core · revisión de la división";
   if (name === "candidate.temporal_interpretation") return "Temporal";
   if (name === "planner") return "Planner";
+  if (name === "core.read_preflight") return "Core · interpretación inicial de lectura";
   if (name === "temporal.interpretation") return "Temporal";
   if (name === "temporal.coherence") return "Coherencia de fechas";
   if (name === "tasks.interpretation") return "Tasks";
@@ -413,6 +414,24 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
   root.setAttribute("aria-label", "Diagrama de ejecución de la solicitud");
   const stages = detail.operational.stages;
   const flow = detail.flow;
+  const ledger = detail.execution_ledger;
+  const terminal = ledger?.status ||
+    (flow?.routes?.some(route => route.status === "failed") ? "failed"
+      : flow?.routes?.some(route => route.status === "needs_attention") ? "needs_attention"
+      : flow?.routes?.some(route => route.status === "partial") ? "partial" : null);
+  if (["failed", "needs_attention", "partial"].includes(terminal)) {
+    // Only a verified failure stage may be named as the cause. A terminal
+    // clarification without failed-stage evidence is NOT proof that the
+    // requested Note or relationship is absent from canonical Markdown.
+    const failedStages = (ledger?.stages || stages).filter(stage =>
+      ["failed", "unavailable"].includes(stage.outcome));
+    const first = failedStages[0];
+    const label = first?.stage_view?.label || (first ? stageTitle(first.name) : "");
+    const reason = first
+      ? `Hay un fallo registrado en «${label}». El diagrama muestra las etapas observadas, pero no demuestra que la información buscada sea inexistente.`
+      : "Odyssey no completó la solicitud, pero el historial no identifica una etapa fallida. No puede concluirse que la información no esté guardada.";
+    root.append(element(doc, "p", "flow-diagnostic-warning", reason));
+  }
   if (flow?.input || sourceText) {
     root.append(plainCard(doc, "Mensaje del usuario", flow?.input || sourceText, "source"));
     root.append(arrow(doc));
@@ -530,10 +549,14 @@ export function renderExecutionFlow(doc, detail, {sourceText = "", checkpoint} =
   }
   if (!flow?.routes?.length) root.append(arrow(doc, "flow-single"));
   const outcomes = flow?.routes?.map(route => route.status) || [];
-  const result = outcomes.length && outcomes.every(s => s === "completed") ? "Rutas completadas"
+  const observedPartialRoutes = outcomes.some(s => s === "completed")
+    && outcomes.some(s => s !== "completed");
+  const result = terminal === "partial" || observedPartialRoutes ? "Resultado parcial"
+    : terminal === "failed" ? "No completado"
+    : terminal === "needs_attention" ? "Necesita revisión"
+    : outcomes.length && outcomes.every(s => s === "completed") ? "Rutas completadas"
     : outcomes.some(s => s === "completed") ? "Resultado parcial"
-    : outcomes.includes("needs_attention") ? "Necesita aclaración"
-    : outcomes.includes("failed") ? "No completado" : "Resultado de Odyssey";
+    : "Resultado de Odyssey";
   const end = plainCard(doc, result, "", result === "Rutas completadas" ? "success" : "outcome");
   const stats = element(doc, "div", "flow-stats");
   const finalCost = cost(detail.estimated_cost);

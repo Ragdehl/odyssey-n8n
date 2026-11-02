@@ -16,6 +16,8 @@ SCHEMAS = (
     contract.PLAN_CORE_ANCHORED_SCHEMA,
     contract.REVIEW_SCHEMA,
     contract.REVIEW_CORE_ANCHORED_SCHEMA,
+    contract.REVIEW_OWNER_SCHEMA,
+    contract.REVIEW_OWNER_CORE_ANCHORED_SCHEMA,
     contract.SPEAKER_SCHEMA,
     contract.TASK_ONLY_SCOPE_SCHEMA,
     contract.MIXED_TASK_CREATE_SCHEMA,
@@ -58,6 +60,8 @@ def _check(schema, depth=0):
         "original-source-anchored-planner-v2",
         "whole-source-review",
         "original-source-anchored-review-v2",
+        "generic-owner-review-v1",
+        "source-anchored-owner-review-v1",
         "speaker-proof",
         "tasks-only-scope",
         "mixed-task-lifecycle-audit",
@@ -178,3 +182,22 @@ def test_events_tasks_router_demands_exact_two_independent_scopes():
     assert "Temporal is a shared" in prompt
     assert "byte-for-byte complete partition" in prompt
     assert "semantic reviewer BEFORE either write" in prompt
+
+
+def test_p4_entity_note_types_come_from_schema_input_not_hardcoded_two_type_enum():
+    declared = contract.PLAN_SCHEMA["properties"]["entities"]["items"]["properties"]["note_type"]
+    assert declared == {"type": "string"}
+    assert "allowed_note_types" in contract.PLANNER_INSTRUCTIONS
+    assert "verified current canonical" in contract.PLANNER_INSTRUCTIONS
+    assert "do not invent an ontology" in contract.PLANNER_INSTRUCTIONS
+
+
+def test_optin_owner_contract_inherits_full_source_safety_and_requires_owner_for_each_fact():
+    for owner_schema in (contract.REVIEW_OWNER_SCHEMA, contract.REVIEW_OWNER_CORE_ANCHORED_SCHEMA):
+        fact = owner_schema["properties"]["facts"]["items"]
+        assert fact["properties"]["owner_name"] == {"type": ["string", "null"]}
+        assert "owner_name" in fact["required"]
+        assert fact["additionalProperties"] is False
+    assert "canonical SELF" in contract.PROMPT_SOURCE_REVIEW
+    assert "independently" in contract.PROMPT_SOURCE_OWNER_REVIEW.lower()
+    assert "proposed note type" in contract.PROMPT_SOURCE_OWNER_REVIEW

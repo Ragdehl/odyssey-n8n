@@ -48,6 +48,7 @@ class ReviewedFullSourceFact:
     # Original-source character offsets, allowing many supporting spans per
     # fact and shared spans across independent facts without note-type logic.
     source_spans: tuple[tuple[int, int], ...] = ()
+    owner_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +121,7 @@ def validate_whole_message_coverage(
     verified_relationship_groups: Sequence[tuple[str, tuple[str, ...]]] = (),
     unverified_source_mentions: Sequence[str] = (),
     core_anchored_evidence: bool = False,
+    require_owner_review: bool = False,
 ) -> ReviewedFullSource:
     """Verify semantic proposal/reviewer agreement and literal source provenance.
 
@@ -152,18 +154,14 @@ def validate_whole_message_coverage(
     # Unverified mentions carry no identity authority. They may be saved as
     # literal source, but independent semantic review must preserve each one.
     mentions = tuple(unverified_source_mentions)
-    if (
-        len(mentions) > 8
-        or any(not isinstance(m, str) or not m or m not in source for m in mentions)
-        or any(
-            not any(
-                isinstance(row, Mapping)
-                and isinstance(row.get("reviewed_text"), str)
-                and mention in row["reviewed_text"]
-                for row in judgments
-            )
-            for mention in mentions
+    if any(not isinstance(m, str) or not m or m not in source for m in mentions) or any(
+        not any(
+            isinstance(row, Mapping)
+            and isinstance(row.get("reviewed_text"), str)
+            and mention in row["reviewed_text"]
+            for row in judgments
         )
+        for mention in mentions
     ):
         raise WholeMessageCoverageError("Unverified source mention was not retained")
     verified = set(verified_relationship_members)
@@ -172,7 +170,7 @@ def validate_whole_message_coverage(
     # Core supplies each source-quoted relation AND its verified members.
     # Names known somewhere in SELF do not prove membership in every fact.
     groups = tuple(verified_relationship_groups)
-    if len(groups) > 8 or any(
+    if any(
         not isinstance(phrase, str)
         or phrase not in source
         or not isinstance(members, (tuple, list))
@@ -190,11 +188,15 @@ def validate_whole_message_coverage(
     # primary occurrence offsets (not reviewer-controlled broad quote spans)
     # before deciding which source mentions each fact can safely claim.
     primary_spans: tuple[tuple[int, int], ...] = ()
-    if groups or any(
-        isinstance(claim, Mapping)
-        and isinstance(claim.get("reference_names"), list)
-        and bool(claim["reference_names"])
-        for claim in judgments
+    if (
+        groups
+        or require_owner_review
+        or any(
+            isinstance(claim, Mapping)
+            and isinstance(claim.get("reference_names"), list)
+            and bool(claim["reference_names"])
+            for claim in judgments
+        )
     ):
         try:
             primary_spans = tuple(
@@ -287,14 +289,32 @@ def validate_whole_message_coverage(
         # independently meaningful source assertion. This gate records evidence,
         # not a grammar-dependent assertion that overlaps are always invalid.
         evidence_spans.append(span)
+        owner_name = claim.get("owner_name") if require_owner_review else None
+        if require_owner_review:
+            if "owner_name" not in claim or not isinstance(
+                claim.get("owner_name"), (str, type(None))
+            ):
+                raise WholeMessageCoverageError("Invalid independent fact owner review")
+            if owner_name is not None:
+                # The independent reviewer must agree with the source Planner,
+                # and the literal mention must belong to THIS atomic evidence.
+                # A raw subject, another fact or a merely referenced person
+                # is not a canonical owner or write permission.
+                if (
+                    kind != "record"
+                    or not owner_name.strip()
+                    or len(owner_name) > 128
+                    or fact.get("subject") != owner_name
+                    or not owned_mention(owner_name, index, insensitive=True)
+                ):
+                    raise WholeMessageCoverageError("Source-specific owner attribution unproven")
         names = claim.get("reference_names")
         if (
             not isinstance(names, list)
-            or len(names) > 8
             or len(set(names)) != len(names)
             or any(not isinstance(n, str) or not n.strip() or len(n) > 128 for n in names)
         ):
-            raise WholeMessageCoverageError("Invalid typed person references")
+            raise WholeMessageCoverageError("Invalid typed canonical references")
         valid_names = {n for n in fact.get("participants", []) if isinstance(n, str)} | {
             e.get("mention") for e in entities if isinstance(e.get("mention"), str)
         }
@@ -323,7 +343,7 @@ def validate_whole_message_coverage(
                 and not proven_prior_reference
             ):
                 raise WholeMessageCoverageError(
-                    "Person name unsupported by this atomic source fact"
+                    "Canonical identity unsupported by this atomic source fact"
                 )
         if names and any(
             primary_spans[index] != other
@@ -383,10 +403,12 @@ def validate_whole_message_coverage(
         ):
             raise WholeMessageCoverageError("Invalid cross-operation dependency")
         if dependency is not None and not (set(names) & set(output[dependency].reference_names)):
-            raise WholeMessageCoverageError("Cross-operation identity handoff has no shared person")
+            raise WholeMessageCoverageError(
+                "Cross-operation identity handoff has no shared canonical entity"
+            )
         output.append(
             ReviewedFullSourceFact(
-                quote, text, kind, date, tuple(names), dependency, tuple(support_spans)
+                quote, text, kind, date, tuple(names), dependency, tuple(support_spans), owner_name
             )
         )
     if evidence_spans != sorted(evidence_spans):

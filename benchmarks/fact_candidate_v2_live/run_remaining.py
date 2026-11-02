@@ -19,13 +19,15 @@ from typing import Any
 from benchmarks.fact_candidate_core_live.run_scoped_live import (
     _receipt_cost,
 )
-from benchmarks.fact_candidate_v2_live.run_live import HERE, ROOT
 from odyssey_apps.fact_candidates import (
     OpenAIFactCandidateRouter,
     validate_fact_candidate_proposal,
 )
 from tests.apps.test_fact_candidates import CASES, _from_design
 from tests.runtime.test_fact_candidate_planning_vertical import _sdk_fake
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
 
 PIN = HERE / "reviewed_remaining_requests.json"
 RESULTS = HERE / "remaining_results"

@@ -13,7 +13,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from odyssey_core.application import ApplicationResult, _dependent_evidence_is_current
-from odyssey_core.dependent_reference_form import referenced_finite_cardinality
+from odyssey_core.dependent_reference_form import (
+    MIN_COMPLETE_COHORT_MEMBERS,
+    referenced_finite_cardinality,
+)
 from odyssey_core.request_planning import RequestPlan, WriteAction
 from odyssey_core.source_bound_dependency import (
     SourceBoundDependency,
@@ -21,6 +24,7 @@ from odyssey_core.source_bound_dependency import (
     prove_source_bound_dependency,
 )
 from odyssey_core.storage import VaultRepository
+from odyssey_core.write_plan_enrichment import MAX_CORE_REFERENCE_FACTS
 
 from .interpretation import (
     TaskActivityTarget,
@@ -262,7 +266,7 @@ def verify_plural_person_task_semantics(
         # the DAG validates all preceding bytes and E2 checks every omitted
         # earlier Person receipt before authorizing the Task write.
         or not full_source.endswith(antecedent_source + dependent_source)
-        or not 2 <= len(antecedent_mentions) <= 8
+        or not MIN_COMPLETE_COHORT_MEMBERS <= len(antecedent_mentions) <= MAX_CORE_REFERENCE_FACTS
         or len(set(antecedent_mentions)) != len(antecedent_mentions)
         or (referenced_finite_cardinality(dependent_mention) != len(antecedent_mentions))
         or any(antecedent_source.count(name) != 1 for name in antecedent_mentions)

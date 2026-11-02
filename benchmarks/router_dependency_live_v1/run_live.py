@@ -23,6 +23,12 @@ HERE = Path(__file__).resolve().parent
 AUTH_ENV = "ODYSSEY_ROUTER_DEPENDENCY_LIVE_V1"
 MAX_CALLS = 6
 MAX_USD = 0.01
+# Pin the genuinely observed one-shot result, not whatever the current Router renders.
+# Archived benchmarks must never silently acquire permission on a revised prompt.
+FROZEN_CONTRACT_HASHES = (
+    "3be2fb5e4dfeb87e793c4f7dd033ade0d0907fe314c2b5156a879686fbd8ad52",
+    "d894f62d7a4161bea1ad62a6cadb1fb3c87d46cd1ee72edfe53b95d4322a2b87",
+)
 CASES = (
     (
         "dependent-person",
@@ -85,6 +91,10 @@ def run() -> int:
     """Run at most six non-retried provider requests with an enforced small bound."""
     if os.environ.get(AUTH_ENV) != "YES" or not os.environ.get("OPENAI_API_KEY"):
         raise SystemExit("Live gate not authorized or missing provider key")
+    if contract_hashes() != FROZEN_CONTRACT_HASHES:
+        raise SystemExit(
+            "Archived Router contract changed; fresh evaluation/authorization required"
+        )
     assert ROUTER_MODEL == "gpt-6-luna" and ROUTER_REASONING_EFFORT == "low"
     assert ROUTER_MAX_OUTPUT_TOKENS <= 512 and len(CASES) == MAX_CALLS
     assert len(render_router_prompt(catalog(), ())) < 28000

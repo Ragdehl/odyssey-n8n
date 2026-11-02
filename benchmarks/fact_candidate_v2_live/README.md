@@ -1,5 +1,14 @@
 # Router v2 — reviewed four-case synthetic API gate
 
+> **Historical archive — 2026-11-01:** The original four-call v1/v2/v3
+> experiments were consumed, and **all three failed semantic fixture review**.
+> Their callable `run_live.py` is retired; the old invocation examples below
+> document past usage, not executable instructions or permission for new calls.
+> Original results/request snapshots are immutable and SHA-checked by
+> `tests/benchmarks/test_fact_candidate_v2_archive.py`. The ongoing 23-case
+> investigation uses its own retained runner, independent of this pilot.
+
+
 This separately reviewable source file is **not the previously rejected
 inline shell evaluator**. It uses the existing production-shaped Router
 request constructor and a committed snapshot, with a separate standalone

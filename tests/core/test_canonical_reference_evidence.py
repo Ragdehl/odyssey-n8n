@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import odyssey_core.application as application
 from odyssey_core.application import execute_request
 from odyssey_core.notes import Note, serialize_note
@@ -304,3 +306,53 @@ def test_dependent_guard_rejects_stale_or_marker_free_reference(tmp_path: Path) 
     source_note.write_text(original + "\n", encoding="utf-8")
     with pytest.raises(WritePreflightGuardError, match="CANONICAL_EVIDENCE_STALE"):
         guard(action, correct, repo, schema)
+
+
+@pytest.mark.parametrize("note_type", ["person", "project", "document", "concept"])
+@pytest.mark.parametrize("duplicate_text", ["Dato contradictorio.", "Primer dato."])
+def test_canonical_fact_readback_requires_unique_request_ordinal_even_when_note_is_shared(
+    tmp_path: Path, note_type: str, duplicate_text: str
+) -> None:
+    """An existing E3 source-fact proof must never accept duplicate physical ordinals."""
+    from odyssey_core import create_entity
+    from odyssey_core.atomic_facts import render_atomic_facts
+    from odyssey_core.notes import parse_note
+
+    (tmp_path / "vault").mkdir()
+    vault = VaultRepository(tmp_path / "vault")
+    schema = json.loads((ROOT / "config/note-schema.json").read_text(encoding="utf-8"))
+    name = "Atlas"
+    request = "generic-request-proof"
+    now = "2026-10-08T12:00:00+02:00"
+    canonical_id = "atlas-current"
+    original = ("Primer dato.", "Segundo dato.")
+    create_entity(
+        vault,
+        schema,
+        path="Atlas.md",
+        entity_id=canonical_id,
+        metadata={"name": name, "type": note_type},
+        content=render_atomic_facts(original, request, (0, 1), now),
+        actor="synthetic",
+        now=now,
+    )
+
+    def physical(quoted: tuple[str, ...], ordinals: tuple[int, ...]):
+        return application._persisted_source_note(
+            vault, schema, canonical_id, quoted, request, ordinals
+        )
+
+    assert physical(original, (0, 1)) is not None
+    assert physical((original[0],), (0,)) is not None
+    assert physical(("Falso.",), (0,)) is None
+
+    path = "Atlas.md"
+    note = parse_note(vault.read_text(path))
+    other = render_atomic_facts(("Hecho de otra petición.",), "other-request", (0,), now)
+    vault.replace_text(path, serialize_note(Note(note.metadata, note.content + "\n" + other)))
+    assert physical(original, (0, 1)) is not None
+    note = parse_note(vault.read_text(path))
+    duplicate = render_atomic_facts((duplicate_text,), request, (0,), now)
+    vault.replace_text(path, serialize_note(Note(note.metadata, note.content + "\n" + duplicate)))
+    assert physical((original[0],), (0,)) is None
+    assert physical(original, (0, 1)) is None

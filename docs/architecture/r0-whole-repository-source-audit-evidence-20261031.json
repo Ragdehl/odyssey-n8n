@@ -1,0 +1,255 @@
+{
+  "snapshot": "e336d1d8607f28c04ec25577e7b2ce044741f9bc",
+  "kind": "whole-repository source discovery, NOT product release review, no direct code changes",
+  "host_inventory": {
+    "versioned_files": 2029,
+    "production_core_runtime_apps_python": 196,
+    "test_files": 517,
+    "benchmark_files": 892,
+    "static_reachable_prod_modules": 185,
+    "not_statically_reached_candidates": 11
+  },
+  "model_reported_tokens": 432968,
+  "notes": "Original reviewer JSON distilled without model command logs; every finding is independently scoped and must be checked against actual active code before deletion. Statically unreachable is NOT proof of unused. Four reviewers are separate sessions, executed serially on Pi.",
+  "roles": {
+    "core": {
+      "verdict": "fail",
+      "summary": "Whole-repository discovery at e336d1d8607f28c04ec25577e7b2ce044741f9bc found active Core and Runtime paths that reject source-grounded facts by relationship shape, participant wording, or fixed group size. R0 remains unaccepted; this read-only review is not acceptance evidence.",
+      "findings": [
+        {
+          "severity": "blocking",
+          "path": "odyssey_core/candidate_coverage.py:612",
+          "reason": "Active prewrite coverage sends a single-fact relationship to the two-person validator in candidate_mutual_relation.py:33-54 and a non-hybrid two-reference fact to candidate_multi_participant.py:36-50. The grouped occurrence proof at candidate_group_participants.py:137-149 cannot serve relationship candidates. These competing proofs make candidate kind, exactly two people, and the literal separator ` y ` determine whether a Core fact can reach E3, despite independently reviewed N:M attribution.",
+          "action": "Consolidate source-owned participant and relationship evidence at the existing Core coverage boundary without weakening canonical helper, identity, or E3 checks. Negative test: a reviewed relationship with an omitted or swapped participant must refuse before mutation. Positive test: the same grounded relationship expressed with three participants or another conjunction must preserve every supported fact and link through physical Markdown readback; repeat with 0/1/2/3/5+ candidate graphs and replay.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_core/dependent_reference_form.py:39",
+          "reason": "Core recognizes finite anaphoric counts only through eight (lines 39-75); dependent_group_evidence.py:75-114 then applies completeness only to `person` and counts physical members using canonical-name-equal source mentions. The active Runtime consumer at odyssey_runtime/whole_source_light.py:1965-1980 additionally requires exactly two route groups and cardinality 2–8. A source-grounded larger or differently typed cohort is refused; an alias-backed member can be excluded from the completeness set even though Core has its physical receipt.",
+          "action": "Use the existing reviewed source graph and Core receipts to prove complete typed cohorts without a finite word table or Person-only completeness rule. Preserve the fail-closed all-member check and E3 current-evidence guard. Negative test: a model-selected subset of a larger cohort must refuse. Positive test: every source-grounded member, including an alias-backed member and a cohort beyond eight, must reach the App lifecycle with exact Core identities and survive Markdown/readback/replay; verify both two-group and multi-group routes.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_core/whole_message_coverage.py:154",
+          "reason": "The active whole-source prewrite validator rejects more than eight unverified mentions or verified relationship groups (lines 154-183), and more than eight canonical reference names per fact (lines 290-297). odyssey_runtime/whole_source_light.py:1428-1440 calls this validator before writing. These fixed semantic group limits can drop a complete, source-supported message even when the independent review and Core identity evidence account for its contents.",
+          "action": "Replace semantic cardinality gates with explicit resource budgets tied to payload size and verified evidence; retain per-mention provenance, identity collision checks, and physical readback. Negative test: nine proposed names with one absent from the source or without Core proof must refuse. Positive test: nine distinct grounded mentions or groups within the payload budget must produce all supported facts and links after reload and replay.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "odyssey_core/candidate_scoped_handoff.py:116",
+          "reason": "This historical scoped planner accepts a single punctuation shape and exact source words at lines 128-130 and 193-219; candidate_scoped_planning.py:73-103 hard-codes `Ayer`/`Mañana` and one fact per candidate. The source search found no production Runtime or Apps caller for either entry point, while the active path uses Core candidate attribution and coverage through odyssey_runtime/candidate_route_dispatch.py:316-370 and odyssey_core/application.py:649-681. Keeping this duplicate planner invites reactivation of source-specific behavior.",
+          "action": "Confirm all import and configuration paths in a targeted test, then retire or clearly isolate this inactive prototype while reusing the active RequestPlan, ExecutionContext, and coverage path. Negative test: a dependent or ambiguous clause must remain pending with no write. Positive test: two independent clauses with different wording and dates must retain both reviewed facts and pending state through the active Core path and physical readback.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "odyssey_core/candidate_attribution.py:107",
+          "reason": "The legacy `_facts` projection at lines 144-172 supports exactly two reference helpers and two sequential facts, duplicating the arbitrary-ordinal `_graph_plan_fact_texts` at lines 896-925. The inspected production call uses `propose_graph` at line 1052, which selects the latter at line 474; the legacy projection remains reachable through the older `propose` and validation APIs at lines 256 and 370. This is a migration hazard, not evidence that the active graph path has the same limit.",
+          "action": "Keep one source-to-fact graph projection for any retained callers and remove the legacy shape restriction only after consumer equivalence is proved. Negative test: duplicate, invented, or unclaimed helper ordinals must refuse. Positive test: one candidate to several facts and several candidates to one fact, with more than two legitimate helpers, must keep exact source claims and pass the existing Core prewrite and Markdown readback gates.",
+          "actionability": "repairable"
+        }
+      ],
+      "coverage_evidence": [
+        "Coverage: personally AST-parsed and indexed the public top-level definitions and Core-to-Runtime/Apps imports of all 120 production Python modules under odyssey_core/ at the pinned HEAD. This was an API/dependency index, not a line-by-line reading of all Core source. Directly read the cited methods and representative identity, planning, mutation, persistence, provenance, and readback code; inspected targeted Runtime call sites and the Apps catalog. Other Runtime/Apps modules and the rest of each indexed Core file were not fully read.",
+        "Compared active Core candidate_coverage.py:197-270,420-665 with application.py:649-681, candidate_attribution.py:449-474,1034-1139, candidate_group_participants.py:121-221, candidate_multi_participant.py:19-115, and candidate_mutual_relation.py:19-110. The active Runtime binding is candidate_route_dispatch.py:316-370.",
+        "Compared finite-cohort source parsing in dependent_reference_form.py:39-93 with receipt completeness in dependent_group_evidence.py:75-114,345-374 and the active whole-source Runtime branch at whole_source_light.py:1965-1980,2509.",
+        "Compared whole_message_coverage.py:140-183,290-308 with its Runtime call at whole_source_light.py:1417-1445 and Core identity collision preflight in whole_message_identity_guard.py:35-100.",
+        "Checked existing safeguards before recommending consolidation: semantic_write.py:568-616 lowers through validate_request_plan; reference_preflight.py:374-452 rechecks relationship evidence; relationship_evidence.py:235-240 reads canonical Markdown; mutation_gate.py:1-100 retains postwrite receipts; persistence.py:108-155 validates Markdown and duplicate IDs; candidate_fact_readback.py:235-270 compares rendered canonical facts.",
+        "Read pyproject.toml and ops/agent-team/review.schema.json. Ran read-only odyssey_context_doctor.py: source clean and pinned; DEV checkout, marker, and health unknown in this environment. No tests, provider calls, deployment, edits, or Git changes were made. The 32 fresh end-to-end tests and final-SHA independent reviews remain outstanding."
+      ],
+      "reported_tokens": 94108,
+      "model": "gpt-6-sol",
+      "effort": "medium",
+      "scope": "native odyssey-scope-read; deny host private paths, network, and workspace writes"
+    },
+    "runtime": {
+      "verdict": "fail",
+      "summary": "Whole-repository discovery at e336d1d8607f28c04ec25577e7b2ce044741f9bc found severe defects in the flag-gated P4 runtime path: safe facts with non-Day owners cannot be compiled, dependent references are restricted to Person sets of 2–8, and several supported App operations are refused by Runtime. This is a source architecture verdict, not R0 acceptance or a claim about the deployed DEV version.",
+      "findings": [
+        {
+          "severity": "blocking",
+          "path": "odyssey_core/whole_source_compiler.py:216",
+          "reason": "P4 compiles dated records only to calendar_day, undated speaker records only to SELF, and Tasks only to new dated Tasks; other reviewed fact owners are rejected at lines 232–241. Runtime invokes this compiler at odyssey_runtime/whole_source_light.py:1483. Thus a source-supported fact about an existing non-Day Note can reach the independent review and still produce no canonical write. The ordinary Core RequestPlan and semantic write path already support owner selection.",
+          "action": "Consolidate P4's reviewed facts into the existing Core RequestPlan/compile_semantic_write owner selection, preserving its source review and E3 guards. Prove equivalence with synthetic existing Note owners across schema types, new singular identities, ambiguity, replay, and physical Markdown readback; then run the 32 fresh final-stage cases.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_runtime/whole_source_light.py:1954",
+          "reason": "The special plural path requires exactly Core→Tasks, exactly two scopes, and cardinality 2–8 at lines 1971–1980. The graph path then requires Person edges for a plural Task at lines 2515–2538. Core already provides canonical source-bound handoff and generic relationship evidence; Runtime's Person/count conditions refuse otherwise safe source-proven Note sets and make example shape determine execution.",
+          "action": "Move set membership proof through existing Core relationship and canonical handoff contracts; let Tasks validate its declared operation without Runtime selecting a Person ontology or finite group size. Retain both independent reviews, current Markdown proof, CAS, and manifest. Compare 0/1/2/3/5/9-member and mixed Note-type sources before and after, including ambiguous or stale vetoes and replay.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_runtime/composition.py:6253",
+          "reason": "P4 independent and dependent App delegates pass empty conversation history, and the dependent Core delegate explicitly sets conversation_context_override=() at lines 6284–6293. WholeSourceLightExecutor.__call__ at odyssey_runtime/whole_source_light.py:624 receives no prior-turn carrier. By comparison, candidate_route_dispatch.py:1015 builds ExecutionContext and lines 1083–1094 check the authenticated prior turns. This transport gap can turn a valid contextual reference into abstention or a different interpretation.",
+          "action": "Carry the existing authenticated ExecutionContext and scoped prior turns through P4 composition into Core and App interpretation, without granting history identity authority. Verify exact-source, actor-isolated contextual follow-ups, stale/ambiguous refusal, and replay against the candidate dispatcher and physical readback before removing empty overrides.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_runtime/whole_source_light.py:1185",
+          "reason": "For a Tasks-only source with more than one operation, P4 sets task_only_batch and accepts only a plan of at least two new Task facts at lines 1248–1257 and 1307–1315. Existing Tasks execution handles lifecycle and Work Session operations, but Runtime refuses a multi-operation Tasks source before those App owners run. The independent scope path also requires a Core+Tasks or Events+Tasks pair.",
+          "action": "Use the existing source partition review and Tasks-owned prepare/execute path for each independently reviewed Tasks operation; preserve ordered dependencies, prewrite review of every operation, operation manifest, and partial receipts. Prove two and three Task lifecycle combinations, Work Session dependencies, negative ambiguity, crash/replay, and final Markdown/Task state.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_runtime/whole_source_light.py:2805",
+          "reason": "In an independently reviewed Events+Tasks partition, Runtime permits only EventOperation.CREATE at lines 2805–2825. The Events App has lifecycle interpretation and execution, while this coordinator condition rejects an independent Event edit or cancellation paired with a Task before either App can apply its own rules.",
+          "action": "Keep the complete-source partition and two reviews, then pass each typed Event operation to the existing Events lifecycle owner and its E3 guard. Prove create/edit/cancel/query mixtures with independent Tasks, dependency vetoes, no prior write when preflight fails, and canonical Calendar/Task readback.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "odyssey_runtime/composition.py:4635",
+          "reason": "The Core read preflight is bypassed for Events only when explicit_event_query_hint matches fixed query and Event word lists in odyssey_apps/events/queries.py:19–45. A semantically equivalent Event query outside those words may be classified READ_ONLY by Core at lines 4662–4668 and never reach Events. The lexical condition changes owner routing despite the registered ApplicationCatalog and model-facing route evidence.",
+          "action": "Route read ownership through the existing typed capability decision while retaining Core's proven read plan and the Events App query checks. Test paraphrases in supported languages, ordinary Core reads mentioning Event terms, mixed requests, and no-write readback before deleting the lexical bypass.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "odyssey_runtime/composition.py:6513",
+          "reason": "The factory chooses P4 or the candidate dispatcher as mutually exclusive hybrid executors at lines 6513–6524. P4 contains its own capability router, planner/reviewer, independent partition and dependent graph at odyssey_runtime/whole_source_light.py:838–2991; candidate_route_dispatch.py:259–1424 already composes source provenance, ExecutionContext, Core review, Apps, and E3. Maintaining two semantic coordinators increases the cost of safely migrating every guard and allows the paths to disagree on owner and representable source shapes.",
+          "action": "Consolidate P4's independently useful source review into the existing typed E2 candidate/Core/App call path in small steps. Before deleting each P4 branch, compare exact-source coverage, candidate↔fact N:M review, actor context, Task/Event operation, E3 claim, readback, crash/replay, and output status on the same synthetic inputs. Retain a branch until its replacement passes those comparisons and the final-SHA gate.",
+          "actionability": "repairable"
+        }
+      ],
+      "coverage_evidence": [
+        "Coverage: personally AST/API/import scanned all 43 listed odyssey_runtime production modules and inspected pyproject.toml plus Core/App owner APIs. Direct source reads concentrated on the active paths of composition.py, whole_source_light.py, candidate_route_dispatch.py, whole_source_model_contract.py and named Core/Apps comparators. The four large files were structurally scanned throughout but were not read line by line in full; the other runtime modules were indexed through AST/API/import scans, with selected methods read directly. No claim of reading all 2,029 tracked files.",
+        "Before call graph with ODYSSEY_LIGHT_SOURCE_V1=1: RuntimeComposition.execute → execute_hybrid_proven_read or WholeSourceLightExecutor.__call__ → _execute_source → P4 model route/reviews → compile_reviewed_operations or independent/dependent Runtime branch → Core execute_request or Tasks/Events delegate → E3/Markdown/readback. Proposed consolidation: RuntimeComposition → existing source review and typed ExecutionContext → Core RequestPlan/coverage/identity or App lifecycle port → existing E3/Markdown/readback.",
+        "Comparator call graph: composition.py:6513–6524 selects candidate_route_dispatch when P4 is off; candidate_route_dispatch.py:540–608 validates catalog and provenance, 817 and 1015 builds ExecutionContext, 1115–1169 invokes Core coverage and execute_request, and 1341–1408 binds registered App executors. odyssey_apps/catalog.py:68 defines ApplicationCatalog; odyssey_core/semantic_write.py:568 defines compile_semantic_write; odyssey_core/relationship_evidence.py:235 defines RelationshipEvidenceProjector.",
+        "Classification: findings describe source-active code only when its flags and enabled Apps select it. composition.py:3800 and 6513–6524 show P4 and hybrid flags; composition.py:6380–6450 gates the separate E5 continuation to DEV. complete_source_handoff.py:195–262 describes an explicitly injected, inactive isolated integration. The context doctor could not verify a DEV checkout or deployed marker, so no finding claims the pinned P4 path is currently deployed.",
+        "Snapshot verified with git rev-parse HEAD; worktree was clean. Read-only context doctor reported DEV checkout and deployed marker unknown. No files, Git state, deployment, credentials, network, provider calls, or tests were changed or invoked. R0 still requires 32 fresh browser→n8n→provider→Core/E3→final-effect cases and independent final-SHA reviews."
+      ],
+      "reported_tokens": 123492,
+      "model": "gpt-6-sol",
+      "effort": "medium",
+      "scope": "native odyssey-scope-read; deny host private paths, network, and workspace writes"
+    },
+    "apps_ui": {
+      "verdict": "fail",
+      "summary": "Whole-repository source discovery at e336d1d8607f28c04ec25577e7b2ce044741f9bc found severe existing ownership and generality defects. This is not R0 acceptance: no tests, provider calls, browser actions, or deployment checks were performed.",
+      "findings": [
+        {
+          "severity": "blocking",
+          "path": "odyssey_runtime/whole_source_light.py:2707",
+          "reason": "The active P4 path selects a special Events+Tasks partition contract and permits only Events+Tasks or Core+Tasks at lines 2707–2736. It then prepares and dispatches those combinations through explicit branches at lines 2804–2825 and 2883–2914. A registered App or another independent combination cannot use the same composition path; supported facts can be refused before Core or an App sees them.",
+          "action": "Use ApplicationCatalog and typed E2 ports to compose registered independent scopes. Keep source partition review and prewrite checks. Prove the replacement with Core+Tasks, Events+Tasks, Core+Events, and three-App input→physical Markdown→readback→replay tests, including partial failure.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_apps/tasks/dependent_target.py:65",
+          "reason": "The dependent reference path accepts only two to eight Person proofs at lines 75–85 and its semantic review repeats that bound at lines 243–289. Runtime invokes this path for a multi-Core-to-Task dependency at odyssey_runtime/whole_source_light.py:2288–2334. The count and Note type decide whether a source dependency can proceed, so a complete set outside that size or involving another canonical Note type is refused despite Core's generic identity evidence.",
+          "action": "Move complete-set and canonical identity proof to the existing Core source/cohort and relationship evidence contracts; let Tasks validate only its lifecycle use of the proven link. Retain both independent semantic reviews and current actor, source, and Markdown checks. Test 0, 1, 2, 3, 5, and 9+ members and arbitrary registered referenceable types through final Task links, readback, and replay.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "odyssey_apps/tasks/planning.py:90",
+          "reason": "TaskCorePlanner changes the Core RequestPlan by inserting Person link facts at lines 96–110 and 182–194, and checks only Person source-name hints at lines 146–174. Runtime installs this decorator at odyssey_runtime/composition.py:5512–5519. Shared fact completeness and identity linkage therefore vary by Note type inside the Tasks App, with a risk of dropping a proven relationship to another type.",
+          "action": "Keep Task-specific assignee and parent-task role authorization, but use Core's existing RequestPlan, link-fact, semantic-write, and relationship-evidence mechanisms for generic fact construction and completeness. Compare old and new plans, then test arbitrary Note-type references and mixed Task/Core facts against physical Markdown and negative ambiguity cases.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "workflows/storage-write.ts:123",
+          "reason": "The tracked workflow can write Markdown directly with n8n's file node at lines 123–147 after a separate existence check. That path lacks the Core/E3 mutation gate and checked canonical readback used by odyssey_apps/events/mutations.py:104–115 and 166–187. No call from the inspected current product route or deployment compose file to this workflow was found, so live exposure is unproven; the artifact remains a competing writer if activated.",
+          "action": "Confirm its deployment and callers before removal. Retire or constrain it so all canonical writes pass through Core/E3. Prove no regression with caller inventory and synthetic create, conflict, concurrent-write, crash, readback, and replay tests.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "odyssey_apps/calendar/queries.py:218",
+          "reason": "Calendar says any App can contribute an occurrence through schema metadata, but lines 230 and 250–255 interpret Event-specific status and recurrence fields, while lines 726–735 label every such occurrence as an event. This duplicates part of Events lifecycle meaning outside its owner and can misproject another registered occurrence type.",
+          "action": "Keep Calendar's canonical read-only projection, but make visibility, recurrence, and display category explicit in the App schema or a typed projection adapter. Compare Event behavior before and after, then test a synthetic second occurrence App, cancellation, recurrence, and Notes/Calendar reload.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "odyssey_apps/events/execution.py:108",
+          "reason": "An Events target date is accepted only if its words fit the fixed ES/FR/EN vocabulary at lines 108–184; `_exact_anchor_for_quote` rejects an otherwise exact Temporal date through that test at lines 249–265. The guard protects against silently losing a clock qualifier, but its finite grammar can also refuse valid source evidence based on wording.",
+          "action": "Preserve the no-dropped-clock safety property using exact source-span coverage and typed Temporal evidence rather than a language list. Test clock qualifiers, unknown words, multiple dates, cancellation target matching, negative cases, and final Event Markdown readback.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "deploy/odyssey-dev-runtime.service:7",
+          "reason": "The inspected DEV service and n8n compose file run a Raspberry-hosted vault and browser service; odyssey_web/README.md:28–35 says ordinary browser state is not durable. This source does not demonstrate the approved installable, device-local mobile target. The context doctor could not determine a deployed SHA, so no deployment claim follows.",
+          "action": "Keep this as a product gap after R0. Establish device-local Markdown and durable per-profile state behind existing Core ports, then verify offline create/read/update/restart without n8n or a remote account. Do not treat DEV browser tests as mobile acceptance.",
+          "actionability": "repairable"
+        }
+      ],
+      "coverage_evidence": [
+        "Coverage: personally ran an AST/API/import scan across all 33 listed odyssey_apps Python modules; source/API scans across all 16 odyssey_web entries and six workflow TypeScript artifacts; inspected the listed config and deploy interfaces. Directly read the cited methods and representative surrounding code in Apps, Runtime, Core, Web, workflows, schema extensions, and deploy files. CSS, HTML, several UI modules, and lower-risk App methods were indexed or scanned, not read line by line. The trusted 2,029-file host inventory is indexing evidence only; I did not personally read all tracked lines.",
+        "Compared odyssey_apps/catalog.py:77–164 and odyssey_apps/schema_extensions.py:52–88 with odyssey_runtime/composition.py:4685–4689 and 6195–6245. ApplicationCatalog and E2 composition already exist; the findings call for reuse, not reimplementation.",
+        "Compared odyssey_core/semantic_write.py:568–616, odyssey_core/request_planning.py:1369, and odyssey_core/relationship_evidence.py:235 with TaskCorePlanner and dependent_target. Core's existing planner, compiler, and relationship projector are the shared owners.",
+        "Compared odyssey_apps/events/mutations.py:104–115 and 166–187 with workflows/storage-write.ts:123–147. Event mutation uses CanonicalMutationGate and Core materialization; the standalone workflow contains a separate native file-write path. Activation was not established.",
+        "Compared odyssey_apps/events/schema.py:21–76 and odyssey_apps/calendar/queries.py:218–255, 712–735. Task and Event lifecycle-specific mutation logic was distinguished from generic Calendar projection.",
+        "Web review included odyssey_web/client.js:170–227 and 359–413, odyssey_web/progress.js:404–434 and 550–595, and odyssey_web/notes.js:1775–1797 and 1832–1852. These paths validate bounded diagnostics, show uncertainty on failed stages, and provide a generic Note-type fallback; no stronger UI receipt defect was established from source alone.",
+        "No files, Git state, provider data, vault data, or deployment were changed. Context doctor reported source SHA e336d1d8607f28c04ec25577e7b2ce044741f9bc and clean source; DEV checkout and deployed marker were unknown. The roadmap still requires 32 fresh end-to-end cases and final-SHA independent reviews before R0 acceptance."
+      ],
+      "reported_tokens": 127872,
+      "model": "gpt-6-sol",
+      "effort": "medium",
+      "scope": "native odyssey-scope-read; deny host private paths, network, and workspace writes"
+    },
+    "qa_ops": {
+      "verdict": "fail",
+      "summary": "Whole-repository discovery at e336d1d8607f28c04ec25577e7b2ce044741f9bc found repairable defects in acceptance enforcement and review scope. R0 remains unaccepted; this review is not a 32-case acceptance result.",
+      "findings": [
+        {
+          "severity": "blocking",
+          "path": "scripts/odyssey_stage_acceptance.py:211",
+          "reason": "The final-SHA check compares only product directories. Changes to the R0 runner, acceptance oracle, or review tooling can leave an earlier live receipt valid while changing what that receipt means. The DEV CI promotion check uses the same restricted path set at .github/workflows/odyssey-dev-contract-gate.yml:53.",
+          "action": "Bind receipts and four reviews to the exact tested commit, including acceptance scripts, tests, fixtures, and relevant configuration. Prove the repair with a negative test that changes an oracle or runner after receipt creation, and a positive test in which an unchanged 32-case receipt remains valid.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "blocking",
+          "path": "scripts/odyssey_agent_cycle.py:985",
+          "reason": "The supervisor instructs reviewers to begin with a baseline diff and read only files needed for findings. That instruction explains how a documentation-only change can receive verdicts that do not assess existing architectural defects across the repository.",
+          "action": "Add an explicit whole-repository discovery review mode with a coverage declaration; retain diff review for change reviews. Test both modes using a documentation-only diff beside a known defect in unchanged active code.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "scripts/odyssey_r0_browser_campaign.py:438",
+          "reason": "The live campaign exits with status 0 even when cases are failed, deferred, or pending. An operator or job that relies on process exit status can record a green run without completed acceptance.",
+          "action": "Return a failing status unless every selected case reaches the required outcome, while preserving forensic receipts. Test mixed failed, deferred, pending, and completed campaigns; keep the separate final semantic receipt gate.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": "scripts/odyssey_r0_real_browser_case.cjs:64",
+          "reason": "The browser probe opens the first available note and checks that calendar cells exist; it does not establish that either surface displays the submitted case's final effect. The Python adapter therefore reports a deferred trace after generic UI checks at scripts/odyssey_r0_real_browser_case.py:665. Deferred is correctly not acceptance, but these checks are weak diagnostic evidence for a costly 32-case run.",
+          "action": "Connect each browser readback to the case's independently reviewed canonical note, Task, Event, or pending result. Test a positive case and a negative case where unrelated preexisting Notes and Calendar content remains visible while the requested fact is absent.",
+          "actionability": "repairable"
+        },
+        {
+          "severity": "warning",
+          "path": ".github/workflows/odyssey-dev-contract-gate.yml:61",
+          "reason": "The DEV workflow runs the selected offline cross-surface gate, while the full pytest job is configured only for main in .github/workflows/python-ci.yml:3. A DEV contract PASS therefore does not mean the full repository test suite ran on that commit.",
+          "action": "Make the reported gate level explicit and require full-suite evidence at the intended readiness checkpoint. Verify with a failing test outside cross-surface selections and a passing full-suite run; retain fresh browser, provider, and physical readback as separate evidence.",
+          "actionability": "repairable"
+        }
+      ],
+      "coverage_evidence": [
+        "Pinned HEAD matched e336d1d8607f28c04ec25577e7b2ce044741f9bc; git status was clean. The read-only context doctor could not establish a DEV checkout, deployed marker, or health, so no deployment claim is made.",
+        "Coverage: indexed tracked paths in tests/ (517), benchmarks/ (892), scripts/ (94), ops/ (31), docs/ (230), and .github/ (2). Read and AST-parsed 467 test, 279 benchmark, 77 script, 1 ops, and all 196 Core/Runtime/Apps Python modules; this is structural inspection, not a line-by-line audit. Directly read both CI workflows and selected R0 campaign, acceptance, supervisor, runtime call-path, browser, fixture, roadmap, and test files. Other JS, shell, JSON, Markdown, and benchmark fixtures were indexed or selectively searched, not all read in detail.",
+        "Active path cross-check: odyssey_runtime/server.py:514 calls RuntimeComposition.execute_product; odyssey_runtime/composition.py:3076 routes to the hybrid candidate executor when configured, and composition.py:6514 wires the light-source route under its flag. The R0 adapter sets that flag at scripts/odyssey_r0_real_browser_case.py:128 and uses a disposable vault and isolated n8n container at lines 407–414 and 581–585.",
+        "The existing ExecutionContext, RequestPlan, compile_semantic_write, OpenAIRequestPlanner, RelationshipEvidenceProjector, and ApplicationCatalog were found in the 196-module AST scan. No duplicate implementation or safe deletion candidate is asserted from indexing alone; retiring any experimental path requires reachability proof plus positive and negative input-to-final-effect regressions.",
+        "scripts/odyssey_stage_acceptance.py:245–437 requires per-case unit and final-output artifacts, and lines 440–459 require four reviewer receipts. docs/architecture/odyssey-phase-acceptance.json marks R0 in_progress with no receipt; the additional fixture contains R28–R32. Offline tests and recorded provider replay do not establish the 32 fresh browser→n8n→GPT→Core/E3→Markdown→Notes/Calendar/replay outcomes."
+      ],
+      "reported_tokens": 87496,
+      "model": "gpt-6-sol",
+      "effort": "medium",
+      "scope": "native odyssey-scope-read; deny host private paths, network, and workspace writes"
+    }
+  }
+}

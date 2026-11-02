@@ -14,6 +14,7 @@ from odyssey_apps.tasks import TaskWorkSessionService
 from odyssey_core import create_entity
 from odyssey_core.application import ApplicationResult, ApplicationStatus
 from odyssey_core.independent_source_scopes import (
+    IndependentSourceScope,
     IndependentSourceScopesError,
     verify_independent_source_scopes,
 )
@@ -79,13 +80,6 @@ def _provider_rows():
         _audit(),
         {"only_task_semantics": True, "exactly_one_operation": True, "source_quote": TASK},
         {
-            "capabilities": ["core"],
-            "interpretation": "joint",
-            "reason": "single",
-            "self_relation_span": None,
-            "app_scopes": [],
-        },
-        {
             "entities": [],
             "facts": [
                 {
@@ -138,13 +132,6 @@ def _provider_rows():
                 }
             ]
         },
-        {
-            "capabilities": ["tasks"],
-            "interpretation": "joint",
-            "reason": "single",
-            "self_relation_span": None,
-            "app_scopes": [],
-        },
     ]
 
 
@@ -193,6 +180,26 @@ def _snapshot(repo):
     return {p: repo.read_text(p) for p in repo.list_markdown_paths()}
 
 
+@pytest.mark.parametrize(
+    "validated_part",
+    [
+        IndependentSourceScope("core", "A different original source.", 0),
+        IndependentSourceScope("events", CORE, 0),
+    ],
+)
+def test_verified_partition_requires_exact_source_and_supported_owner(tmp_path, validated_part):
+    repo, actor, executor, _runtime_instance, calls = _runtime(tmp_path)
+    before = _snapshot(repo)
+    executor.client = RecordedClient([])
+    result = executor._execute_source(
+        CORE, "mismatched-verified-scope", actor, "main", verified_scope=validated_part
+    )
+    assert result.status is ApplicationStatus.NEEDS_ATTENTION
+    assert result.clarification_code == "INDEPENDENT_SCOPE_CAPABILITY_UNVERIFIED"
+    assert executor.client.calls == []
+    assert calls == [] and _snapshot(repo) == before
+
+
 def test_mixed_independent_core_and_work_session_share_authored_notes_ui_and_e3(tmp_path):
     repo, actor, executor, runtime, calls = _runtime(tmp_path)
     executor.client = RecordedClient(_provider_rows())
@@ -205,6 +212,16 @@ def test_mixed_independent_core_and_work_session_share_authored_notes_ui_and_e3(
     assert flow["version"] == 1 and flow["input"] == SOURCE
     assert flow["parallel_preparation"] is False
     assert [route["capability"] for route in flow["routes"]] == ["core", "tasks"]
+    assert executor.client.calls == [
+        "odyssey_light_capability_route_v1",
+        "odyssey_independent_source_scopes_v1",
+        "odyssey_independent_source_scopes_audit_v1",
+        "odyssey_task_only_scope_v1",
+        "odyssey_light_shared_semantic_plan_v1",
+        "odyssey_p2_source_coverage_v1",
+        "odyssey_speaker_full_A",
+        "odyssey_speaker_full_B",
+    ]
     assert stages[0]["name"] == "application.router"
     assert 0 <= stages[0]["duration_ms"] < first["operational"]["total_duration_ms"]
     offset = 1
@@ -322,40 +339,6 @@ def test_joint_or_dependent_route_does_not_activate_independent_execution(tmp_pa
     assert calls == []
 
 
-def test_independent_second_scope_provider_outage_returns_durable_partial(tmp_path):
-    from openai import OpenAIError
-
-    repo, actor, executor, runtime, calls = _runtime(tmp_path)
-
-    class FailSecondScopedRouter(RecordedClient):
-        def create(self, **kwargs):
-            schema = kwargs["text"]["format"]["name"]
-            if schema == "odyssey_light_capability_route_v1" and len(self.calls) == 9:
-                raise OpenAIError("synthetic provider outage after first canonical fact")
-            return super().create(**kwargs)
-
-    executor.client = FailSecondScopedRouter(_provider_rows()[:-1])
-    response = runtime.execute_product(SOURCE, "mixed-p4-second-provider-down", "main", actor)
-    assert response["status"] == "partial"
-    assert "Me gusta correr por la tarde." in repo.read_text("self.md")
-    assert calls == []
-    prior = _snapshot(repo)
-    assert runtime.execute_product(SOURCE, "mixed-p4-second-provider-down", "main", actor)[
-        "delivery_replayed"
-    ]
-    assert prior == _snapshot(repo)
-
-
-def test_second_scoped_router_cannot_smuggle_core_into_tasks_source(tmp_path):
-    repo, actor, executor, runtime, calls = _runtime(tmp_path)
-    rows = _provider_rows()
-    rows[-1] = {**rows[-1], "capabilities": ["tasks", "core"]}
-    executor.client = RecordedClient(rows)
-    response = runtime.execute_product(SOURCE, "mixed-p4-router-scope-mismatch", "main", actor)
-    assert response["status"] == "partial"
-    assert calls == [] and "Me gusta correr por la tarde." in repo.read_text("self.md")
-
-
 def test_independent_first_scope_provider_outage_does_not_claim_physical_partial(tmp_path):
     from openai import OpenAIError
 
@@ -367,7 +350,7 @@ def test_independent_first_scope_provider_outage_does_not_claim_physical_partial
                 raise OpenAIError("synthetic no-write planner outage")
             return super().create(**kwargs)
 
-    executor.client = FailFirstScopedPlanner(_provider_rows()[:5])
+    executor.client = FailFirstScopedPlanner(_provider_rows()[:4])
     before = _snapshot(repo)
     result = runtime.execute_product(SOURCE, "mixed-p4-first-provider-down", "main", actor)
     assert result["status"] == "needs_attention"
@@ -582,7 +565,7 @@ def test_three_independent_scopes_core_task_core_have_complete_real_readback(
     whole = SOURCE + " " + extra
     repo, actor, executor, runtime, calls = _runtime(tmp_path)
     rows = _provider_rows()
-    extra_core_rows = deepcopy(rows[4:9])
+    extra_core_rows = deepcopy(rows[4:8])
 
     def replace_literals(item):
         if isinstance(item, str):
@@ -607,7 +590,7 @@ def test_three_independent_scopes_core_task_core_have_complete_real_readback(
         ],
     }
     audit = {**_audit(), "full_source_quote": whole}
-    rows = [route, partition, audit, *rows[3:9], *extra_core_rows]
+    rows = [route, partition, audit, *rows[3:8], *extra_core_rows]
     executor.client = RecordedClient(rows)
     seen = []
 

@@ -1,0 +1,851 @@
+{
+  "schema": "odyssey-r0-findings-ledger-v1",
+  "audit_snapshot_sha": "e336d1d8607f28c04ec25577e7b2ce044741f9bc",
+  "audit_evidence": "docs/architecture/r0-whole-repository-source-audit-evidence-20261031.json",
+  "plan": "docs/architecture/r0-remediation-plan.md",
+  "policy": {
+    "immutable_origins": true,
+    "states": [
+      "open",
+      "in_progress",
+      "code_verified",
+      "closed",
+      "deferred_after_r0"
+    ],
+    "closure_minimum": "A reviewer-approved nonempty source commit and tangible before/after, tests and independent evidence; code_verified never means E2E accepted.",
+    "r0_completion": "Every pre-R0 finding has reviewed closure AND final 33 case live browser/model/n8n/physical Markdown/reload/replay with four final SHA auditors. Deferred G13 is a separately tracked future delivery gap, not an excuse for R0 architectural blockers."
+  },
+  "workstreams": [
+    {
+      "id": "G01",
+      "title": "Acceptance and proof integrity",
+      "existing_owner": "Core QA/CI",
+      "phase": "guardrails",
+      "depends_on": [],
+      "change_contract": "Fail closed on changed run/oracle/test definitions; real case-specific Notes/Calendar readback and nonzero unsuccessful campaign status.",
+      "verification": "Automated tamper/negative tests, selected+full offline gate, external E2E remains separate.",
+      "status": "in_progress",
+      "review_decision": "approved_for_implementation",
+      "implementation_checkpoint": {
+        "working_tree": "refactor/e5-source-orchestration-consolidation",
+        "results": "Campaign nonzero on failure/deferred/pending, broad SHA-bound acceptance code+oracle checks, actual changed note id verified in browser and all final canonical note IDs required in UI. Code tested offline only; real browser still pending.",
+        "negative_tests": [
+          "tests/benchmarks/test_r0_browser_campaign.py",
+          "tests/benchmarks/test_odyssey_stage_acceptance.py",
+          "tests/benchmarks/test_r0_real_browser_case.py"
+        ],
+        "note": "R0-F024 DEV CI scope audit remains open; all G01 findings require independent review before closure.",
+        "offline_cross_surface": "2687 Python, 7 subtests, 296 JS PASS at source working tree; not live model/browser acceptance"
+      },
+      "full_ci_checkpoint": {
+        "change": "Existing strict Python CI full suite now runs on PR to dev and main; push to main unchanged; Sonar main only; no continue-on-error or special test list.",
+        "host_offline_result": "FAIL: 118 failed, 5454 passed, 80 skipped, 52 subtests passed (229.48 sec); run from source b5416f4 with CI workflow change in working tree.",
+        "failure_buckets": {
+          "historical_or_frozen_benchmarks": 56,
+          "agent_supervisor_tests": 53,
+          "embedding_worker_or_presence": 9
+        },
+        "isolated_crosscheck": "Embedding worker plus agent builder resume: 22 pass in isolation, indicating at least some run-order/environment interaction; cause not yet proven.",
+        "evidence": "/tmp/odyssey-r0-g01-full-suite-before-ci-20261031.log (host-only; NOT committed because logs may include local environment details)",
+        "next": "Classify failures by root cause; repair outdated contracts using existing owners, resource/fixture isolation; never suppress failing tests; validate hosted full suite before G01 close."
+      },
+      "resource_lifecycle_checkpoint": {
+        "root_cause": "with sqlite3.connect returns a transaction context, NOT a closable connection context; SQLite connection reference cycles retained file handles until eventual GC.",
+        "production_changes": "Explicit closing(sqlite3.connect(...)) as conn, conn; 24 connection lifetimes in 7 existing odyssey_core/odyssey_runtime modules. No new independent SQLite helper, and transaction behavior preserved.",
+        "before": "118 failed, 5454 passed, 80 skipped, 4772 warnings, 52 subtests, >950 open fd by 38% of source full pytest.",
+        "after": "56 failed, 5518 passed, 80 skipped, 120 warnings, 52 subtests. Descriptor probe maximum recorded 136 (<950) on 100% of same suite; execution stops only at remaining historic prompt-snapshot mismatches.",
+        "tests": [
+          "tests/core/test_sqlite_connection_lifecycle.py",
+          "tests/core/test_context.py",
+          "tests/core/test_semantic.py",
+          "tests/core/test_context_wal_publication.py"
+        ],
+        "real_model_browser": "NOT RUN; full suite still red on 56 original historical benchmarks; do not close G01.",
+        "official_cross_surface": "PASS: 2690 Python + 7 subtests + 296 JavaScript on current working-tree after fixes, including connection lifecycle regression selected in Core group.",
+        "record_tracking_note": "Append-only ledger test assumed zero followups; generalized to next ID from current ledger and fixed before final official gate."
+      },
+      "historical_benchmark_checkpoint": {
+        "observed_after_stale_e4_test_corrected": "782 PASS / 55 FAIL / 38 SKIP (tests/benchmarks scope, source branch; no provider calls). Before: 781 PASS / 56 FAIL / 38 SKIP.",
+        "source_bound_proof": "E4 receipt retains authentic trace SHA and original browser/physical content, but explicitly refuses certification of later code after pinned source SHA drift. No receipts or prompt snapshots changed.",
+        "remaining_red_files": {
+          "tests/benchmarks/test_application_router_calendar_live_v4.py": 2,
+          "tests/benchmarks/test_application_router_calendar_live_v5.py": 1,
+          "tests/benchmarks/test_core_dependent_live_gate.py": 6,
+          "tests/benchmarks/test_fact_candidate_core_live_runner.py": 4,
+          "tests/benchmarks/test_fact_candidate_core_temporal_live_runner.py": 9,
+          "tests/benchmarks/test_fact_candidate_playground_export.py": 1,
+          "tests/benchmarks/test_fact_candidate_remaining_live_runner.py": 7,
+          "tests/benchmarks/test_fact_candidate_scoped_core_live.py": 4,
+          "tests/benchmarks/test_fact_candidate_v2_live_runner.py": 9,
+          "tests/benchmarks/test_historical_dependent_core_outputs.py": 5,
+          "tests/benchmarks/test_planner_prompt_regression_v5.py": 1,
+          "tests/benchmarks/test_router_core_followup_live_v3.py": 2,
+          "tests/benchmarks/test_router_dependency_live_v1.py": 1,
+          "tests/benchmarks/test_router_temporal_current_v1.py": 1,
+          "tests/benchmarks/test_router_temporal_live_v2.py": 2
+        },
+        "classification": "Fifteen historical frozen request/cost/prompt evaluation suites. Their exact former wire formats cannot certify current active Core/Apps/Runtime; no production imports observed for surveyed archived benchmark gates. No versioned fixture or authorization ceiling was re-anchored.",
+        "next": "Review the active equivalent for each historical guarantee (provider approval, cost cap, no retry, strict typed source, no E3 write, original 32 R0 real E2E) before retiring historical gate, otherwise keep CI red and mark R0 unaccepted. No skip/xfail/continue-on-error.",
+        "reviewed_test": "tests/benchmarks/test_e4_functional_acceptance.py"
+      },
+      "router_prompt_drift_diagnosis": {
+        "test": "tests/benchmarks/test_router_temporal_current_v1.py::test_current_router_and_temporal_model_contracts_are_hash_pinned",
+        "observed": "The 2026-10-04 v6 router prompt pin is 3be2fb5e..., while current source renders d2ffd7f8...; Router schema and Temporal prompt/schema still match their frozen pins.",
+        "source_cause": "A later production Router prompt edit in 403295e changed how ellipsis and shared context are described; this dated source pin is not approval of the current model contract.",
+        "existing_active_protections": "tests/apps/test_router.py checks current role/text context, exact source validation, schema, temporal routing authority; scripts/odyssey_stage_acceptance.py pins current acceptance to changed product scripts/oracles and rejects stale receipts.",
+        "safe_migration": "Preserve historical prompt hash and prior evidence without reanchoring. Confirm original artifact provenance and current equivalents of each source/provenance/authorization invariant before removing or replacing the mislabelled current-hash assertion. Re-run prompt/model acceptance on the final source SHA; do not claim a green full suite yet.",
+        "state": "diagnosed_only"
+      },
+      "historical_routing_gate_hardening_20261101": {
+        "status": "code_only_not_closed",
+        "previous_result": "Before: 782 PASS / 55 FAIL / 38 SKIP (dated benchmark suite); active Router prompt SHA d2ffd7f8 differed from historical 3be2fb5e; v2 cost projection USD 0.0447304 exceeded unchanged USD 0.04 limit.",
+        "existing_owner": "Original one-shot Router dependency v1 and Router/Temporal v2 benchmark gates plus active Router validation in tests/apps/test_router.py. No product Router, Temporal, planner or model prompt modified.",
+        "general_gap": "Old benchmark runners could be attempted after production source drift and their tests conflated historical evidence with current contract approval.",
+        "reused_mechanism": "The existing SHA-256 of Router prompt+schema, v2 source digest, unchanged historical evidence, and prior cost ceiling; no new infrastructure or permission.",
+        "changes": "Runner v1 now fails closed before the provider when the originally recorded prompt/schema pair changed; runner v2 preflight fails closed on historical source digest mismatch even without credentials. Historic 0.04 USD v2 cost bound retained, no re-anchoring or prompt edit. Three previously red tests now honestly preserve historical receipt, require stale-source refusal, and keep current active schema/source invariants distinct.",
+        "path_removed_or_scheduled": "Removed implicit runner assumption that the moving current Router contract is the reviewed historical contract. Actual redundant production coordination removal remains G11/G12, after parity proof.",
+        "negative_tests": [
+          "tests/benchmarks/test_router_dependency_live_v1.py",
+          "tests/benchmarks/test_router_temporal_live_v2.py",
+          "tests/benchmarks/test_router_temporal_current_v1.py"
+        ],
+        "active_independent_checks": [
+          "tests/apps/test_router.py",
+          "scripts/odyssey_stage_acceptance.py"
+        ],
+        "offline_tests": "tests/benchmarks overall 788 PASS / 51 FAIL / 38 SKIP after change; 47 targeted Router historical/current tests PASS; no fresh model/browser tests.",
+        "known_limits": "51 remaining failed historic benchmarks; changed live Router prompt is NOT re-approved, no current GPT semantic evaluation, no DEV deployment or four SHA reviewers. G01/full CI and R0 still FAIL."
+      },
+      "archived_core_mechanical_replay_20261101": {
+        "status": "code_checked_not_closed",
+        "observed_failure": "5 archived F23/F26 Core Markdown tests and 6 dependent live-gate tests failed before Core execution: reviewed_dependent_requests.json does not match the changed current Planner envelope (each of 4 requests drifted by 274 serialized bytes). Correct fail-closed hash refusal, not proven Core write regression.",
+        "preexisting_owners": "Retired 2026-10-11 two-candidate legacy preview and run_dependent_live.reviewed immutable model approval; active generic full-source handoff tests/runtime/test_complete_source_handoff.py and tests/runtime/test_general_source_fact_graph_e2e.py; actual Core execute_request, VaultRepository and canonical readback.",
+        "reused_instead_of_reimplementation": "Unmodified request reviewer for any real/provider gate; four authentic 2026-10-11 historical receipt byte SHA256 values pinned from original Git artifact. _request only as offline fixture preparation; downstream model responses are recorded outputs recompiled through current Core on a disposable vault with no source/write authority inherited from history.",
+        "obsolete_path_removed": "Removed the old test assumption that a dated, separately scoped Planner request must still match the changed current prompt. No production rewrite or extra Coordinator/Planner; the old per-candidate production path had already been retired by 4c4b283; deletion of still-unused historical pilot code must await callers and full gate review.",
+        "positive_proof": "5 historical-output tests execute through current Core with disposable Markdown physical assertions, including multiple facts on one source, existing typed note reuse and document creation; active generic handoff/temporal/identity/current source tests 86 PASS.",
+        "negative_proof": "All 4 changed current requests are rejected by the unchanged reviewed gate; a one-byte append to archived receipt blocks replay; old flag, budget, no-retry controls separately exercised using only in-process fake provider and isolated mock of stale reviewer; original source-coverage manifest still rejects unauthorized direct activation.",
+        "bench_scope": "After editing and adding a tamper sentinel, tests/benchmarks: 800 PASS, 40 FAIL, 38 SKIP (offline); earlier 788 PASS / 51 FAIL / 38 SKIP. Original failed tests are not all solved and CI is not green.",
+        "limitations": "No fresh GPT model semantic proof, no authenticated Chromium/n8n/current version E3, no current prompt acceptance, no four independent SHA audits. G01 and R0 NOT ACCEPTED."
+      },
+      "retired_router_core_provider_runner_20261101": {
+        "status": "code_verified_offline_not_closed",
+        "existing_owner": "Router and Core production paths already tested at tests/apps/test_router.py, tests/runtime/test_complete_source_handoff.py and tests/runtime/test_general_source_fact_graph_e2e.py; old one-shot experiments lived solely under benchmarks/router_core_followup_live_v3 and v3_8.",
+        "general_defect": "An unapproved ninth-call Sol experiment and an already-consumed eight-call historical campaign retained two executable provider callers totaling 689 lines; old tests required a historic $0.31 budget whose active recalculation is $0.31034608, but no new approval existed. Historical evidence was conflated with current approval.",
+        "reuse": "Existing generic Router/Core source and ownership tests remain the real behavior owner. Preserve two unchanged, hash-pinned original matrices and actual consumed 8-call receipt as historical data; test archived bytes rather than maintaining old provider executors.",
+        "code_removed": "benchmarks/router_core_followup_live_v3/run_live.py (361 lines), benchmarks/router_core_followup_live_v3_8/run_live.py (328 lines), tests/benchmarks/test_router_core_followup_live_v3.py (54 lines). New compact data-only receipt integrity test; both READMEs explain why source code was retired.",
+        "observable_before_after": "Before: the v3 preflight was RED on changed budget and its one-Sol call was never approved; the v3_8 already used 8/8 and was not current model approval. After: no executable old runner in either archived folder; original receipt hash d957cd2... unchanged, 8 attempts/0 retries/no writes and 6/8 with two Router FAILs asserted; the full active route/Core tests exercise current semantics without invoking archival code.",
+        "positive_negative_tests": "tests/benchmarks/test_router_core_followup_archive.py verifies matrices, exact receipt, bound, zero writes/retries and two failed Router records; a modified archive receipt fails closed. Active generic Router and full-source Core regression set: 87 PASS with archive tests. Only offline, not fresh GPT/browser.",
+        "postchange_suite": "tests/benchmarks 801 PASS / 38 FAIL / 38 SKIP vs prior 800 PASS / 40 FAIL / 38 SKIP; removed two obsolete failing assertions, no xfail/skip or budget lift.",
+        "limits": "Retirement is solely of unreferenced benchmark executable code, NOT one of the two active production semantic coordinators. 38 benchmark failures and full CI remain red; independent four-role final audit and 32-case E2E not run; G01/R0 not closed."
+      },
+      "retired_consumed_router_fourcall_runner_20261101": {
+        "status": "offline_code_verified_not_closed",
+        "owner_and_defect": "The four-call Router v1/v2/v3 pilot (benchmarks/fact_candidate_v2_live/run_live.py) belongs to historical QA, NOT product Router. All three four-call campaigns were consumed on 2026-10-10; historic prompt request snapshots are no longer equal to the current Router. Existing runner logic duplicated current source validation and retained provider-call authority despite all three runs failing their semantic oracle.",
+        "existing_mechanism_reused": "odyssey_apps.fact_candidates canonical strict source validator, tests/apps/test_fact_candidates.py source/negative tests, real future R0 source-wide E2E. The still-needed remaining 23-case offline evidence runner now computes its own filesystem HERE/ROOT, eliminating its sole dependency on the consumed pilot. No schema, prompt, cost cap, active production path or historic record edited.",
+        "removed": "216-line obsolete executable benchmarks/fact_candidate_v2_live/run_live.py and 145-line obsolete test_fact_candidate_v2_live_runner.py (9 historical red checks). Replaced with short SHA-pinned receipt/snapshot-only tests; retained all 3 original synthetic receipts, 2 old request snapshots, and remaining 23-case runner.",
+        "positive_negative_proof": "Archive 3 receipt hashes and 2 request-snapshot hashes verified unchanged; each genuine 4-call result is source_valid but all_fixture_matches=false and live_model_quality_verified=false. Tampered archived receipt rejected. Current tests/apps/test_fact_candidates.py and retained observed 23-case tests + archive = 64 PASS, no fresh provider.",
+        "bench_scope": "804 PASS / 29 FAIL / 38 SKIP after this edit (before: 801 PASS / 38 FAIL / 38 SKIP); 29 remain openly failing, not suppressed or reanchored.",
+        "next_and_limits": "Continue classifying historic temporal/scoped/Core QA gates before removing any helpers consumed by current vertical tests. Real product coordinator G11/G12 not yet retired; no fresh GPT, authenticated browser/n8n, four final reviewer approvals or DEV deployment; R0/G01 not accepted."
+      },
+      "archived_prompt_exports_20261101": {
+        "status": "offline_verified_not_closed",
+        "before": "Two archived validation tests assumed a dated Playground export and Planner v5 manifest matched moving current production prompts; current contracts drift, so assertions failed before any model.",
+        "reused_owners": "Original saved Playground and Planner v5 manifest bytes SHA-256 plus existing strict verify_manifest() refusal, historical cost bound and current Router/Core tests. No new provider gate, prompt, model schema, cost cap or production code.",
+        "change": "Tests now preserve authentic historical SHA and require drift to be rejected; old snapshot cannot self-certify the current model. R0 full browser campaign already enforces all 32 cases, independent result provenance, fail-close and readback.",
+        "positive_negative": "43 focused benchmark/acceptance tests PASS, including 32-case acceptance guard; 806 PASS / 27 FAIL / 38 SKIP across benchmarks, vs 804/29/38. No real GPT/browser run or final four-role audit.",
+        "production_code_deleted": "None in this small checkpoint; active semantic coordinator retirement remains G11/G12. Previously retired old runners are separately recorded."
+      },
+      "hosted_ci_checkpoint_filename_portability_20261101": {
+        "status": "local_tests_pass_ci_pending",
+        "prior_hosted_run": "GitHub Python deterministic checks on 651423f showed 29 FAIL = 27 immutable historic benchmark request/prompt drift + 2 execution_checkpoint tests erroneously used next(iterdir()) to select JSON but could select .retention.lock on GitHub filesystem.",
+        "fix": "Select the unique *.json checkpoint record explicitly in two existing negative corruption/identity tests; preserve strict expected exception and real corruption/no forged receipt assertion. No production checkpoint implementation or snapshot altered.",
+        "proof": "28 selected P4-context/checkpoint tests PASS locally; hosted CI result on next SHA not yet run. Two negative checkpoint tests check corrupt record JSON specifically; 30 selected checkpoint/factory/context PASS before one new historical-only no-write case (11 focused PASS). Full Runtime 2353 PASS on current production diff; benchmark 811/27 historical/38 skipped. CI not rerun until push."
+      },
+      "preimplementation_reuse_and_production_reachability_gate_20261102": {
+        "status": "source_only_gate_verified_not_r0_closed",
+        "failure_that_escaped": "Commit d262635 added three new Core source-fact / link functions that were not called by active production paths, duplicating existing Core/E3 canonical reference owners. The AST semantic-branch inventory had 86 unchanged findings, and 2796 Python/297 JS offline tests passed; neither proved the functions were integrated. User correctly rejected example-driven implementation.",
+        "existing_controls_reused": "Extended the existing scripts/audit_semantic_branch_regressions.py and preexisting scripts/odyssey_cross_surface_gate.py; did not add a new validator service, CI job, stage, review role or database. Uses the actual Git integration-base diff and AST of all Core/Apps/Runtime Python. The existing independent Generality reviewer role (ops/agent-team/generality.md) has a blocking unused-component/overlap veto, including modules that merely call each other. Existing odyssey-implement-change skill requires pre-code owner/active call-path map and independent design objection for significant cross-App architecture.",
+        "negative_canary": "Historical bad commit d262635 physically replayed through detector with before source from 4da58ce; all CanonicalSourceFactNote, CanonicalSourceFactLinkGuard and prove_canonical_source_fact_note flagged. Disposable Git staged introduction of an unused class plus own test blocked; isolated new functions calling each other are blocked; existing cross-surface run returns exit code 1 before pytest when audit is red.",
+        "positive_canary": "An existing production function calling a new generic helper (whose helper calls a second new helper) is accepted; no added symbols is accepted; current PR contains 11 new top-level symbols relative to origin/dev, all with at least one statically traceable existing production consumer; detector reports no new flags. Independent Generality review still required to verify that the consumers are real/equivalent responsibility rather than token references.",
+        "scope_and_limit": "Static detector is necessary, not sufficient. A reachable new component may duplicate existing responsibility, and plugins/dynamic registration can be invisible. Therefore the reviewer must inspect source ownership and runtime real call graph with veto. No fake imports, baseline change or allowlist to green CI. This source-only tooling improvement has NOT been independently audited by the four SHA roles, tested with fresh GPT/browser, deployed to DEV or merged; R0 and G01 remain IN_PROGRESS."
+      }
+    },
+    {
+      "id": "G02",
+      "title": "Audit mode and scope accuracy",
+      "existing_owner": "Agent supervisor and existing four roles",
+      "phase": "guardrails",
+      "depends_on": [
+        "G01"
+      ],
+      "change_contract": "Distinguish diff review from whole-repo scans; record honest coverage and require pinned immutable source.",
+      "verification": "Negative documentation-only diff with known pre-existing source defect; four roles independently assert scope.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "post_consolidation_residual_audit": {
+        "status": "scheduled_within_r0_not_run",
+        "order": "AFTER actual G03-G12 semantic consolidation and BEFORE 32-case real model/browser campaign and final four SHA approvals; repeat after significant changes as needed.",
+        "source_baseline": "Immutable existing whole-repository audit at e336d1d; repeat file inventory and full production-subtree high-risk read on final consolidated SHA.",
+        "coverage": "All tracked files indexed; entire production Python Core/Runtime/Apps and all active JS/web/n8n/workflow/writer paths explicitly covered by four role-separated read-only reviewers; deep-read vs AST/index-only disclosed; semantic special paths, duplicate owners, orphan/dead modules, E3 bypass, E2 context, actor/provenance, budgets, runtimes and tests.",
+        "roles": "Reuse Generality/Quality/Testing/Performance, not a fifth auditor. A small PR-diff review is insufficient and no clean report without before-after residual inventory and source SHA.",
+        "acceptance": "Correct all material findings in existing G01-G12 ledger, perform all 32 independent real-model browser/n8n/E3 Markdown UI reload/replay cases on SHA-matched DEV, then final four independent SHA auditors and --require-stage-accepted R0 PASS.",
+        "note": "This is a mandatory audit milestone, NOT an added feature stage, and was not performed by merely updating documentation."
+      },
+      "metamorphic_source_coverage_matrix_20261101": {
+        "status": "offline_case_matrix_implemented_stage_not_accepted",
+        "user_goal": "Prevent semantic shortcuts based on names, one phrase, one sentence order, one temporal position or one NoteSchema type. Recover past F09/F10/F14/F16/F21/F23/F25/F26/F27 and R28-R32 families, including previous double-renumbered multi-fact links and the unresolved R31 owner gap.",
+        "new_variation_data": "tests/fixtures/r0_semantic_variations_v1.json; 55 separate human-authored input variants across 11 families. 39 affirmative/compilable oracles, 8 uncertain/negated/ambiguous refuse/pending controls, 4 verified relationship/source-only proofs, 4 R31 third-party owner negative sentinels. Meaningfully equivalent two-fact assertions in Spanish/French/English with order swapped, temporal phrases before/after, shared references and nine names, single-turn antecedent/pronoun dependence, cross-App Core+Task, NoteSchema person/project/document/concept and safe ambiguity. An additional 16 source-and-expected-meaning live-only challenges span eight neglected original themes: corrections F19, conditionals F20, positive vs negated F17/F18, time/person ordering F07/F08, shared predicate F09/F16, authenticated relation query R32, mixed Work Session R30 and past-recollection vs future Event F01/F02/R29.",
+        "actual_test_owners": "tests/core/test_r0_semantic_variations_matrix.py: typed whole-source immutable provenance/dual-speaker/core compilation + semantic-meaning-set oracle; deliberate five independent forgeries per affirmative case, source-scoped relationship member swapping, missing/backwards dependencies, nonaffirmative abstention; tests/runtime/test_r0_semantic_variations_physical.py: 26 actual Core/E3 writes to disposable Markdown, source order reversal, multilingual variants, nine references, per-fact owner/link isolation and readback. 280 tests PASS in matrix+physical.",
+        "important_limits": "The reviewed facts and decisions are TEST-SUPPLIED semantic hypotheses; no current GPT model was asked to interpret these variants and no P4/browser/n8n real journey was run. Four owner cases are known P4 NEEDS_ATTENTION not success; group cases are source-proof only, and ambiguity negative cases do not establish useful partial-save behavior. User-generated NoteSchema type requires further physical schema proof, though existing generated Core tests include custom type hints. This cannot certify natural-language robustness. The 16 live_challenges are NOT simulated model successes: their stored expectation is for future human/AI interpretation on actual product path only.",
+        "future_real_ai_gate": "Keep the 32 acceptance cases untouched. Before R0 acceptance, after production semantic consolidation, evaluate the 55 reviewed-source variants PLUS 16 semantic-only challenges (71 supplemental inputs) as a separate real-model browser/n8n/Markdown stress campaign with result-level semantic/owner/ambiguity oracles; detect source/order-dependent failures. Reuse existing R0 browser infrastructure, a fresh bounded approval/budget and four role reviewers; never fake receipts or treat offline proposals as fresh model outputs. The official stage 32 real cases and final whole-code four-role audit remain mandatory.",
+        "no_product_logic_added": "No Core/Runtime/Apps production files, prompts, model settings, routing branches, NoteSchema or user vault changed in this checkpoint; all new case phrasing lives only in fixtures/tests. The tests do not conceal already known P4 owner gaps."
+      },
+      "r0_semantic_static_branch_tripwire_20261101": {
+        "status": "offline_invariant_verified_not_full_audit",
+        "source_baseline_sha": "2dfd87ca251847012eb4932f6bb6b80ec38ddbe5",
+        "existing_suspect_count": 86,
+        "files_with_suspect_count": 48,
+        "owner": "scripts/audit_semantic_branch_regressions.py reused by tests/benchmarks/test_r0_semantic_branch_regressions.py and the existing scripts/odyssey_cross_surface_gate.py e2_identity_and_source group; baseline docs/architecture/r0-semantic-branch-baseline.json SHA pinned in tests. No extra agent or new pipeline.",
+        "positive_negative": "Python AST scans all odyssey_core/odyssey_runtime/odyssey_apps modules on every cross-surface gate. Synthetic tests inject phrase branch, note-type branch, fixed participant cap, old route proposed_relation_spans > 8, match/case, and a new branch in each package: all are rejected as new review findings. Generic schema-driven type validation, source-bound proof and schema-based resource limits accepted. Existing findings may be removed but may not be silently expanded or rewritten.",
+        "limits": "86 are heuristic review flags, NOT proven 86 software defects, and passing means no NEW unreviewed flags only. Runtime/Apps JavaScript, prompt prose, dynamic aliases, other sentence-semantic logic and existing flagged paths require human and four-role whole-source audit before acceptance. Audit remains open and cannot be made clean by re-pinning baseline without review."
+      },
+      "materialized_write_projection_completeness_20261101": {
+        "status": "offline_p4_physical_verified_not_closed",
+        "before": "For one P4 request with 10 source-attributed independently dated facts, Core/E3 persisted all 10 real Markdown calendar-day notes, but _verified_route_writes returned [] due a hardcoded limit of eight. Two other execution-flow constructors erased the entire writes field when >8, so graph reported no write despite durable user data.",
+        "reused_owner": "Existing Core UnitResult/ActionResult materialized receipts; P4 _verified_route_writes for bounded projection; existing odyssey_web/progress.js routeEvidence already iterates all route.writes, so no renderer rewrite or independent graph owner needed.",
+        "fix": "Remove three redundant 8-result presentation ceilings (a 4-line net production deletion), without changing Core E3 authority or adding semantic dispatch, note-type cases, prompts, agent, service, writer or numeric truncation. Only show succeeded, materially affected, authenticated affected_stable_note_ids backed unit receipts.",
+        "positive_negative": "tests/runtime/test_r0_write_receipt_completeness.py: 12 verified receipts kept in source order, no false/failed/unaffected writes, 10 actual Core/E3 dated Markdown physical writes, 10 actual P4 output graph writes from recorded model responses and exact replay. 73 focused PASS with existing P4, owner-gap and Core-anchored routes.",
+        "limitations": "Offline recorded-model P4, not fresh model or browser; browser JS renders every supplied write but interactive Chromium not rerun. Core G05 arbitrary target requires independent owner proof not present in current P4 proposal/review/speaker contract; do not pass raw proposed subject as owner or create a competing writer. Full 32 real-model/browser E2E and four roles still unverified."
+      },
+      "large_route_graph_and_actor_history_20261101": {
+        "status": "implemented_source_offline_not_final",
+        "observed_before": "Even after P4 10+ write receipts were retained (3dfcaf5), Core _project_execution_flow clipped actions, units, references, plans, entities and writes to first 8; legacy routed aggregator clipped four route evidence categories at 8; both active P4 graph aggregators suppressed execution_flow for >8 route outcomes; conversation history refused >8 route rows, >8 per-route writes/temporal/plan/entity observations, and stage route_index >=8. Actor ConversationRepository main chunk filename validation incorrectly required an escaped backslash for internally generated 000001.json, so a valid persisted main assistant turn failed on reload.",
+        "reused_owner_and_code_removed": "Existing Core application result projection, original route aggregation, P4 execution_flow production, Core actor conversation storage and existing JS graph renderer. No new handler/writer/model/semantic dispatch. Removed 8-only observability caps from these owners; 64 KiB validated whole detail, 64 total stages, <=16 per-route stages and canonical E3 receipt provenance remain. One token-safety-allowlist validation for UnitStatus value; exact main chunk path still constrained to six digits plus .json and actor namespace. 10 routes and 21 verified write receipts survive single storage/reload and HTML text render.",
+        "positive_negative": "tests/core/test_r0_execution_flow_cardinality.py (10 route actor durable append/load/idempotent replay; 12 writes on one route; cross-actor isolation; 12 Core unit projections; rejects forged stage and invented UnitStatus, oversized 64KiB and ../ chunk filename), tests/runtime/test_r0_routed_graph_cardinality.py (10 real AppResult route projections, 21 source-backed written-note receipts; failure zero-write negative), tests/odyssey_web_progress.test.mjs (10 routes/21 receipt entries visible). Existing Core and P4 regressions remain included in full gate.",
+        "scope_limits": "No fresh model/browser/n8n, no DEV deploy. 64 KiB request detail and 64-stage telemetry ceilings remain legitimate physical resource limits; >64 stages currently loses execution_flow but retains separately verified Core write result. Broad whole-repository residual audit G02/G11 still required. The identity chunk validator was exercised in isolated actor-scoped synthetic history, not on personal vault data."
+      }
+    },
+    {
+      "id": "G03",
+      "title": "Source semantic coverage/provenance",
+      "existing_owner": "Core coverage and evidence contracts",
+      "phase": "core",
+      "depends_on": [
+        "G01"
+      ],
+      "change_contract": "Remove candidate-shape and semantic max-8 constraints, retaining authenticated evidence, bounded memory/resources, provenance and no invented relation.",
+      "verification": "0/1/N and N:M facts, >8 references, ambiguous/hallucinated names refused, physical readback.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "source_reference_cardinality_fix_20261101": {
+        "status": "offline_verified_partial",
+        "before": "Original Core source coverage rejected 9 or 12 explicit reference_names on a single fact solely because len(names)>8; Core reviewed compiler also rejected >8; other paths rejected >8 unverified source mentions and authenticated groups independently.",
+        "existing_owner": "odyssey_core.whole_message_coverage.validate_whole_message_coverage and odyssey_core.whole_source_compiler.compile_reviewed_operations; existing Core/E3 execute_request for authenticated identity, canonical Markdown and readback.",
+        "general_fix_and_deletion": "Removed four legacy hard-coded eight-item semantic ceilings in the two existing Core validators without creating any new dispatcher, type rule, planner, writer or service. Kept source max 4096, fact text max 320, max 16 reviewed atomic facts, per-claim unique identifiers, exact source checks, slot identity, verified relationship groups, applicant schema, original entity attribution and E3 write authority.",
+        "positive_and_negative": "157 Python focal PASS including 9 and 12 references in source and Core plan, 12 unverified mentions, 12 separate verified groups, 4 Core/E3 physical self.md readbacks with nine existing identities of person/project/document/concept types, invented/duplicate/absent names, bad slot counts, forged group phrases and wrong source rejected.",
+        "limitations": "No product P4 end-to-end path with 9 references; another source proposal/reviewer may still constrain 8 elsewhere. Generic note owner P4 R31 still rejects before Core despite existing Core semantic writer. Final 32-case live GPT/browser/n8n/Markdown and four audits missing. G03/G04 and R0 NOT CLOSED."
+      },
+      "p4_verified_9_source_relationships_20261101": {
+        "status": "code_verified_offline_not_closed",
+        "before": "Four actual P4 synthetic-vault tests with 9 distinct current SELF relationship groups and identity type person/project/document/concept all refused after the FIRST Router response solely because len(proposed_relation_spans)>8; corresponding 1 and 8 cases completed.",
+        "existing_owner_reused": "odyssey_runtime/whole_source_light.py validated route-to-Core SELF relationship boundary; existing odyssey_core/whole_message_relationship_proof.py verifies original source occurrences and canonical actor SELF relation members, and Core/E3 alone writes Markdown.",
+        "one_line_product_fix": "Removed the redundant maximum-eight proposal-count check, retaining <=4096 source bounds, <=128 per-span length, exact distinct source occurrence verification, authenticated SELF membership, ambiguity rejection, schema and Core/E3 write authorization. No type/frase/order special branch, new handler, prompt or second writer.",
+        "proof": "tests/runtime/test_r0_n_relationship_groups_p4.py with 1/8/9 independent actual authenticated SELF group proof (all Note types person/project/document/concept) → P4 recorded-model path → canonical E3 physical Markdown readback → replay idempotency. 9th invented or duplicated source group refuses and makes zero writes, across all four Note types. 20 tests PASS; original Issue157 family group negatives also PASS.",
+        "remaining": "This closes one active P4 cap only, not all historic 2-to-8 Person/task scope paths, P4 arbitrary NoteSchema natural owner R31, full 32 actual GPT/browser cases or four fresh independent auditors. G03/R0 OPEN."
+      }
+    },
+    {
+      "id": "G04",
+      "title": "Typed relations and complete groups",
+      "existing_owner": "Core relation evidence + Tasks lifecycle",
+      "phase": "core",
+      "depends_on": [
+        "G03"
+      ],
+      "change_contract": "Interpret arbitrary source group through AI, verify existing Core canonical memberships, no hard-coded Person/2–8/grammar handling.",
+      "verification": "0/1/2/3/5/9+ typed groups, cross-actor and unknown members safe pending, E3/Tasks replay.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "core_general_nm_group_proof_20261101": {
+        "status": "source_core_e3_offline_proof_not_live_model_not_deployed_not_closed",
+        "existing": "odyssey_core.dependent_group_graph.verify_dependent_group_graph already establishes original complete source, independent review, source-specific N:M spans and no forward edges. odyssey_core.dependent_group_evidence.prove_canonical_group_handoff maps model edges to actual E3-written Markdown receipts; odyssey_core.application.DependentReferenceSetGuard enforces individual fresh canonical stable IDs and fact-bearing markers at the existing E3 prewrite seam. No new resolver, planner, router, writer, stage or backend.",
+        "defect": "Generic reviewed source DAG rejected 9 or 12 independently proven edges solely with len(dependencies)>8, despite bounded original source (4096) and <=16 reviewed groups. Existing E3 multi-reference guard rejected >8 edges and a mixed NoteSchema type set, and also required all references to use one identical mention despite each edge independently checking its own marker and stable target. Both checks were unnecessary semantic shape restrictions.",
+        "source_change": "Remove graph fan-in 8-only veto and E3 grouped guard arbitrary upper limit/same-type/same-mention restrictions, retain at least two edges, uniqueness by canonical stable Note ID, strict original source and independent reviewer match, Core physically materialized proof, per-edge E3 fresh CAS ID, type and canonical name, and after-write physical Markdown. Resource bounds unchanged at 4096 source bytes and <=16 source groups; max 4096 is source length in characters, not payload bytes.",
+        "proof": "tests/core/test_p4_dependent_group_graph.py: 2/3/5/9/12 typed source edges in both original and reversed order; independent reviewer missing-one mismatch fails. tests/core/test_r0_mixed_cardinality_e3.py: physically write 9 canonical references to concept/project/document/person and additional dynamically registered equipment NoteSchema type, original reviewed two-source-group graph with 9 links -> exact Core handoff -> E3 nine physical links in target Note -> replay unchanged. Reverse source order, omitted marker and substituted canonical ID negative, independent review dropped edge fails; a real canonical edit between predecessor and consumer makes E3 abort without modifying target. Additional actual Core/E3 nine-link mixed-type write with N distinct canonical source mentions, without shared pronoun or note type; duplicate ID fails at grouped preflight construction. 91 focused tests PASS across reviewed source graph, physical E3, existing dependent guard, and active P4 dependent N-group regressions.",
+        "not_yet_done": "Existing person/task-specialized cardinal/grammar handling, provider strict model contract and previous 2-8 limits in Tasks and other active modules require broader owner-based correction. Nine edges can be carried by the Core graph but not asserted as end-to-end supported by every router/model/Tasks path or current DEV. No fresh GPT, n8n, authenticated browser, real user vault, final 32 E2E, four SHA auditors or stage acceptance yet."
+      },
+      "task_create_source_names_generic_20261101": {
+        "status": "partial_g08_reused",
+        "evidence": "See G08.tasks_named_source_identity_completeness_20261101: existing Core write-plan helper now enforces explicit source Note coverage for arbitrary NoteSchema types with E3 physical write / refusal, before Tasks CREATE. Not yet generic plurals or full P4 GPT."
+      },
+      "remove_redundant_8_caps_preserve_reviewed_source_authority_20261101": {
+        "status": "partial_structural_source_verified_not_semantics_not_live_model_not_deployed",
+        "before": "Even after generic Core N:M source graph approved >8 reviewed edges, the P4 coordinator repeated a `len(part.dependencies) not in range(1,9)` veto without independent authority. TaskPersonReferenceSet, verify_plural_person_task_semantics and TaskCorePlanner additionally duplicated eight-member capacity limits even though Core write-plan enrichment accepts up to 16 link facts.",
+        "safe_change": "Removed the obsolete P4 post-graph eight-edge restriction. Refactored the structural two-review source verifier and TaskCorePlanner to reuse named Core constants `MIN_COMPLETE_COHORT_MEMBERS` and `MAX_CORE_REFERENCE_FACTS` (16 resource budget); the existing Core link-enrichment size cap now owns its named resource constant. **Deliberately left TaskPersonReferenceSet original 2..8 semantic/source guard untouched**: modifying its whole conditional changed a pinned typed-dispatch AST finding and there is no complete generic source proof to replace it yet. P4 still requires current conservative closed-class source cardinality and all independent reviewer/E3 guarantees. No new provider contract/writer/ontology.",
+        "red_to_green_and_proof": "Trial extension to numeric pronoun phrases `los 2..16` caused a regression against immutable `test_p4_finite_plural_reference_forms.py` (`los 2` must not be accepted by source-only closed-class gate); this experiment and its 9/12 P4 physical tests were reverted without rewriting the historical test or adding a special number-two exception. First full suite on interim numeric parser reported 4789 PASS / 1 FAIL. On safe rollback: 4729 PASS, 39 SKIP, 52 subtests; one extra existing benchmark detector rejected altered TaskPersonReferenceSet typed conditional. Original pinned conditional restored, detector NO_NEW_FLAGS and 49 focused PASS (AST guard, Core Source grammar, TaskCorePlanner N set). Synthetic verified inputs 2/5/8/9/12/16 flow through TaskCorePlanner with generic Core reference enrichment; 17 and duplicate identities rejected. A 9-item falsely claimed eight-item SourceBoundDependency set still fails its untouched Tasks member proof. Existing two-person P4 real E3 physical/replay tests remain PASS. No claim 9-member natural language P4 Task succeeds.",
+        "genuine_blocker": "TaskPersonReferenceSet remains the audited 2..8 Person-specific carrier, independent of Core planner size budget. Larger or open-text cohorts require source-anchored complete-set typed evidence from independent model reviewers, a refreshed trusted Core contract for target-set completeness and anti-forgery in the Task carrier, then actual provider/browser/n8n/Markdown/replay acceptance. Pinned 86-branch baseline and prior original grammar tests are unchanged. G04 and R0 remain OPEN.",
+        "final_source_verification": "Final post-rollback/post-constant-refactor full suite tests/core tests/apps/tasks tests/runtime 4729 PASS, 39 SKIP, 52 subtests PASS; benchmarks 811 PASS, 27 pre-existing FAIL, 38 SKIP; original immutable P4 finite plural grammar regression PASS; AST detector NO_NEW_FLAGS: baseline 86, current 86, additions 0, no reanchored baseline. Ruff format/check and canonical doc guard PASS. Full cross-surface precommit gate still to run. NOT GPT/browser/n8n/DEV."
+      },
+      "literal_group_source_note_link_r33_20261101": {
+        "status": "acceptance_oracle_added_product_link_unimplemented",
+        "user_contract": "An unknown/unspecified cohort is not automatically a set of person identities. Two durable operations may succeed independently: historical journal Day fact saved literally; next-day Task saved literally. If independently source-proven, the dependent Task references the specific canonical Day/Fact source, never a guessed Person. If a link cannot be proven, do not assert a linked success, and do not lose independent safely writable knowledge.",
+        "existing_reuse": "P4 already has literal Day writer and Core/E3 Task writer; `ReviewedSourceGraph` and `CanonicalGroupHandoff` carry dependent proofs, but the current P4 Task consumer only dispatches Person/Task-dependent targets and does NOT prove a journal-FACT note as an allowed target. Missing generic fact-source binding must be addressed through shared Core provenance and existing E3 note-link authority, without a new special pronoun handler.",
+        "test_evidence": "R33 appended only after immutable R28–R32, with source and expected-unit SHA256 frozen by existing browser campaign oracle. `tests/benchmarks/test_r0_literal_diary_task_contract.py` records expected 3 user meanings and proves offline P4 can physically save literal journal without minting Persons. 38 acceptance/catalog tests PASS; Task-to-correct-Day canonical link NOT yet proven, fresh GPT, browser/n8n, notes/reload/replay pending.",
+        "no_unwarranted_promise": "No production semantic code or provider prompt/schema changed; acceptance total increased to 33. Existing R0 G04 and G08 stay in_progress; physical source-to-Task relationship requires a generic source-fact authority improvement, not ad hoc lexical/reference-name routing.",
+        "core_physical_source_fact_binding_checkpoint": "SUPERSEDED HISTORICAL EXPERIMENT (source commit d262635): two new classes CanonicalSourceFactNote and CanonicalSourceFactLinkGuard plus tests/core/test_r0_canonical_source_fact_note.py were added to handle the R33 note-of-origin link. Tests only proved synthetic Core plans but NO production caller existed. This duplicated existing CanonicalReferenceEvidence, materialized_core_receipt, DependentReferenceGuard and E3 preflight; it was a case-driven parallel trust path. Classes and their synthetic-only tests were subsequently RETIRED, not deployed and not integrated. Historic 12 PASS does not certify the corrected architecture.",
+        "final_core_scope_gate": "HISTORICAL ONLY for RETIRED implementation d262635: cross surface 2796 Python + 297 JS PASS and AST NO_NEW_FLAGS did not catch unused duplicate product logic; such green tests never proved generalized real source->Note links. Do not count as product acceptance. After corrective removal rerun existing full cross-surface gate; R33 and R0 still NOT ACCEPTED.",
+        "repeated_case_specific_code_correction_20261101": {
+          "status": "duplicate_removed_existing_owner_reuse_not_product_accepted",
+          "user_criticism": "The assistant claimed it added a generic mechanism to link a Task to an earlier-fact Note, but this was a new path originated from R33 and only called by its own synthetic tests. Even no explicit `type == task` conditional is not enough: generality must be proven by actual production ownership, reuse and different Notes/App capabilities.",
+          "diagnosis": "Existing Core application.CanonicalReferenceEvidence + DependentReferenceGuard, canonical_receipt_provenance.materialized_core_receipt, source-bound graph, E3 typed references/lookup/preflight and TaskLifecycleGuard already own real identity/link checks. New classes were not called by any production path and duplicated source-provenance hash and link validation. R33 blocked earlier: the active P4 semantics/Task consumer assumes an antecedent is an identified Person/Task; it cannot carry a generic fact-as-context relation when a group has no identity. This is a cross-capability semantic transport and existing Core reference-contract gap, not a new Task→Day link mechanism.",
+          "repair": "Reverted the 155-line unused CanonicalSourceFactNote/CanonicalSourceFactLinkGuard implementation, its 278-line private tests, and its test-only cross-surface entry in place on the PR source branch. R33 frozen oracle/physical literal journal regression remains append-only and PENDING. Leave existing immutable old recipient/identity safety gates intact. No new Writer, orchestrator, direct Note mutation, LLM calls or type/phrase dispatch.",
+          "expected_general_contract": "Any source fact (regardless of owner Note type) may be interpreted as context for any independently requested operation/Note. Core carries source spans+fact/note receipt+canonical identity/evidence; independent model reviews must attest relation, and E3 resolves and writes links. If members are unresolved, keep original wording without inventing identity; if any relation cannot be proven, preserve independent safely writable facts and do not assert a linked success. Verify on unrelated NoteSchema types, reordered clauses, mixed app operations, actor/stale/wrong-fact/ambiguous/replay negatives, and the original 33 fresh provider/browser cases.",
+          "limit": "The active semantic P4↔Core↔Apps wiring is NOT repaired by removal; R33 remains not accepted. It is prohibited to replace this with another single-example, single-note-type or unused test-only guard."
+        }
+      },
+      "r33_preimplementation_independent_generality_veto_20261102": {
+        "status": "RECONSIDER_NOT_IMPLEMENTED",
+        "review_type": "ONE bounded independent read-only Codex Generality design review, not the four final SHA auditors",
+        "reviewed_source_sha": "48f57198ee35b40db846a2023d0bf99bd6df0cb1",
+        "isolation": "Existing odyssey-scope-read native profile preflight PASSED (private paths and network denied; source read-only). One session gpt-6-sol medium. No product/source edits by auditor; no private vault or DEV access.",
+        "independent_verdict": "RECONSIDER: no safe minimal Task-to-Day extension, and wiring only one existing dependency cannot attest exact originating fact in a multi-fact Note.",
+        "observed_owner_chain": [
+          "Core whole_message_coverage.validate_whole_message_coverage: dependent_on_fact_index admitted only for earlier fact with shared canonical reference_names; literal facts with unspecified members cannot express context dependency safely.",
+          "Core whole_source_compiler.compile_reviewed_operations: transforms independently reviewed facts into Day/owner/Task actions, but does not consume the cross-fact dependency index or carry its provenance into a physical operation.",
+          "Core canonical_receipt_provenance.materialized_core_receipt, application.CanonicalReferenceEvidence and DependentReferenceGuard: genuine E3 identity/link proof already exists, but a direct receipt requires actual new note creation, not a specific fact appended to an existing Note.",
+          "Runtime whole_source_light._execute_dependent_graph: reviewed group edges are subsequently converted into TaskPersonReference/TaskPersonReferenceSet/TaskDependentTarget, not generic context between source facts; composition wires the existing delegated flow.",
+          "Tasks TaskCorePlanner: owns legitimate lifecycle data, must not choose which earlier fact is context or invent members."
+        ],
+        "pre_code_requirements": [
+          "Preserve independently reviewed semantic source→source relation separately from (never equivalent to) canonical identity. Do not assume chronological text order is execution order.",
+          "Reuse Core ReviewedFullSource, compiler, existing E3 receipts/CAS and normal references, not create another Task→Day or SourceFactLink mechanism.",
+          "Prove physical association to one exact prior request-marked fact (request_id, ordinal and source span), even when stored in updated Day with other unrelated facts and links, and protect actor/stale/alternate-note attempts.",
+          "Validate arbitrary note types and Core/Apps destinations, 0/1/N cross-relationships and reordered statements, literal unresolved text without invented Person links; leave unprovable contextual link pending without losing independent safe facts.",
+          "Exercise physical Markdown readback/replay and independent reviewer rejection; then fresh scoped Odyssey model/browser/n8n E2E before accepting product."
+        ],
+        "decision": "Do NOT implement ad hoc semantic code, do NOT reinterpret the previous R33 isolated Day-only PASS as the full feature. Scope remains G04/G11 within R0, not new stage. A revised owner-only design must pass pre-code Generality veto before change."
+      },
+      "reusable_repair_handoff_20261102": {
+        "status": "ACTIONABLE_PLAN_FROM_EXISTING_READ_ONLY_AUDIT_NOT_YET_IMPLEMENTED",
+        "reviewed_sha": "48f57198ee35b40db846a2023d0bf99bd6df0cb1",
+        "source": "Author synthesis of the existing independent Generality RECONSIDER receipt, NOT a second independent approval or newly run reviewer; use with the actual pinned HEAD diff before editing.",
+        "root_cause": "Semantic relation between two facts is conflated with shared canonical entity identity. Core coverage verifies a limited entity handoff, compiler discards fact dependencies, and P4 converts source edges into Person/Task-specific targets. Direct canonical receipts prove Note creation, but do not independently attest which fact of an updated Note is relevant.",
+        "preferred_repair_order_without_new_phase": [
+          {
+            "owner": "odyssey_core/whole_message_coverage.py::validate_whole_message_coverage + ReviewedFullSource",
+            "existing": "dependent_on_fact_index with source excerpts and independent coverage review",
+            "missing": "Source-level relation independently reviewable even when reference_names is empty, distinct from an asserted entity identity; no inference from sentence order, proximity or plural grammar.",
+            "minimal_change_proposal": "Evolve existing reviewed-source relation semantics in Core rather than add a Task/Day bridge. First show the exact proposal/review data path; preserve independent semantic attestation and refuse unproven relation. This is a PROPOSAL subject to contract review, not permission for a new LLM model/prompt/schema.",
+            "acceptance_first": "Multiple literal facts with unrelated or unidentified members; zero, one and multiple relationships; reversed source order; negative forged/ambiguous/no-review relation with safe independent facts intact."
+          },
+          {
+            "owner": "odyssey_core/whole_source_compiler.py::compile_reviewed_operations + odyssey_core/application.py + odyssey_core/canonical_receipt_provenance.py",
+            "existing": "Core reviewed operations, KnowledgeReference markers, Core/E3 canonical preflight/CAS, request-marked atomic fact readback",
+            "missing": "Reconcile original reviewed fact indices with compiled and physically materialized facts when one Note has multiple facts or several Notes each receive facts; an earlier source index must never be treated as a final Note ID.",
+            "minimal_change_proposal": "Extend existing Core planning/provenance binding so independent verified relationship is associated with exactly the source fact and canonical owning Note, then E3 resolves the existing link marker and verifies current content. Reuse existing receipt/guard authority, not create CanonicalSourceFactNote/CanonicalSourceFactLinkGuard again.",
+            "acceptance_first": "Two facts in one Day plus another in a different existing Note; only the correct origin may be linked; stale fact, changed note, wrong actor, ID swap and replay fail closed without fabricated links or partial data loss."
+          },
+          {
+            "owner": "odyssey_runtime/whole_source_light.py::_execute_dependent_graph + odyssey_runtime/composition.py + odyssey_apps/tasks/planning.py",
+            "existing": "Reviewed dependency graph, Core handoff checks, compositional App lifecycle delegates, one E3 writer",
+            "missing": "P4 limits a dependent Task to resolved Person/Task targets, instead of conveying general reviewed context to a capability-neutral Core plan; legacy and P4 overlap.",
+            "minimal_change_proposal": "Once Core shared provenance supports the relationship, pass its evidence through the existing adapter/registry, preserve Task lifecycle checks, compare existing Person/Task E2E and retire redundant branching only after parity. Do NOT implement task→day, app-combination dispatch or phrase-specific fallback.",
+            "acceptance_first": "Same source fact referenced from different NoteSchema destinations and a non-Task operation; reordered clauses, N:M links, app lifecycle, prior failing R33 literal story/task readback/replay."
+          }
+        ],
+        "decision_gate": "Before changing production code, use this existing handoff; inspect only changed SHA-sensitive code and prove the chosen shared owner+existing caller. Do not commission another exploratory whole-repo audit. If a proposed Core relation contract would change LLM schema/prompt or user semantics, use odyssey-llm-stage and required approvals; do not silently change. Keep R33 FAIL/PENDING until GPT/browser/n8n/E3 physical acceptance.",
+        "efficiency_rule": "One review once, one evidence-backed action packet, one implementer pass and targeted tests; independent Generality rechecks only changed diff; four-role full SHA review and real model/browser remain final gates."
+      },
+      "shared_core_fact_marker_uniqueness_20261102": {
+        "status": "existing_owner_safety_fix_offline_verified_R33_still_pending",
+        "prior_owner": "odyssey_core/application.py::_persisted_source_note was already called by _collect_persisted_reference_evidence and direct target receipt proof, so is an ACTIVE shared trust boundary. Existing odyssey_core/atomic_facts.parse_atomic_facts and E3 physical request/ordinal markers remain the single source of truth.",
+        "specific_defect": "Existing set subset check accepted a physically correct (request_id, ordinal, text) marker even when a second physical fact in the same Note reused the same request_id and ordinal, whether with different or identical text. A future link to this origin would be ambiguous; no source-level plan can prove which fact was meant.",
+        "fix": "In the EXISTING _persisted_source_note only, compare requested ordinals to uniquely occurring physically parsed request-scoped markers. Reject a duplicate ordinal, wrong text, absent requested marker or repeated request ordinal; permit distinct ordinals and facts from independent requests in the same Note. Zero extra production helpers/classes/semantic type branches/new E3 writer. E3 write ownership, NoteSchema and original scope remain unchanged.",
+        "proof": "8 new red-to-green adversarial cases (duplicate marker with same/different text x person/project/document/concept); 13 tests in the existing canonical-reference suite PASS; 127 targeted Core/physical N:M/runtime/P4 tests PASS; AST branch audit NO_NEW_FLAGS (86 old flagged). All synthetic Markdown; NO fresh provider/browser or downstream arbitrary source→Note contextual link.",
+        "remaining": "This closes only one physical-source uniqueness flaw. Existing whole_message_coverage dependency carrier, whole_source_compiler and Runtime P4 must still convey semantic fact→fact relations independently reviewed across capabilities and bind the correct physically unique fact to a canonical note; R33 still PENDING. Do not add a Task→Day/Person route or new proof class."
+      }
+    },
+    {
+      "id": "G05",
+      "title": "Generic owner of facts",
+      "existing_owner": "Core RequestPlan + semantic_write + E3",
+      "phase": "core",
+      "depends_on": [
+        "G03"
+      ],
+      "change_contract": "P4 carries Core-selected natural canonical owner, without Day/SELF-only semantics.",
+      "verification": "R31 positive P4→correct Markdown owner→Notes; arbitrary NoteSchema type, ambiguous/unknown owner negatives.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "owner_proof_boundary_inspection_20261101": {
+        "status": "diagnosed_not_implemented",
+        "existing": "Core semantic_write.compile_semantic_write already selects described canonical target for any NoteSchema type; P4 has independent source coverage and two speaker reviewers.",
+        "missing": "P4 reviewed fact schema does not attest per-fact canonical owner; speaker reviewers prove participation/negation, not which named third-party note is owned. The Planner subject is one untrusted model suggestion and cannot be elevated to owner/write authority merely because the spelling appears in source or the reviewer also mentions the identity.",
+        "decision": "No raw subject-to-SelectionCriteria shortcut, no alternate owner compiler/writer, no new note-type/phrase branch. Remain fail-closed for R31 pending independently reviewed owner semantics and schema-contract live-model approval as required by odyssey-llm-stage. Both whole-source and canonical Core identity evidence must agree before any E3 write.",
+        "required_next": "Design and test a minimal independent per-fact owner semantic attestation using existing Core reviewer/model contract; prove positive across user-defined NoteSchema and source reorderings and negative ambiguous/stale/cross-actor, then bounded provider eval, P4 physical/browser acceptance."
+      },
+      "optional_independent_owner_source_review_20261101": {
+        "status": "source_optin_verified_offline_not_live_model_not_deployed",
+        "existing_owner_reused": "Core whole_message_coverage original-source proof, whole_source_compiler.resolve_attested_owner_targets and CanonicalSourceOwnerGuard, exact identity resolver and existing E3 preflight/readback; Runtime only selects opt-in independent review contract and passes the Core-produced proof. No extra model stage, router or writer.",
+        "before": "Existing R31 source-bound complete review and speaker checks still dropped owner information; P4 could only compile dated Day/SELF/Task. R31 unowned third-party note returns needs_attention although Core semantic_write already supports a typed canonical owner. Plain Planner subject could not safely serve as canonical owner.",
+        "optional_behavior": "New owner_name nullable field is opt-in on the EXISTING independent P4 source reviewer (not a new API call); subject claimed by Planner must agree with independent reviewer and match the source evidence of the SAME fact, third-party speaker role must be independently attested, then Core resolve_exact_entity WITHOUT a model-proposed type must return exactly one existing unambiguous Note before any write. Any absent/homonym/stale/SELF role fails closed. Original Core/E3 writer uses SelectionCriteria and a single reference lowerer; readback validates exact target stable ID + actual subrequest/atomic fact, including grouped multiple facts per owner. The new guard rechecks the same stable canonical Note ID and unique name at the actual E3 WritePreflightGuard seam just before mutation, preventing unsafe writes if a homonym is introduced or the identity is replaced after initial proof. Core operation source_positions link grouped facts to the exact physical readback owner and subrequest. Initial 0..N identity candidates are validated through the existing Core resolve_exact_entities_batch (ONE canonical vault scan for all source owners), while each E3 physical mutation still rechecks its own target ID/uniqueness via the existing prewrite guard.",
+        "switch_and_scope": "WholeSourceLightExecutor.owner_review_enabled is explicitly FALSE by default and has no production environment enablement; opt-in tests only. Original frozen P4 prompt/schema/provider names unchanged on default; owner schema/prompt is separate strict opt-in variant. No user vault, DEV or PROD writes; no paid model call. Does not implement owner semantics for ungrounded pronouns or absent/deleted notes. No NoteSchema ontology changes.",
+        "synthetic_positive_negative": "At least 8 P4 recorded-model positive combinations: person/project/document/concept × inverse source order, two source facts to correct distinct owner and SELF, physical Markdown + replay. Plus user-defined equipment NoteSchema with two different facts written on same note and replay in both sentence orders. Negative P4 tests: mismatched reviewer/Planner owner, unknown owner, no owner proof, same name across types, SELF speaker conflict; all zero writes. Core existing owner-gap tests with flag OFF remain negative. Strict schema new output field mandatory and no extra keys. All synthetic/offline, never fresh production GPT. Four more Core guard tests prove the original stable ID remains required even after a newer same-name Note of another type appears; a preflight target redirected to a different stable ID fails before write. Status remains OFF in the product. Post-batch modification: 133 focused regression tests PASS (Core compiler, default P4, new opt-in owner modes, anchored evidence, parallel coverage, original owner gaps). Full 4478 Core+Runtime pass and 811/27/38 benchmarks were run on the preceding identical semantic behavior, before the final batch identity performance optimization, and are not fresh whole-suite proof of that last diff.",
+        "remaining": "Requires explicit bounded authorization and fresh exact production-model eval of new reviewer prompt/schema for diverse 55 + 16 semantic cases, including negative/cross-actor and date/owner ambiguities; then safe production wiring, actual browser+n8n+Core/E3 physical readback, full 32 acceptance, whole-repo residue audit and four independent SHA-matched reviewer receipts. Mark G05/R0 OPEN until completed.",
+        "owner_prompt_offline_versions": {
+          "model": "gpt-5.6-luna (actual P4 existing Core reviewer), fresh provider evaluation NOT RUN; model effort inherited unchanged",
+          "base_optin_prompt_sha256": "0e7becac9d53f80435cb82aae0cc8f2f129a66180a1992f1f47aa6b5654234e1",
+          "anchored_optin_prompt_sha256": "188f2c7f9e32689db897cd31976f5a185bf33cdea25580e02c107a6741129084",
+          "strict_schemas": "REVIEW_OWNER_SCHEMA and REVIEW_OWNER_CORE_ANCHORED_SCHEMA (original accepted prompts and strict schemas unchanged when flag is OFF)",
+          "eval_matrix": "Use existing immutable 32 acceptance + versioned tests/fixtures/r0_semantic_variations_v1.json owner families (including R31 four known gap negatives and varied owner types/order) plus prompt-owner source-only negative checks in tests/runtime/test_p4_generic_owner_gap.py. Before adoption create bounded genuine provider approval receipts for 55+16 varied source cases; no mock PASS counts as production GPT evidence."
+        }
+      }
+    },
+    {
+      "id": "G06",
+      "title": "One E2 context shared across active stages",
+      "existing_owner": "Core ExecutionContext/Stage ports + Runtime composition",
+      "phase": "core",
+      "depends_on": [
+        "G01"
+      ],
+      "change_contract": "No P4 history reset; exact original source, actor, bounded history, timing and evidence go to relevant blocks unchanged.",
+      "verification": "R32 and mixed multi-turn; verified actor isolation, no history-derived write privilege.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "actor_bounded_history_transport_20261101": {
+        "status": "offline_source_verified_optin_disabled_by_default_not_live_model_not_deployed",
+        "existing_mechanism": "Actor-rooted LocalConversationStore.recent_context(exclude_request_id) already used by RuntimeComposition for existing routed Core and by conversation continuity; P4 whole-source executor had no prior history transport (G06 original failure). Reused same factory-resolved actor root, same 16 turns/4096 compact JSON byte bounds; no second history store or resolver.",
+        "minimal_change": "Optional existing P4 executor injected trusted callback (only with DEV+ODYSSEY_P4_RECENT_CONTEXT_V1=1; FALSE in normal app). Read just once per outer request; pass exactly original source plus bounded read-only prior turns to its SAME Router and Core Planner, including independent child scopes. Existing source-only coverage, speaker reviewers, Core target identity, E3 writer, physical readback and replay retain exclusive write proof. Generic rule forbids copying historical claims/obeying history instructions. No new model stage, writer, type-specific/named phrase/word-order routes.",
+        "scope_and_limitations": "This is context TRANSPORT for initial P4 Router and Planner only. It is not verified semantic resolution of cross-turn pronouns and does NOT yet wire prior context to all Tasks/Events/Temporal delegates or Core READ path. Present strict current-source proof may safely decline history-only referents. G06 and R32 remain OPEN. Source-model input and prompt differ only under opt-in; no real GPT calls or deployment authorized.",
+        "evidence": "tests/runtime/test_r0_p4_conversation_context.py: four independent synthetic prior topics across type/phrase domains, original speaker/current source exact, payload routed only to Router/Planner, no current duplicate, no other actor data, no historical text saved, physical Core E3 Markdown and same-delivery replay; five malformed/oversized/injected-turn negative histories fail before provider/writes; default OFF payload unchanged. tests/runtime/test_p4_production_composition_task_ui.py: factory flag OFF/DEV opt-in wiring; ordinary Tasks/HTTP path still default, DEV extra Tasks model stages not covered by this flag-wiring test. Total selected 88 PASS including R0 own gap & Core-anchored and Tasks. Additional test tests/runtime/test_r0_p4_conversation_context.py rejects model-planned history-only assertion not present in current source, zero writes. Prompt sent only to existing Router/Core planner, not source/speaker reviewers; default prompts verified byte-for-byte unchanged. 11 targeted context PASS, full Runtime 2353 PASS, benchmark 811 PASS/27 historical FAIL/38 SKIP; full source-only cross-surface gate pending.",
+        "prompt_context_sha256": "7482b122a574f47c932a70eb6f78d4d99a12b23f8d0eadf6f7221f7c3a8748dc",
+        "future_model_eval_matrix": [
+          "One-turn baseline: 0 prior turns and identical valid source; no added write or different route",
+          "Recent same-actor follow-up: two independently source-grounded references, new note content only from current utterance",
+          "Ambiguous antecedents across several turns/types/languages: clarify, never choose by string or order",
+          "Conflict/negation/correction of earlier claim: no historical assertion promoted to a new write",
+          "Adversarial preceding turn asks to bypass Core/provenance or insert note IDs: reject as authority",
+          "Another actor context missing despite same spelling, plus current turn pre-appended: no cross-user leak/no duplicate",
+          "P4 independent Core/Tasks/Events scopes plus read-only user question: preserve source/authority and real E3 semantics"
+        ],
+        "next": "Bounded separately authorized fresh production-model prompt eval (Router and Core Planner), then assess remaining App handoffs/Temporal, plus real browser+n8n+Markdown multi-turn/replay on deployed SHA. Must not mark G06/32-case campaign/4 roles accepted."
+      }
+    },
+    {
+      "id": "G07",
+      "title": "Registered App operation composition",
+      "existing_owner": "ApplicationCatalog + Task/Event lifecycle ports",
+      "phase": "apps",
+      "depends_on": [
+        "G05",
+        "G06"
+      ],
+      "change_contract": "No fixed Core→Tasks, Events→Tasks, or CREATE-only branch in generic coordinator; Apps enforce only own rules.",
+      "verification": "F22 mixed Work Sessions; create/edit/cancel/query, synthetic third App, partial receipts, no premature writes.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G08",
+      "title": "TaskCorePlanner boundary",
+      "existing_owner": "Core semantic links/identity + Task lifecycle",
+      "phase": "apps",
+      "depends_on": [
+        "G04",
+        "G07"
+      ],
+      "change_contract": "Remove Task-specific construction of generic Person facts without losing assignee/parent/work-session policy.",
+      "verification": "Generic links to arbitrary Note types, ambiguous owner and replay negatives.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "tasks_named_source_identity_completeness_20261101": {
+        "status": "source_and_physical_e3_offline_only_not_live_model_not_closed",
+        "existing_and_defect": "TaskCorePlanner used an in-class Person-only _require_source_identity_links that refused one valid generic role for an existing Person yet silently accepted omitted or wrong-type exact Core source Note hints for project/document/concept/user-defined types. The existing canonical_source_context.matching_canonical_names_in_source scans NoteSchema types and yields unambiguous read-only typed hints, and existing Core write_plan_enrichment already owns shared pure RequestPlan enrichment.",
+        "change": "Retired the old Tasks Person-only source-hint completeness method; introduced require_complete_named_source_references at existing odyssey_core.write_plan_enrichment generic owner. For Task CREATE, after existing Core enrichment + app lifecycle checks, require a unique plan reference/helper for every current source-bound Core name hint irrespective of NoteSchema type and role, with exact canonical name/type, helper reference_lookup_only and valid index. Do NOT infer links or select identities. E3 still resolves and authorizes each link. App role security for assignee/parent_task remains in TaskCorePlanner.",
+        "positive_negative": "tests/apps/tasks/test_r0_generic_source_note_links.py: positive 1/2/5/9 named existing source references across person/project/document/concept/user-defined equipment and reversed order; omitted/alien type/canonical name/lookup invalid fail closed. Physical synthetic Task CREATE using actual Core/E3 Writer with nine mixed links preserves all 9 in canonical Markdown in both orders, while omission returns not completed with no vault mutation. Existing Tasks plural person, TaskCorePlanner and P4 dependent N-group/delivery replay tests also run. Baseline 12 of 19 deterministic reproducer cases failed before correction; after code 78 focused PASS including existing P4 replay tests.",
+        "replay_boundary": "Direct Core.execute_request CREATE repeated with same request_id creates a second task, because Core E3 by itself is not the delivery-level idempotence gate; the source test does not claim otherwise. Logical delivery replay already uses Runtime LocalDeliveryResultStore and is separately covered by existing P4 replays. R0 must still verify actual product delivery idempotence for each relevant route and not infer it from bare Core writes.",
+        "limitations": "No prompt/schema/model change; no production-model or authenticated-browser test; no DEV deploy; no source-close claim. TaskPersonReferenceSet and verify_plural_person_task_semantics still contain 2..8 cardinal and lexical person restrictions; these require independent semantic source proof/complete finite cohorts and cannot be made unsafe merely by removing checks. Further G04/G08 review and full final R0 acceptance required.",
+        "verification_final": "Prior 4710 PASS / 39 SKIP / 52 subtests Core+Tasks+Runtime and benchmark 811/27 historical/38 were on b9dbfdf BEFORE this additional marker invariant. Current strengthened marker invariant: 90 focused PASS with P4 delivery replay, Tasks and Core; final new SHA cross-surface gate to follow; do not claim prior full-suite runs cover the follow-up diff.",
+        "additional_marker_provenance_gate": "Follow-up negative test reproduced that a proposed KnowledgeReference/helper with correct name/type but never used in any primary fact could pass plan completeness and still create a Task without the actual Markdown link. Existing Core pure helper now additionally requires an explicit {{ref:index}} token in a primary fact for EACH source hint, not just a helper. Positive real E3 9-link test remains, and five per-type unused-helper negative cases are fail-closed; 90 focused tests PASS after the fix. Core is still NOT independent semantic/model proof. This gate is shared and type-independent."
+      }
+    },
+    {
+      "id": "G09",
+      "title": "Language and semantic routing without keyword lists",
+      "existing_owner": "LLM typed plan + Temporal evidence + App ports",
+      "phase": "apps",
+      "depends_on": [
+        "G06",
+        "G07"
+      ],
+      "change_contract": "Replace event keyword/finite multilingual date lexical routing only when equivalent source provenance and time bounds are proved.",
+      "verification": "Paraphrased read/mutate Event, date qualifier omission negative, no source word-specific production branch.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G10",
+      "title": "Calendar occurrence generic projection",
+      "existing_owner": "Calendar typed occurrence contract + Event adapter",
+      "phase": "apps",
+      "depends_on": [
+        "G07"
+      ],
+      "change_contract": "Calendar projects arbitrary registered occurrence types, Event lifecycle stays in Events.",
+      "verification": "Second synthetic occurrence producer, recurrence/cancellation/readback.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G11",
+      "title": "One thin coordinator (no parallel semantic engine)",
+      "existing_owner": "Existing Runtime E2 candidate/Core/App chain",
+      "phase": "cleanup",
+      "depends_on": [
+        "G03",
+        "G04",
+        "G05",
+        "G06",
+        "G07",
+        "G08",
+        "G09"
+      ],
+      "change_contract": "Consolidate P4 and legacy dispatcher after dual-run parity; delete redundant routes not move them to another file.",
+      "verification": "32 full-source cases, mixed 0/1/N, replay, source/N:M, owned writes, bounded performance, four final SHA auditors.",
+      "status": "not_started",
+      "review_decision": "pending_review"
+    },
+    {
+      "id": "G12",
+      "title": "Historical and competing-path retirement",
+      "existing_owner": "Core module owners + E3 canonical Writer",
+      "phase": "cleanup",
+      "depends_on": [
+        "G01",
+        "G11"
+      ],
+      "change_contract": "Prove inactive callers, optional launches and tests; archive/delete only if not a distinct security boundary or user-supported path.",
+      "verification": "Import/feature flag/test caller inventory, no direct Markdown writer outside Core/E3, regression before deletion.",
+      "status": "in_progress",
+      "review_decision": "pending_review",
+      "active_core_reference_renderer_consolidation_20261101": {
+        "status": "code_verified_offline_not_closed",
+        "before": "odyssey_core/whole_source_compiler.py had two independent duplicated symbolic-reference/link loops for the same Core record, one for dated Day facts and one for SELF facts; Task repeated helper lookup units. This invites inconsistent reference renumbering, duplicate owners and future note-type patchwork.",
+        "existing_owner_reused": "Existing Core KnowledgeUnit, SelectionCriteria, KnowledgeReference, RequestPlan and E3 execute_request. Independently attested target remains Day or authenticated SELF; Task lifecycle/status/target_date and source speaker backlinks remain their existing separate trust checks.",
+        "actual_code_removed": "Replaced both production record/link loops and the redundant make_action kind dispatch with one _record_action canonical reference renderer. Removed 27 net production lines (102 removed, 75 added) and one separate production conversion path, not simply an extra function. No new app dispatch, model calls, NoteSchema type-specific or phrase-specific branch.",
+        "positive_negative_tests": "85 focused Python PASS: same two independent facts in original/reversed order, Day vs authenticated SELF, person/project/document/concept typed lookup hints, reference dedup and source speaker backlinks, Tasks pending+date+force_create properties unchanged, undated Task rejection; P4 existing real recorded-model synthetic vault and generic-owner-negative regressions remain correct.",
+        "remaining_duplicate": "The 2026-10-16 archive benchmarks/application_router/light_router_poc_20261016/p2_integrated_bridge.py still contains a historic make_action and is imported by two archived P3/P4 pilots and tests/benchmarks/test_light_router_p2_contract_20261016.py. Not a production caller. Must classify downstream historical evidence before deleting; do not reintroduce as active path.",
+        "limits": "This is an active Core duplication removal, NOT full retirement of both large P4 and legacy Runtime coordinators, NOT R31 arbitrary-note-owner acceptance, and NOT real GPT/browser E2E. G12/R0 remain open."
+      },
+      "generated_multi_fact_reference_collision_20261101": {
+        "status": "offline_verified_pending_final_live_acceptance",
+        "user_report": "Repeated examples can accidentally pass a case-shaped local patch, especially after a conversation change. User requests AGENTS/skills adherence and no semantic code based on phrases, Note type, counts, sentence order or examples.",
+        "existing_guidance_checked": "AGENTS.md, odyssey-generality, odyssey-skill-steward, odyssey-verify-change and ops/agent-team/generality.md already explicitly require generic code, owner reuse, varied/reordered inputs and full live-model browser E2E; no conflicting rule was found. Do not add a redundant skill or imply text instructions alone enforce architecture.",
+        "before_reproduced": "28 deterministic seeded generated variants varied 0/1/2/3/5/9/12 references, 1-3 facts, source permutations and arbitrary declared NoteSchema type hints. Nine failed on current Core whole_source_compiler._record_action because repeated str.replace of local {{ref:N}} changed a newly generated global {{ref:N}} a second time, potentially binding the wrong identity. Previous fixed-case tests missed that.",
+        "shared_owner_fix": "In the existing Core _record_action, first allocate target reference positions, then translate ORIGINAL marker tokens in one re.sub pass using that local-to-global mapping. No case-dependent branch, new handler, ontology, prompt, service, or alternative Writer.",
+        "positive_and_negative": "28/28 generated variants PASS with independent expected original-token offset oracle; 8 physical Core/E3 synthetic Markdown readbacks (four existing Note types × original/reversed fact order) assert only the correct references on each fact, no foreign identity links; full focused existing P4 and source graph/ownership suites 168 PASS. Source/marker tamper and E3 authority negative tests retained. No live model and no DEV deployment.",
+        "scope_limits": "This repairs a concrete multi-fact shared compiler error, not the separate R31 natural owner P4 gap and not all of R0. No Generality/Quality/Testing/Performance final independent receipts yet; must still test fresh 32 cases browser/n8n/GPT/E3 on final SHA."
+      }
+    },
+    {
+      "id": "G13",
+      "title": "Mobile device-local delivery target",
+      "existing_owner": "Existing local-first architecture/backlog",
+      "phase": "post_r0",
+      "depends_on": [
+        "G11"
+      ],
+      "change_contract": "Do not confuse Raspberry DEV with installable offline mobile. No scope creep into R0 base simplification.",
+      "verification": "Separately reviewed offline-first mobile acceptance, not used to accept R0 or silently forgotten.",
+      "status": "deferred_after_r0",
+      "review_decision": "pending_review"
+    }
+  ],
+  "findings": [
+    {
+      "id": "R0-F001",
+      "audit_role": "core",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "07311c13bc478d632df373e46a5e6f6e0442026c553ecdc8983884f3e9e3ab91",
+      "severity": "blocking",
+      "reference": "odyssey_core/candidate_coverage.py:612",
+      "workstream_id": "G03",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F002",
+      "audit_role": "core",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "6cf216b2b473059183076a95beb555611af58be7f81fa13124be9b8a42ca978e",
+      "severity": "blocking",
+      "reference": "odyssey_core/dependent_reference_form.py:39",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F003",
+      "audit_role": "core",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "80644c351e552f9de2a2808a5077bbcd3892b7988c05f9c9abdc4429bd950725",
+      "severity": "blocking",
+      "reference": "odyssey_core/whole_message_coverage.py:154",
+      "workstream_id": "G03",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F004",
+      "audit_role": "core",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "3347077da580b4e46cdf07d79cbe413ad38d4b068c7a7c38165b02873fd65a3f",
+      "severity": "warning",
+      "reference": "odyssey_core/candidate_scoped_handoff.py:116",
+      "workstream_id": "G12",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F005",
+      "audit_role": "core",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "61a266733b12f89faf2f29dfe25665b5193ca53b190d35d38a06dfad2fe7c337",
+      "severity": "warning",
+      "reference": "odyssey_core/candidate_attribution.py:107",
+      "workstream_id": "G12",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F006",
+      "audit_role": "runtime",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "125487734597388f055925b8896a632fb8c6297b8180c88a01fb6e9b35b42a6c",
+      "severity": "blocking",
+      "reference": "odyssey_core/whole_source_compiler.py:216",
+      "workstream_id": "G05",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F007",
+      "audit_role": "runtime",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "8eb310c670ac4052c14cb1d585e70d7b970a979c462c14a91aa793e5457461c7",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:1954",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F008",
+      "audit_role": "runtime",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "d1a51beb06c9e819977fbfed385fe498e50909f53cac9cc608a2bf2ed21ebc36",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/composition.py:6253",
+      "workstream_id": "G06",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F009",
+      "audit_role": "runtime",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "cf895cdd57c4f3e2b147a491995b7072d5153b2d3211dc2b30640d696c140252",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:1185",
+      "workstream_id": "G07",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F010",
+      "audit_role": "runtime",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "e7461fa19c5659ed4d7574647744cdb3fef6a296beb8d23a2b6d36c5e2a33eba",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:2805",
+      "workstream_id": "G07",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F011",
+      "audit_role": "runtime",
+      "audit_index": 6,
+      "audit_fingerprint_sha256": "5dee62a271927390f81d0048107f77c610efbcabdb59de6e47f8e25c3a503800",
+      "severity": "warning",
+      "reference": "odyssey_runtime/composition.py:4635",
+      "workstream_id": "G09",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F012",
+      "audit_role": "runtime",
+      "audit_index": 7,
+      "audit_fingerprint_sha256": "dbd730e7879fbe398b24d657e027b33f4be3d42baa9ef6ca4d0c4c0576be7d6e",
+      "severity": "warning",
+      "reference": "odyssey_runtime/composition.py:6513",
+      "workstream_id": "G11",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F013",
+      "audit_role": "apps_ui",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "6a74bd63619a18ce0f99352eb262080cf1041a1ae0ea212818ae80e3f0ffe815",
+      "severity": "blocking",
+      "reference": "odyssey_runtime/whole_source_light.py:2707",
+      "workstream_id": "G07",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F014",
+      "audit_role": "apps_ui",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "53c2f0b17025c0895ccff50f9a0b555a2dc57d84569f3860443c1794ef6ac3b2",
+      "severity": "blocking",
+      "reference": "odyssey_apps/tasks/dependent_target.py:65",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F015",
+      "audit_role": "apps_ui",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "e8ed8badb40e851948b9ab089e969a981126b32f703337fb4b282dce886041fa",
+      "severity": "blocking",
+      "reference": "odyssey_apps/tasks/planning.py:90",
+      "workstream_id": "G08",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F016",
+      "audit_role": "apps_ui",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "faee55f6ca09cc6bc2b446d5c478f2c96affc5f0955d4f3fabc2226f8095d0a0",
+      "severity": "warning",
+      "reference": "workflows/storage-write.ts:123",
+      "workstream_id": "G12",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F017",
+      "audit_role": "apps_ui",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "09318884681904d5eb78f42f58cbc57382e1c3ca50a481cf4126b63d9f43ed09",
+      "severity": "warning",
+      "reference": "odyssey_apps/calendar/queries.py:218",
+      "workstream_id": "G10",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F018",
+      "audit_role": "apps_ui",
+      "audit_index": 6,
+      "audit_fingerprint_sha256": "d47191bb954c6ecf43ca51e773a65aaef17a14f4744d6e8cb5884c68d4fd1bcb",
+      "severity": "warning",
+      "reference": "odyssey_apps/events/execution.py:108",
+      "workstream_id": "G09",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F019",
+      "audit_role": "apps_ui",
+      "audit_index": 7,
+      "audit_fingerprint_sha256": "553ef8fdeb79ec0d42ee021f6c86f6d5ee8bcae8f6aa627aacc407ec4843d599",
+      "severity": "warning",
+      "reference": "deploy/odyssey-dev-runtime.service:7",
+      "workstream_id": "G13",
+      "state": "deferred_after_r0",
+      "closure": null
+    },
+    {
+      "id": "R0-F020",
+      "audit_role": "qa_ops",
+      "audit_index": 1,
+      "audit_fingerprint_sha256": "ebdfbf9012943be5af5493316880f5471fb7768950532d046ac168ad2bcac951",
+      "severity": "blocking",
+      "reference": "scripts/odyssey_stage_acceptance.py:211",
+      "workstream_id": "G01",
+      "state": "in_progress",
+      "closure": null
+    },
+    {
+      "id": "R0-F021",
+      "audit_role": "qa_ops",
+      "audit_index": 2,
+      "audit_fingerprint_sha256": "52284043750eef6ffa29bb20f116fecbedfcacb1e465986ee341acbe0cd6cde9",
+      "severity": "blocking",
+      "reference": "scripts/odyssey_agent_cycle.py:985",
+      "workstream_id": "G02",
+      "state": "open",
+      "closure": null
+    },
+    {
+      "id": "R0-F022",
+      "audit_role": "qa_ops",
+      "audit_index": 3,
+      "audit_fingerprint_sha256": "70422e3a8c89356087c9dfeddb6f7063f2dc0a12aaf389c597a3eff631f4278a",
+      "severity": "warning",
+      "reference": "scripts/odyssey_r0_browser_campaign.py:438",
+      "workstream_id": "G01",
+      "state": "in_progress",
+      "closure": null
+    },
+    {
+      "id": "R0-F023",
+      "audit_role": "qa_ops",
+      "audit_index": 4,
+      "audit_fingerprint_sha256": "64610e0fcbadd956921eebfcba551a870d70c384e530e0de3ffe59921eee91fe",
+      "severity": "warning",
+      "reference": "scripts/odyssey_r0_real_browser_case.cjs:64",
+      "workstream_id": "G01",
+      "state": "in_progress",
+      "closure": null
+    },
+    {
+      "id": "R0-F024",
+      "audit_role": "qa_ops",
+      "audit_index": 5,
+      "audit_fingerprint_sha256": "94dedba0bd8ee45b15e84ac767e12daae4612953be098fe5c8952c839434e0c1",
+      "severity": "warning",
+      "reference": ".github/workflows/odyssey-dev-contract-gate.yml:61",
+      "workstream_id": "G01",
+      "state": "in_progress",
+      "closure": null
+    }
+  ],
+  "followups": [
+    {
+      "id": "R0-N001",
+      "source": "Suite Python completa con índices de conocimiento reconstruidos y consultas repetidas en un vault ficticio.",
+      "observed_failure": "Las conexiones sqlite3 usadas como context manager no se cerraban: con >950 descriptores abiertos, el supervisor y el worker de embeddings fallaban al invocar procesos con select(). 118 fallos en la suite.",
+      "expected_effect": "Todas las conexiones SQLite de Core/Runtime se cierran al salir de operaciones con éxito o error, preservando commit/rollback; las pruebas del supervisor/worker funcionan en la suite conjunta.",
+      "workstream_id": "G01",
+      "state": "in_progress",
+      "closure": null
+    },
+    {
+      "id": "R0-N002",
+      "source": "He conocido varias personas. Mañana tengo que escribirles.",
+      "observed_failure": "El asistente presentó la identificación de todos los miembros del grupo como condición para guardar una tarea; no hay recibo ni fallo de esa frase observado en la aplicación. El camino P4 existente sí prioriza la resolución de Persons para dependencias Core→Tasks y no demuestra una relación Task→fact literal en Day.",
+      "expected_effect": "Guardar un hecho literal de diario del día de captura, crear una tarea literal para mañana sin inventar destinatarios y enlazarla a la nota canónica del diario que contiene ese hecho, cuando el vínculo fuente está independientemente verificado. El enlace es a la nota/hecho, NO a identidades Person fabricadas. Para varios hechos de diario no vincular a uno cualquiera ni usar contexto ambiguo como identidad. Fallar o pedir aclaración solo por un impedimento material, sin perder el hecho independiente.",
+      "workstream_id": "G04",
+      "state": "open",
+      "closure": null
+    }
+  ]
+}

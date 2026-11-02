@@ -763,7 +763,7 @@ class ContextIndex:
         os.close(descriptor)
         temporary = Path(temporary_name)
         try:
-            with sqlite3.connect(temporary) as connection:
+            with closing(sqlite3.connect(temporary)) as connection, connection:
                 connection.executescript("""
                     CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                     CREATE TABLE vault_inventory (
@@ -945,7 +945,10 @@ class ContextIndex:
         # validation and embedding. Physical versions of EVERY file are still
         # checked; unknown or changed unrelated Notes force a safe rebuild.
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as inventory_db:
+            with (
+                closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as inventory_db,
+                inventory_db,
+            ):
                 check = dict(inventory_db.execute("SELECT key,value FROM metadata"))
                 if any(check.get(k) != v for k, v in _INDEX_MARKERS.items()) or check.get(
                     "schema_digest"
@@ -1081,7 +1084,7 @@ class ContextIndex:
         # unrelated Notes; missing/corrupt indexed rows must fail closed.
         affected = frozenset(changed_requested)
         try:
-            with sqlite3.connect(self.path) as connection:
+            with closing(sqlite3.connect(self.path)) as connection, connection:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Context index markers are incompatible")
@@ -1316,7 +1319,7 @@ class ContextIndex:
         if not 1 <= max_changed <= 256:
             raise ValueError("External reconciliation requires a bounded mutation budget")
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as conn:
+            with closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as conn, conn:
                 markers = dict(conn.execute("SELECT key,value FROM metadata"))
                 if any(markers.get(k) != v for k, v in _INDEX_MARKERS.items()) or markers.get(
                     "schema_digest"
@@ -1430,7 +1433,7 @@ class ContextIndex:
                 for item in values
             )
         try:
-            with sqlite3.connect(self.path) as connection:
+            with closing(sqlite3.connect(self.path)) as connection, connection:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Context index markers are incompatible")
@@ -1576,7 +1579,10 @@ class ContextIndex:
         ):
             raise ValueError("Invalid bounded canonical name hint request")
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as connection,
+                connection,
+            ):
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Canonical hint index markers are incompatible")
@@ -1642,7 +1648,10 @@ class ContextIndex:
         filter_definitions = _filter_definitions(schema)
         normalized_filters = _normalize_filters(schema, filters, type, required_tags)
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as connection,
+                connection,
+            ):
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise ContextIndexError("Context index markers are incompatible")

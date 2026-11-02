@@ -1,0 +1,697 @@
+{
+  "schema": "odyssey-r0-semantic-branch-baseline-v1",
+  "pinned_source_sha": "2dfd87ca251847012eb4932f6bb6b80ec38ddbe5",
+  "interpretation": "All findings are review debts, never approved semantic branches. Deletions allowed; new suspicious conditions must be reviewed and proven generic before baseline change.",
+  "observations": [
+    {
+      "file": "odyssey_apps/events/execution.py",
+      "owner": "bound_occurrence",
+      "predicate_sha256": "c72418cb61d00d2e01c7d5472cce871d5469a8ff00313b9df49d3d6878be68ca",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/events/interpretation.py",
+      "owner": "_unique_source_span",
+      "predicate_sha256": "f8be43f8d1b874a57230194e02108cec9a90bd9b940350610ac3cedbeb1f06a0",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/events/proposal.py",
+      "owner": "validate_event_proposal",
+      "predicate_sha256": "736d15f1469da587da0639bd7417a7dc547a4da02a5b5872960399b01b61a0ef",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/fact_candidates.py",
+      "owner": "OpenAIFactCandidateRouter.propose",
+      "predicate_sha256": "235a71daf25e39d7f11860e33af46c9cdacd4cf5a29e5b2ffad983b2b1220eab",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/tasks/dependent_target.py",
+      "owner": "TaskPersonReference.require_current",
+      "predicate_sha256": "d23afdd78f453d80bf7de20a37a483d78c25a1e42d0331ed7e9ed3d5d70de82d",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/tasks/dependent_target.py",
+      "owner": "TaskPersonReferenceSet.__post_init__",
+      "predicate_sha256": "eadb23f6228f7e5c90292f047b4a8efdb44387284d396d1c84a0427156f114fe",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/tasks/dependent_target.py",
+      "owner": "prove_dependent_person_reference",
+      "predicate_sha256": "4ce9b9d48b8ecbd7e12b14bf0ff6ae08f3dce177d83e95c2e3bc4faf81eadade",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_apps/tasks/planning.py",
+      "owner": "TaskCorePlanner.bind_verified_source_note_names",
+      "predicate_sha256": "be4d993b40509354850ae6842f56c2d58c59a9932ee977c66da59f251b29cf8e",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/atomic_facts.py",
+      "owner": "_fact_blocks",
+      "predicate_sha256": "9d5b2159ea44ea3e43c998fe59fd991d892a514e9335109120592889293d4126",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_context.py",
+      "owner": "CoreCandidateContext.validate",
+      "predicate_sha256": "34ccf42f05243d72a4c33220bcc839fa021b18ac99f9646bd5d0f46c055c90b4",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_continuation_context.py",
+      "owner": "prepare_selected_candidate_continuation",
+      "predicate_sha256": "6e3d4f15c99eb3f348f9471482b996707c664c6e6b12128c36121cff03b4b9bf",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_continuation_semantic.py",
+      "owner": "validate_independent_continuation_verdict",
+      "predicate_sha256": "7966303c395116352fd628d09ece0c943239c1f9814e86677dad12cdc1ce95d5",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_correction_chain.py",
+      "owner": "correction_chain",
+      "predicate_sha256": "011a4a96149f399cfdf2cc624eb3fab2e3fe225d1c417819cc0839f1db838ab1",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_coverage.py",
+      "owner": "validate_candidate_coverage_manifest",
+      "predicate_sha256": "ac2a806a5947b4840e80c5c10646a80ff7f1ca090b0fffaaf79d13abb02c9f76",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_grouped_property.py",
+      "owner": "validate_shared_subject_property",
+      "predicate_sha256": "400699fcf388b2dfe8904e198d5b58d0f898e6febf02cd552b14c6ed06335b61",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_grouped_temporal.py",
+      "owner": "validate_grouped_dated_occurrence",
+      "predicate_sha256": "13d38386d7437cc3aeb4055658368eb62f4f70be60ff7692bf78f20da79fe1af",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_independent_linked_events.py",
+      "owner": "validate_independent_linked_event_fact",
+      "predicate_sha256": "d1c603d2a49ff55e6fe6bad0e648c83ff362d09b2afe3ad74c339349ab4c845d",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_multi_participant.py",
+      "owner": "validate_two_named_participant_fact",
+      "predicate_sha256": "497f1518c8018ff3984fccaf333daaad8a6842376b321a907b1c33a94aaffdd8",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_multi_participant.py",
+      "owner": "validate_two_named_participant_fact",
+      "predicate_sha256": "d0c872ee6d385eb30564e7f2807547d7ab018c05c2bdef3d5a1454e2ae7f93d8",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_mutual_relation.py",
+      "owner": "validate_one_mutual_relationship_fact",
+      "predicate_sha256": "81a0227aa5cd60cb927e60008fb291237b9512f252c0fd47f5f19f5a8f86586a",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_pending_state.py",
+      "owner": "CandidatePendingRepository._validate",
+      "predicate_sha256": "ee148010855869c259f0d9a0f277857a6765114461620e423f55df4e05f77b2f",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_reference_handoff.py",
+      "owner": "find_single_candidate_canonical_handoff",
+      "predicate_sha256": "f07ad02572bc525afccf895710233236181b8dc14db2e9b77993802cf1c8b125",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_scoped_handoff.py",
+      "owner": "CoreScopedPlanningUnit.scoped_request",
+      "predicate_sha256": "9016fdecd85af4352e297355a973533f8bdd3fcf37148923c3b17130f2c30c97",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_scoped_handoff.py",
+      "owner": "CoreScopedPlanningUnit.scoped_request",
+      "predicate_sha256": "a45bf7fabe999d7ce53a7454499661eb2462d2246b8bb90d0ded166678868fdb",
+      "categories": [
+        "semantic_count_review",
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_scoped_handoff.py",
+      "owner": "preview_independent_candidate_scopes",
+      "predicate_sha256": "484a407757f1b5a777f5e7cb8509aedd966d183e3af9228bc9466f0d4056ef8f",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_scoped_handoff.py",
+      "owner": "preview_independent_candidate_scopes",
+      "predicate_sha256": "576bfd5a625573ccf5f1d2d91f2e6d95c3748f79481c2e5c4ff9575700f266ed",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_scoped_handoff.py",
+      "owner": "preview_independent_candidate_scopes",
+      "predicate_sha256": "dcadcff07e027e4aec9cc0dc068c0368b8aaf07b14bc773127a234643be79b28",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_scoped_planning.py",
+      "owner": "merge_scoped_core_plans_for_review",
+      "predicate_sha256": "9a7871d039df779551b276c7998e15f35843136585f76b539c89d920db8f4fc1",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_sensitive_statement.py",
+      "owner": "supports_sensitive_literal_candidates",
+      "predicate_sha256": "6b8db9ceeb1f1112dbeb5dbff80f7df638608c9ec0055b6235795a39206d34e3",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_sequential_contacts.py",
+      "owner": "validate_two_sequential_contacts",
+      "predicate_sha256": "0d4366906beff13f81a493adb05e83f2495d0608fded3e9f2639cc3901b70c98",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_sequential_contacts.py",
+      "owner": "validate_two_sequential_contacts",
+      "predicate_sha256": "12fbfaada2a55d8f8c458071eea9293e048fe79a3ce645c3e11fd255fe75f3a2",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_sequential_contacts.py",
+      "owner": "validate_two_sequential_contacts",
+      "predicate_sha256": "6339726ab2eb8ea3f820dbb984cfa591925b93b359df6be1a7f78f156fa1da04",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_sequential_contacts.py",
+      "owner": "validate_two_sequential_contacts",
+      "predicate_sha256": "83c2d38968fd3c7d543d9f13736387c199220a794581302dafa1352d6822e7ea",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/candidate_sequential_contacts.py",
+      "owner": "validate_two_sequential_contacts",
+      "predicate_sha256": "ec25f46a520440e6155eb5538227b077b13455fd0fcf38bea907abe1a6ca00b6",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/conversations.py",
+      "owner": "ConversationRepository._append_main",
+      "predicate_sha256": "3483bc092c9a1c2827fb61ef88100bdd64d5545eca5284512d49e99c1476651e",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/conversations.py",
+      "owner": "ConversationRepository.append_turn",
+      "predicate_sha256": "2aebd393596209c5356e77dbac964e6779cfb976ed5acb215fc3b99b25cfeeb6",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/dependent_group_evidence.py",
+      "owner": "_require_complete_person_cohort",
+      "predicate_sha256": "15fe8a84809f0ab1523281ff693d1d500a3fe6c21ee458002c4fc3fde2c9ed18",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/dependent_group_evidence.py",
+      "owner": "_require_complete_person_cohort",
+      "predicate_sha256": "4c5a5855dc061c95cd1adcf2f8cd0b51b3c4b3999c1c6795f4efc52ebea7fbfd",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/dependent_group_evidence.py",
+      "owner": "prove_canonical_group_handoff",
+      "predicate_sha256": "51c5472ef3492e7439d0a192f4f425e7952d2f6bcfd80fa4eb839de6c3d6917d",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/dependent_group_evidence.py",
+      "owner": "prove_canonical_group_handoff",
+      "predicate_sha256": "741a41628f0f62a88b531653c2e04250eb095c5569fabd0e27209c915fbea0cc",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/dependent_group_evidence.py",
+      "owner": "prove_canonical_group_handoff",
+      "predicate_sha256": "b142b987e5791f17db1136ef9c3ce6c9a843ab66837524dc9a1083f12c9d0280",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/execution_context.py",
+      "owner": "NoteMention.__post_init__",
+      "predicate_sha256": "11dbdf18427afe6980b14678cbdef535a942e1bbcb9db32e139ef88374812d1c",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/experimental_luna_planning.py",
+      "owner": "OpenAILunaExperimentalPlanner.bind_verified_source_note_names",
+      "predicate_sha256": "9fe1e9a79b7664dfe1f20da141c3b51c4c6097448e0f549d8c1fb052b5b29121",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/experimental_luna_planning.py",
+      "owner": "_validate_semantic_temporal_evidence",
+      "predicate_sha256": "e03ad2d2a7e71ba9c3a205f859a1d9235060fa5554d19231fea70f790b86772a",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/experimental_luna_planning.py",
+      "owner": "render_luna_experimental_prompt",
+      "predicate_sha256": "fa402ba74cb2bab7944c6fac80e8b3ac011604229428c171624ea862a7615156",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/hybrid_fact_presentation.py",
+      "owner": "normalize_hybrid_day_clock_prefix",
+      "predicate_sha256": "00d08bacb9f04df90ee5854a332612877fc1754dd3ef8cb145bc923eada0f762",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/hybrid_fact_presentation.py",
+      "owner": "normalize_hybrid_day_clock_prefix",
+      "predicate_sha256": "d2f6636e597ed619a9adeb3f61ee1344596a155fd72f8fdb27d469a7e7f99a28",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/independent_source_scopes.py",
+      "owner": "verify_independent_source_scopes",
+      "predicate_sha256": "608a319f3b81b88413abb72875160700f5b0182ecc9deceadb2d2e26bbbfa15a",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/indexed_queries.py",
+      "owner": "CoreIndexedQueries._ground",
+      "predicate_sha256": "e4e294e901ecb20f24b005d1e10d463e8e9ebf7fe7c83cc05c4120779d352394",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/local_conversations.py",
+      "owner": "LocalConversationStore.append_turn",
+      "predicate_sha256": "548e276b97bf4ba18a74abbe9ac971c60202ce9405ca8e01d72bb9947ff6ec30",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/notes/codec.py",
+      "owner": "_split_inline_array",
+      "predicate_sha256": "a240bd750efbcf1814d917321b49571cd7b83366e3e77f137be7c5ec651b2e3a",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/plural_task_readback.py",
+      "owner": "verify_plural_task_markdown",
+      "predicate_sha256": "f9851339ed8e475d907e7c7b61e2fb8e4c53843f9c07fed5bd9d1ba9fbad4b05",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/qualitative_fact_preservation.py",
+      "owner": "_qualified_day_fact",
+      "predicate_sha256": "9f5df580e1aeb793b5d4f341c8964f660381ebdf63716d986e33cee83ba10dee",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/request_planning.py",
+      "owner": "_validate_selection",
+      "predicate_sha256": "a4277fc1c8e2ffc815b201e890434dc93d7352613ba80f0f87b8efe47d56efe6",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/semantic_write.py",
+      "owner": "_decode_candidate_scope",
+      "predicate_sha256": "0ce5d3024fefbecd31b9eb15e6bb874c40f00512779247071032c56d418cc479",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/semantic_write.py",
+      "owner": "_decode_candidate_scope",
+      "predicate_sha256": "f4a2ec91de15805c7bb60433d66fcfb292c997ce89d6250dea3a2f0fa7897779",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/temporal_group_composition.py",
+      "owner": "compose_shared_clock_group",
+      "predicate_sha256": "01ae4dbcc74c4312693a9f2d30462b55fa10ffbf9a015b20aded359ad56bd652",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/whole_message_coverage.py",
+      "owner": "validate_whole_message_coverage",
+      "predicate_sha256": "7f44fedd4c16e81a6195986f8f84c9bf58eb98a3d01719a953fa6a8842b14222",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/whole_message_coverage.py",
+      "owner": "validate_whole_message_coverage",
+      "predicate_sha256": "87ccd62084944c3748ea04c2b2f9cba4b5cfd5cea49d0e013d1122157f28c747",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/whole_message_coverage.py",
+      "owner": "validate_whole_message_coverage",
+      "predicate_sha256": "f86fcdc049151c1e5d6f33c6aa81f5d0280b98037f13c5d19c05f5efe3c1c9f9",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/whole_source_compiler.py",
+      "owner": "compile_reviewed_operations",
+      "predicate_sha256": "2955e91a120d067d25bbc92ff0efb5ae22d9fd1b3de3d1c5f08f1c4f625b748e",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_core/whole_source_readback.py",
+      "owner": "assert_reviewed_markdown",
+      "predicate_sha256": "316b15974239cc1217d74a3f17eff87e7243595a30171211e3b3f7b19ec6897c",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/ambiguous_route_pending.py",
+      "owner": "preserve_unresolved_dependent_reference",
+      "predicate_sha256": "4e61195c4371d8f4161efd67981a478cfbd158ab9547208ffb7980f5ea2bb3e7",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/candidate_route_dispatch.py",
+      "owner": "execute_candidate_routed_message.run_unit",
+      "predicate_sha256": "361a2294eca9bcf6bf523a180d26f3f0cfebcbff824771a57b677c27b60b76af",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/candidate_route_dispatch.py",
+      "owner": "execute_candidate_routed_message.run_unit",
+      "predicate_sha256": "71a582132da0f0fde94ad325183e9ae461cecae05a5fd9e6cd8f11bcc23f8bae",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/composition.py",
+      "owner": "RuntimeComposition._clarification_view",
+      "predicate_sha256": "02210a56bb1ec12c0fadce0abb229080c9bfc5555afb87bde16178e11cb1d841",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/composition.py",
+      "owner": "RuntimeComposition.persist_product_assistant_response",
+      "predicate_sha256": "092dd3a229e0ac20fd4c7da8288a19091b17602277bd5541785b2c20ea474970",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/conversation_error.py",
+      "owner": "diagnose_trusted_execution_graph",
+      "predicate_sha256": "e1e3bee6017fa921aff6e9e3867587d19fb58ea0c8bc9c1ea20af5311bf81405",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/delivery_results.py",
+      "owner": "LocalDeliveryResultStore.begin_operation_manifest",
+      "predicate_sha256": "5fc05e3eb10b4bcafc80b24f608e5f923e5777a99e6c6473ef204a4c56e5db1a",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/delivery_results.py",
+      "owner": "LocalDeliveryResultStore.begin_operation_manifest",
+      "predicate_sha256": "f19b255f96bb434984c67f02d7857852691f99bc20ce66c71619151fc9d036f9",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/delivery_results.py",
+      "owner": "LocalDeliveryResultStore.inspect_operation_manifest",
+      "predicate_sha256": "7bb1dc5e96af58faea00702d3ef741eac0bf51d00a7446d53ae1057a58f9bc2d",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/hybrid_group_compiler.py",
+      "owner": "_needs_joint_interpretation",
+      "predicate_sha256": "96557f75d678d3697c875297b63874a9643dd9ef15cdc52bf3129ce8e6c889d1",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/hybrid_group_compiler.py",
+      "owner": "_needs_joint_interpretation",
+      "predicate_sha256": "fcb39b827ff106950f0a3b9461f64cf0a96eb2503101dc109beb27ed29cbdf1f",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/hybrid_group_compiler.py",
+      "owner": "_requires_shared_clause_review",
+      "predicate_sha256": "4711f4a2e6c9d758cbbcc28e90fb5811208d1eca535c05e213ed9eddd2597492",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/scoped_event_handoff.py",
+      "owner": "ScopedCoreEventHandoff.remember",
+      "predicate_sha256": "637c1e463e8b63db56a2c8fdbb8611b1890a16d918bc645a8af1f9d9957245f5",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_dependent_core_task",
+      "predicate_sha256": "5ea2d28ac09dc1cbb2675dcb7b523f52ecf1079b48c0ea8721435d00eee2efb0",
+      "categories": [
+        "semantic_count_review",
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_dependent_graph",
+      "predicate_sha256": "4546e52473387ee87eea9fe4e2ce275396bdf6cad8789ff7b6b14ed00085c7c9",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_dependent_graph",
+      "predicate_sha256": "78820dc7abc1d0c7796a183d4b2d263b0a1408b17e763a5dbbebe8b3bf83f02e",
+      "categories": [
+        "semantic_count_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_dependent_graph",
+      "predicate_sha256": "8624437909006553105fc65255b1fa3077d674a6d1bbfd86a7197bb6556e13ae",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_dependent_graph",
+      "predicate_sha256": "a5cf05b20299de95f1e24fccbfcb609edc9ec0841b3ce7a1f044f6a977227b4d",
+      "categories": [
+        "typed_dispatch_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_independent_scopes",
+      "predicate_sha256": "f7271595e3425bbf9c9ec11ca9ea19be7b83b8d7a863affe7bbc03e5e22ab91f",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_source",
+      "predicate_sha256": "0f79e0830e62469a7cc01e9e8d627ec59c386e8dacee35e9937108b4c35c6025",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_source",
+      "predicate_sha256": "6de9beac4691a4080afa5f5ad2f488ed67098524cdb73e67d11cf15fb1263e32",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._execute_source",
+      "predicate_sha256": "70cc980d7873ab8cdf2f01553dcd10edbb6275283d798c97c00d2310385a5a32",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._prewrite_reason_code",
+      "predicate_sha256": "4c19aa5446c48b0611b3e0260259b221b89bb3c7476d186c6fe988990649ac34",
+      "categories": [
+        "source_literal_review"
+      ]
+    },
+    {
+      "file": "odyssey_runtime/whole_source_light.py",
+      "owner": "WholeSourceLightExecutor._prewrite_reason_code",
+      "predicate_sha256": "eb766e59d43dabffcdbb8137dd6e4681a9741395fba13c0b3ff5776f29543239",
+      "categories": [
+        "source_literal_review"
+      ]
+    }
+  ]
+}

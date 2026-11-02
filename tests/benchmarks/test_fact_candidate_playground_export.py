@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from benchmarks.fact_candidate_v2_preflight.export_playground_requests import (
@@ -28,6 +29,13 @@ def test_manual_export_is_only_frozen_synthetic_router_data() -> None:
     assert "sk-proj-" not in rendered
 
 
-def test_checked_in_export_equals_current_requests() -> None:
-    """Review bundle changes when the production-shaped inputs change."""
-    assert json.loads(OUTPUT.read_text(encoding="utf-8")) == export()
+def test_archived_playground_export_remains_intact_but_cannot_approve_current_router() -> None:
+    """The previously shared manual requests are historical, not a live pin."""
+    assert hashlib.sha256(OUTPUT.read_bytes()).hexdigest() == (
+        "51159a04781a4462503d34d6bab7980967f565e6795dce5527353172c548bf95"
+    )
+    old = json.loads(OUTPUT.read_text(encoding="utf-8"))
+    active = export()
+    assert old != active  # Current prompt changed; don't re-export over old evidence.
+    assert old["executes_provider"] is active["executes_provider"] is False
+    assert old["validated_model_equivalence"] is active["validated_model_equivalence"] is False

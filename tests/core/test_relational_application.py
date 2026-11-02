@@ -3659,3 +3659,101 @@ def test_current_document_source_bounds_two_relational_fact_references(
     assert (vault / "people/clara.md").read_bytes() == before[vault / "people/clara.md"]
     assert len(domain_markdown_paths(vault)) == len(before)
     assert_capture_day_materialized(vault)
+
+
+@pytest.mark.parametrize(
+    ("question", "source_fact", "relation", "name", "note_type"),
+    [
+        ("¿Quién es mi padre?", "Mi padre es [[Eric]].", "mi padre", "Eric", "person"),
+        ("¿Cuál es mi proyecto?", "Mi proyecto es [[Atlas]].", "mi proyecto", "Atlas", "project"),
+    ],
+)
+def test_source_grounded_self_relative_read_reaches_canonical_target_without_write(
+    tmp_path: Path,
+    schema: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    question: str,
+    source_fact: str,
+    relation: str,
+    name: str,
+    note_type: str,
+) -> None:
+    """R32: one generic relation reader, independent of the relation or Note type."""
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(vault, "people/edgar.md", "edgar", "Edgar", fact(source_fact))
+    write_note(vault, f"entities/{name}.md", "target", name, "", note_type=note_type)
+    before = {p.relative_to(vault): p.read_bytes() for p in vault.rglob("*.md")}
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        application,
+        "get_context",
+        lambda *args, **kwargs: calls.append(kwargs) or object(),
+    )
+    plan = RequestPlan(
+        (
+            RetrieveAction(
+                SelectionCriteria(
+                    None,
+                    question,
+                    note_type,
+                    (),
+                    None,
+                    relational_reference=RelationalReference(relation, "self", None, "one"),
+                )
+            ),
+        ),
+        (),
+    )
+    result = run(vault, schema, plan, selector=RelevantFactSelector(relation))
+    assert result.status is application.ApplicationStatus.COMPLETED, [
+        (a.reason, a.status.value) for a in result.action_results
+    ]
+    assert calls[0]["allowed_note_ids"] == frozenset({"target"})
+    assert {p.relative_to(vault): p.read_bytes() for p in vault.rglob("*.md")} == before
+
+
+@pytest.mark.parametrize(
+    ("relationship", "member", "note_type"),
+    [
+        ("mi padre", "Eric", "person"),
+        ("mi proyecto", "Atlas", "project"),
+        ("mi documento", "Informe", "document"),
+    ],
+)
+def test_read_only_source_relationship_reuses_same_generic_core_resolver(
+    tmp_path: Path,
+    schema: dict,
+    monkeypatch: pytest.MonkeyPatch,
+    relationship: str,
+    member: str,
+    note_type: str,
+) -> None:
+    """A known SELF relationship resolves any canonical note type without mutation."""
+    from dataclasses import replace
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    write_note(
+        vault,
+        "people/edgar.md",
+        "edgar",
+        "Edgar",
+        fact(f"{relationship.capitalize()} es [[{member}]]."),
+    )
+    member_id = "linked-member"
+    write_note(vault, f"linked/{member}.md", member_id, member, "", note_type=note_type)
+    before = {p.relative_to(vault).as_posix(): p.read_bytes() for p in vault.rglob("*.md")}
+    calls = []
+    monkeypatch.setattr(
+        application, "get_context", lambda *args, **kwargs: calls.append(kwargs) or object()
+    )
+    selection = replace(
+        relational_selection(relationship, source_kind="self", source_query=None),
+        type=note_type,
+    )
+    plan = RequestPlan((RetrieveAction(selection),), ())
+    outcome = run(vault, schema, plan)
+    assert outcome.status is application.ApplicationStatus.COMPLETED
+    assert calls and calls[0]["allowed_note_ids"] == frozenset({member_id})
+    assert {p.relative_to(vault).as_posix(): p.read_bytes() for p in vault.rglob("*.md")} == before

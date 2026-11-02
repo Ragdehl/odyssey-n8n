@@ -56,6 +56,8 @@ def assert_reviewed_markdown(
     review: Mapping[str, Any],
     self_roles: tuple[bool, ...],
     self_id: str,
+    reference_types: Mapping[str, str | None] | None = None,
+    canonical_owners: Mapping[int, tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Prove each assertion's exact owner/text/links and new-or-existing receipt.
 
@@ -66,29 +68,49 @@ def assert_reviewed_markdown(
     """
     reviewed = review["facts"]
     assert len(reviewed) == len(self_roles) and reviewed
+    approved_owners = canonical_owners or {}
+    assert all(
+        type(index) is int
+        and 0 <= index < len(reviewed)
+        and isinstance(binding, tuple)
+        and len(binding) == 2
+        and all(isinstance(part, str) and part for part in binding)
+        for index, binding in approved_owners.items()
+    ), "Unverified owner readback bindings"
     changed = {p: content for p, content in after.items() if before.get(p) != content}
     parsed = {path: parse_note(text) for path, text in after.items()}
     assert len({note.metadata["id"] for note in parsed.values()}) == len(parsed)
     by_id = {note.metadata["id"]: (path, note) for path, note in parsed.items()}
-    people = [note for note in parsed.values() if note.metadata.get("type") == "person"]
+    # A referenced canonical identity may be any type admitted by NoteSchema;
+    # role words and model output never grant an ID or silently coerce to Person.
+    expected_types = reference_types or {}
     references_by_name: dict[str, str] = {}
     for item in reviewed:
         for name in item["reference_names"]:
             matches = [
                 note
-                for note in people
-                if note.metadata.get("name", "").casefold() == name.casefold()
+                for note in parsed.values()
+                if note.metadata.get("deleted") is not True
+                and note.metadata.get("name", "").casefold() == name.casefold()
+                and (
+                    expected_types.get(name) is None
+                    or note.metadata.get("type") == expected_types[name]
+                )
             ]
-            assert len(matches) == 1, "A referenced name is not a unique canonical person"
+            assert len(matches) == 1, "A referenced identity is not canonical and unique"
             references_by_name[name] = str(matches[0].metadata["id"])
 
     used: set[tuple[str, str, int]] = set()
     expected_new = Counter()
+    verified_subrequests: set[tuple[str, str]] = set()
     readback = []
     notes_query = NotesQueryService(repository, schema, context_index)
     for position, item in enumerate(reviewed):
         kind, date = item["kind"], item["date"]
-        if kind == "record" and date is not None:
+        if position in approved_owners:
+            assert kind == "record" and not self_roles[position]
+            owner_id, subrequest = approved_owners[position]
+        elif kind == "record" and date is not None:
             owner_id = "date:" + date
             subrequest = f"{request_id}-day-{date}"
         elif kind == "record":
@@ -109,6 +131,7 @@ def assert_reviewed_markdown(
             assert matches[0].metadata["target_date"] == date
         else:
             raise AssertionError("Unknown reviewed operation")
+        verified_subrequests.add((owner_id, subrequest))
         assert owner_id in by_id, "Reviewed fact owner is physically absent"
         path, note = by_id[owner_id]
         now_atoms = parse_atomic_facts(note.content)
@@ -170,14 +193,7 @@ def assert_reviewed_markdown(
             }
         )
 
-    for owner_id, subrequest in {
-        (row["owner_id"], f"{request_id}-day-{row['source_date']}")
-        if row["source_kind"] == "record" and row["source_date"] is not None
-        else (row["owner_id"], f"{request_id}-self")
-        if row["source_kind"] == "record"
-        else (row["owner_id"], f"{request_id}-task-{row['source_position']}")
-        for row in readback
-    }:
+    for owner_id, subrequest in verified_subrequests:
         new_atoms = [
             fact
             for fact in parse_atomic_facts(by_id[owner_id][1].content)

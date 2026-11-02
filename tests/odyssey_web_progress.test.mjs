@@ -256,3 +256,57 @@ test("execution graph displays both verified Core and Session predecessor routes
   assert.match(graph.textContent, /Depende del camino 1/);
   assert.match(graph.textContent, /Depende de los caminos 1, 3/);
 });
+
+
+test("graph reports an actual failed Core read preflight without inventing missing identity", () => {
+  const graph = renderExecutionFlow(fakeDocument, {
+    operational: {total_duration_ms: 5, stages: [
+      {name: "core.read_preflight", outcome: "failed", duration_ms: 2, error_category: "ValueError", provider_calls: []},
+      {name: "application.router", outcome: "completed", duration_ms: 1, provider_calls: []},
+    ]},
+    execution_ledger: {status: "needs_attention", stages: [
+      {name: "core.read_preflight", outcome: "failed", route_index: null, parent_stage: null},
+    ], write_receipts: [], affected_stable_note_ids: [], events: [], routes: [], events_truncated: false},
+  }, {sourceText: "¿Quién es mi padre?"});
+  assert.match(graph.textContent, /Core · interpretación inicial de lectura/);
+  assert.match(graph.textContent, /no demuestra que la información buscada sea inexistente/);
+  assert.match(graph.textContent, /Necesita revisión/);
+  assert.doesNotMatch(graph.textContent, /padre no existe|no tienes padre/i);
+});
+
+test("graph admits that it cannot identify failure stage instead of saying every route completed", () => {
+  const graph = renderExecutionFlow(fakeDocument, {
+    operational: {total_duration_ms: 4, stages: [
+      {name: "planner", outcome: "completed", duration_ms: 4, provider_calls: []},
+    ]},
+    execution_ledger: {status: "needs_attention", stages: [
+      {name: "planner", outcome: "completed", route_index: null, parent_stage: null},
+    ], write_receipts: [], affected_stable_note_ids: [], events: [], routes: [], events_truncated: false},
+  });
+  assert.match(graph.textContent, /historial no identifica una etapa fallida/);
+  assert.match(graph.textContent, /Necesita revisión/);
+  assert.doesNotMatch(graph.textContent, /Rutas completadas/);
+});
+
+test("graph renders all 10 verified source routes and 12 writes in a single route", () => {
+  const routes = Array.from({length: 10}, (_, index) => ({
+    capability: "core", text: `Afirmación ${index}.`, status: "completed",
+    stage_count: 1, temporal: [],
+    writes: Array.from({length: index === 0 ? 12 : 1}, (_, item) => ({
+      status: "succeeded", operation: "UPDATED", target: `note-${index}-${item}`,
+    })),
+  }));
+  const graph = renderExecutionFlow(fakeDocument, {
+    operational: {total_duration_ms: 10, stages: [
+      {name: "application.router", outcome: "completed", duration_ms: 1, provider_calls: []},
+      ...routes.map((_, index) => ({name: "core.writer", outcome: "completed", duration_ms: 1,
+        provider_calls: [], route_index: index})),
+    ]},
+    flow: {version: 1, input: routes.map(item => item.text).join(" "),
+      parallel_preparation: false, routes},
+  });
+  assert.match(graph.textContent, /note-0-0/);
+  assert.match(graph.textContent, /note-0-11/);
+  assert.match(graph.textContent, /note-9-0/);
+  assert.equal((graph.textContent.match(/Resultado de escritura Core registrado:/g) || []).length, 21);
+});

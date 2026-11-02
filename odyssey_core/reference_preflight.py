@@ -967,6 +967,92 @@ def is_reference_only_unit(unit: KnowledgeUnit) -> bool:
     )
 
 
+def single_relational_reference_helper_index(
+    action: WriteAction | Mapping[str, Any],
+) -> int | None:
+    """One Core-owned check for a factless relation helper and its consumer.
+
+    `WriteAction` is the already validated execution value; Mapping is its
+    persisted, untrusted pending-work shape. Both use the same cardinality,
+    dependency and non-write checks; only the representation differs.
+    No language, relationship taxonomy or canonical Note type is inspected.
+    """
+    stored = isinstance(action, Mapping)
+    if stored:
+        if action.get("kind") != "write":
+            return None
+        units = action.get("units")
+        if not isinstance(units, list):
+            return None
+    elif isinstance(action, WriteAction):
+        units = action.units
+    else:
+        return None
+    if len(units) != 2:
+        return None
+
+    def helper(unit: object) -> bool:
+        if stored:
+            if not isinstance(unit, Mapping):
+                return False
+            target = unit.get("target")
+            relation = target.get("relational_reference") if isinstance(target, Mapping) else None
+            return (
+                isinstance(relation, Mapping)
+                and relation.get("members") == "one"
+                and unit.get("intent") == "record"
+                and unit.get("cardinality", "one") == "one"
+                and unit.get("destination_type") is None
+                and not any(
+                    unit.get(key) for key in ("facts", "properties", "tag_changes", "references")
+                )
+            )
+        return (
+            isinstance(unit, KnowledgeUnit)
+            and is_reference_only_unit(unit)
+            and unit.target.relational_reference is not None
+            and unit.target.relational_reference.members == "one"
+        )
+
+    helper_indices = [index for index, unit in enumerate(units) if helper(unit)]
+    if len(helper_indices) != 1:
+        return None
+    helper_index = helper_indices[0]
+    consumer = units[1 - helper_index]
+    if stored:
+        if not isinstance(consumer, Mapping):
+            return None
+        target = consumer.get("target")
+        refs = consumer.get("references")
+        return (
+            helper_index
+            if (
+                isinstance(target, Mapping)
+                and target.get("relational_reference") is None
+                and consumer.get("facts")
+                and isinstance(refs, list)
+                and bool(refs)
+                and all(
+                    isinstance(ref, Mapping) and ref.get("target_index") == helper_index
+                    for ref in refs
+                )
+            )
+            else None
+        )
+    if not isinstance(consumer, KnowledgeUnit):
+        return None
+    return (
+        helper_index
+        if (
+            consumer.facts
+            and consumer.target.relational_reference is None
+            and consumer.references
+            and all(ref.target_index == helper_index for ref in consumer.references)
+        )
+        else None
+    )
+
+
 def _materialize_decision(
     unit_index: int,
     unit: KnowledgeUnit,

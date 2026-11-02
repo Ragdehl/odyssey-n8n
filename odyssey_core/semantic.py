@@ -11,6 +11,7 @@ import sqlite3
 import tempfile
 from array import array
 from collections.abc import Iterable, Sequence
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -338,7 +339,7 @@ class SemanticEntityIndex:
         os.close(descriptor)
         temporary = Path(temporary_name)
         try:
-            with sqlite3.connect(temporary) as connection:
+            with closing(sqlite3.connect(temporary)) as connection, connection:
                 connection.executescript(
                     """
                     CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -487,7 +488,7 @@ class SemanticEntityIndex:
 
         affected = frozenset(requested)
         try:
-            with sqlite3.connect(self.path) as connection:
+            with closing(sqlite3.connect(self.path)) as connection, connection:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise SemanticIndexError("Semantic index markers are incompatible")
@@ -599,7 +600,7 @@ class SemanticEntityIndex:
         vector = _normalized_vector(vectors[0])
         new_source_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         try:
-            with sqlite3.connect(self.path) as connection:
+            with closing(sqlite3.connect(self.path)) as connection, connection:
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                     raise SemanticIndexError("Semantic index markers are incompatible")
@@ -642,7 +643,10 @@ class SemanticEntityIndex:
         if not self.path.exists():
             return
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as connection,
+                connection,
+            ):
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
             if any(metadata.get(key) != value for key, value in _INDEX_MARKERS.items()):
                 raise SemanticIndexError("Refusing to delete an unverified semantic index")
@@ -687,7 +691,10 @@ class SemanticEntityIndex:
             raise ValueError("Semantic candidate type must be canonical text")
 
         try:
-            with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
+            with (
+                closing(sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)) as connection,
+                connection,
+            ):
                 metadata = dict(connection.execute("SELECT key, value FROM metadata"))
                 canonical_types = json.loads(metadata["canonical_types"])
                 if type is not None and type not in canonical_types:

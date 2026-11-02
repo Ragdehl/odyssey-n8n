@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from odyssey_core.dependent_reference_form import MIN_COMPLETE_COHORT_MEMBERS
 from odyssey_core.request_planning import (
     PlannerClarification,
     RequestPlan,
@@ -12,10 +13,12 @@ from odyssey_core.request_planning import (
     WriteAction,
 )
 from odyssey_core.write_plan_enrichment import (
+    MAX_CORE_REFERENCE_FACTS,
     CoreLinkFactSpec,
     add_core_reference_facts,
     ensure_complete_core_reference_set,
     ensure_visible_core_action_fact,
+    require_complete_named_source_references,
 )
 
 from .interpretation import TaskInterpretation, TaskOperation, TaskRelationshipRole
@@ -38,7 +41,7 @@ class TaskCorePlanner:
     ) -> None:
         self._planner = planner
         if verified_person_set and (
-            not 2 <= len(verified_person_set) <= 8
+            not MIN_COMPLETE_COHORT_MEMBERS <= len(verified_person_set) <= MAX_CORE_REFERENCE_FACTS
             or any(
                 not isinstance(p, tuple)
                 or len(p) != 2
@@ -84,7 +87,8 @@ class TaskCorePlanner:
         result = self._ensure_relationship_facts(result)
         result = self._ensure_verified_person_set(result)
         self._require_authorized_relationship_roles(result)
-        self._require_source_identity_links(result)
+        if self._interpretation.operation is TaskOperation.CREATE:
+            require_complete_named_source_references(result, self._verified_source_names)
         return result
 
     def _ensure_verified_person_set(self, plan: RequestPlan) -> RequestPlan:
@@ -142,36 +146,6 @@ class TaskCorePlanner:
             expected.remove(key)
         if expected:
             raise RequestPlanningError("Typed Task relationship was omitted")
-
-    def _require_source_identity_links(self, plan: RequestPlan) -> None:
-        """Prevent a generic Task label from disguising a dropped known person.
-
-        Source-name hints are read-only. Actual helper IDs are still selected
-        independently by Core/Writer. An uncertain name interpretation
-        must be revisited, not converted into a source-blind Task completion.
-        """
-        if self._interpretation.operation is not TaskOperation.CREATE:
-            return
-        people = [
-            h for h in self._verified_source_names if getattr(h, "note_type", None) == "person"
-        ]
-        if not people:
-            return
-        action = plan.actions[0]
-        assert isinstance(action, WriteAction)
-        primary = next(unit for unit in action.units if not unit.reference_lookup_only)
-        for person in people:
-            if not any(
-                reference.mention.casefold() == person.mention.casefold()
-                and reference.role in {"person", "identity", "assignee"}
-                and 0 <= reference.target_index < len(action.units)
-                and action.units[reference.target_index].reference_lookup_only
-                and action.units[reference.target_index].target.type == "person"
-                for reference in primary.references
-            ):
-                raise RequestPlanningError(
-                    "Task CREATE dropped a Core-verified named source person identity"
-                )
 
     def _ensure_visible_action(self, plan: RequestPlan) -> RequestPlan:
         """Delegate shared plan mechanics to Core, preserve Tasks CREATE policy."""
