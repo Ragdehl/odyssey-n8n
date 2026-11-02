@@ -302,6 +302,28 @@
           "expected_general_contract": "Any source fact (regardless of owner Note type) may be interpreted as context for any independently requested operation/Note. Core carries source spans+fact/note receipt+canonical identity/evidence; independent model reviews must attest relation, and E3 resolves and writes links. If members are unresolved, keep original wording without inventing identity; if any relation cannot be proven, preserve independent safely writable facts and do not assert a linked success. Verify on unrelated NoteSchema types, reordered clauses, mixed app operations, actor/stale/wrong-fact/ambiguous/replay negatives, and the original 33 fresh provider/browser cases.",
           "limit": "The active semantic P4↔Core↔Apps wiring is NOT repaired by removal; R33 remains not accepted. It is prohibited to replace this with another single-example, single-note-type or unused test-only guard."
         }
+      },
+      "r33_preimplementation_independent_generality_veto_20261102": {
+        "status": "RECONSIDER_NOT_IMPLEMENTED",
+        "review_type": "ONE bounded independent read-only Codex Generality design review, not the four final SHA auditors",
+        "reviewed_source_sha": "48f57198ee35b40db846a2023d0bf99bd6df0cb1",
+        "isolation": "Existing odyssey-scope-read native profile preflight PASSED (private paths and network denied; source read-only). One session gpt-6-sol medium. No product/source edits by auditor; no private vault or DEV access.",
+        "independent_verdict": "RECONSIDER: no safe minimal Task-to-Day extension, and wiring only one existing dependency cannot attest exact originating fact in a multi-fact Note.",
+        "observed_owner_chain": [
+          "Core whole_message_coverage.validate_whole_message_coverage: dependent_on_fact_index admitted only for earlier fact with shared canonical reference_names; literal facts with unspecified members cannot express context dependency safely.",
+          "Core whole_source_compiler.compile_reviewed_operations: transforms independently reviewed facts into Day/owner/Task actions, but does not consume the cross-fact dependency index or carry its provenance into a physical operation.",
+          "Core canonical_receipt_provenance.materialized_core_receipt, application.CanonicalReferenceEvidence and DependentReferenceGuard: genuine E3 identity/link proof already exists, but a direct receipt requires actual new note creation, not a specific fact appended to an existing Note.",
+          "Runtime whole_source_light._execute_dependent_graph: reviewed group edges are subsequently converted into TaskPersonReference/TaskPersonReferenceSet/TaskDependentTarget, not generic context between source facts; composition wires the existing delegated flow.",
+          "Tasks TaskCorePlanner: owns legitimate lifecycle data, must not choose which earlier fact is context or invent members."
+        ],
+        "pre_code_requirements": [
+          "Preserve independently reviewed semantic source→source relation separately from (never equivalent to) canonical identity. Do not assume chronological text order is execution order.",
+          "Reuse Core ReviewedFullSource, compiler, existing E3 receipts/CAS and normal references, not create another Task→Day or SourceFactLink mechanism.",
+          "Prove physical association to one exact prior request-marked fact (request_id, ordinal and source span), even when stored in updated Day with other unrelated facts and links, and protect actor/stale/alternate-note attempts.",
+          "Validate arbitrary note types and Core/Apps destinations, 0/1/N cross-relationships and reordered statements, literal unresolved text without invented Person links; leave unprovable contextual link pending without losing independent safe facts.",
+          "Exercise physical Markdown readback/replay and independent reviewer rejection; then fresh scoped Odyssey model/browser/n8n E2E before accepting product."
+        ],
+        "decision": "Do NOT implement ad hoc semantic code, do NOT reinterpret the previous R33 isolated Day-only PASS as the full feature. Scope remains G04/G11 within R0, not new stage. A revised owner-only design must pass pre-code Generality veto before change."
       }
     },
     {

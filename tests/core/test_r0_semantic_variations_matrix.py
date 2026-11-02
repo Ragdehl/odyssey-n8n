@@ -160,7 +160,7 @@ def test_future_live_semantic_challenges_cover_reorder_correction_conditionals_a
     )
 
 
-def test_matrix_preserves_official_32_and_covers_historical_r0_failure_families():
+def test_matrix_preserves_official_33_and_covers_historical_r0_failure_families():
     assert MATRIX["schema"] == "odyssey-r0-semantic-variations-v1"
     assert [c["id"] for c in CASES] == [f"V{i:03d}" for i in range(1, len(CASES) + 1)]
     assert len(CASES) >= 55
@@ -183,7 +183,9 @@ def test_matrix_preserves_official_32_and_covers_historical_r0_failure_families(
         (ROOT / "tests/fixtures/odyssey_additional_regressions_v1.json").read_text(encoding="utf-8")
     )
     assert original["case_ids"] == [f"F{i:02d}" for i in range(1, 28)]
-    assert [c["id"] for c in appended["cases"]] == [f"R{i}" for i in range(28, 33)]
+    assert [c["id"] for c in appended["cases"]] == [f"R{i}" for i in range(28, 34)]
+    assert [c["id"] for c in appended["cases"][:5]] == [f"R{i}" for i in range(28, 33)]
+    assert appended["cases"][-1]["live_acceptance"] == "pending"
     assert any("j’ai" in c["source"] for c in CASES)
     assert any("I met" in c["source"] for c in CASES)
     assert any(len(f["reference_names"]) >= 9 for c in CASES for f in c["facts"])
