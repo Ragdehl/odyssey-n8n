@@ -289,6 +289,29 @@ def run(*, names: list[str], output: Path | None, python: str) -> int:
     offline_env = {**os.environ, "PYTHONPATH": str(ROOT)}
     for secret in ("OPENAI_API_KEY", "OPENAI_ORGANIZATION", "OPENAI_PROJECT"):
         offline_env.pop(secret, None)
+    # This existing gate also rejects new production-only helpers which have
+    # no reachable production consumer, even when their isolated unit tests pass.
+    # A Git diff against the real integration base is required; without it,
+    # fail closed instead of silently skipping the architecture preflight.
+    use_check = [
+        python,
+        str(ROOT / "scripts/audit_semantic_branch_regressions.py"),
+        "--require-production-use",
+    ]
+    if os.environ.get("ODYSSEY_REVIEW_BASE_SHA"):
+        use_check.extend(("--base", os.environ["ODYSSEY_REVIEW_BASE_SHA"]))
+    checker = subprocess.run(
+        use_check,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=offline_env,
+    )
+    if checker.returncode != 0:
+        print("CROSS_SURFACE_GATE BLOCKED: unverified new production definitions")
+        print((checker.stdout + checker.stderr)[-4000:])
+        return 1
     proc = subprocess.run(
         command,
         cwd=ROOT,

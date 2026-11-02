@@ -47,6 +47,8 @@ jobs:
       # Shared E2/E3/Tasks/Work Sessions contracts must pass independently of
       # historical frozen benchmark gates. No API credentials are forwarded.
       - name: Cross-surface mutation regression gate
+        env:
+          ODYSSEY_REVIEW_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: python scripts/odyssey_cross_surface_gate.py --output /tmp/odyssey-cross-surface-ci.json
 
       - name: Run tests

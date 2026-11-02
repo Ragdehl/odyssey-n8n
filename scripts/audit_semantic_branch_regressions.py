@@ -9,9 +9,11 @@ No provider, personal notes, network, runtime process or code mutation.
 
 from __future__ import annotations
 
+import argparse
 import ast
 import hashlib
 import json
+import subprocess
 from collections import Counter
 from pathlib import Path
 
@@ -201,6 +203,132 @@ def audit(root: Path = ROOT, baseline_file: Path = BASELINE) -> dict:
     }
 
 
+def unreferenced_new_production_definitions(
+    before: dict[str, str], after: dict[str, str], production: dict[str, str]
+) -> list[dict[str, str]]:
+    """Block newly introduced source definitions without a reachable production caller.
+
+    A production caller that existed before the patch anchors the graph. New
+    functions calling each other are not themselves proof of integration.
+    Tests are deliberately excluded; static reachability is a NECESSARY but
+    never a sufficient condition for genuine reuse or semantic generality.
+    """
+    definitions: dict[tuple[str, str], ast.AST] = {}
+    for path, source in after.items():
+        if not path.startswith(PACKAGES) or not path.endswith(".py"):
+            continue
+        old_names = set()
+        if path in before:
+            old_names = {
+                (type(node).__name__, node.name)
+                for node in ast.parse(before[path], filename=path).body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            }
+        for node in ast.parse(source, filename=path).body:
+            if (
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and (type(node).__name__, node.name) not in old_names
+            ):
+                definitions[(path, node.name)] = node
+
+    if not definitions:
+        return []
+    by_name: dict[str, set[tuple[str, str]]] = {}
+    for key in definitions:
+        by_name.setdefault(key[1], set()).add(key)
+    uses: dict[tuple[str, str] | None, set[tuple[str, str]]] = {}
+    for path, source in production.items():
+        if not path.startswith(PACKAGES) or not path.endswith(".py"):
+            continue
+        tree = ast.parse(source, filename=path)
+        for node in tree.body:
+            # Module-level expressions and pre-existing definitions are roots.
+            # A new definition is not a root just because a test imports it.
+            caller = (
+                (path, node.name)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                else None
+            )
+            owner = caller if caller in definitions else None
+            found = uses.setdefault(owner, set())
+            for access in ast.walk(node):
+                # ImportFrom is not a usage: imported-but-unused exports are
+                # still blocked, and `__all__` string literals are ignored.
+                name = (
+                    access.id
+                    if isinstance(access, ast.Name) and isinstance(access.ctx, ast.Load)
+                    else access.attr
+                    if isinstance(access, ast.Attribute)
+                    else None
+                )
+                if name:
+                    for target in by_name.get(name, ()):
+                        if target != caller:
+                            found.add(target)
+
+    reachable = set(uses.get(None, ()))
+    while True:
+        next_reachable = reachable | set().union(
+            *(uses.get(node, set()) for node in reachable), set()
+        )
+        if next_reachable == reachable:
+            break
+        reachable = next_reachable
+    return [
+        {
+            "file": path,
+            "name": name,
+            "reason": "new_production_definition_without_existing_path",
+        }
+        for path, name in sorted(definitions)
+        if (path, name) not in reachable
+    ]
+
+
+def new_definition_usage_for_branch(root: Path = ROOT, base: str | None = None) -> list[dict]:
+    """Diff against a real Git base; include staged files for pre-commit.
+
+    For a PR this should be the actual integration base (normally origin/dev),
+    not a dated exception list. Missing Git evidence fails closed.
+    """
+
+    def git(*args: str) -> str:
+        return subprocess.check_output(
+            ["git", *args], cwd=root, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+
+    if base is None:
+        base = git("merge-base", "HEAD", "origin/dev")
+    base = git("rev-parse", "--verify", f"{base}^{{commit}}")
+    modified = git("diff", "--name-only", "--diff-filter=ACMR", base, "--", *PACKAGES)
+    old: dict[str, str] = {}
+    new: dict[str, str] = {}
+    for path in modified.splitlines():
+        if not path.endswith(".py") or not path.startswith(PACKAGES):
+            continue
+        new[path] = (root / path).read_text(encoding="utf-8")
+        result = subprocess.run(
+            ["git", "show", f"{base}:{path}"], cwd=root, text=True, capture_output=True, check=False
+        )
+        if result.returncode == 0:
+            old[path] = result.stdout
+    production = {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for package in PACKAGES
+        for path in (root / package).rglob("*.py")
+    }
+    return unreferenced_new_production_definitions(old, new, production)
+
+
 if __name__ == "__main__":
-    print(json.dumps(audit(), indent=2, ensure_ascii=False))
-    raise SystemExit(1 if audit()["new_review_required"] else 0)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--require-production-use", action="store_true")
+    parser.add_argument("--base", help="Git SHA/ref of the integration base")
+    args = parser.parse_args()
+    report = audit()
+    if args.require_production_use:
+        report["unreferenced_new_definitions"] = new_definition_usage_for_branch(base=args.base)
+        if report["unreferenced_new_definitions"]:
+            report["status"] = "REVIEW_REQUIRED"
+    print(json.dumps(report, indent=2, ensure_ascii=False))
+    raise SystemExit(1 if report["status"] != "NO_NEW_FLAGS" else 0)

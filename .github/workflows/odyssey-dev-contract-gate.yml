@@ -59,6 +59,8 @@ jobs:
           fi
 
       - name: Cross-surface regression suite without credentials
+        env:
+          ODYSSEY_REVIEW_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
         run: python scripts/odyssey_cross_surface_gate.py --output /tmp/odyssey-dev-cross-surface-gate.json
 
       - name: Validate NoteSchema

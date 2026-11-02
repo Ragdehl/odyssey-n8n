@@ -49,6 +49,12 @@ def test_universal_semantic_generality_rule_is_discoverable_and_auditable() -> N
     assert "user-defined note types" in skill
     assert "posición o secuencia de fechas" in plan
     assert "temporal position/order" in reviewer
+    # A green offline suite never justifies a new producer used only by tests.
+    assert "Unreachable-component veto" in reviewer
+    assert "MUST be **FAIL" in reviewer
+    skill = (ROOT / ".codex/skills/odyssey-implement-change/SKILL.md").read_text()
+    assert "Pre-code veto for new semantic mechanisms" in skill
+    assert "--require-production-use" in skill
 
 
 def test_doctor_never_displays_protected_key_and_fails_closed_on_unknown(
