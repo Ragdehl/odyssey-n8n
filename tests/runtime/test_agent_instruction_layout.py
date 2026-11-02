@@ -57,6 +57,44 @@ def test_universal_semantic_generality_rule_is_discoverable_and_auditable() -> N
     assert "--require-production-use" in skill
 
 
+def test_existing_generality_reviewer_returns_actionable_repair_handoff_not_only_verdict():
+    """The existing audit schema and prompts must yield a usable repair proposal.
+
+    Deterministic instruction contract only, NOT a live model compliance claim.
+    """
+    reviewer = (ROOT / "ops/agent-team/generality.md").read_text(encoding="utf-8")
+    implement = (ROOT / ".codex/skills/odyssey-implement-change/SKILL.md").read_text(
+        encoding="utf-8"
+    )
+    results = (ROOT / ".codex/skills/odyssey-results/SKILL.md").read_text(encoding="utf-8")
+    schema = json.loads((ROOT / "ops/agent-team/review.schema.json").read_text())
+    fields = set(schema["properties"]["findings"]["items"]["required"])
+    assert {"path", "reason", "action", "severity", "actionability"} <= fields
+    assert {"summary", "findings", "evidence", "verdict"} <= set(schema["required"])
+    assert "Reusable repair handoff, not just a verdict" in reviewer
+    for requirement in (
+        "preferred minimal repair in the existing owner",
+        "positive/negative final-effect tests",
+        "ranked recommendation",
+        "Do NOT invent another schema",
+        "Reduce token waste",
+    ):
+        assert requirement in reviewer
+    assert "Reuse negative audit results rather than restarting analysis" in implement
+    assert "actual useful findings" in results
+    ledger = json.loads((ROOT / "docs/architecture/r0-remediation-ledger.json").read_text())
+    group = next(g for g in ledger["workstreams"] if g["id"] == "G04")
+    handoff = group["reusable_repair_handoff_20261102"]
+    assert handoff["status"] == "ACTIONABLE_PLAN_FROM_EXISTING_READ_ONLY_AUDIT_NOT_YET_IMPLEMENTED"
+    assert len(handoff["preferred_repair_order_without_new_phase"]) == 3
+    for finding in handoff["preferred_repair_order_without_new_phase"]:
+        assert all(
+            finding[k]
+            for k in ("owner", "existing", "missing", "minimal_change_proposal", "acceptance_first")
+        )
+    assert "NOT" in handoff["decision_gate"] or "pending" in handoff["decision_gate"].lower()
+
+
 def test_doctor_never_displays_protected_key_and_fails_closed_on_unknown(
     tmp_path: Path,
 ) -> None:

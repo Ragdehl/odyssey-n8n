@@ -324,6 +324,37 @@
           "Exercise physical Markdown readback/replay and independent reviewer rejection; then fresh scoped Odyssey model/browser/n8n E2E before accepting product."
         ],
         "decision": "Do NOT implement ad hoc semantic code, do NOT reinterpret the previous R33 isolated Day-only PASS as the full feature. Scope remains G04/G11 within R0, not new stage. A revised owner-only design must pass pre-code Generality veto before change."
+      },
+      "reusable_repair_handoff_20261102": {
+        "status": "ACTIONABLE_PLAN_FROM_EXISTING_READ_ONLY_AUDIT_NOT_YET_IMPLEMENTED",
+        "reviewed_sha": "48f57198ee35b40db846a2023d0bf99bd6df0cb1",
+        "source": "Author synthesis of the existing independent Generality RECONSIDER receipt, NOT a second independent approval or newly run reviewer; use with the actual pinned HEAD diff before editing.",
+        "root_cause": "Semantic relation between two facts is conflated with shared canonical entity identity. Core coverage verifies a limited entity handoff, compiler discards fact dependencies, and P4 converts source edges into Person/Task-specific targets. Direct canonical receipts prove Note creation, but do not independently attest which fact of an updated Note is relevant.",
+        "preferred_repair_order_without_new_phase": [
+          {
+            "owner": "odyssey_core/whole_message_coverage.py::validate_whole_message_coverage + ReviewedFullSource",
+            "existing": "dependent_on_fact_index with source excerpts and independent coverage review",
+            "missing": "Source-level relation independently reviewable even when reference_names is empty, distinct from an asserted entity identity; no inference from sentence order, proximity or plural grammar.",
+            "minimal_change_proposal": "Evolve existing reviewed-source relation semantics in Core rather than add a Task/Day bridge. First show the exact proposal/review data path; preserve independent semantic attestation and refuse unproven relation. This is a PROPOSAL subject to contract review, not permission for a new LLM model/prompt/schema.",
+            "acceptance_first": "Multiple literal facts with unrelated or unidentified members; zero, one and multiple relationships; reversed source order; negative forged/ambiguous/no-review relation with safe independent facts intact."
+          },
+          {
+            "owner": "odyssey_core/whole_source_compiler.py::compile_reviewed_operations + odyssey_core/application.py + odyssey_core/canonical_receipt_provenance.py",
+            "existing": "Core reviewed operations, KnowledgeReference markers, Core/E3 canonical preflight/CAS, request-marked atomic fact readback",
+            "missing": "Reconcile original reviewed fact indices with compiled and physically materialized facts when one Note has multiple facts or several Notes each receive facts; an earlier source index must never be treated as a final Note ID.",
+            "minimal_change_proposal": "Extend existing Core planning/provenance binding so independent verified relationship is associated with exactly the source fact and canonical owning Note, then E3 resolves the existing link marker and verifies current content. Reuse existing receipt/guard authority, not create CanonicalSourceFactNote/CanonicalSourceFactLinkGuard again.",
+            "acceptance_first": "Two facts in one Day plus another in a different existing Note; only the correct origin may be linked; stale fact, changed note, wrong actor, ID swap and replay fail closed without fabricated links or partial data loss."
+          },
+          {
+            "owner": "odyssey_runtime/whole_source_light.py::_execute_dependent_graph + odyssey_runtime/composition.py + odyssey_apps/tasks/planning.py",
+            "existing": "Reviewed dependency graph, Core handoff checks, compositional App lifecycle delegates, one E3 writer",
+            "missing": "P4 limits a dependent Task to resolved Person/Task targets, instead of conveying general reviewed context to a capability-neutral Core plan; legacy and P4 overlap.",
+            "minimal_change_proposal": "Once Core shared provenance supports the relationship, pass its evidence through the existing adapter/registry, preserve Task lifecycle checks, compare existing Person/Task E2E and retire redundant branching only after parity. Do NOT implement task→day, app-combination dispatch or phrase-specific fallback.",
+            "acceptance_first": "Same source fact referenced from different NoteSchema destinations and a non-Task operation; reordered clauses, N:M links, app lifecycle, prior failing R33 literal story/task readback/replay."
+          }
+        ],
+        "decision_gate": "Before changing production code, use this existing handoff; inspect only changed SHA-sensitive code and prove the chosen shared owner+existing caller. Do not commission another exploratory whole-repo audit. If a proposed Core relation contract would change LLM schema/prompt or user semantics, use odyssey-llm-stage and required approvals; do not silently change. Keep R33 FAIL/PENDING until GPT/browser/n8n/E3 physical acceptance.",
+        "efficiency_rule": "One review once, one evidence-backed action packet, one implementer pass and targeted tests; independent Generality rechecks only changed diff; four-role full SHA review and real model/browser remain final gates."
       }
     },
     {
