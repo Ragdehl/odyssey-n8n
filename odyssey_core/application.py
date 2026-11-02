@@ -2481,9 +2481,21 @@ def _persisted_source_note(
         persisted = parse_atomic_facts(note.content)
     except (AtomicFactError, NoteFormatError, OSError, ValueError, RuntimeError, AttributeError):
         return None
-    expected = set(zip(rendered_facts, ordinals, strict=True))
-    actual = {(fact.text, fact.ordinal) for fact in persisted if fact.request_id == request_id}
-    if not expected.issubset(actual):
+    # A source-fact ordinal is a unique physical address within a request.
+    # Set membership alone accepted the right fact even if another marker in
+    # the SAME Note reused its ordinal, making the claimed provenance ambiguous.
+    expected = dict(zip(ordinals, rendered_facts, strict=True))
+    if len(expected) != len(ordinals):
+        return None
+    actual = (
+        fact for fact in persisted if fact.request_id == request_id and fact.ordinal in expected
+    )
+    seen: set[int] = set()
+    for fact in actual:
+        if fact.ordinal in seen or fact.text != expected[fact.ordinal]:
+            return None
+        seen.add(fact.ordinal)
+    if len(seen) != len(expected):
         return None
     return stable_note_id, evidence_digest(markdown)
 

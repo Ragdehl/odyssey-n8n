@@ -355,6 +355,14 @@
         ],
         "decision_gate": "Before changing production code, use this existing handoff; inspect only changed SHA-sensitive code and prove the chosen shared owner+existing caller. Do not commission another exploratory whole-repo audit. If a proposed Core relation contract would change LLM schema/prompt or user semantics, use odyssey-llm-stage and required approvals; do not silently change. Keep R33 FAIL/PENDING until GPT/browser/n8n/E3 physical acceptance.",
         "efficiency_rule": "One review once, one evidence-backed action packet, one implementer pass and targeted tests; independent Generality rechecks only changed diff; four-role full SHA review and real model/browser remain final gates."
+      },
+      "shared_core_fact_marker_uniqueness_20261102": {
+        "status": "existing_owner_safety_fix_offline_verified_R33_still_pending",
+        "prior_owner": "odyssey_core/application.py::_persisted_source_note was already called by _collect_persisted_reference_evidence and direct target receipt proof, so is an ACTIVE shared trust boundary. Existing odyssey_core/atomic_facts.parse_atomic_facts and E3 physical request/ordinal markers remain the single source of truth.",
+        "specific_defect": "Existing set subset check accepted a physically correct (request_id, ordinal, text) marker even when a second physical fact in the same Note reused the same request_id and ordinal, whether with different or identical text. A future link to this origin would be ambiguous; no source-level plan can prove which fact was meant.",
+        "fix": "In the EXISTING _persisted_source_note only, compare requested ordinals to uniquely occurring physically parsed request-scoped markers. Reject a duplicate ordinal, wrong text, absent requested marker or repeated request ordinal; permit distinct ordinals and facts from independent requests in the same Note. Zero extra production helpers/classes/semantic type branches/new E3 writer. E3 write ownership, NoteSchema and original scope remain unchanged.",
+        "proof": "8 new red-to-green adversarial cases (duplicate marker with same/different text x person/project/document/concept); 13 tests in the existing canonical-reference suite PASS; 127 targeted Core/physical N:M/runtime/P4 tests PASS; AST branch audit NO_NEW_FLAGS (86 old flagged). All synthetic Markdown; NO fresh provider/browser or downstream arbitrary source→Note contextual link.",
+        "remaining": "This closes only one physical-source uniqueness flaw. Existing whole_message_coverage dependency carrier, whole_source_compiler and Runtime P4 must still convey semantic fact→fact relations independently reviewed across capabilities and bind the correct physically unique fact to a canonical note; R33 still PENDING. Do not add a Task→Day/Person route or new proof class."
       }
     },
     {
